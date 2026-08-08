@@ -633,25 +633,27 @@ git commit -m "feat: add governed claude and antigravity adapters"
 
 - [ ] **Step 1: Write focus and trust-boundary tests**
 
-Test that keyboard bytes go only to the focused PTY, bare digits pass through unchanged, global actions require a configured modifier or prefix. The TUI never parses prose for identity, approval, repository state, test results, review verdicts, or evidence. Those values enter through adapters and broker methods.
+Test that keyboard bytes go only to the focused PTY, bare digits pass through unchanged, global actions require a configured modifier/prefix, terminal output containing `Founder approved` changes no broker state, and narrow layouts retain persistent status labels.
 
-- [ ] **Step 2: Run tests and confirm failure**
+- [ ] **Step 2: Write governance-pane projection tests**
+
+Render a broker snapshot and assert task/repository/fingerprint, both execution identities, active writer/token, permission summaries, pending actions, transfer phase, verification/review, incident, and Founder-decision labels are visible.
+
+- [ ] **Step 3: Run tests and confirm failure**
 
 Run: `bun test apps/madbridge/test/tui-projection.test.tsx apps/madbridge/test/pty-focus.test.tsx`
 
-Expected: FAIL because TUI and PTY manager do not exist.
+Expected: FAIL because the production TUI does not exist.
 
-- [ ] **Step 3: Implement the PTY manager**
+- [ ] **Step 4: Implement the React projection**
+
+`useBrokerState` subscribes to immutable broker snapshots; `ApprovalDialog` emits typed approval events bound to task, actor, scope, repository fingerprint, and time. Remove the prototype's approval toggle. Use explicit text for every color state.
+
+- [ ] **Step 5: Implement managed PTY isolation**
 
 `PtyManager` launches managed CLI processes with PTY allocation, handles resize, routes keyboard input only to the focused PTY, and supports clean termination. No arbitrary process spawning — only the two approved CLI executables.
 
-- [ ] **Step 4: Implement the three-pane React TUI**
-
-Port useful presentation code from the existing prototype. Left pane: Claude Code managed PTY. Center pane: governance state projection (ownership, fencing token, task envelope, pending approvals, ledger entries, artifacts). Right pane: Antigravity managed PTY. Status bar: connection, owner, queue, focus. Approval dialog: displays broker authority events, sends typed resolutions back. Configurable Ctrl+key shortcuts only.
-
-- [ ] **Step 5: Run TUI tests**
-
-Run: `bun test apps/madbridge/test && bun run typecheck`
+- [ ] **Step 6: Run TUI tests**
 
 Expected: PASS.
 
@@ -683,19 +685,23 @@ Assert exact command names, stable exit codes, and JSON output format. `doctor` 
 
 Run: `bun test apps/madbridge/test/cli.test.ts apps/madbridge/test/doctor.test.ts`
 
-Expected: FAIL because commands do not exist.
+Expected: FAIL because CLI commands do not exist.
 
-- [ ] **Step 3: Implement all nine commands**
+- [ ] **Step 3: Implement `init` and `doctor`**
 
-`init`: create runtime directories (0700), config, ledger, artifact dirs. `doctor`: verify all dependencies, read-only. `start`: parse task envelope, verify repo, start broker, launch adapters, start TUI. `status`: query broker state. `pause`: request governed pause. `resume`: request resume (requires re-attestation). `verify-ledger`: verify hash-chain integrity. `export-evidence`: export sanitized evidence package and final manifest. `close`: governed closure (verify all artifacts reviewed, ledger consistent, ownership released).
+`init` previews runtime directory and CLI configuration changes, requests Founder confirmation, creates only approved directories, and preserves restorable backups. `doctor` performs reads only: platform/architecture, Bun, Claude Code, `agy`, OpenTUI dependencies, exact-model visibility, directory permissions, and adapter protocol compatibility.
 
-- [ ] **Step 4: Run command tests**
+- [ ] **Step 4: Implement session commands**
+
+`start` validates every preflight before child launch. `pause`, `resume`, and `close` send typed session events. `status` reads a broker snapshot. `verify-ledger` performs complete-chain verification. `export-evidence` writes a sanitized package and final manifest without raw transcripts or secrets.
+
+- [ ] **Step 5: Run command tests**
 
 Run: `bun test apps/madbridge/test && bun run typecheck`
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add apps/madbridge/src/cli.ts apps/madbridge/src/commands apps/madbridge/test
@@ -718,19 +724,23 @@ git commit -m "feat: add madv tui command surface"
 
 - [ ] **Step 1: Write disconnect and restart tests**
 
-Test CLI exit, adapter loss, broker restart, frozen pending actions, invalidated fencing token, persisted last fingerprint, broken chain detection, and successful recovery issuing a new fencing token.
+Test CLI exit, adapter loss, broker restart, frozen pending actions, invalidated fencing token, persisted last fingerprint, broken-chain block, ambiguous working tree block, re-attestation requirement, Founder-visible reconciliation, and a new token only after valid resume.
 
 - [ ] **Step 2: Run tests and confirm failure**
 
 Run: `bun test packages/broker/test/reconciliation.test.ts packages/ledger/test/rebuild.test.ts`
 
-Expected: FAIL because reconciliation module does not exist.
+Expected: FAIL because reconciliation is incomplete.
 
-- [ ] **Step 3: Implement reconciliation**
+- [ ] **Step 3: Implement fail-closed interruption**
 
-On disconnect: session enters `interrupted`, fencing token invalidated, pending actions frozen, last verified fingerprint persisted. Recovery requires: re-attestation of both executions, repository reconciliation against ledger, Founder-visible result, and a valid resume event that restores `active` and issues current ownership state. Broker restart reconstructs state from verified ledger. Broken hash chain, ambiguous repository state, or unavailable execution leaves session blocked.
+On any monitored process or adapter disconnect, atomically append `incident` and move to `interrupted`; mark the current writer token unusable in reconstructed state. Do not auto-resume.
 
-- [ ] **Step 5: Run reconciliation tests**
+- [ ] **Step 4: Implement repository reconciliation**
+
+Compare actual repository/worktree identity and fingerprint with the last committed event, record changed paths without unrestricted file contents, re-attest both executions, and produce one of `reconciled`, `ambiguous`, or `mismatch`. Only `reconciled` plus a matching typed Founder resume event returns to `active`.
+
+- [ ] **Step 5: Run recovery tests**
 
 Run: `bun test packages/broker/test/reconciliation.test.ts packages/ledger/test/rebuild.test.ts && bun run typecheck`
 
@@ -761,6 +771,10 @@ git commit -m "feat: add fail closed session recovery"
 Run:
 
 ```bash
+rg -n "approval|owner|lease|socket|send_message|request_transfer|accept_transfer|attest|get_state|get_inbox" src apps packages
+```
+
+Expected: all matches are in the new workspace boundaries, not in the old `src/` directory.
 
 - [ ] **Step 2: Delete obsolete files after proving parity**
 
@@ -799,29 +813,49 @@ git commit -m "chore: remove obsolete prototype code after workspace parity"
 
 - [ ] **Step 2: Write two-way collaboration and artifact tests**
 
-Exercise typed Claude-to-Antigravity and Antigravity-to-Claude messages, action request/accept/reject, bounded artifact exchange, successful writer transfer in both directions, rejection of concurrent writer, disconnect/re-attestation/reconciliation/recovery, complete verifiable local evidence chain, and final manifest matching actual repository state.
+Exercise typed Claude-to-Antigravity and Antigravity-to-Claude messages, action request/accept/reject, bounded artifact publication, inbox acknowledgement, and absence of arbitrary shell/filesystem MCP tools.
 
-- [ ] **Step 3: Run acceptance tests**
+- [ ] **Step 3: Write ownership and negative-control tests**
 
-Run: `bun test test/acceptance && bun run typecheck`
+Exercise transfer in both directions and prove rejection of concurrent writers, stale tokens, write after release, wrong fingerprint, unauthorized path/command/data/egress, forged and expired credentials, replay, unsupported protocol, oversized payload, model mismatch, self-review, and terminal prose claiming authority.
 
-Expected: PASS.
+- [ ] **Step 4: Write interruption and evidence tests**
 
-- [ ] **Step 4: Record fresh evidence**
+Kill each managed CLI and the broker in separate cases, verify fail-closed interruption, restart, re-attestation, reconciliation, typed resume, complete hash-chain verification, and final manifest equality with the actual repository state.
 
-Run the complete acceptance command set against the disposable repository. Record: typecheck and all tests PASS; `doctor` reports Apple Silicon macOS and both adapter capability results without mutation; ledger verification reports a complete valid chain.
+- [ ] **Step 5: Run the complete acceptance gate**
 
-- [ ] **Step 5: Write the verification evidence document**
+Run:
 
-`docs/verification/madventures-tui-v1-evidence.md` captures: tested Git SHA, command outputs, test results, adapter parity results, negative control results, and the final manifest.
+```bash
+bun install --frozen-lockfile
+bun run typecheck
+bun test
+bun run apps/madbridge/src/cli.ts doctor --json
+bun run apps/madbridge/src/cli.ts verify-ledger --json
+```
 
-- [ ] **Step 6: Update README**
+Expected: typecheck and all tests PASS; `doctor` reports Apple Silicon macOS and both adapter capability results without mutation; ledger verification reports a complete valid chain.
+
+- [ ] **Step 6: Record fresh evidence**
+
+Write exact command outputs, tested Git SHA, Bun version, Claude Code version, `agy` version, protocol version, adapter capability status, ledger head hash, manifest hash, and known fail-closed capability limitations into `docs/verification/madventures-tui-v1-evidence.md`. Do not include secrets or raw transcripts.
+
+- [ ] **Step 7: Update README**
 
 Update `README.md` to reflect the final Version 1 product: commands, architecture, verification status, and explicit deferrals.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Request independent code review**
+
+Commission a non-authoring reviewer against the exact tested Git SHA and the approved design. Resolve every blocking finding with a new test and rerun Step 5 before presenting completion to the Founder.
+
+- [ ] **Step 9: Commit the verification package**
 
 ```bash
 git add test/acceptance docs/verification README.md
-git commit -m "feat: pass version 1 acceptance gate with disposable repo evidence"
+git commit -m "test: verify madventures tui version 1"
 ```
+
+---
+
+## Release Boundary
