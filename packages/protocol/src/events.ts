@@ -3,6 +3,7 @@
 
 import type { RepositoryFingerprint } from "./task-envelope";
 import { PROTOCOL_VERSION } from "./task-envelope";
+import { canonicalJson } from "./canonical-json";
 
 export const EVENT_TYPES = [
   "message", "action_request", "action_accept", "action_reject",
@@ -45,7 +46,16 @@ const KNOWN_EVENT_KEYS = new Set([
 
 const MAX_INLINE_PAYLOAD_BYTES = 64 * 1024; // 64KB max for inline payloads
 
-export function parseBridgeEvent(raw: Record<string, unknown>): BridgeEventV1 {
+/**
+ * Parse and validate a BridgeEventV1 from raw input.
+ * Rejects: unknown fields, oversized inline payloads, mismatched hashes,
+ * invalid parent IDs, unsupported versions, unknown event types,
+ * and timestamps after the provided envelope expiration.
+ */
+export function parseBridgeEvent(
+  raw: Record<string, unknown>,
+  options?: { envelopeExpiresAt?: string },
+): BridgeEventV1 {
   // Check for unknown fields
   for (const key of Object.keys(raw)) {
     if (!KNOWN_EVENT_KEYS.has(key)) {
@@ -79,7 +89,30 @@ export function parseBridgeEvent(raw: Record<string, unknown>): BridgeEventV1 {
     throw new Error("invalid parent event ID");
   }
 
+  // Hash verification — if payload_hash is provided, verify it matches the canonical hash of payload
+  const payloadHash = raw["payload_hash"];
+  if (typeof payloadHash === "string" && payloadHash.length > 0 && payload !== undefined && payload !== null) {
+    const computedHash = computePayloadHash(payload);
+    if (payloadHash !== computedHash) {
+      throw new Error("mismatched payload hash");
+    }
+  }
+
+  // Timestamp after envelope expiration
+  const createdAt = raw["created_at"];
+  if (typeof createdAt === "string" && options?.envelopeExpiresAt) {
+    if (new Date(createdAt).getTime() > new Date(options.envelopeExpiresAt).getTime()) {
+      throw new Error("timestamp after envelope expiration");
+    }
+  }
+
   return raw as unknown as BridgeEventV1;
+}
+
+function computePayloadHash(payload: unknown): string {
+  // Use Bun.hash for synchronous hash computation
+  const json = canonicalJson(payload);
+  return Bun.hash(json).toString(16);
 }
 
 export { PROTOCOL_VERSION };
