@@ -1,0 +1,26 @@
+{
+  "name": "founder-tui",
+  "version": "0.1.0",
+  "module": "src/index.tsx",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "bun run --watch src/index.tsx",
+    "build": "tsc --noEmit",
+    "broker": "bun run src/broker/index.ts",
+    "mcp": "bun run src/mcp/server.ts",
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@opentui/core": "^0.5.1",
+    "@opentui/react": "^0.5.1",
+    "@types/react": "^19.2.18",
+    "react": "^19.2.6"
+  }
+}
