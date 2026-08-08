@@ -1,130 +1,63 @@
 # MADVentures TUI Experience Version 1 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Build the Apple Silicon macOS Version 1 of MADVentures TUI Experience: a local, governed, live bridge between Claude Code CLI and Antigravity CLI with exclusive writer ownership, typed collaboration, recoverable evidence, and a three-pane terminal interface.
-
-**Architecture:** A framework-independent `madbridge` broker owns validation, session lifecycle, writer fencing, typed routing, SQLite evidence, and content-addressed artifacts. Thin Claude Code and Antigravity adapters communicate through `madbridge-protocol/v1`; the OpenTUI React app launches managed PTYs and projects broker state without treating terminal prose as authority. Every state-changing action is validated against one Founder-approved task envelope and recorded transactionally.
-
-**Tech Stack:** Bun 1.3.14, strict TypeScript, React 19, OpenTUI 0.5.1, `bun:sqlite`, `bun:test`, Unix-domain sockets, Node-compatible cryptography and process APIs, and MCP over stdio.
+**Goal:** Build Apple Silicon macOS Version 1 of MADVentures TUI Experience.
 
 ## Global Constraints
 
-- Product/interface name: `MADVentures TUI Experience`.
-- Repository name: `madventures-tui`.
-- Founder command: `madv-tui`; neutral service: `madbridge`; protocol: `madbridge-protocol/v1`.
-- Version 1 supports Apple Silicon macOS only and opens no TCP listener.
-- Runtime socket: `~/Library/Application Support/MADVentures/run/madbridge.sock`; directory mode `0700`, socket mode `0600`.
-- SQLite ledger: `~/Library/Application Support/MADVentures/madventures-tui/data/ledger.sqlite3`.
-- Artifacts: `~/Library/Application Support/MADVentures/madventures-tui/artifacts/sha256/`.
-- React is presentation only; it cannot decide authority, permissions, ownership, evidence acceptance, hashing, or recovery.
-- Neither adapter exposes arbitrary filesystem reads, arbitrary shell execution, raw transcript synchronization, credentials, or unrestricted environment variables.
+- Product: `MADVentures TUI Experience`. Repo: `madventures-tui`. Command: `madv-tui`. Service: `madbridge`. Protocol: `madbridge-protocol/v1`.
+- Apple Silicon macOS only, no TCP listener.
+- Socket: `~/Library/Application Support/MADVentures/run/madbridge.sock`, mode 0700/0600.
+- Ledger: `.../data/ledger.sqlite3`, Artifacts: `.../artifacts/sha256/`.
+- React is presentation only; adapters cannot expose arbitrary FS/shell/transcripts/credentials.
 - Broker messages cannot create, enlarge, or simulate Founder authority.
-- Every disconnect fails closed; writing resumes only after re-attestation, repository reconciliation, and a valid resume event.
-- Exactly one execution may own a worktree at a time; each acquisition increments the fencing token.
-- Dependencies remain exactly pinned in `bun.lock`; install and CI use frozen-lockfile mode.
-- Use the existing prototype as preserved input. Do not force-push, rewrite its initial commit, or describe adapter stubs as functional.
-- Do not implement Codex, Grok, Cursor, or Hermes adapters; hosted coordination; Neon projection; a central gateway; merge/deploy automation; or autonomous authority changes.
-
----
+- Every disconnect fails closed; writing resumes only after re-attestation, reconciliation, and valid resume.
+- One writer per worktree; each acquisition increments fencing token.
+- Dependencies pinned in `bun.lock`; frozen-lockfile mode.
+- Existing prototype preserved; do not force-push or describe stubs as functional.
+- No Codex/Grok/Cursor/Hermes; no hosted coordination/Neon/gateway/merge/deploy/autonomous changes.
 
 ## File Structure
 
-```text
-apps/madbridge/
-  package.json
-  src/cli.ts
-  src/commands/{init,doctor,start,status,pause,resume,verify-ledger,export-evidence,close}.ts
-  src/tui/App.tsx
-  src/tui/components/{ApprovalDialog,EventLog,StatusBar}.tsx
-  src/tui/panes/{ClaudePane,GovernancePane,AntigravityPane}.tsx
-  src/tui/hooks/{useBrokerState,useKeyboard}.ts
-  test/{cli,doctor,tui-projection,pty-focus}.test.tsx
-
-packages/protocol/
-  src/{index,ids,canonical-json,task-envelope,events,wire}.ts
-  test/{canonical-json,task-envelope,events,wire}.test.ts
-
-packages/policy/
-  src/{index,engine,path-policy,command-policy,egress-policy,review-policy}.ts
-  test/{engine,path-policy,negative-controls}.test.ts
-
-packages/ledger/
-  src/{index,schema,ledger,hash-chain,rebuild}.ts
-  test/{ledger,hash-chain,rebuild}.test.ts
-
-packages/artifact-store/
-  src/{index,store,manifest}.ts
-  test/store.test.ts
-
-packages/broker/
-  src/{index,broker,session-machine,ownership-machine,reconciliation,socket,credentials,mcp-server,pty-manager}.ts
-  test/{broker,session-machine,ownership-machine,socket,reconciliation,mcp-contract}.test.ts
-
-packages/adapter-claude-code/
-  src/{index,adapter,attestation,hooks,mcp-config}.ts
-  test/{attestation,parity,integration}.test.ts
-
-packages/adapter-antigravity/
-  src/{index,adapter,attestation,hooks,mcp-config}.ts
-  test/{attestation,parity,integration}.test.ts
-
-test/acceptance/
-  disposable-repo.ts
-  two-way-collaboration.test.ts
-  ownership-transfer.test.ts
-  interruption-recovery.test.ts
-  evidence-manifest.test.ts
-```
+apps/madbridge/ + packages/{protocol,policy,ledger,artifact-store,broker,adapter-claude-code,adapter-antigravity}/ + test/acceptance/
 
 ---
 
-### Task 1: Preserve the Prototype and Establish the Workspace
+### Task 1: Preserve Prototype and Establish Workspace
+- [x] Done. SHA: e2c01a7
 
-- [x] Step 1: Record baseline — HEAD d49b912, Bun 1.3.14, tsc clean
-- [x] Step 2: Write failing architecture-boundary test
-- [x] Step 3: Confirm failure (ENOENT on App.tsx)
-- [x] Step 4: Create workspace manifests, package.json files, App.tsx shell
-- [x] Step 5: Verify — `bun install --frozen-lockfile && bun run verify` PASS
-- [x] Step 6: Commit SHA e2c01a7
+### Task 2: Define madbridge-protocol/v1
+- [x] Done. SHA: 1bf61e1, remediation: 60811b1 (58 negative-control tests)
 
-### Task 2: Define madbridge-protocol/v1 and Task Envelopes
+### Task 3: Policy and Repository Fingerprinting
+- [x] Done. SHA: 1fcfc65
 
-- [x] Step 1-6: Initial implementation, commit 1bf61e1
-- [x] Remediation: 58 negative-control tests, sha256Canonical documented as Promise<string>, known-vector determinism test, payload hash verification + timestamp-after-expiration added to parseBridgeEvent, commit 60811b1
+### Task 4: Transactional Ledger and Artifact Store
+- [x] Done. SHA: b83cfa7
 
-### Task 3: Implement Policy and Repository Fingerprinting
+### Task 5: Session and Ownership State Machines
+- [x] Done. SHA: 32236da
 
-**Files:**
-- Create: `packages/policy/src/{index,engine,path-policy,command-policy,egress-policy,review-policy}.ts`
-- Create: `packages/policy/test/{engine,path-policy,negative-controls}.test.ts`
+---
 
-**Interfaces:**
-- Consumes: `TaskEnvelopeV1`, `BridgeEventV1`, `RepositoryFingerprint`.
-- Produces: `ActionContext`, `PolicyDecision`, `evaluateAction(context)`, `assertWithinAllowedPath`, `classifyCommand`, `verifyReviewIndependence`, and `fingerprintRepository(repoPath)`.
+### Task 6: Broker, Socket Authentication, MCP Contract
 
-- [ ] **Step 1: Write fail-closed policy tests**
-- [ ] **Step 2: Add path, command, egress, and self-review negative tests**
-- [ ] **Step 3: Run tests and confirm failure**
-- [ ] **Step 4: Implement pure policy decisions**
-- [ ] **Step 5: Run policy tests**
-- [ ] **Step 6: Commit**
+**Files:** `packages/broker/src/{index,broker,socket,credentials,mcp-server}.ts` + `packages/broker/test/{broker,socket,mcp-contract}.test.ts`
 
-### Task 4: Build the Transactional Ledger and Artifact Store
+**Produces:** `MadBridgeBroker.start(config)`, `stop()`, `dispatch(event, credential)`, `subscribe(listener)`, `createInMemoryBrokerForTest()`, 16 MCP tools.
 
-- [ ] Steps 1-7
+- [ ] Step 1: Write socket/credential tests (0700 dir, 0600 socket, wrong-owner rejection, stale cleanup, short-lived credentials, replay rejection, credential/sender mismatch, zero TCP)
+- [ ] Step 2: Write MCP allowlist test (16 tools)
+- [ ] Step 3: Run tests — FAIL
+- [ ] Step 4: Implement dispatch ordering (authenticate → parse → verify task hash/fingerprint → evaluate policy → state transition/token → persist → broadcast)
+- [ ] Step 5: Run broker tests — PASS
+- [ ] Step 6: Commit
 
-### Task 5: Implement Session and Ownership State Machines
+### Task 7: Parity-Tested CLI Adapters
 
-- [ ] Steps 1-6
+**Files:** `packages/adapter-*/` + `test/adapter-parity.shared.ts`
 
-### Task 6: Build the Local Broker, Socket Authentication, and MCP Contract
-
-- [ ] Steps 1-6
-
-### Task 7: Implement and Parity-Test Both CLI Adapters
-
-**Interfaces:**
 ```ts
 export interface ConfigChangeSet {
   readonly targetPath: string;
@@ -134,139 +67,91 @@ export interface ConfigChangeSet {
   readonly backupPath: string;
 }
 export interface LaunchInput {
-  readonly sessionId: string;
-  readonly executionId: string;
-  readonly credentialPath: string;
-  readonly repositoryPath: string;
-  readonly exactModel: string;
-  readonly provider: string;
-  readonly effort: string;
+  readonly sessionId: string; readonly executionId: string; readonly credentialPath: string;
+  readonly repositoryPath: string; readonly exactModel: string; readonly provider: string; readonly effort: string;
 }
 export interface ManagedExecution {
-  readonly executionId: string;
-  readonly pid: number;
-  readonly executablePath: string;
-  readonly startedAt: string;
+  readonly executionId: string; readonly pid: number; readonly executablePath: string; readonly startedAt: string;
+}
+export interface AdapterV1 {
+  attest(): Promise<ExecutionIdentity>;
+  prepareConfigPreview(): Promise<ConfigChangeSet>;
+  launch(input: LaunchInput): Promise<ManagedExecution>;
+  notifyInbox(eventId: string): Promise<void>;
+  pause(reason: string): Promise<void>;
+  terminate(signal: "SIGTERM" | "SIGKILL"): Promise<void>;
 }
 ```
 
-- [ ] Steps 1-6
+- [ ] Step 1: Define shared parity suite (executable resolution, version, fingerprint, exact model/provider, effort, missing-model failure, config preview no mutation, backup/restore, child-execution ID, inbox notification, disconnect)
+- [ ] Step 2: Run parity tests — FAIL
+- [ ] Step 3: Implement Claude Code attestation + MCP config (machine-verifiable model)
+- [ ] Step 4: Implement Antigravity attestation + MCP config (fail closed if unverifiable)
+- [ ] Step 5: Run parity/integration tests — PASS or documented fail-closed
+- [ ] Step 6: Commit: `feat: add governed claude and antigravity adapters`
 
-### Task 8: Add Managed PTYs and the MADVentures TUI Experience
+### Task 8: Managed PTYs and MADVentures TUI
 
-**Files:**
-- Create: `packages/broker/src/pty-manager.ts`
-- Create: `apps/madbridge/src/tui/App.tsx`
-- Create: `apps/madbridge/src/tui/components/{ApprovalDialog,EventLog,StatusBar}.tsx`
-- Create: `apps/madbridge/src/tui/panes/{ClaudePane,GovernancePane,AntigravityPane}.tsx`
-- Create: `apps/madbridge/src/tui/hooks/{useBrokerState,useKeyboard}.ts`
-- Create: `apps/madbridge/test/{tui-projection,pty-focus}.test.tsx`
+**Files:** `packages/broker/src/pty-manager.ts` + `apps/madbridge/src/tui/` + `apps/madbridge/test/`
 
-- [ ] Step 1: Write focus and trust-boundary tests
-- [ ] Step 2: Write governance-pane projection tests
-- [ ] Step 3: Run tests and confirm failure
-- [ ] Step 4: Implement the React projection
-- [ ] Step 5: Implement managed PTY isolation
-- [ ] Step 6: Run TUI tests
-- [ ] Step 7: Commit
+- [ ] Step 1: Write focus/trust-boundary tests (bytes go to focused PTY, bare digits pass, global actions need modifier, terminal `Founder approved` changes no state, narrow layout retains labels)
+- [ ] Step 2: Write governance-pane projection tests (task/repo/fingerprint, execution identities, writer/token, permissions, pending actions, transfer phase, verification/review, incident, Founder-decision labels)
+- [ ] Step 3: Run tests — FAIL
+- [ ] Step 4: Implement React projection (useBrokerState subscribes to immutable snapshots; ApprovalDialog emits typed events; remove approval toggle; explicit text for every color)
+- [ ] Step 5: Implement PTY isolation (owns I/O only, never parses prose for identity/approval/state/results/evidence)
+- [ ] Step 6: Run TUI tests — PASS
+- [ ] Step 7: Commit: `feat: add madventures governed terminal experience`
 
-### Task 9: Implement the madv-tui Command Surface
+### Task 9: madv-tui Command Surface
 
-- [ ] Step 1: Write command-contract tests
-- [ ] Step 2: Run tests and confirm failure
-- [ ] Step 3: Implement `init` and `doctor`
-- [ ] Step 4: Implement session commands
-- [ ] Step 5: Run command tests
-- [ ] Step 6: Commit
+**Files:** `apps/madbridge/src/{cli,commands/*}.ts` + `apps/madbridge/test/{cli,doctor}.test.ts`
 
-### Task 10: Implement Interruption, Reconciliation, and Deterministic Restart
+- [ ] Step 1: Write command-contract tests (exact names, unknown-command rejection, read-only doctor, no filesystem changes on failed preflight, complete envelope confirmation, nonzero exit for blocked/invalid/interrupted)
+- [ ] Step 2: Run tests — FAIL
+- [ ] Step 3: Implement init + doctor (init previews runtime dir + CLI config changes, requests confirmation, creates approved dirs, preserves backups; doctor reads only)
+- [ ] Step 4: Implement session commands (start validates preflight; pause/resume/close send typed events; status reads snapshot; verify-ledger does full chain; export-evidence writes sanitized package + manifest)
+- [ ] Step 5: Run command tests — PASS
+- [ ] Step 6: Commit: `feat: add madv tui command surface`
 
-**Files:**
-- Create: `packages/broker/src/reconciliation.ts`
-- Create: `packages/broker/test/reconciliation.test.ts`
-- Extend: `packages/ledger/src/rebuild.ts`
-- Extend: `packages/broker/src/broker.ts`
+### Task 10: Interruption, Reconciliation, Deterministic Restart
 
-**Interfaces:**
-- Produces: `interruptSession(reason)`, `reconcileRepository(input)`, `resumeSession(approval)`, and deterministic `rebuildBrokerState(events)`.
+**Files:** `packages/broker/src/reconciliation.ts` + `packages/broker/test/reconciliation.test.ts` + extend `packages/ledger/src/rebuild.ts` + `packages/broker/src/broker.ts`
 
-- [ ] Step 1: Write disconnect and restart tests
-- [ ] Step 2: Run tests and confirm failure
-- [ ] Step 3: Implement fail-closed interruption
-- [ ] Step 4: Implement repository reconciliation
-- [ ] Step 5: Run recovery tests
-- [ ] Step 6: Commit
+**Produces:** `interruptSession(reason)`, `reconcileRepository(input)`, `resumeSession(approval)`, `rebuildBrokerState(events)`
 
-### Task 11: Migrate Useful Prototype Code and Remove Obsolete Duplicates
+- [ ] Step 1: Write disconnect/restart tests (CLI exit, adapter loss, broker restart, frozen actions, invalidated token, persisted fingerprint, broken-chain/ambiguous-worktree blocks, re-attestation, Founder-visible reconciliation, new token only after resume)
+- [ ] Step 2: Run tests — FAIL
+- [ ] Step 3: Implement fail-closed interruption (atomically append incident → interrupted; mark token unusable; no auto-resume)
+- [ ] Step 4: Implement repository reconciliation (compare identity/fingerprint, record changed paths, re-attest both, produce reconciled/ambiguous/mismatch; only reconciled + typed resume returns to active)
+- [ ] Step 5: Run recovery tests — PASS
+- [ ] Step 6: Commit: `feat: add fail closed session recovery`
 
-**Files:**
-- Delete after parity is proven: `src/tui/`, `src/broker/`, `src/mcp/`, `src/adapters/`, `src/permissions/`, `src/shared/`
-- Modify: `README.md`
-- Modify: `test/architecture-boundaries.test.ts`
+### Task 11: Migrate Prototype, Remove Obsolete Duplicates
 
-- [ ] Step 1: Inventory prototype logic against the new implementation
-- [ ] Step 2: Delete obsolete files after proving parity
-- [ ] Step 3: Run full verification
-- [ ] Step 4: Commit
+**Delete after parity:** `src/tui/`, `src/broker/`, `src/mcp/`, `src/adapters/`, `src/permissions/`, `src/shared/`
 
-### Task 12: Execute Version 1 Negative Controls and Acceptance Gate
+- [ ] Step 1: Inventory prototype (`rg ... src apps packages`), document unmatched
+- [ ] Step 2: Strengthen boundary test (exactly one production definition for broker/policy/protocol/ledger/approval; no `/tmp/` socket)
+- [ ] Step 3: Run full suite before deletion — PASS
+- [ ] Step 4: Delete obsolete paths (preserve git history)
+- [ ] Step 5: Run full suite after deletion — PASS
+- [ ] Step 6: Commit: `refactor: retire prototype bridge duplicates`
 
-**Files:**
-- Create: `test/acceptance/disposable-repo.ts`
-- Create: `test/acceptance/{two-way-collaboration,ownership-transfer,interruption-recovery,evidence-manifest}.test.ts`
-- Create: `docs/verification/madventures-tui-v1-evidence.md`
-- Modify: `README.md`
+### Task 12: Negative Controls and Acceptance Gate
 
-- [ ] Step 1: Create an isolated disposable Git repository fixture
+**Files:** `test/acceptance/` + `docs/verification/` + `README.md`
 
-The helper creates a temporary directory, initializes Git, commits one file, creates dedicated Claude and Antigravity worktrees, and returns cleanup handles. It must refuse any path inside the production repository or any branch named `main` or `master` for destructive controls.
-
-- [ ] Step 2: Write two-way collaboration and artifact tests
-
-Exercise typed Claude-to-Antigravity and Antigravity-to-Claude messages, action request/accept/reject, bounded artifact publication, inbox acknowledgement, and absence of arbitrary shell/filesystem MCP tools.
-
-- [ ] Step 3: Write ownership and negative-control tests
-
-Exercise transfer in both directions and prove rejection of concurrent writers, stale tokens, write after release, wrong fingerprint, unauthorized path/command/data/egress, forged and expired credentials, replay, unsupported protocol, oversized payload, model mismatch, self-review, and terminal prose claiming authority.
-
-- [ ] Step 4: Write interruption and evidence tests
-
-Kill each managed CLI and the broker in separate cases, verify fail-closed interruption, restart, re-attestation, reconciliation, typed resume, complete hash-chain verification, and final manifest equality with the actual repository state.
-
-- [ ] Step 5: Run the complete acceptance gate
-
-Run:
-```bash
-bun install --frozen-lockfile
-bun run typecheck
-bun test
-bun run apps/madbridge/src/cli.ts doctor --json
-bun run apps/madbridge/src/cli.ts verify-ledger --json
-```
-
-Expected: typecheck and all tests PASS; `doctor` reports Apple Silicon macOS and both adapter capability results without mutation; ledger verification reports a complete valid chain.
-
-- [ ] Step 6: Record fresh evidence
-
-Write exact command outputs, tested Git SHA, Bun version, Claude Code version, `agy` version, protocol version, adapter capability status, ledger head hash, manifest hash, and known fail-closed capability limitations into `docs/verification/madventures-tui-v1-evidence.md`. Do not include secrets or raw transcripts.
-
-- [ ] Step 7: Update README
-
-Update `README.md` to reflect the final Version 1 product: commands, architecture, verification status, and explicit deferrals.
-
-- [ ] Step 8: Request independent code review
-
-Commission a non-authoring reviewer against the exact tested Git SHA and the approved design. Resolve every blocking finding with a new test and rerun Step 5 before presenting completion to the Founder.
-
-- [ ] Step 9: Commit the verification package
-
-```bash
-git add test/acceptance docs/verification README.md
-git commit -m "test: verify madventures tui version 1"
-```
+- [ ] Step 1: Disposable repo fixture (temp dir, git init, one file, Claude + AGY worktrees, cleanup handles; refuse production path or main/master for destructive tests)
+- [ ] Step 2: Two-way collaboration + artifact tests (typed messages both directions, action request/accept/reject, bounded artifact publication, inbox ack, no arbitrary shell/FS MCP)
+- [ ] Step 3: Ownership + negative controls (transfer both directions; reject concurrent writers, stale tokens, write after release, wrong fingerprint, unauthorized path/command/data/egress, forged/expired credentials, replay, unsupported protocol, oversized payload, model mismatch, self-review, terminal prose claiming authority)
+- [ ] Step 4: Interruption + evidence tests (kill each CLI and broker separately; verify fail-closed interruption, restart, re-attestation, reconciliation, typed resume, complete hash-chain, manifest equals repo state)
+- [ ] Step 5: Run acceptance gate (`bun install --frozen-lockfile && bun run typecheck && bun test && bun run apps/madbridge/src/cli.ts doctor --json && bun run apps/madbridge/src/cli.ts verify-ledger --json`)
+- [ ] Step 6: Record fresh evidence (SHA, versions, protocol, adapter status, ledger hash, manifest hash, limitations)
+- [ ] Step 7: Request independent code review
+- [ ] Step 8: Commit: `test: verify madventures tui version 1`
 
 ---
 
 ## Release Boundary
 
-The Builder may open a review branch or the Release Boundary already exists at the end of the approved implementation plan. Preserve it exactly; do not create a replacement. Proceed to the next task only if every prior task step passed, the verification results were recorded, and the commit SHA was provided. No merge, installation, deployment, or operational activation is authorized.
+The Builder may open a review branch or PR after Task 12. A green suite authorizes neither merge nor installation. The Founder separately reviews the exact tested tree, independent review verdict, adapter capability results, evidence-chain verification, and final manifest before any merge, local installation, or operational use.
