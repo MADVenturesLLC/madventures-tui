@@ -218,14 +218,52 @@ export interface ManagedExecution {
 - Modify: `README.md`
 
 - [ ] Step 1: Create an isolated disposable Git repository fixture
+
+The helper creates a temporary directory, initializes Git, commits one file, creates dedicated Claude and Antigravity worktrees, and returns cleanup handles. It must refuse any path inside the production repository or any branch named `main` or `master` for destructive controls.
+
 - [ ] Step 2: Write two-way collaboration and artifact tests
+
+Exercise typed Claude-to-Antigravity and Antigravity-to-Claude messages, action request/accept/reject, bounded artifact publication, inbox acknowledgement, and absence of arbitrary shell/filesystem MCP tools.
+
 - [ ] Step 3: Write ownership and negative-control tests
+
+Exercise transfer in both directions and prove rejection of concurrent writers, stale tokens, write after release, wrong fingerprint, unauthorized path/command/data/egress, forged and expired credentials, replay, unsupported protocol, oversized payload, model mismatch, self-review, and terminal prose claiming authority.
+
 - [ ] Step 4: Write interruption and evidence tests
+
+Kill each managed CLI and the broker in separate cases, verify fail-closed interruption, restart, re-attestation, reconciliation, typed resume, complete hash-chain verification, and final manifest equality with the actual repository state.
+
 - [ ] Step 5: Run the complete acceptance gate
+
+Run:
+```bash
+bun install --frozen-lockfile
+bun run typecheck
+bun test
+bun run apps/madbridge/src/cli.ts doctor --json
+bun run apps/madbridge/src/cli.ts verify-ledger --json
+```
+
+Expected: typecheck and all tests PASS; `doctor` reports Apple Silicon macOS and both adapter capability results without mutation; ledger verification reports a complete valid chain.
+
 - [ ] Step 6: Record fresh evidence
+
+Write exact command outputs, tested Git SHA, Bun version, Claude Code version, `agy` version, protocol version, adapter capability status, ledger head hash, manifest hash, and known fail-closed capability limitations into `docs/verification/madventures-tui-v1-evidence.md`. Do not include secrets or raw transcripts.
+
 - [ ] Step 7: Update README
+
+Update `README.md` to reflect the final Version 1 product: commands, architecture, verification status, and explicit deferrals.
+
 - [ ] Step 8: Request independent code review
+
+Commission a non-authoring reviewer against the exact tested Git SHA and the approved design. Resolve every blocking finding with a new test and rerun Step 5 before presenting completion to the Founder.
+
 - [ ] Step 9: Commit the verification package
+
+```bash
+git add test/acceptance docs/verification README.md
+git commit -m "test: verify madventures tui version 1"
+```
 
 ---
 
