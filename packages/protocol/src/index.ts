@@ -1,1 +1,31 @@
-export const PROTOCOL_VERSION = "madbridge-protocol/v1"
+// packages/protocol/src/index.ts
+// Public exports for the madbridge-protocol/v1 package.
+
+export { PROTOCOL_VERSION, EVENT_TYPES } from "./events";
+export type { EventType, BridgeEventV1 } from "./events";
+export { parseBridgeEvent } from "./events";
+
+export type {
+  TaskEnvelopeV1,
+  TaskScope,
+  ExecutionIdentity,
+  RepositoryFingerprint,
+  CliSurface,
+  ExecutionRole,
+  DataClass,
+  CommandCategory,
+  ArtifactCategory,
+  Effort,
+} from "./task-envelope";
+export {
+  parseTaskEnvelope,
+  KNOWN_ROLES,
+  KNOWN_SURFACES,
+  KNOWN_DATA_CLASSES,
+  KNOWN_COMMAND_CATEGORIES,
+} from "./task-envelope";
+
+export { canonicalJson, sha256Canonical } from "./canonical-json";
+export { newEventId, newSessionId } from "./ids";
+export { encodeWire, decodeWire } from "./wire";
+export type { WireMessage } from "./wire";
