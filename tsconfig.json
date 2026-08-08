@@ -19,6 +19,15 @@
     "noImplicitOverride": true,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
-    "noPropertyAccessFromIndexSignature": false
+    "noPropertyAccessFromIndexSignature": false,
+    "paths": {
+      "@madventures/protocol": ["./packages/protocol/src/index.ts"],
+      "@madventures/policy": ["./packages/policy/src/index.ts"],
+      "@madventures/ledger": ["./packages/ledger/src/index.ts"],
+      "@madventures/artifact-store": ["./packages/artifact-store/src/index.ts"],
+      "@madventures/broker": ["./packages/broker/src/index.ts"],
+      "@madventures/adapter-claude-code": ["./packages/adapter-claude-code/src/index.ts"],
+      "@madventures/adapter-antigravity": ["./packages/adapter-antigravity/src/index.ts"]
+    }
   }
 }
