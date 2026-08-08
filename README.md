@@ -68,8 +68,49 @@ bun run verify
 ```bash
 bun run verify          # typecheck + all tests
 bun test                # tests only
+bun test test/acceptance  # acceptance tests only
 ```
 
-251 tests across 28 files cover protocol parsing, policy enforcement, ledger
+343 tests across 32 files cover protocol parsing, policy enforcement, ledger
 integrity, ownership transitions, session reconciliation, adapter attestation,
-CLI commands, and TUI projection.
+CLI commands, TUI projection, and full acceptance-level two-way collaboration,
+ownership transfer, interruption recovery, and evidence manifest verification.
+
+## Acceptance Tests
+
+The `test/acceptance/` directory contains end-to-end acceptance tests that
+verify the complete MadBridge governance contract:
+
+- **disposable-repo.ts** — isolated disposable Git repository fixture with
+  worktrees. Refuses production repo paths and `main`/`master` branches.
+- **two-way-collaboration.test.ts** — typed bidirectional messaging, action
+  request/accept/reject, bounded artifact publication, inbox acknowledgement,
+  and absence of arbitrary shell/filesystem MCP tools.
+- **ownership-transfer.test.ts** — ownership transfer in both directions plus
+  negative controls: concurrent writers, stale tokens, write after release,
+  wrong fingerprint, unauthorized path/command/data/egress, forged and expired
+  credentials, replay, unsupported protocol, oversized payload, model mismatch,
+  self-review, and terminal prose claiming authority.
+- **interruption-recovery.test.ts** — fail-closed interruption on CLI exit,
+  adapter disconnect, and broker restart; reconciliation, re-attestation,
+  typed resume, complete hash-chain verification, and deterministic state rebuild.
+- **evidence-manifest.test.ts** — manifest equality with actual repository
+  state, sanitized evidence export, CLI verify-ledger, and protocol version
+  consistency.
+
+All acceptance tests use the in-memory broker (`createInMemoryBrokerForTest`)
+for safety — no real CLI processes are spawned.
+
+## Verification
+
+```bash
+# Complete acceptance gate
+bun install --frozen-lockfile
+bun run typecheck
+bun test
+bun run apps/madbridge/src/cli.ts doctor --json
+bun run apps/madbridge/src/cli.ts verify-ledger --json
+```
+
+See `docs/verification/madventures-tui-v1-evidence.md` for the latest
+verification evidence record.
