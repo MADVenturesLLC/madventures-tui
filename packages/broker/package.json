@@ -4,9 +4,10 @@
   "type": "module",
   "private": true,
   "dependencies": {
-    "@madventures/protocol": "workspace:*",
-    "@madventures/policy": "workspace:*",
+    "@madventures/artifact-store": "workspace:*",
     "@madventures/ledger": "workspace:*",
-    "@madventures/artifact-store": "workspace:*"
+    "@madventures/policy": "workspace:*",
+    "@madventures/protocol": "workspace:*",
+    "node-pty": "^1.1.0"
   }
 }
