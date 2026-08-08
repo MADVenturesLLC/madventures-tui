@@ -6,3 +6,5 @@ export { MCP_TOOLS, McpServer } from "./mcp-server";
 export type { McpToolDef } from "./mcp-server";
 export { validateCredential, createCredential } from "./credentials";
 export type { Credential } from "./credentials";
+export { PtyManager, createPtyManager } from "./pty-manager";
+export type { PtyId, PtyLaunchOptions, PtyHandle, PtyManagerSnapshot } from "./pty-manager";
