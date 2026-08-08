@@ -1,0 +1,10 @@
+{
+  "name": "@madventures/adapter-claude-code",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "@madventures/protocol": "workspace:*",
+    "@madventures/broker": "workspace:*"
+  }
+}

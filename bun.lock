@@ -7,18 +7,101 @@
       "dependencies": {
         "@opentui/core": "^0.5.1",
         "@opentui/react": "^0.5.1",
-        "@types/react": "^19.2.18",
         "react": "^19.2.6",
       },
       "devDependencies": {
         "@types/bun": "latest",
+        "@types/react": "^19.2.18",
       },
       "peerDependencies": {
         "typescript": "^5",
       },
     },
+    "apps/madbridge": {
+      "name": "@madventures/madbridge",
+      "version": "0.1.0",
+      "dependencies": {
+        "@madventures/adapter-antigravity": "workspace:*",
+        "@madventures/adapter-claude-code": "workspace:*",
+        "@madventures/artifact-store": "workspace:*",
+        "@madventures/broker": "workspace:*",
+        "@madventures/ledger": "workspace:*",
+        "@madventures/policy": "workspace:*",
+        "@madventures/protocol": "workspace:*",
+        "@opentui/core": "^0.5.1",
+        "@opentui/react": "^0.5.1",
+        "react": "^19.2.6",
+      },
+    },
+    "packages/adapter-antigravity": {
+      "name": "@madventures/adapter-antigravity",
+      "version": "0.1.0",
+      "dependencies": {
+        "@madventures/broker": "workspace:*",
+        "@madventures/protocol": "workspace:*",
+      },
+    },
+    "packages/adapter-claude-code": {
+      "name": "@madventures/adapter-claude-code",
+      "version": "0.1.0",
+      "dependencies": {
+        "@madventures/broker": "workspace:*",
+        "@madventures/protocol": "workspace:*",
+      },
+    },
+    "packages/artifact-store": {
+      "name": "@madventures/artifact-store",
+      "version": "0.1.0",
+      "dependencies": {
+        "@madventures/protocol": "workspace:*",
+      },
+    },
+    "packages/broker": {
+      "name": "@madventures/broker",
+      "version": "0.1.0",
+      "dependencies": {
+        "@madventures/artifact-store": "workspace:*",
+        "@madventures/ledger": "workspace:*",
+        "@madventures/policy": "workspace:*",
+        "@madventures/protocol": "workspace:*",
+      },
+    },
+    "packages/ledger": {
+      "name": "@madventures/ledger",
+      "version": "0.1.0",
+      "dependencies": {
+        "@madventures/protocol": "workspace:*",
+      },
+    },
+    "packages/policy": {
+      "name": "@madventures/policy",
+      "version": "0.1.0",
+      "dependencies": {
+        "@madventures/protocol": "workspace:*",
+      },
+    },
+    "packages/protocol": {
+      "name": "@madventures/protocol",
+      "version": "0.1.0",
+    },
   },
   "packages": {
+    "@madventures/adapter-antigravity": ["@madventures/adapter-antigravity@workspace:packages/adapter-antigravity"],
+
+    "@madventures/adapter-claude-code": ["@madventures/adapter-claude-code@workspace:packages/adapter-claude-code"],
+
+    "@madventures/artifact-store": ["@madventures/artifact-store@workspace:packages/artifact-store"],
+
+    "@madventures/broker": ["@madventures/broker@workspace:packages/broker"],
+
+    "@madventures/ledger": ["@madventures/ledger@workspace:packages/ledger"],
+
+    "@madventures/madbridge": ["@madventures/madbridge@workspace:apps/madbridge"],
+
+    "@madventures/policy": ["@madventures/policy@workspace:packages/policy"],
+
+    "@madventures/protocol": ["@madventures/protocol@workspace:packages/protocol"],
+
     "@opentui/core": ["@opentui/core@0.5.1", "", { "dependencies": { "bun-ffi-structs": "0.3.1", "diff": "9.0.0", "marked": "17.0.1", "string-width": "7.2.0", "strip-ansi": "7.1.2" }, "optionalDependencies": { "@opentui/core-darwin-arm64": "0.5.1", "@opentui/core-darwin-x64": "0.5.1", "@opentui/core-linux-arm64": "0.5.1", "@opentui/core-linux-arm64-musl": "0.5.1", "@opentui/core-linux-x64": "0.5.1", "@opentui/core-linux-x64-musl": "0.5.1", "@opentui/core-win32-arm64": "0.5.1", "@opentui/core-win32-x64": "0.5.1" }, "peerDependencies": { "web-tree-sitter": "0.25.10" } }, "sha512-mIBFyqIP4rkhQ35uldLXWawWQ6S9tvNWvmxGmDJ7W9cLXjegG6gKEfZ/4NyIMma755ERs/sqO/pIh3Ytf3DDFg=="],
 
     "@opentui/core-darwin-arm64": ["@opentui/core-darwin-arm64@0.5.1", "", { "os": "darwin", "cpu": "arm64" }, "sha512-Yl3JBLYRrBN+SxXY/gYaqCT/JNrN50K4xO7hYC+/Si8/FgOrBlbRmfJIUNQdZMMLUvOMA+I813+hDw3xfarBzQ=="],

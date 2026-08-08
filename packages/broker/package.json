@@ -1,0 +1,12 @@
+{
+  "name": "@madventures/broker",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "@madventures/protocol": "workspace:*",
+    "@madventures/policy": "workspace:*",
+    "@madventures/ledger": "workspace:*",
+    "@madventures/artifact-store": "workspace:*"
+  }
+}

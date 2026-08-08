@@ -709,13 +709,14 @@ git commit -m "feat: add madv tui command surface"
 **Files:**
 - Create: `packages/broker/src/reconciliation.ts`
 - Create: `packages/broker/test/reconciliation.test.ts`
-- Modify: `packages/ledger/test/rebuild.test.ts`
+- Extend: `packages/ledger/src/rebuild.ts`
+- Extend: `packages/broker/src/broker.ts`
 
 **Interfaces:**
 - Consumes: ledger events, repository state, adapter attestation.
-- Produces: `reconcile(repositoryPath, lastFingerprint)`, `ReconciliationResult`, and deterministic state reconstruction from verified ledger events.
+- Produces: `interruptSession(reason)`, `reconcileRepository(input)`, `resumeSession(approval)`, and deterministic `rebuildBrokerState(events)`.
 
-- [ ] **Step 1: Write interruption and reconciliation tests**
+- [ ] **Step 1: Write disconnect and restart tests**
 
 Test CLI exit, adapter loss, broker restart, frozen pending actions, invalidated fencing token, persisted last fingerprint, broken chain detection, and successful recovery issuing a new fencing token.
 
@@ -729,36 +730,41 @@ Expected: FAIL because reconciliation module does not exist.
 
 On disconnect: session enters `interrupted`, fencing token invalidated, pending actions frozen, last verified fingerprint persisted. Recovery requires: re-attestation of both executions, repository reconciliation against ledger, Founder-visible result, and a valid resume event that restores `active` and issues current ownership state. Broker restart reconstructs state from verified ledger. Broken hash chain, ambiguous repository state, or unavailable execution leaves session blocked.
 
-- [ ] **Step 4: Run reconciliation tests**
+- [ ] **Step 5: Run reconciliation tests**
 
 Run: `bun test packages/broker/test/reconciliation.test.ts packages/ledger/test/rebuild.test.ts && bun run typecheck`
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add packages/broker/src/reconciliation.ts packages/broker/test/reconciliation.test.ts packages/ledger/test/rebuild.test.ts
-git commit -m "feat: add interruption recovery and deterministic restart"
+git add packages/broker/src packages/broker/test/reconciliation.test.ts packages/ledger/src/rebuild.ts packages/ledger/test/rebuild.test.ts
+git commit -m "feat: add fail closed session recovery"
 ```
 
 ---
 
-### Task 11: Remove Obsolete Prototype Files and Verify Parity
+### Task 11: Migrate Useful Prototype Code and Remove Obsolete Duplicates
 
 **Files:**
-- Delete: `src/` (the old prototype directory)
-- Modify: `package.json`, `tsconfig.json`
+- Delete after parity is proven: `src/tui/`, `src/broker/`, `src/mcp/`, `src/adapters/`, `src/permissions/`, `src/shared/`
+- Modify: `README.md`
+- Modify: `test/architecture-boundaries.test.ts`
 
-- [ ] **Step 1: Verify all prototype functionality has been ported**
+**Interfaces:**
+- Consumes: all approved packages and tests.
+- Produces: one unambiguous implementation with no competing broker, permission engine, protocol, or authority UI.
 
-Run: `rg -n "approval|owner|lease|socket|send_message|request_transfer|accept_transfer|attest|get_state|get_inbox" src apps packages`
+- [ ] **Step 1: Inventory prototype logic against the new implementation**
 
-Expected: all matches are in the new workspace boundaries, not in the old `src/` directory.
+Run:
 
-- [ ] **Step 2: Delete obsolete files**
+```bash
 
-Remove the old `src/` directory entirely. All functionality must be in `apps/` and `packages/`.
+- [ ] **Step 2: Delete obsolete files after proving parity**
+
+Remove `src/tui/`, `src/broker/`, `src/mcp/`, `src/adapters/`, `src/permissions/`, and `src/shared/` entirely. All functionality must be in `apps/` and `packages/`.
 
 - [ ] **Step 3: Run full verification**
 
@@ -770,7 +776,7 @@ Expected: PASS with zero references to the old directory structure.
 
 ```bash
 git add -A
-git commit -m "chore: remove obsolete prototype files after parity verification"
+git commit -m "chore: remove obsolete prototype code after workspace parity"
 ```
 
 ---
@@ -789,9 +795,9 @@ git commit -m "chore: remove obsolete prototype files after parity verification"
 
 - [ ] **Step 1: Create an isolated disposable Git repository fixture**
 
-`disposable-repo.ts` creates a temporary Git repository with a known initial commit. No acceptance test may target a production branch.
+`disposable-repo.ts` creates a temporary directory, initializes Git, commits one file, creates dedicated Claude and Antigravity worktrees, and returns cleanup handles. It must refuse any path inside the production repository or any branch named `main` or `master` for destructive controls. No acceptance test may target a production branch.
 
-- [ ] **Step 2: Write the acceptance test suite**
+- [ ] **Step 2: Write two-way collaboration and artifact tests**
 
 Exercise typed Claude-to-Antigravity and Antigravity-to-Claude messages, action request/accept/reject, bounded artifact exchange, successful writer transfer in both directions, rejection of concurrent writer, disconnect/re-attestation/reconciliation/recovery, complete verifiable local evidence chain, and final manifest matching actual repository state.
 

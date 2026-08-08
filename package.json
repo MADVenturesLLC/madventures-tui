@@ -1,18 +1,22 @@
 {
   "name": "madventures-tui",
   "version": "0.1.0",
-  "module": "src/index.tsx",
   "type": "module",
   "private": true,
+  "module": "src/index.tsx",
   "bin": {
     "madv-tui": "src/cli.ts"
   },
+  "workspaces": ["apps/*", "packages/*"],
   "scripts": {
     "dev": "bun run --watch src/index.tsx",
     "build": "tsc --noEmit",
+    "typecheck": "bunx tsc --noEmit",
+    "test": "bun test",
+    "verify": "bunx tsc --noEmit && bun test",
+    "madv-tui": "bun run src/cli.ts",
     "broker": "bun run src/broker/index.ts",
-    "mcp": "bun run src/mcp/server.ts",
-    "test": "bun test"
+    "mcp": "bun run src/mcp/server.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",

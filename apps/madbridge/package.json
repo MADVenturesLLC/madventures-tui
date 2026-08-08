@@ -1,0 +1,18 @@
+{
+  "name": "@madventures/madbridge",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "@opentui/core": "^0.5.1",
+    "@opentui/react": "^0.5.1",
+    "react": "^19.2.6",
+    "@madventures/protocol": "workspace:*",
+    "@madventures/policy": "workspace:*",
+    "@madventures/ledger": "workspace:*",
+    "@madventures/artifact-store": "workspace:*",
+    "@madventures/broker": "workspace:*",
+    "@madventures/adapter-claude-code": "workspace:*",
+    "@madventures/adapter-antigravity": "workspace:*"
+  }
+}

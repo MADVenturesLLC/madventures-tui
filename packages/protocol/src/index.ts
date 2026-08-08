@@ -1,0 +1,1 @@
+export const PROTOCOL_VERSION = "madbridge-protocol/v1"
