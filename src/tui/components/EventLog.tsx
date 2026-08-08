@@ -18,16 +18,18 @@ export function EventLog({ entries }: Props) {
       paddingLeft={1}
       paddingRight={1}
     >
-      <text attributes={TextAttributes.UNDERLINE}>Event Log</text>
+      <text attributes={TextAttributes.UNDERLINE}>Event Log (hash-chained ledger)</text>
       {recent.map((entry) => (
         <box key={entry.seq} flexDirection="row">
           <text fg="gray">#{entry.seq}</text>
           <text> </text>
-          <text fg={entry.type === "interrupt" ? "red" : entry.type === "transfer" ? "cyan" : "white"}>
+          <text fg={entry.type === "interrupt" ? "red" : entry.type.includes("transfer") ? "cyan" : "white"}>
             {entry.type}
           </text>
           <text> </text>
           <text fg="magenta">{entry.actor}</text>
+          <text> </text>
+          <text fg="blue">tok:{entry.fencingToken}</text>
           <text> </text>
           <text attributes={TextAttributes.DIM}>
             {entry.hash.slice(0, 12)}

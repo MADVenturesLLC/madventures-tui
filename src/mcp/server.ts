@@ -5,10 +5,12 @@
 // Each CLI spawns its own instance of this server. They communicate with
 // the broker daemon over the Unix socket.
 
-import { StateMachine } from "../broker/state-machine";
+import { OwnershipMachine } from "../broker/ownership-machine";
+import { SessionMachine } from "../broker/session-machine";
 import { Ledger } from "../broker/ledger";
 import { InboxManager } from "../broker/inbox";
 import { TransferManager } from "../broker/transfer";
+import { PermissionEngine } from "../permissions/engine";
 import { MCP_TOOLS } from "../shared/protocol";
 import type { CliId, BrokerState } from "../shared/types";
 

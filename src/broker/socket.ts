@@ -1,9 +1,10 @@
-// src/broker/socket.ts
-// Unix-domain socket server. Subscribers connect and receive state updates.
-// Uses Bun's built net listen API.
+// broker/socket.ts
+// Unix-domain socket server with secure runtime (F4).
+// Socket is 0600 in a 0700 Founder-owned directory.
 
 import type { SocketMessage } from "../shared/protocol";
-import { BROKER_SOCKET_PATH } from "../shared/protocol";
+import { SOCKET_PATH } from "../shared/protocol";
+import { Runtime } from "./runtime";
 
 type MessageHandler = (msg: SocketMessage) => void;
 type ClientSocket = { write: (data: string) => void; close: () => void };
@@ -14,16 +15,12 @@ export class BrokerSocket {
   private listening = false;
 
   async start(): Promise<void> {
-    // Clean up stale socket file
-    try {
-      await Bun.file(BROKER_SOCKET_PATH).exists() &&
-        (await import("fs/promises")).unlink(BROKER_SOCKET_PATH);
-    } catch {
-      // ignore
-    }
+    // F4: secure runtime setup
+    Runtime.init();
+    Runtime.cleanStaleSocket();
 
     const server = Bun.listen({
-      unix: BROKER_SOCKET_PATH,
+      unix: SOCKET_PATH,
       socket: {
         data: (socket: ClientSocket, data: Buffer) => {
           const text = new TextDecoder().decode(data);
@@ -46,13 +43,16 @@ export class BrokerSocket {
       },
     });
 
+    // F4: secure the socket file to 0600
+    Runtime.secureSocket();
+
     this.listening = true;
-    void server; // keep reference alive
+    void server;
   }
 
   broadcast(msg: SocketMessage): void {
     const text = JSON.stringify(msg) + "\n";
-    for (const client of this.clients) {
+    for (const client of Array.from(this.clients)) {
       client.write(text);
     }
   }

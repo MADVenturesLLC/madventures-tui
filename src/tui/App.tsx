@@ -1,5 +1,5 @@
-// src/tui/App.tsx — Root layout, focus routing, keyboard handler
-import { useReducer, useCallback } from "react";
+// src/tui/App.tsx — Root layout, focus routing, configurable keyboard handler
+import { useReducer, useCallback, useMemo } from "react";
 import { ClaudePane } from "./panes/ClaudePane";
 import { AntigravityPane } from "./panes/AntigravityPane";
 import { GovernancePane } from "./panes/GovernancePane";
@@ -7,12 +7,12 @@ import { ApprovalDialog } from "./components/ApprovalDialog";
 import { StatusBar } from "./components/StatusBar";
 import { EventLog } from "./components/EventLog";
 import { useBrokerState } from "./hooks/useBrokerState";
-
-export type FocusTarget = "claude" | "antigravity" | "governance" | "events";
+import { loadKeybindings } from "../shared/keybindings";
+import type { FocusTarget } from "../shared/ui-types";
 
 interface UIState {
   focus: FocusTarget;
-  showApproval: boolean;
+  showApprovalDialog: boolean;
 }
 
 type UIAction =
@@ -24,7 +24,7 @@ function uiReducer(state: UIState, action: UIAction): UIState {
     case "focus":
       return { ...state, focus: action.target };
     case "toggle-approval":
-      return { ...state, showApproval: !state.showApproval };
+      return { ...state, showApprovalDialog: !state.showApprovalDialog };
     default:
       return state;
   }
@@ -32,20 +32,27 @@ function uiReducer(state: UIState, action: UIAction): UIState {
 
 export function App() {
   const { state, connected } = useBrokerState();
+  const keybindings = useMemo(() => loadKeybindings(), []);
+
   const [ui, dispatch] = useReducer(uiReducer, {
     focus: "claude",
-    showApproval: state?.pendingApproval != null,
+    showApprovalDialog: false,
   });
 
   const onKey = useCallback((key: string) => {
-    switch (key) {
-      case "1": dispatch({ type: "focus", target: "claude" }); break;
-      case "2": dispatch({ type: "focus", target: "antigravity" }); break;
-      case "3": dispatch({ type: "focus", target: "governance" }); break;
-      case "4": dispatch({ type: "focus", target: "events" }); break;
-      case "a": dispatch({ type: "toggle-approval" }); break;
+    const normalized = key.toLowerCase();
+    const action = keybindings.get(normalized);
+    if (!action) return;
+
+    switch (action) {
+      case "focus-claude": dispatch({ type: "focus", target: "claude" }); break;
+      case "focus-antigravity": dispatch({ type: "focus", target: "antigravity" }); break;
+      case "focus-governance": dispatch({ type: "focus", target: "governance" }); break;
+      case "focus-events": dispatch({ type: "focus", target: "events" }); break;
+      case "toggle-approval": dispatch({ type: "toggle-approval" }); break;
+      case "quit": break; // handled by renderer
     }
-  }, []);
+  }, [keybindings]);
 
   return (
     <box flexDirection="column" flexGrow={1}>
@@ -68,7 +75,7 @@ export function App() {
         />
       </box>
 
-      {/* Middle: event log (collapsible) */}
+      {/* Middle: event log (visible when focused) */}
       {ui.focus === "events" && (
         <EventLog entries={state?.eventLog ?? []} />
       )}
@@ -76,10 +83,12 @@ export function App() {
       {/* Bottom: status bar always visible */}
       <StatusBar state={state} connected={connected} focus={ui.focus} />
 
-      {/* Overlay: approval dialog when needed */}
-      {ui.showApproval && state?.pendingApproval && (
+      {/* Overlay: approval dialog — shows pending approval events from broker.
+          UI does NOT create authority. It displays broker authority events.
+          Acceptance/rejection is sent to the broker, which records a ledger entry. */}
+      {ui.showApprovalDialog && (state?.pendingApprovals?.length ?? 0) > 0 && (
         <ApprovalDialog
-          request={state.pendingApproval}
+          approval={state!.pendingApprovals[0]!}
           onAccept={() => dispatch({ type: "toggle-approval" })}
           onReject={() => dispatch({ type: "toggle-approval" })}
         />

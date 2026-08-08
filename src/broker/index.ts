@@ -1,67 +1,81 @@
 // src/broker/index.ts
-// Broker daemon entry point. Starts socket server, wires up state machine,
-// ledger, inboxes, and transfer manager. Broadcasts state updates to TUI.
+// Broker daemon entry point. Wires ownership + session machines, ledger,
+// approval manager, inboxes, transfers, and socket. Broadcasts state.
 
-import { StateMachine } from "./state-machine";
+import { OwnershipMachine } from "./ownership-machine";
+import { SessionMachine } from "./session-machine";
 import { Ledger } from "./ledger";
 import { InboxManager } from "./inbox";
 import { TransferManager } from "./transfer";
+import { ApprovalManager } from "./approval";
 import { BrokerSocket } from "./socket";
+import { Runtime } from "./runtime";
 import type { BrokerState, CliId } from "../shared/types";
 import type { SocketMessage } from "../shared/protocol";
 
 export class Broker {
-  readonly state = new StateMachine();
+  readonly ownership = new OwnershipMachine();
+  readonly sessions = new SessionMachine();
   readonly ledger = new Ledger();
   readonly inboxes = new InboxManager();
-  readonly transfers = new TransferManager();
+  readonly transfers = new TransferManager(this.ownership, this.sessions);
+  readonly approvals = new ApprovalManager(this.ledger);
   readonly socket = new BrokerSocket();
 
   async start(): Promise<void> {
+    // F4: secure runtime
+    Runtime.init();
+    Runtime.cleanStaleSocket();
     await this.socket.start();
-    console.log(`[broker] listening on ${process.env.FOUNDER_TUI_SOCKET ?? "/tmp/founder-tui-broker.sock"}`);
+    Runtime.secureSocket();
 
-    // Wire state machine changes to broadcast
-    this.state.onChange(() => this.broadcastState());
+    console.log(`[broker] listening on ${Runtime.socket}`);
 
-    // Wire inbox changes to broadcast
+    // Wire state changes to broadcast
+    this.ownership.onChange(() => this.broadcastState());
+    this.sessions.onChange(() => this.broadcastState());
+    this.approvals.onChange(() => this.broadcastState());
+
     for (const cli of ["claude", "antigravity"] as CliId[]) {
       this.inboxes.subscribe(cli, () => this.broadcastState());
     }
 
-    // Handle incoming socket messages (from TUI or adapters)
+    // Handle incoming socket messages
     this.socket.onMessage((msg: SocketMessage) => {
       switch (msg.kind) {
         case "subscribe":
-          // Send full state on subscribe
           this.broadcastState();
           break;
-        // Tool calls come through MCP, not socket — socket is for state sync
       }
     });
 
-    // Append genesis entry
-    await this.ledger.append("attest", "claude", { event: "broker-started" });
+    // Genesis ledger entry
+    await this.ledger.append("session-start", "claude", {
+      event: "broker-started",
+      runtimeDir: Runtime.dir,
+    });
     this.broadcastState();
   }
 
   private broadcastState(): void {
     const state: BrokerState = {
-      owner: this.state.current,
+      ownership: this.ownership.current,
+      sessions: this.sessions.getAll(),
       inboxes: {
         claude: this.inboxes.get("claude"),
         antigravity: this.inboxes.get("antigravity"),
       },
       eventLog: this.ledger.recent(50),
-      pendingApproval: null,
-      pendingTransfer: this.transfers.current,
+      pendingApprovals: this.approvals.pendingList,
+      pendingTransfers: this.transfers.isPending ? [this.transfers.current!] : [],
+      artifacts: [],
       queueDepth: this.inboxes.queueDepth(),
+      fencingToken: this.ownership.token,
     };
     this.socket.broadcast({ kind: "state", state });
   }
 }
 
-// Entry point when run directly
 if (import.meta.main) {
   const broker = new Broker();
   broker.start().catch((err) => {

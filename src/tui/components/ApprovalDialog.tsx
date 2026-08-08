@@ -1,14 +1,17 @@
 // src/tui/components/ApprovalDialog.tsx
+// F2: Displays approval EVENTS from the broker — does not create authority.
+// Accept/reject sends a resolution to the broker, which records a ledger entry.
+
 import { TextAttributes } from "@opentui/core";
-import type { ApprovalRequest } from "../../shared/types";
+import type { ApprovalEvent } from "../../shared/types";
 
 interface Props {
-  request: ApprovalRequest;
+  approval: ApprovalEvent;
   onAccept: () => void;
   onReject: () => void;
 }
 
-export function ApprovalDialog({ request }: Props) {
+export function ApprovalDialog({ approval }: Props) {
   return (
     <box
       position="absolute"
@@ -24,18 +27,32 @@ export function ApprovalDialog({ request }: Props) {
       paddingBottom={1}
     >
       <text fg="yellow" attributes={TextAttributes.BOLD}>
-        Approval Required: {request.type.toUpperCase()}
+        Approval Required: {approval.type.toUpperCase()}
       </text>
       <box paddingTop={1} paddingBottom={1}>
-        <text>{request.detail}</text>
+        <text>Task: {approval.task.title}</text>
+      </box>
+      <box paddingBottom={1}>
+        <text fg="gray">Requested by: {approval.actor.cli} ({approval.actor.model})</text>
+      </box>
+      <box paddingBottom={1}>
+        <text fg="gray">Repo fingerprint: {approval.repoFingerprint.slice(0, 24)}</text>
+      </box>
+      <box paddingBottom={1}>
+        <text fg="gray">Scope: {approval.scope.commandCategories.join(", ")}</text>
+      </box>
+      <box paddingBottom={1}>
+        <text fg="gray">Event ID: {approval.id}</text>
       </box>
       <box paddingTop={1}>
-        <text fg="gray">Requested by: {request.requestedBy}</text>
-      </box>
-      <box paddingTop={1}>
-        <text fg="green">[Y] Accept</text>
+        <text fg="green">[Ctrl+Y] Accept</text>
         <text>  </text>
-        <text fg="red">[N] Reject</text>
+        <text fg="red">[Ctrl+N] Reject</text>
+      </box>
+      <box paddingTop={1}>
+        <text attributes={TextAttributes.DIM}>
+          Resolution is recorded as an immutable ledger entry.
+        </text>
       </box>
     </box>
   );

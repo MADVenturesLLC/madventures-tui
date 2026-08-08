@@ -1,7 +1,7 @@
 // src/tui/panes/AntigravityPane.tsx
 import { TextAttributes } from "@opentui/core";
 import type { BrokerState } from "../../shared/types";
-import type { FocusTarget } from "../App";
+import type { FocusTarget } from "../../shared/ui-types";
 
 interface Props {
   active: boolean;
@@ -10,11 +10,12 @@ interface Props {
 }
 
 export function AntigravityPane({ active, state }: Props) {
-  const isOwner =
-    state?.owner.status === "held" && state.owner.holder === "antigravity";
-  const isPaused =
-    state?.owner.status === "paused" && state.owner.holder === "antigravity";
+  const session = state?.sessions.antigravity;
+  const ownership = state?.ownership;
+  const isOwner = ownership?.holder === "antigravity" && ownership.status === "owned";
+  const isPaused = session?.status === "paused" || session?.status === "reconciling";
   const inbox = state?.inboxes.antigravity ?? [];
+  const unacked = inbox.filter((m) => !m.acknowledged).length;
 
   return (
     <box
@@ -30,16 +31,19 @@ export function AntigravityPane({ active, state }: Props) {
           Antigravity
         </text>
         {isOwner && <text fg="green" attributes={TextAttributes.BOLD}> [WRITING]</text>}
-        {isPaused && <text fg="yellow"> [PAUSED]</text>}
+        {isPaused && <text fg="yellow"> [{session?.status?.toUpperCase()}]</text>}
       </box>
 
+      {/* F8: PTY output area */}
       <box flexGrow={1}>
-        <text attributes={TextAttributes.DIM}>Awaiting Antigravity session...</text>
+        <text attributes={TextAttributes.DIM}>
+          {session?.status === "active" ? "PTY stream active..." : "Awaiting session start..."}
+        </text>
       </box>
 
       <box border={true} borderColor="gray">
         <text attributes={TextAttributes.DIM}>
-          Inbox: {inbox.length} message{inbox.length !== 1 ? "s" : ""}
+          Inbox: {unacked} unread / {inbox.length} total
         </text>
       </box>
     </box>

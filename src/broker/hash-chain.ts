@@ -1,8 +1,8 @@
-// src/broker/hash-chain.ts
+// broker/hash-chain.ts
 // Hash-chained append-only ledger for attestation and recovery.
-// Each entry's hash = sha256(prevHash + seq + type + actor + payload + timestamp).
+// Each entry's hash = sha256(prevHash + seq + type + actor + fencingToken + payload + timestamp).
 
-import type { LedgerEntry } from "../shared/types";
+import type { LedgerEntry, LedgerEntryType, CliId, FencingToken, TaskEnvelope } from "../shared/types";
 
 const encoder = new TextEncoder();
 
@@ -13,9 +13,11 @@ async function sha256(data: string): Promise<string> {
     .join("");
 }
 
+const GENESIS_HASH = "0".repeat(64);
+
 export class HashChain {
   private entries: LedgerEntry[] = [];
-  private lastHash = "0000000000000000000000000000000000000000000000000000000000000000";
+  private lastHash = GENESIS_HASH;
 
   get all(): LedgerEntry[] {
     return [...this.entries];
@@ -26,21 +28,25 @@ export class HashChain {
   }
 
   async append(
-    type: LedgerEntry["type"],
-    actor: LedgerEntry["actor"],
+    type: LedgerEntryType,
+    actor: CliId,
     payload: Record<string, unknown>,
+    fencingToken: FencingToken = 0,
+    task: TaskEnvelope | null = null,
   ): Promise<LedgerEntry> {
     const seq = this.entries.length + 1;
     const timestamp = Date.now();
     const prevHash = this.lastHash;
 
-    const hashInput = `${prevHash}|${seq}|${type}|${actor}|${JSON.stringify(payload)}|${timestamp}`;
+    const hashInput = `${prevHash}|${seq}|${type}|${actor}|${fencingToken}|${JSON.stringify(payload)}|${timestamp}`;
     const hash = await sha256(hashInput);
 
     const entry: LedgerEntry = {
       seq,
       type,
       actor,
+      fencingToken,
+      task,
       payload,
       prevHash,
       hash,
@@ -53,11 +59,11 @@ export class HashChain {
   }
 
   async verify(): Promise<boolean> {
-    let expectedPrev = "0000000000000000000000000000000000000000000000000000000000000000";
+    let expectedPrev = GENESIS_HASH;
 
     for (const entry of this.entries) {
       if (entry.prevHash !== expectedPrev) return false;
-      const hashInput = `${entry.prevHash}|${entry.seq}|${entry.type}|${entry.actor}|${JSON.stringify(entry.payload)}|${entry.timestamp}`;
+      const hashInput = `${entry.prevHash}|${entry.seq}|${entry.type}|${entry.actor}|${entry.fencingToken}|${JSON.stringify(entry.payload)}|${entry.timestamp}`;
       const recomputed = await sha256(hashInput);
       if (recomputed !== entry.hash) return false;
       expectedPrev = entry.hash;

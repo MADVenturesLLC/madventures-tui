@@ -1,9 +1,12 @@
 {
-  "name": "founder-tui",
+  "name": "madventures-tui",
   "version": "0.1.0",
   "module": "src/index.tsx",
   "type": "module",
   "private": true,
+  "bin": {
+    "madv-tui": "src/cli.ts"
+  },
   "scripts": {
     "dev": "bun run --watch src/index.tsx",
     "build": "tsc --noEmit",
@@ -12,7 +15,8 @@
     "test": "bun test"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@types/react": "^19.2.18"
   },
   "peerDependencies": {
     "typescript": "^5"
@@ -20,7 +24,6 @@
   "dependencies": {
     "@opentui/core": "^0.5.1",
     "@opentui/react": "^0.5.1",
-    "@types/react": "^19.2.18",
     "react": "^19.2.6"
   }
 }

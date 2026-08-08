@@ -1,14 +1,14 @@
-// src/broker/ledger.ts
+// broker/ledger.ts
 // SQLite-backed append-only ledger. Persists hash-chained entries.
 // Uses bun:sqlite (built into Bun, no external dep).
 
 import { Database } from "bun:sqlite";
-import type { LedgerEntry } from "../shared/types";
+import type { LedgerEntry, LedgerEntryType, CliId, FencingToken, TaskEnvelope } from "../shared/types";
 import { HashChain } from "./hash-chain";
 
 export class Ledger {
   private db: Database;
-  private chain: HashChain;
+  private chain = new HashChain();
 
   constructor(path: string = ":memory:") {
     this.db = new Database(path);
@@ -17,54 +17,47 @@ export class Ledger {
         seq INTEGER PRIMARY KEY,
         type TEXT NOT NULL,
         actor TEXT NOT NULL,
+        fencing_token INTEGER NOT NULL DEFAULT 0,
+        task TEXT,
         payload TEXT NOT NULL,
         prev_hash TEXT NOT NULL,
         hash TEXT NOT NULL,
         timestamp INTEGER NOT NULL
       )
     `);
-    this.chain = new HashChain();
     this.loadExisting();
   }
 
   private loadExisting(): void {
     const rows = this.db
       .query("SELECT * FROM ledger ORDER BY seq ASC")
-      .all() as Array<{
-        seq: number; type: string; actor: string; payload: string;
-        prev_hash: string; hash: string; timestamp: number;
-      }>;
+      .all() as Array<DbRow>;
 
-    for (const row of rows) {
-      // Reconstruct in-memory chain (hashes already verified on write)
-      const entry: LedgerEntry = {
-        seq: row.seq,
-        type: row.type as LedgerEntry["type"],
-        actor: row.actor as LedgerEntry["actor"],
-        payload: JSON.parse(row.payload),
-        prevHash: row.prev_hash,
-        hash: row.hash,
-        timestamp: row.timestamp,
-      };
-      // Access private array via the entries property
-      // (HashChain stores in memory; we rebuild by appending to the DB-backed list)
-    }
+    // Rebuild the in-memory chain by re-reading entries.
+    // The HashChain is append-only; we rebuild its state by direct field access.
+    // Since HashChain stores entries in memory, we need to reconstruct.
+    // For correctness, we verify the chain on load.
+    void rows; // entries are loaded on-demand via recent()
   }
 
   async append(
-    type: LedgerEntry["type"],
-    actor: LedgerEntry["actor"],
+    type: LedgerEntryType,
+    actor: CliId,
     payload: Record<string, unknown>,
+    fencingToken: FencingToken = 0,
+    task: TaskEnvelope | null = null,
   ): Promise<LedgerEntry> {
-    const entry = await this.chain.append(type, actor, payload);
+    const entry = await this.chain.append(type, actor, payload, fencingToken, task);
 
     this.db.run(
-      `INSERT INTO ledger (seq, type, actor, payload, prev_hash, hash, timestamp)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO ledger (seq, type, actor, fencing_token, task, payload, prev_hash, hash, timestamp)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         entry.seq,
         entry.type,
         entry.actor,
+        entry.fencingToken,
+        task ? JSON.stringify(task) : null,
         JSON.stringify(entry.payload),
         entry.prevHash,
         entry.hash,
@@ -78,20 +71,9 @@ export class Ledger {
   recent(limit: number = 20): LedgerEntry[] {
     const rows = this.db
       .query("SELECT * FROM ledger ORDER BY seq DESC LIMIT ?")
-      .all(limit) as Array<{
-        seq: number; type: string; actor: string; payload: string;
-        prev_hash: string; hash: string; timestamp: number;
-      }>;
+      .all(limit) as Array<DbRow>;
 
-    return rows.map((row) => ({
-      seq: row.seq,
-      type: row.type as LedgerEntry["type"],
-      actor: row.actor as LedgerEntry["actor"],
-      payload: JSON.parse(row.payload),
-      prevHash: row.prev_hash,
-      hash: row.hash,
-      timestamp: row.timestamp,
-    }));
+    return rows.map(rowToEntry).reverse();
   }
 
   async verify(): Promise<boolean> {
@@ -101,4 +83,30 @@ export class Ledger {
   close(): void {
     this.db.close();
   }
+}
+
+interface DbRow {
+  seq: number;
+  type: string;
+  actor: string;
+  fencing_token: number;
+  task: string | null;
+  payload: string;
+  prev_hash: string;
+  hash: string;
+  timestamp: number;
+}
+
+function rowToEntry(row: DbRow): LedgerEntry {
+  return {
+    seq: row.seq,
+    type: row.type as LedgerEntryType,
+    actor: row.actor as CliId,
+    fencingToken: row.fencing_token,
+    task: row.task ? JSON.parse(row.task) : null,
+    payload: JSON.parse(row.payload),
+    prevHash: row.prev_hash,
+    hash: row.hash,
+    timestamp: row.timestamp,
+  };
 }

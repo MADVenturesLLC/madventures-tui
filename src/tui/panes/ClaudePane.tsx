@@ -1,7 +1,7 @@
 // src/tui/panes/ClaudePane.tsx
 import { TextAttributes } from "@opentui/core";
 import type { BrokerState } from "../../shared/types";
-import type { FocusTarget } from "../App";
+import type { FocusTarget } from "../../shared/ui-types";
 
 interface Props {
   active: boolean;
@@ -10,11 +10,12 @@ interface Props {
 }
 
 export function ClaudePane({ active, state }: Props) {
-  const isOwner =
-    state?.owner.status === "held" && state.owner.holder === "claude";
-  const isPaused =
-    state?.owner.status === "paused" && state.owner.holder === "claude";
+  const session = state?.sessions.claude;
+  const ownership = state?.ownership;
+  const isOwner = ownership?.holder === "claude" && ownership.status === "owned";
+  const isPaused = session?.status === "paused" || session?.status === "reconciling";
   const inbox = state?.inboxes.claude ?? [];
+  const unacked = inbox.filter((m) => !m.acknowledged).length;
 
   return (
     <box
@@ -30,18 +31,21 @@ export function ClaudePane({ active, state }: Props) {
           Claude Code
         </text>
         {isOwner && <text fg="green" attributes={TextAttributes.BOLD}> [WRITING]</text>}
-        {isPaused && <text fg="yellow"> [PAUSED]</text>}
+        {isPaused && <text fg="yellow"> [{session?.status?.toUpperCase()}]</text>}
+        {session && <text attributes={TextAttributes.DIM}> {session.status}</text>}
       </box>
 
-      {/* Session output placeholder — will stream from adapter */}
+      {/* F8: PTY output area — will host real managed CLI PTY, not just status */}
       <box flexGrow={1}>
-        <text attributes={TextAttributes.DIM}>Awaiting Claude session...</text>
+        <text attributes={TextAttributes.DIM}>
+          {session?.status === "active" ? "PTY stream active..." : "Awaiting session start..."}
+        </text>
       </box>
 
-      {/* Inbox count */}
+      {/* Inbox */}
       <box border={true} borderColor="gray">
         <text attributes={TextAttributes.DIM}>
-          Inbox: {inbox.length} message{inbox.length !== 1 ? "s" : ""}
+          Inbox: {unacked} unread / {inbox.length} total
         </text>
       </box>
     </box>
