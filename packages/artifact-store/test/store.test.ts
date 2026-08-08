@@ -60,3 +60,15 @@ test("publish rejects mismatched declared hash", () => {
     declared_hash: "wronghash",
   })).toThrow("hash mismatch");
 });
+
+test("artifact store hashes binary bytes correctly", () => {
+  const store = testStore();
+  const binaryData = new Uint8Array([0x00, 0xff, 0x88, 0x44]);
+  const meta = store.publish(binaryData, {
+    task_id: "task-bin",
+    type: "binary",
+    repo_fingerprint: "abc",
+  });
+  // sha256 of bytes [0x00, 0xff, 0x88, 0x44]
+  expect(meta.sha256).toBe("7616b1b5fac42d9a6e80d01c37b4c020c855411776fa4f2fbcb8e5f9e8b35f18");
+});

@@ -4,6 +4,7 @@
 import type { RepositoryFingerprint } from "./task-envelope";
 import { PROTOCOL_VERSION } from "./task-envelope";
 import { canonicalJson } from "./canonical-json";
+import { sha256Hex } from "./crypto";
 
 export const EVENT_TYPES = [
   "message", "action_request", "action_accept", "action_reject",
@@ -110,9 +111,8 @@ export function parseBridgeEvent(
 }
 
 function computePayloadHash(payload: unknown): string {
-  // Use Bun.hash for synchronous hash computation
   const json = canonicalJson(payload);
-  return Bun.hash(json).toString(16);
+  return sha256Hex(json);
 }
 
 export { PROTOCOL_VERSION };

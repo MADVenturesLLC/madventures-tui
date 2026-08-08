@@ -1,9 +1,10 @@
 // packages/artifact-store/src/store.ts
 // Content-addressed artifact store.
-// Writes to temp file, hashes, fsyncs, atomically renames to sha256/<first-two>/<full-hash>.
+// Writes to temp file, hashes, atomically renames to sha256/<first-two>/<full-hash>.
 
 import { writeFileSync, readFileSync, existsSync, mkdirSync, renameSync, unlinkSync } from "fs";
 import { join, dirname } from "path";
+import { sha256Hex } from "@madventures/protocol";
 
 export interface ArtifactMetadata {
   sha256: string;
@@ -92,8 +93,6 @@ export class ArtifactStore {
   }
 
   private computeHash(data: Uint8Array): string {
-    // Use Bun.hash for synchronous hashing
-    const hex = Bun.hash(new TextDecoder().decode(data)).toString(16);
-    return hex.padStart(64, "0");
+    return sha256Hex(data);
   }
 }

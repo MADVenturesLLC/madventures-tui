@@ -19,7 +19,7 @@ import {
   rebuildBrokerState,
 } from "@madventures/broker";
 import type { InterruptReason, RepositorySnapshot, ReconcileInput } from "@madventures/broker";
-import { PROTOCOL_VERSION } from "@madventures/protocol";
+import { PROTOCOL_VERSION, sha256Hex } from "@madventures/protocol";
 import type { BridgeEventV1, RepositoryFingerprint } from "@madventures/protocol";
 import { Ledger } from "@madventures/ledger";
 import type { LedgerRow } from "@madventures/ledger";
@@ -74,7 +74,7 @@ function makeEvent(
 
 function makeLedgerRow(event: BridgeEventV1, seq: number, prevHash: string): LedgerRow {
   const eventJson = JSON.stringify(event);
-  const hash = Bun.hash(prevHash + eventJson).toString(16).padStart(64, "0");
+  const hash = sha256Hex(prevHash + eventJson);
   return {
     sequence: seq,
     event_id: event.event_id,

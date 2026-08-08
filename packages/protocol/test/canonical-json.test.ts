@@ -1,13 +1,17 @@
 // packages/protocol/test/canonical-json.test.ts
 //
-// sha256Canonical returns Promise<string> (async, uses crypto.subtle.digest).
-// sha256CanonicalSync returns string (sync, uses Bun.hash — non-cryptographic,
-// for quick dedup only, not for security-sensitive hashing).
-// The tests below use sha256Canonical (the async/cryptographic variant) for all
-// security-sensitive determinism checks.
+// sha256Canonical returns Promise<string>.
+// sha256CanonicalSync returns string.
+// Both use cryptographic SHA-256 hashes over canonical JSON.
 
 import { expect, test } from "bun:test";
 import { canonicalJson, sha256Canonical, sha256CanonicalSync } from "../src/canonical-json";
+import { sha256Hex } from "../src/crypto";
+
+test("sha256Hex known vector", () => {
+  const hash = sha256Hex("abc");
+  expect(hash).toBe("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+});
 
 test("canonical JSON sorts object keys recursively", () => {
   expect(canonicalJson({ z: 1, a: { y: 2, b: 3 } })).toBe('{"a":{"b":3,"y":2},"z":1}');
@@ -54,11 +58,14 @@ test("sha256Canonical returns a Promise<string>", async () => {
   expect(hash).toHaveLength(64); // SHA-256 hex = 64 chars
 });
 
-test("sha256CanonicalSync returns a string synchronously", () => {
-  const result = sha256CanonicalSync({ a: 1 });
-  expect(typeof result).toBe("string");
-  // Bun.hash returns a number; .toString(16) gives variable-length hex.
-  // It is NOT a 64-char SHA-256 — it is a non-cryptographic hash for dedup only.
+test("sha256CanonicalSync returns a string synchronously and matches async", async () => {
+  const obj = { a: 1 };
+  const resultSync = sha256CanonicalSync(obj);
+  expect(typeof resultSync).toBe("string");
+  expect(resultSync).toHaveLength(64);
+  
+  const resultAsync = await sha256Canonical(obj);
+  expect(resultSync).toBe(resultAsync);
 });
 
 // Known-vector determinism test: a fixed input must always produce the same

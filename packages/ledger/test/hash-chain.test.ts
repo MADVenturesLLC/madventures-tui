@@ -26,7 +26,7 @@ test("computeEventHash changes when previous hash changes", () => {
   expect(h1).not.toBe(h2);
 });
 
-test("computeEventHash returns 64-char hex string", () => {
+test("computeEventHash returns 64-char hex string and matches sha256Hex", () => {
   const h = computeEventHash("0".repeat(64), "{}");
   expect(h).toMatch(/^[0-9a-f]{64}$/);
 });
