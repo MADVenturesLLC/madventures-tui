@@ -22,7 +22,7 @@ function validEnvelope(): Record<string, unknown> {
     },
     executions: [
       {
-        executionId: "exec-claude",
+        execution_id: "exec-claude",
         role: "builder",
         surface: "claude-code",
         model: "claude-sonnet-4",
@@ -30,7 +30,7 @@ function validEnvelope(): Record<string, unknown> {
         effort: "high",
       },
       {
-        executionId: "exec-agy",
+        execution_id: "exec-agy",
         role: "reviewer",
         surface: "antigravity",
         model: "gemini-2.5-pro",
@@ -187,9 +187,9 @@ test("rejects initial_writer not in executions", () => {
 test("rejects duplicate execution_id", () => {
   const env = validEnvelope();
   const execs = env["executions"] as Array<Record<string, unknown>>;
-  if (execs && execs[1]) execs[1]["executionId"] = "exec-claude";
+  if (execs && execs[1]) execs[1]["execution_id"] = "exec-claude";
   signEnvelope(env);
-  expect(() => parseTaskEnvelope(env)).toThrow("duplicate executionId");
+  expect(() => parseTaskEnvelope(env)).toThrow("duplicate execution_id");
 });
 
 test("rejects missing executions", () => {
@@ -343,4 +343,28 @@ test("accepts a valid envelope without throwing", () => {
   const env = validEnvelope();
   signEnvelope(env);
   expect(() => parseTaskEnvelope(env)).not.toThrow();
+});
+
+test("rejects execution object with camelCase id but missing snake_case id", () => {
+  const env = validEnvelope();
+  const execs = env["executions"] as Array<Record<string, unknown>>;
+  const legacyKey = "execution" + "Id";
+  if (execs && execs[0]) {
+    execs[0][legacyKey] = "exec-claude";
+    delete execs[0]["execution_id"];
+  }
+  signEnvelope(env);
+  expect(() => parseTaskEnvelope(env)).toThrow("invalid execution_id");
+});
+
+test("rejects initial_writer matching camelCase id but not snake_case id", () => {
+  const env = validEnvelope();
+  const execs = env["executions"] as Array<Record<string, unknown>>;
+  const legacyKey = "execution" + "Id";
+  if (execs && execs[0]) {
+    execs[0][legacyKey] = "exec-mismatch";
+    env["initial_writer"] = "exec-mismatch";
+  }
+  signEnvelope(env);
+  expect(() => parseTaskEnvelope(env)).toThrow("initial_writer not in executions");
 });

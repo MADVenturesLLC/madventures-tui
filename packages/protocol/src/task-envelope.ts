@@ -23,7 +23,7 @@ export const KNOWN_DATA_CLASSES: readonly DataClass[] = ["public", "internal", "
 export const KNOWN_COMMAND_CATEGORIES: readonly CommandCategory[] = ["read", "write", "build", "test", "git", "shell", "network"];
 
 export interface ExecutionIdentity {
-  readonly executionId: string;
+  readonly execution_id: string;
   readonly role: ExecutionRole;
   readonly surface: CliSurface;
   readonly model: string;        // exact model, not "auto"
@@ -57,7 +57,7 @@ export interface TaskEnvelopeV1 {
   readonly worktree: string;
   readonly repository_fingerprint: RepositoryFingerprint;
   readonly executions: readonly ExecutionIdentity[];
-  readonly initial_writer: string; // executionId
+  readonly initial_writer: string; // execution_id
   readonly scope: TaskScope;
   readonly expires_at: string; // ISO 8601
   readonly created_at: string;
@@ -165,12 +165,12 @@ export function parseTaskEnvelope(raw: Record<string, unknown>): TaskEnvelopeV1 
       throw new Error("invalid execution entry");
     }
     const e = exec as Record<string, unknown>;
-    const execId = e["executionId"];
+    const execId = e["execution_id"];
     if (typeof execId !== "string" || execId.length === 0) {
-      throw new Error("invalid executionId");
+      throw new Error("invalid execution_id");
     }
     if (seenExecutionIds.has(execId)) {
-      throw new Error("duplicate executionId");
+      throw new Error("duplicate execution_id");
     }
     seenExecutionIds.add(execId);
 
