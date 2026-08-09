@@ -28,8 +28,8 @@ export function GovernancePane({ active, state }: GovernancePaneProps) {
       
       <box marginTop={1} flexDirection="column">
         <text><strong>Identities</strong></text>
-        <text>Claude: {cl?.executionId || "—"}</text>
-        <text>Antigravity: {agy?.executionId || "—"}</text>
+        <text>Claude: {cl?.execution_id || "—"}</text>
+        <text>Antigravity: {agy?.execution_id || "—"}</text>
       </box>
 
       <box marginTop={1} flexDirection="column">

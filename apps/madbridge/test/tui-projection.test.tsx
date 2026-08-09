@@ -30,7 +30,7 @@ function makeFingerprint(): RepositoryFingerprint {
 
 function makeExecution(surface: "claude-code" | "antigravity"): ExecutionIdentity {
   return {
-    executionId: `exec-${surface}`,
+    execution_id: `exec-${surface}`,
     role: surface === "claude-code" ? "builder" : "reviewer",
     surface,
     model: surface === "claude-code" ? "claude-sonnet-4" : "gemini-2.5-pro",

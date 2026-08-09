@@ -60,7 +60,7 @@ function runPreflight(flags: CommandFlags, ctx: CommandContext): PreflightResult
     checks.push({
       name: "exact-model",
       ok: false,
-      detail: `auto model not allowed for: ${autoModels.map((e) => e.executionId).join(", ")}`,
+      detail: `auto model not allowed for: ${autoModels.map((e) => e.execution_id).join(", ")}`,
     });
     return { ok: false, checks };
   }
