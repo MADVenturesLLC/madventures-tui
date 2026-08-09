@@ -286,6 +286,66 @@ describe("negative controls — wrong fingerprint", () => {
   });
 });
 
+// ─── Negative control: unauthorized receiver ───
+
+describe("negative controls — unauthorized receiver", () => {
+  const released: OwnershipState = {
+    kind: "sender-released",
+    executionId: "claude",
+    worktreeId: "wt-1",
+    fencingToken: 2,
+    transferTo: "antigravity",
+    repositoryFingerprint: FP,
+  };
+
+  test("non-intended receiver with matching fingerprint cannot accept", () => {
+    expect(() =>
+      transitionOwnership(released, {
+        type: "receiver_accept",
+        executionId: "intruder",
+        worktreeId: "wt-1",
+        repositoryFingerprint: FP,
+      }),
+    ).toThrow("receiver_not_intended");
+  });
+
+  test("intended receiver from the wrong worktree cannot accept", () => {
+    expect(() =>
+      transitionOwnership(released, {
+        type: "receiver_accept",
+        executionId: "antigravity",
+        worktreeId: "wt-other",
+        repositoryFingerprint: FP,
+      }),
+    ).toThrow("worktree_mismatch");
+  });
+
+  test("unauthorized accept leaves the transfer released for the intended receiver", () => {
+    // A rejected accept must not mutate state — the intended receiver can
+    // still accept afterwards.
+    expect(() =>
+      transitionOwnership(released, {
+        type: "receiver_accept",
+        executionId: "intruder",
+        worktreeId: "wt-1",
+        repositoryFingerprint: FP,
+      }),
+    ).toThrow("receiver_not_intended");
+
+    const accepted = transitionOwnership(released, {
+      type: "receiver_accept",
+      executionId: "antigravity",
+      worktreeId: "wt-1",
+      repositoryFingerprint: FP,
+    });
+    expect(accepted.kind).toBe("owned");
+    if (accepted.kind === "owned") {
+      expect(accepted.executionId).toBe("antigravity");
+      expect(accepted.fencingToken).toBe(3);
+    }
+  });
+});
+
 // ─── Negative control: unauthorized path/command/data/egress ───
 
 describe("negative controls — policy enforcement", () => {

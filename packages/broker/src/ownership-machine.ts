@@ -91,6 +91,16 @@ export function transitionOwnership(state: OwnershipState, event: OwnershipEvent
 
     case "sender-released":
       if (event.type === "receiver_accept") {
+        // Authorize the intended receiver — not just a matching fingerprint.
+        // The transfer was assigned to a specific execution; only that
+        // execution may accept.
+        if (event.executionId !== state.transferTo) {
+          throw new Error("receiver_not_intended");
+        }
+        // Bind the accept to the same worktree the transfer was opened on.
+        if (event.worktreeId !== state.worktreeId) {
+          throw new Error("worktree_mismatch");
+        }
         // Verify fingerprint matches
         if (event.repositoryFingerprint.sha256 !== state.repositoryFingerprint.sha256) {
           throw new Error("fingerprint_mismatch");
