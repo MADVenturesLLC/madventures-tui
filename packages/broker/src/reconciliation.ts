@@ -41,6 +41,12 @@ export interface InterruptResult {
   incidentEvent: BridgeEventV1;
   tokenInvalidated: number;
   autoResumed: false;
+  /**
+   * True when the session was already interrupted and this call recorded a
+   * secondary incident without issuing a new fencing token or mutating state.
+   * First-time interrupts are always `false`.
+   */
+  duplicate: boolean;
 }
 
 export interface RepositorySnapshot {
@@ -276,10 +282,26 @@ export function interruptSession(input: InterruptInput): InterruptResult {
     previous_event_hash: previousHash,
   };
 
-  // Transition to interrupted through the state machine. Every interruption —
-  // whether the session is active or paused — uses this single path. Invalid
-  // transitions (e.g. from `closed`) throw rather than being silently
-  // overridden; the caller decides how to fail closed.
+  // Duplicate-interrupt idempotency: if the session is already interrupted,
+  // do NOT attempt the state-machine transition (interrupted -> interrupted is
+  // not a legal edge). Record a secondary incident event for auditability and
+  // notification, leave the state and fencing token untouched, and return
+  // { duplicate: true }. The token remains unusable, no new token is issued.
+  if (input.sessionState.kind === "interrupted") {
+    return {
+      state: input.sessionState,
+      incidentEvent,
+      tokenInvalidated: input.currentWriterToken,
+      autoResumed: false,
+      duplicate: true,
+    };
+  }
+
+  // Transition to interrupted through the state machine. Every first-time
+  // interruption — whether the session is active, paused, starting, or
+  // reconciling — uses this single path. Invalid transitions (e.g. from
+  // `closed` or `closing`) throw rather than being silently overridden; the
+  // caller decides how to fail closed.
   const newState = transitionSession(input.sessionState, { type: "interrupt" });
 
   return {
@@ -287,6 +309,7 @@ export function interruptSession(input: InterruptInput): InterruptResult {
     incidentEvent,
     tokenInvalidated: input.currentWriterToken,
     autoResumed: false,
+    duplicate: false,
   };
 }
 

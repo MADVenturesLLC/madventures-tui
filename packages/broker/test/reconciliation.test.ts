@@ -239,17 +239,107 @@ describe("paused interruption goes through the state machine", () => {
         ledgerRows: makeLedgerRows([makeEvent("message")]),
       }),
     ).toThrow(InvalidTransitionError);
+  });
 
-    // Already interrupted: re-interrupt is also invalid — no silent no-op
-    // coercion to interrupted, the machine decides.
+  test("closing -> interrupted is not silently coerced", () => {
+    // closing only allows `complete`. A closing-session interrupt must throw,
+    // not mutate state — closing must never silently become interrupted.
     expect(() =>
       interruptSession({
         reason: "adapter_disconnect",
-        sessionState: { kind: "interrupted" },
+        sessionState: { kind: "closing" },
         currentWriterToken: 2,
         ledgerRows: makeLedgerRows([makeEvent("message")]),
       }),
     ).toThrow(InvalidTransitionError);
+  });
+});
+
+describe("duplicate-interrupt idempotency", () => {
+  test("duplicate interrupt while already interrupted does not throw", () => {
+    const rows = makeLedgerRows([makeEvent("message")]);
+
+    // First interrupt: active -> interrupted (normal path)
+    const first = interruptSession({
+      reason: "cli_exit",
+      sessionState: { kind: "active" },
+      currentWriterToken: 7,
+      ledgerRows: rows,
+    });
+    expect(first.state.kind).toBe("interrupted");
+    expect(first.duplicate).toBe(false);
+
+    // Second interrupt: already interrupted — must NOT throw.
+    const second = interruptSession({
+      reason: "adapter_disconnect",
+      detail: "second disconnect during interruption",
+      sessionState: first.state,
+      currentWriterToken: 7,
+      ledgerRows: rows,
+    });
+    expect(second.state.kind).toBe("interrupted");
+    expect(second.duplicate).toBe(true);
+  });
+
+  test("duplicate interrupt leaves state interrupted and token unusable", () => {
+    const result = interruptSession({
+      reason: "broker_restart",
+      sessionState: { kind: "interrupted" },
+      currentWriterToken: 9,
+      ledgerRows: makeLedgerRows([makeEvent("message")]),
+    });
+
+    expect(result.state.kind).toBe("interrupted");
+    // Token is still the same — not invalidated again with a new value.
+    expect(result.tokenInvalidated).toBe(9);
+    expect(result.duplicate).toBe(true);
+  });
+
+  test("duplicate interrupt does not issue a new fencing token", () => {
+    // interruptSession never changes the fencing token itself; the broker
+    // wrapper re-assigns it only on resume. A duplicate must not change the
+    // invalidated-token value either — it reports the same token.
+    const token = 42;
+    const result = interruptSession({
+      reason: "cli_exit",
+      sessionState: { kind: "interrupted" },
+      currentWriterToken: token,
+      ledgerRows: makeLedgerRows([makeEvent("message")]),
+    });
+
+    expect(result.tokenInvalidated).toBe(token);
+    expect(result.duplicate).toBe(true);
+  });
+
+  test("duplicate interrupt produces a distinct secondary incident event", () => {
+    const rows = makeLedgerRows([makeEvent("message")]);
+
+    const first = interruptSession({
+      reason: "cli_exit",
+      sessionState: { kind: "active" },
+      currentWriterToken: 1,
+      ledgerRows: rows,
+      now: "2026-08-08T17:00:00.000Z",
+    });
+
+    const second = interruptSession({
+      reason: "adapter_disconnect",
+      detail: "second disconnect",
+      sessionState: first.state,
+      currentWriterToken: 1,
+      ledgerRows: rows,
+      now: "2026-08-08T17:00:05.000Z",
+    });
+
+    // Both are incident events the listener can receive and audit.
+    expect(first.incidentEvent.event_type).toBe("incident");
+    expect(second.incidentEvent.event_type).toBe("incident");
+    // Distinct event IDs — this is a new, independently audit-worthy event.
+    expect(second.incidentEvent.event_id).not.toBe(first.incidentEvent.event_id);
+    // The secondary incident carries its own reason/detail.
+    expect(second.incidentEvent.payload["reason"]).toBe("adapter_disconnect");
+    expect(second.incidentEvent.payload["detail"]).toBe("second disconnect");
+    expect(second.duplicate).toBe(true);
   });
 });
 

@@ -394,6 +394,65 @@ describe("typed resume", () => {
   });
 });
 
+// ─── Duplicate-interrupt idempotency ───
+
+describe("duplicate-interrupt idempotency", () => {
+  test("duplicate broker interrupt while interrupted does not throw and records a secondary incident", async () => {
+    const broker = await createInMemoryBrokerForTest();
+    try {
+      const incidents: any[] = [];
+      broker.subscribe((e) => {
+        if (e?.event_type === "incident") incidents.push(e);
+      });
+
+      // First interrupt — normal path.
+      broker.interrupt("cli_exit", "primary disconnect");
+      expect(broker.sessionState.kind).toBe("interrupted");
+      expect(broker.tokenUsable).toBe(false);
+      const tokenAfterFirst = broker.fencingToken;
+      expect(incidents.length).toBe(1);
+
+      // Duplicate interrupt — must be idempotent, not throw.
+      expect(() => broker.interrupt("adapter_disconnect", "secondary disconnect")).not.toThrow();
+
+      // State remains interrupted, token remains unusable, no new token.
+      expect(broker.sessionState.kind).toBe("interrupted");
+      expect(broker.tokenUsable).toBe(false);
+      expect(broker.fencingToken).toBe(tokenAfterFirst);
+
+      // The listener received a second, distinct incident event.
+      expect(incidents.length).toBe(2);
+      expect(incidents[1].payload["reason"]).toBe("adapter_disconnect");
+      expect(incidents[1].event_id).not.toBe(incidents[0].event_id);
+    } finally {
+      broker.stop();
+    }
+  });
+
+  test("duplicate interruptSession on already-interrupted state is idempotent", () => {
+    const rows = makeLedgerRows([makeEvent("message")]);
+
+    const first = interruptSession({
+      reason: "cli_exit",
+      sessionState: { kind: "active" },
+      currentWriterToken: 5,
+      ledgerRows: rows,
+    });
+    expect(first.state.kind).toBe("interrupted");
+    expect(first.duplicate).toBe(false);
+
+    const second = interruptSession({
+      reason: "adapter_disconnect",
+      sessionState: first.state,
+      currentWriterToken: 5,
+      ledgerRows: rows,
+    });
+    expect(second.state.kind).toBe("interrupted");
+    expect(second.tokenInvalidated).toBe(5);
+    expect(second.duplicate).toBe(true);
+  });
+});
+
 // ─── Complete hash-chain verification ───
 
 describe("complete hash-chain verification", () => {
