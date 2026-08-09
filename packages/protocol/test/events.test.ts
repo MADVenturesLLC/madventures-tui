@@ -3,7 +3,7 @@
 // Every mandated rejection behavior is tested through the public parser.
 
 import { expect, test } from "bun:test";
-import { parseBridgeEvent, PROTOCOL_VERSION, EVENT_TYPES } from "../src";
+import { parseBridgeEvent, PROTOCOL_VERSION, EVENT_TYPES, sha256Hex } from "../src";
 import { canonicalJson } from "../src/canonical-json";
 
 // ─── Valid fixture ───
@@ -94,7 +94,7 @@ test("accepts correct payload hash", () => {
   const evt = validEvent();
   const payload = { message: "hello" };
   evt["payload"] = payload;
-  evt["payload_hash"] = Bun.hash(canonicalJson(payload)).toString(16);
+  evt["payload_hash"] = sha256Hex(canonicalJson(payload));
   expect(() => parseBridgeEvent(evt)).not.toThrow();
 });
 

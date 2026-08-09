@@ -53,14 +53,23 @@ test("starting cannot directly transition to paused", () => {
   expect(() => transitionSession({ kind: "starting" }, { type: "pause" })).toThrow();
 });
 
-test("paused cannot directly transition to interrupted", () => {
-  expect(() => transitionSession({ kind: "paused" }, { type: "interrupt" })).toThrow();
+test("paused transitions to interrupted", () => {
+  const result = transitionSession({ kind: "paused" }, { type: "interrupt" });
+  expect(result.kind).toBe("interrupted");
 });
 
 test("closed cannot transition to anything", () => {
   expect(() => transitionSession({ kind: "closed" }, { type: "start" })).toThrow();
   expect(() => transitionSession({ kind: "closed" }, { type: "pause" })).toThrow();
   expect(() => transitionSession({ kind: "closed" }, { type: "resume" })).toThrow();
+});
+
+test("closed cannot transition to interrupted", () => {
+  expect(() => transitionSession({ kind: "closed" }, { type: "interrupt" })).toThrow("invalid transition: closed -> interrupt");
+});
+
+test("closing cannot transition to interrupted", () => {
+  expect(() => transitionSession({ kind: "closing" }, { type: "interrupt" })).toThrow();
 });
 
 test("reconciling cannot directly transition to paused", () => {

@@ -1,7 +1,7 @@
 // packages/protocol/src/task-envelope.ts
 // Task envelope V1 — the sole authority source for a session.
 
-import { sha256Canonical } from "./canonical-json";
+import { sha256CanonicalSync } from "./canonical-json";
 
 export const PROTOCOL_VERSION = "madbridge-protocol/v1" as const;
 
@@ -23,7 +23,7 @@ export const KNOWN_DATA_CLASSES: readonly DataClass[] = ["public", "internal", "
 export const KNOWN_COMMAND_CATEGORIES: readonly CommandCategory[] = ["read", "write", "build", "test", "git", "shell", "network"];
 
 export interface ExecutionIdentity {
-  readonly executionId: string;
+  readonly execution_id: string;
   readonly role: ExecutionRole;
   readonly surface: CliSurface;
   readonly model: string;        // exact model, not "auto"
@@ -57,7 +57,7 @@ export interface TaskEnvelopeV1 {
   readonly worktree: string;
   readonly repository_fingerprint: RepositoryFingerprint;
   readonly executions: readonly ExecutionIdentity[];
-  readonly initial_writer: string; // executionId
+  readonly initial_writer: string; // execution_id
   readonly scope: TaskScope;
   readonly expires_at: string; // ISO 8601
   readonly created_at: string;
@@ -85,6 +85,20 @@ export function parseTaskEnvelope(raw: Record<string, unknown>): TaskEnvelopeV1 
     }
   }
 
+  // envelope_hash must be present, lowercase 64-char hex
+  const envelopeHash = raw["envelope_hash"];
+  if (typeof envelopeHash !== "string" || !/^[0-9a-f]{64}$/.test(envelopeHash)) {
+    throw new Error("missing or invalid envelope_hash");
+  }
+
+  // Hash verification: exclude envelope_hash and recompute
+  const rawWithoutHash = { ...raw };
+  delete rawWithoutHash["envelope_hash"];
+  const computedHash = sha256CanonicalSync(rawWithoutHash);
+  if (envelopeHash !== computedHash) {
+    throw new Error("mismatched envelope_hash");
+  }
+
   // Protocol version
   if (raw["protocol_version"] !== PROTOCOL_VERSION) {
     throw new Error(`unsupported protocol_version: ${String(raw["protocol_version"])}`);
@@ -96,10 +110,17 @@ export function parseTaskEnvelope(raw: Record<string, unknown>): TaskEnvelopeV1 
     throw new Error("missing authorization_reference");
   }
 
-  // Expiration — must be present
+  // Expiration — must be present and future
   const expiresAt = raw["expires_at"];
   if (typeof expiresAt !== "string" || expiresAt.length === 0) {
     throw new Error("missing expiration");
+  }
+  const expiresAtTime = new Date(expiresAt).getTime();
+  if (Number.isNaN(expiresAtTime)) {
+    throw new Error("invalid expiration date");
+  }
+  if (expiresAtTime <= Date.now()) {
+    throw new Error("expiration must be in the future");
   }
 
   // Repository/worktree — must not be ambiguous
@@ -115,16 +136,44 @@ export function parseTaskEnvelope(raw: Record<string, unknown>): TaskEnvelopeV1 
     throw new Error("ambiguous repository/worktree");
   }
 
+  // Repository fingerprint
+  const fingerprint = raw["repository_fingerprint"] as Record<string, unknown>;
+  if (!fingerprint || typeof fingerprint !== "object") {
+    throw new Error("missing repository_fingerprint");
+  }
+  if (fingerprint["kind"] !== "commit" && fingerprint["kind"] !== "working_tree") {
+    throw new Error("invalid fingerprint kind");
+  }
+  if (typeof fingerprint["sha256"] !== "string" || !/^[0-9a-f]{64}$/.test(fingerprint["sha256"])) {
+    throw new Error("invalid fingerprint sha256");
+  }
+  if (typeof fingerprint["git_sha"] !== "string" || !/^[0-9a-f]{40}$/.test(fingerprint["git_sha"])) {
+    throw new Error("invalid fingerprint git_sha");
+  }
+  if (fingerprint["kind"] === "working_tree" && (typeof fingerprint["base_git_sha"] !== "string" || !/^[0-9a-f]{40}$/.test(fingerprint["base_git_sha"]))) {
+    throw new Error("invalid fingerprint base_git_sha");
+  }
+
   // Executions — validate each
   const executions = raw["executions"];
   if (!Array.isArray(executions) || executions.length === 0) {
     throw new Error("missing executions");
   }
+  const seenExecutionIds = new Set<string>();
   for (const exec of executions) {
     if (typeof exec !== "object" || exec === null) {
       throw new Error("invalid execution entry");
     }
     const e = exec as Record<string, unknown>;
+    const execId = e["execution_id"];
+    if (typeof execId !== "string" || execId.length === 0) {
+      throw new Error("invalid execution_id");
+    }
+    if (seenExecutionIds.has(execId)) {
+      throw new Error("duplicate execution_id");
+    }
+    seenExecutionIds.add(execId);
+
     if (!KNOWN_ROLES.includes(e["role"] as ExecutionRole)) {
       throw new Error(`unknown role: ${String(e["role"])}`);
     }
@@ -137,6 +186,12 @@ export function parseTaskEnvelope(raw: Record<string, unknown>): TaskEnvelopeV1 
     if (typeof e["provider"] !== "string" || e["provider"].length === 0) {
       throw new Error(`unknown provider: ${String(e["provider"])}`);
     }
+  }
+
+  // initial_writer
+  const initialWriter = raw["initial_writer"];
+  if (typeof initialWriter !== "string" || !seenExecutionIds.has(initialWriter)) {
+    throw new Error("initial_writer not in executions");
   }
 
   // Scope — must have non-empty permitted paths and non-unrestricted commands

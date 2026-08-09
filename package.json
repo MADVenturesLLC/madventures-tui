@@ -3,24 +3,22 @@
   "version": "0.1.0",
   "type": "module",
   "private": true,
-  "module": "src/index.tsx",
-  "bin": {
-    "madv-tui": "src/cli.ts"
-  },
   "workspaces": ["apps/*", "packages/*"],
   "scripts": {
-    "dev": "bun run --watch src/index.tsx",
+    "dev": "bun run --watch apps/madbridge/src/tui/App.tsx",
     "build": "tsc --noEmit",
     "typecheck": "bunx tsc --noEmit",
     "test": "bun test",
     "verify": "bunx tsc --noEmit && bun test",
-    "madv-tui": "bun run src/cli.ts",
-    "broker": "bun run src/broker/index.ts",
-    "mcp": "bun run src/mcp/server.ts"
+    "madv-tui": "bun run apps/madbridge/src/cli.ts",
+    "broker": "bun run packages/broker/src/broker.ts",
+    "mcp": "bun run packages/broker/src/mcp-server.ts"
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "@types/react": "^19.2.18"
+    "@types/react": "^19.2.18",
+    "@types/react-test-renderer": "^19.1.0",
+    "react-test-renderer": "^19.2.8"
   },
   "peerDependencies": {
     "typescript": "^5"

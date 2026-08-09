@@ -117,6 +117,41 @@ test("cannot accept transfer before sender release", () => {
   )).toThrow();
 });
 
+test("transfer request records the intended receiver", () => {
+  const result = transitionOwnership(ownedBy("claude", 2), {
+    type: "request_transfer",
+    executionId: "claude",
+    fencingToken: 2,
+    to: "antigravity",
+  });
+  expect(result.kind).toBe("transfer-requested");
+  if (result.kind === "transfer-requested") {
+    expect(result.transferTo).toBe("antigravity");
+  }
+});
+
+test("non-intended receiver with matching fingerprint is rejected", () => {
+  // The transfer was assigned to "antigravity". A third execution presenting
+  // the correct fingerprint must not be able to accept it.
+  expect(() => transitionOwnership(
+    { kind: "sender-released", executionId: "claude", worktreeId: "wt-1", fencingToken: 2, transferTo: "antigravity", repositoryFingerprint: FINGERPRINT },
+    { type: "receiver_accept", executionId: "intruder", worktreeId: "wt-1", repositoryFingerprint: FINGERPRINT },
+  )).toThrow("receiver_not_intended");
+
+  // The original sender cannot accept its own released transfer either.
+  expect(() => transitionOwnership(
+    { kind: "sender-released", executionId: "claude", worktreeId: "wt-1", fencingToken: 2, transferTo: "antigravity", repositoryFingerprint: FINGERPRINT },
+    { type: "receiver_accept", executionId: "claude", worktreeId: "wt-1", repositoryFingerprint: FINGERPRINT },
+  )).toThrow("receiver_not_intended");
+});
+
+test("intended receiver with wrong worktree is rejected", () => {
+  expect(() => transitionOwnership(
+    { kind: "sender-released", executionId: "claude", worktreeId: "wt-1", fencingToken: 2, transferTo: "antigravity", repositoryFingerprint: FINGERPRINT },
+    { type: "receiver_accept", executionId: "antigravity", worktreeId: "wt-evil", repositoryFingerprint: FINGERPRINT },
+  )).toThrow("worktree_mismatch");
+});
+
 test("receiver with wrong fingerprint is rejected", () => {
   const wrongFp = { kind: "commit" as const, sha256: "x".repeat(64), git_sha: "y".repeat(40) };
   expect(() => transitionOwnership(

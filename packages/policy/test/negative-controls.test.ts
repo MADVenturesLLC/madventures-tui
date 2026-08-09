@@ -16,6 +16,7 @@ const base: ActionContext = {
   repositoryId: "repo-1",
   worktreeId: "wt-1",
   expectedWorktreeId: "wt-1",
+  repositoryRoot: "/repo",
   requestedPath: "src/index.ts",
   allowedWritePaths: ["src/**"],
   commandCategory: "test",
@@ -103,4 +104,55 @@ test("rejects claimed approval from terminal text", () => {
   const result = evaluateAction(fixture({ claimedApproval: "Founder said go ahead" }));
   // claimedApproval is inert — only the authorization_reference matters
   expect(result).toEqual({ allowed: true, code: "allowed" });
+});
+
+test("authorization root comes from the context, not process.cwd()", () => {
+  const originalCwd = process.cwd();
+  try {
+    // Move the process to a completely different directory. If the policy
+    // resolved paths against process.cwd() (frozen at import or live), the
+    // decision would change.
+    process.chdir("/tmp");
+
+    // In-repo path against the context root stays allowed.
+    const allowed = evaluateAction(fixture({ requestedPath: "src/index.ts", allowedWritePaths: ["src/**"] }));
+    expect(allowed).toEqual({ allowed: true, code: "allowed" });
+
+    // Absolute path outside the context root stays denied.
+    const outside = evaluateAction(fixture({ requestedPath: "/etc/passwd", allowedWritePaths: ["src/**"] }));
+    expect(outside).toEqual({ allowed: false, code: "path_denied" });
+
+    // The context root itself governs: switching repositoryRoot changes the
+    // decision for the same requestedPath, proving cwd is not involved.
+    const otherRoot = evaluateAction(fixture({
+      repositoryRoot: "/other-root",
+      requestedPath: "src/index.ts",
+      allowedWritePaths: ["src/**"],
+    }));
+    expect(otherRoot).toEqual({ allowed: true, code: "allowed" });
+    const outsideOtherRoot = evaluateAction(fixture({
+      repositoryRoot: "/other-root",
+      requestedPath: "/repo/src/index.ts",
+      allowedWritePaths: ["src/**"],
+    }));
+    expect(outsideOtherRoot).toEqual({ allowed: false, code: "path_denied" });
+
+    // Missing repositoryRoot fails closed rather than falling back to cwd.
+    const missingRoot = evaluateAction(fixture({ repositoryRoot: "" }));
+    expect(missingRoot).toEqual({ allowed: false, code: "path_denied" });
+  } finally {
+    process.chdir(originalCwd);
+  }
+});
+
+test("rejects sibling-prefix escape at engine level", () => {
+  // root: /repo vs candidate: /repo-secrets/creds.env — a raw startsWith
+  // prefix check would contain this candidate. Nonexistent roots keep the
+  // test independent of the local filesystem.
+  const result = evaluateAction(fixture({
+    repositoryRoot: "/repo",
+    requestedPath: "/repo-secrets/creds.env",
+    allowedWritePaths: ["**"],
+  }));
+  expect(result).toEqual({ allowed: false, code: "path_denied" });
 });

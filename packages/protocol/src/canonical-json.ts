@@ -2,6 +2,8 @@
 // Canonical JSON serialization: recursively sorted keys, no whitespace.
 // Used for deterministic hashing of events and task envelopes.
 
+import { sha256Hex } from "./crypto";
+
 export function canonicalJson(value: unknown): string {
   return serialize(value);
 }
@@ -27,17 +29,10 @@ function serialize(value: unknown): string {
 
 export async function sha256Canonical(value: unknown): Promise<string> {
   const json = canonicalJson(value);
-  const encoder = new TextEncoder();
-  const buf = await crypto.subtle.digest("SHA-256", encoder.encode(json));
-  return Array.from(new Uint8Array(buf))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+  return sha256Hex(json);
 }
 
 export function sha256CanonicalSync(value: unknown): string {
-  // Bun supports crypto.subtle.digest synchronously via Bun.hash
-  // but for cross-compat we use the async version in tests.
-  // This sync version uses Bun.Hash for convenience.
   const json = canonicalJson(value);
-  return Bun.hash(json).toString(16);
+  return sha256Hex(json);
 }

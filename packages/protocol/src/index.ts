@@ -25,7 +25,8 @@ export {
   KNOWN_COMMAND_CATEGORIES,
 } from "./task-envelope";
 
-export { canonicalJson, sha256Canonical } from "./canonical-json";
+export { canonicalJson, sha256Canonical, sha256CanonicalSync } from "./canonical-json";
+export { sha256Hex } from "./crypto";
 export { newEventId, newSessionId } from "./ids";
 export { encodeWire, decodeWire } from "./wire";
 export type { WireMessage } from "./wire";
