@@ -1,43 +1,127 @@
 // packages/policy/src/path-policy.ts
-// Path validation: glob matching, traversal rejection, normalization.
-// Resolves paths relative to the approved repository root.
+// Path validation: containment, traversal rejection, symlink rejection, glob matching.
+//
+// Authorization is always resolved against the caller-supplied repository root
+// (from the task envelope / repository context) — never process.cwd().
+//
+// Fail-closed ordering:
+//   1. Textual containment — reject `..` components, absolute escapes, and
+//      sibling-prefix escapes (e.g. /tmp/repo vs /tmp/repo-secrets) BEFORE
+//      any filesystem access or authorization.
+//   2. lstat component walk from the trusted root to the candidate — reject
+//      any symlink in any unresolved component, including the final one.
+//   3. realpath containment — after the symlink-free walk, realpath the
+//      deepest existing prefix and re-check path.relative containment:
+//      reject if the relative result is absolute or escapes the root.
+//   4. Glob matching on the contained relative path (behavior preserved).
+
+import { lstatSync, realpathSync } from "node:fs";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 
 export function assertWithinAllowedPath(
   requestedPath: string,
   allowedPaths: readonly string[],
   repoRoot: string,
 ): void {
-  const normalized = normalizePath(requestedPath, repoRoot);
+  if (requestedPath.length === 0) throw new Error("path_denied");
+  if (!isAbsolute(repoRoot)) throw new Error("path_denied");
 
-  // Reject path traversal
-  if (normalized.includes("..")) {
+  const rootAbs = resolve(repoRoot);
+
+  // Reject `..` traversal components in the raw request before anything else.
+  if (requestedPath.split(/[\\/]/).includes("..")) {
     throw new Error("path_denied");
   }
 
-  // Reject absolute paths outside the repo
-  if (normalized.startsWith("/") && !normalized.startsWith(repoRoot)) {
+  const candidateAbs = isAbsolute(requestedPath)
+    ? resolve(requestedPath)
+    : resolve(rootAbs, requestedPath);
+
+  // Textual containment against the trusted root. Catches absolute paths
+  // outside the repo and sibling-prefix escapes (/tmp/repo-secrets) before
+  // any filesystem access.
+  const relativeToRoot = relative(rootAbs, candidateAbs);
+  if (isAbsolute(relativeToRoot) || escapesRoot(relativeToRoot)) {
     throw new Error("path_denied");
   }
 
-  // Strip repo root prefix for glob matching
-  const relativePath = normalized.startsWith(repoRoot)
-    ? normalized.slice(repoRoot.length).replace(/^\//, "")
-    : normalized.replace(/^\//, "");
+  // Filesystem checks: reject symlink components, then re-verify containment
+  // after realpath. Both are vacuous when the path does not exist on disk
+  // (a nonexistent path cannot contain a symlink).
+  assertNoSymlinkComponents(rootAbs, candidateAbs);
+  assertRealpathContainment(rootAbs, candidateAbs);
 
+  // Glob matching on the contained relative path.
   for (const pattern of allowedPaths) {
-    if (matchGlob(relativePath, pattern)) return;
+    if (matchGlob(relativeToRoot, pattern)) return;
   }
 
   throw new Error("path_denied");
 }
 
-function normalizePath(path: string, repoRoot: string): string {
-  // If absolute, use as-is
-  if (path.startsWith("/")) {
-    return path;
+function escapesRoot(rel: string): boolean {
+  return rel === ".." || rel.startsWith(`..${sep}`);
+}
+
+// Walk every component from the trusted root to the candidate with lstat.
+// Any symlink — intermediate directory or final file — is rejected before
+// resolution. ENOENT/ENOTDIR means the component (and everything below it)
+// does not exist, so no symlink can hide there; the walk stops clean.
+// Any other filesystem error fails closed.
+function assertNoSymlinkComponents(rootAbs: string, candidateAbs: string): void {
+  const components = relative(rootAbs, candidateAbs).split(sep).filter((c) => c.length > 0);
+  let current = rootAbs;
+  for (const component of components) {
+    current = join(current, component);
+    let stat;
+    try {
+      stat = lstatSync(current);
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === "ENOENT" || code === "ENOTDIR") return;
+      throw new Error("path_denied");
+    }
+    if (stat.isSymbolicLink()) throw new Error("path_denied");
   }
-  // If relative, resolve against repo root
-  return `${repoRoot}/${path}`;
+}
+
+// Defense in depth after the symlink-free walk: realpath the deepest
+// existing prefix of the candidate and the root, then require the candidate
+// to remain contained. Rejects if path.relative is absolute or escapes.
+function assertRealpathContainment(rootAbs: string, candidateAbs: string): void {
+  try {
+    lstatSync(rootAbs);
+  } catch {
+    return; // root absent on disk: nothing exists below it to resolve
+  }
+
+  const components = relative(rootAbs, candidateAbs).split(sep).filter((c) => c.length > 0);
+  let deepest = rootAbs;
+  for (const component of components) {
+    const next = join(deepest, component);
+    try {
+      lstatSync(next);
+    } catch {
+      break;
+    }
+    deepest = next;
+  }
+
+  let realRoot: string;
+  let realDeepest: string;
+  try {
+    realRoot = realpathSync(rootAbs);
+    realDeepest = realpathSync(deepest);
+  } catch {
+    throw new Error("path_denied");
+  }
+
+  const suffix = components.slice(relative(rootAbs, deepest).split(sep).filter((c) => c.length > 0).length);
+  const realCandidate = suffix.length > 0 ? join(realDeepest, ...suffix) : realDeepest;
+  const relCheck = relative(realRoot, realCandidate);
+  if (isAbsolute(relCheck) || escapesRoot(relCheck)) {
+    throw new Error("path_denied");
+  }
 }
 
 function matchGlob(path: string, pattern: string): boolean {

@@ -17,6 +17,9 @@ export interface ActionContext {
   repositoryId: string;
   worktreeId: string;
   expectedWorktreeId: string;
+  // Trusted repository/worktree root from the task envelope / policy input.
+  // Never derived from process.cwd().
+  repositoryRoot: string;
   requestedPath: string;
   allowedWritePaths: readonly string[];
   commandCategory: string;
@@ -35,7 +38,6 @@ export type PolicyDecision =
 
 const KNOWN_SURFACES = new Set(["claude-code", "antigravity"]);
 const KNOWN_ROLES = new Set(["builder", "reviewer", "observer"]);
-const REPO_ROOT = process.cwd(); // In production, from task envelope
 
 // Known models per surface — used for model validation
 const SURFACE_MODELS: Record<string, Set<string>> = {
@@ -76,9 +78,13 @@ export function evaluateAction(context: ActionContext): PolicyDecision {
     return { allowed: false, code: "repository_denied" };
   }
 
-  // 6. Path validation
+  // 6. Path validation — root comes from the task envelope / policy input,
+  //    never from process.cwd(). Missing root fails closed.
+  if (context.repositoryRoot.length === 0) {
+    return { allowed: false, code: "path_denied" };
+  }
   try {
-    assertWithinAllowedPath(context.requestedPath, context.allowedWritePaths, REPO_ROOT);
+    assertWithinAllowedPath(context.requestedPath, context.allowedWritePaths, context.repositoryRoot);
   } catch {
     return { allowed: false, code: "path_denied" };
   }

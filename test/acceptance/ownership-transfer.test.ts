@@ -55,6 +55,7 @@ const baseAction: ActionContext = {
   repositoryId: "repo-1",
   worktreeId: "wt-1",
   expectedWorktreeId: "wt-1",
+  repositoryRoot: "/repo",
   requestedPath: "src/index.ts",
   allowedWritePaths: ["src/**"],
   commandCategory: "test",
