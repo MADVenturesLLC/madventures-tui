@@ -193,3 +193,99 @@ The manifest is generated at evidence-export time from the artifact store and le
 - All acceptance tests use the in-memory broker (`createInMemoryBrokerForTest`) — no real CLI processes are spawned.
 - The disposable repository fixture creates temporary directories outside the production repository and cleans them up after each test.
 - Evidence export (CLI `export-evidence` command) redacts known secret patterns (`sk-*`, `ghp_*`, `Bearer` tokens, password/secret/token assignments) from output.
+
+---
+
+## Addendum A — 2026-08-09 post-remediation verification (main @ fd8322e)
+
+### PR merge table
+
+| PR | Merge SHA | Subject |
+| --- | --- | --- |
+| #1 | `dcef949` | Fix MADVentures TUI trust-boundary defects |
+| #2 | `e6c3ea8` | fix: align ledger replay with session machine |
+| #3 | `0f262c4` | fix: synthesize broker replay start from activity |
+| #4 | `fd8322e` | fix: make duplicate broker interrupts idempotent |
+
+### Fresh builder-run outputs
+
+**`bun install --frozen-lockfile`:**
+
+```
+bun install v1.3.14 (0d9b296a)
+
+Done! Checked 47 packages (no changes) [8.00ms]
+```
+
+**`bunx tsc --noEmit`:**
+
+```
+EXIT:0
+```
+
+Result: **PASS** (no errors, TypeScript clean)
+
+**`bun test`:**
+
+```
+401 pass
+0 fail
+1100 expect() calls
+Ran 401 tests across 32 files. [9.11s]
+```
+
+Result: **PASS** — all 401 tests pass
+
+### Hashing annotation
+
+The earlier zero-padded ledger head recorded in the original Ledger Verification section above (`000000000000000000000000000000000000000000000000264cd2970a141820`) is a preserved pre-remediation Wyhash-era artifact. It is **not** evidence of current hashing. Current code uses cryptographic SHA-256; no `Bun.hash` remains in `packages/` or `apps/`.
+
+### Review SHA supersession
+
+The pre-remediation review SHA `c3fc284` recorded in the Tested Versions table above is superseded through `fd8322e`.
+
+---
+
+## Addendum B — operational readiness gate (pending Founder-host run)
+
+This addendum remains pending an actual Founder-host run. It must not be completed from the builder environment.
+
+### Command sequence
+
+```bash
+export PATH="$HOME/.bun/bin:$PATH"
+cd ~/madventures-tui
+git fetch origin
+git rev-parse HEAD
+git rev-parse origin/main
+uname -m
+bun install --frozen-lockfile
+bunx tsc --noEmit
+bun test
+bun run apps/madbridge/src/cli.ts doctor --json
+bun run apps/madbridge/src/cli.ts verify-ledger --json
+```
+
+### Readiness rules
+
+1. **Doctor exit code and top-level `ok` are insufficient.** All eight individual doctor checks must be status `"ok"`.
+2. **`platform`** requires status `"ok"` and evidence capture of platform detail plus `uname -m`. `darwin/x64` is allowed.
+3. **`claude-code`**, **`agy`**, and **`exact-model-visibility`** must each be `"ok"`.
+4. **Directory writability:** repo root and `~/Library/Application Support/MADVentures/` must be writable.
+5. **`ledger_not_found`** is acceptable before init; an existing ledger must verify valid.
+
+### Evidence slots (to be filled by Founder-host run)
+
+- **Founder-host date:** _<pending>_
+- **Host:** _<pending>_
+- **`uname -m`:** _<pending>_
+- **SHA (`git rev-parse HEAD`):** _<pending>_
+- **Raw doctor JSON:** _<pending>_
+- **`claude --version`:** _<pending>_
+- **`agy --version`:** _<pending>_
+- **Raw verify-ledger JSON:** _<pending>_
+
+### Status labels
+
+- **READY FOR FOUNDER RELEASE DECISION**
+- **DEVELOPMENT COMPLETE — OPERATIONAL ENVIRONMENT BLOCKED**

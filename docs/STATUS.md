@@ -1,5 +1,11 @@
 # MADVentures TUI V1 — Build Record and Trust Boundary Review
 
+> **Supersession notice (2026-08-09).** Sections 1–10 below are preserved
+> verbatim as historical evidence of the `f9e36d5` / `a0b4301` review state.
+> They describe the tree as it existed at that time and are **not current.**
+> The current closure status is recorded in section 11 at the end of this
+> document.
+
 **Repo:** `MADVenturesLLC/madventures-tui`
 **Working host:** iMac (`michaels-imac.local`), path `~/madventures-tui`
 **Code state described:** `f9e36d5` (branch `main`, working tree clean)
@@ -225,3 +231,45 @@ Note: `bun` is at `~/.bun/bin/bun` and is not on the default SSH PATH.
 The architecture is right. Package separation (protocol, policy, ledger, artifact-store, broker, adapters) is correct and the plan document is practical and task-based. The TUI scaffold has the right three-pane concept but remains a scaffold; the title border and final visual treatment are not in GitHub main.
 
 The build is promising. The trust boundary is not ready. Do not describe the governance or evidence model as functional until section 5 is closed.
+
+---
+
+## 11. Closure record — 2026-08-09
+
+**Current `origin/main` SHA:** `fd8322e3a599e8bcb2ac751b5f6b635ea4857b85`
+
+### PR merge table
+
+| PR | Merge SHA | Subject |
+| --- | --- | --- |
+| #1 | `dcef949` | Fix MADVentures TUI trust-boundary defects |
+| #2 | `e6c3ea8` | fix: align ledger replay with session machine |
+| #3 | `0f262c4` | fix: synthesize broker replay start from activity |
+| #4 | `fd8322e` | fix: make duplicate broker interrupts idempotent |
+
+### Trust-boundary findings closure (5.1–5.5)
+
+- **5.1 (cryptographic hashing):** Cryptographic SHA-256 replaced the non-cryptographic `Bun.hash` (Wyhash). No `Bun.hash` remains in `packages/` or `apps/`.
+- **5.1 (fsync claim):** The misleading fsync claim was removed. fsync was **not** added; artifact durability is atomic-rename only.
+- **5.2 (path policy):** Path policy rejects prefix and symlink escapes.
+- **5.3 (task-envelope authority):** The task-envelope authority hash is recomputed and validated.
+- **5.4 (paused interruption):** Paused interruption follows a legal state-machine transition (`paused` → `interrupted`); the try/catch bypass was removed.
+- **5.5 (ownership accept):** Ownership accept validates the intended receiver and worktree.
+
+### Current verification
+
+- `bun install --frozen-lockfile`: clean
+- `bunx tsc --noEmit`: clean (TypeScript clean)
+- `bun test`: **401 pass, 0 fail, 1100 expect() calls, 32 files**
+
+### Supported-host rule
+
+The `doctor` `platform` check must report status `"ok"`, and the exact platform detail plus `uname -m` must be recorded in evidence. `darwin/x64` is a verified supported V1 host and is not a blocker.
+
+### Current state: DEVELOPMENT COMPLETE — OPERATIONAL ENVIRONMENT BLOCKED
+
+Based on the last recorded Founder-host doctor evidence:
+
+- `claude-code`: `warn` — `claude not found in PATH`
+- `agy`: `warn` — `agy not found in PATH`
+- `exact-model-visibility`: `warn` — config not found

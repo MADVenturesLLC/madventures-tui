@@ -71,7 +71,7 @@ bun test                # tests only
 bun test test/acceptance  # acceptance tests only
 ```
 
-343 tests across 32 files cover protocol parsing, policy enforcement, ledger
+401 tests across 32 files cover protocol parsing, policy enforcement, ledger
 integrity, ownership transitions, session reconciliation, adapter attestation,
 CLI commands, TUI projection, and full acceptance-level two-way collaboration,
 ownership transfer, interruption recovery, and evidence manifest verification.
