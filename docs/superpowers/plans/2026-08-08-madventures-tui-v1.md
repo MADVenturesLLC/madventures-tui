@@ -8,6 +8,7 @@
 
 - Product: `MADVentures TUI Experience`. Repo: `madventures-tui`. Command: `madv-tui`. Service: `madbridge`. Protocol: `madbridge-protocol/v1`.
 - Apple Silicon macOS only, no TCP listener.
+> Clarification (2026-08-09): for V1 release closure, platform readiness is determined by the doctor `platform` check reporting `ok`, with the exact platform detail and `uname -m` recorded in evidence. The 401-pass validation ran on the Founder's Intel iMac (`darwin/x64`, platform `ok`); `darwin/x64` is not an operational blocker. The original line above is preserved as historical planning context.
 - Socket: `~/Library/Application Support/MADVentures/run/madbridge.sock`, mode 0700/0600.
 - Ledger: `.../data/ledger.sqlite3`, Artifacts: `.../artifacts/sha256/`.
 - React is presentation only; adapters cannot expose arbitrary FS/shell/transcripts/credentials.
@@ -43,18 +44,22 @@ apps/madbridge/ + packages/{protocol,policy,ledger,artifact-store,broker,adapter
 
 ### Task 6: Broker, Socket Authentication, MCP Contract
 
+- [x] Done. Delivered via PR #1 squash merge `dcef949`; original task commits are preserved on `origin/review/f9e36d5-trust-boundary`.
+
 **Files:** `packages/broker/src/{index,broker,socket,credentials,mcp-server}.ts` + `packages/broker/test/{broker,socket,mcp-contract}.test.ts`
 
 **Produces:** `MadBridgeBroker.start(config)`, `stop()`, `dispatch(event, credential)`, `subscribe(listener)`, `createInMemoryBrokerForTest()`, 16 MCP tools.
 
-- [ ] Step 1: Write socket/credential tests (0700 dir, 0600 socket, wrong-owner rejection, stale cleanup, short-lived credentials, replay rejection, credential/sender mismatch, zero TCP)
-- [ ] Step 2: Write MCP allowlist test (16 tools)
-- [ ] Step 3: Run tests — FAIL
-- [ ] Step 4: Implement dispatch ordering (authenticate → parse → verify task hash/fingerprint → evaluate policy → state transition/token → persist → broadcast)
-- [ ] Step 5: Run broker tests — PASS
-- [ ] Step 6: Commit
+- [x] Step 1: Write socket/credential tests (0700 dir, 0600 socket, wrong-owner rejection, stale cleanup, short-lived credentials, replay rejection, credential/sender mismatch, zero TCP)
+- [x] Step 2: Write MCP allowlist test (16 tools)
+- [x] Step 3: Run tests — FAIL
+- [x] Step 4: Implement dispatch ordering (authenticate → parse → verify task hash/fingerprint → evaluate policy → state transition/token → persist → broadcast)
+- [x] Step 5: Run broker tests — PASS
+- [x] Step 6: Commit
 
 ### Task 7: Parity-Tested CLI Adapters
+
+- [x] Done. Delivered via PR #1 squash merge `dcef949`; original task commits are preserved on `origin/review/f9e36d5-trust-boundary`.
 
 **Files:** `packages/adapter-*/` + `test/adapter-parity.shared.ts`
 
@@ -83,75 +88,87 @@ export interface AdapterV1 {
 }
 ```
 
-- [ ] Step 1: Define shared parity suite (executable resolution, version, fingerprint, exact model/provider, effort, missing-model failure, config preview no mutation, backup/restore, child-execution ID, inbox notification, disconnect)
-- [ ] Step 2: Run parity tests — FAIL
-- [ ] Step 3: Implement Claude Code attestation + MCP config (machine-verifiable model)
-- [ ] Step 4: Implement Antigravity attestation + MCP config (fail closed if unverifiable)
-- [ ] Step 5: Run parity/integration tests — PASS or documented fail-closed
-- [ ] Step 6: Commit: `feat: add governed claude and antigravity adapters`
+- [x] Step 1: Define shared parity suite (executable resolution, version, fingerprint, exact model/provider, effort, missing-model failure, config preview no mutation, backup/restore, child-execution ID, inbox notification, disconnect)
+- [x] Step 2: Run parity tests — FAIL
+- [x] Step 3: Implement Claude Code attestation + MCP config (machine-verifiable model)
+- [x] Step 4: Implement Antigravity attestation + MCP config (fail closed if unverifiable)
+- [x] Step 5: Run parity/integration tests — PASS or documented fail-closed
+- [x] Step 6: Commit: `feat: add governed claude and antigravity adapters`
 
 ### Task 8: Managed PTYs and MADVentures TUI
 
+- [x] Done. Delivered via PR #1 squash merge `dcef949`; original task commits are preserved on `origin/review/f9e36d5-trust-boundary`.
+
 **Files:** `packages/broker/src/pty-manager.ts` + `apps/madbridge/src/tui/` + `apps/madbridge/test/`
 
-- [ ] Step 1: Write focus/trust-boundary tests (bytes go to focused PTY, bare digits pass, global actions need modifier, terminal `Founder approved` changes no state, narrow layout retains labels)
-- [ ] Step 2: Write governance-pane projection tests (task/repo/fingerprint, execution identities, writer/token, permissions, pending actions, transfer phase, verification/review, incident, Founder-decision labels)
-- [ ] Step 3: Run tests — FAIL
-- [ ] Step 4: Implement React projection (useBrokerState subscribes to immutable snapshots; ApprovalDialog emits typed events; remove approval toggle; explicit text for every color)
-- [ ] Step 5: Implement PTY isolation (owns I/O only, never parses prose for identity/approval/state/results/evidence)
-- [ ] Step 6: Run TUI tests — PASS
-- [ ] Step 7: Commit: `feat: add madventures governed terminal experience`
+- [x] Step 1: Write focus/trust-boundary tests (bytes go to focused PTY, bare digits pass, global actions need modifier, terminal `Founder approved` changes no state, narrow layout retains labels)
+- [x] Step 2: Write governance-pane projection tests (task/repo/fingerprint, execution identities, writer/token, permissions, pending actions, transfer phase, verification/review, incident, Founder-decision labels)
+- [x] Step 3: Run tests — FAIL
+- [x] Step 4: Implement React projection (useBrokerState subscribes to immutable snapshots; ApprovalDialog emits typed events; remove approval toggle; explicit text for every color)
+- [x] Step 5: Implement PTY isolation (owns I/O only, never parses prose for identity/approval/state/results/evidence)
+- [x] Step 6: Run TUI tests — PASS
+- [x] Step 7: Commit: `feat: add madventures governed terminal experience`
 
 ### Task 9: madv-tui Command Surface
 
+- [x] Done. Delivered via PR #1 squash merge `dcef949`; original task commits are preserved on `origin/review/f9e36d5-trust-boundary`.
+
 **Files:** `apps/madbridge/src/{cli,commands/*}.ts` + `apps/madbridge/test/{cli,doctor}.test.ts`
 
-- [ ] Step 1: Write command-contract tests (exact names, unknown-command rejection, read-only doctor, no filesystem changes on failed preflight, complete envelope confirmation, nonzero exit for blocked/invalid/interrupted)
-- [ ] Step 2: Run tests — FAIL
-- [ ] Step 3: Implement init + doctor (init previews runtime dir + CLI config changes, requests confirmation, creates approved dirs, preserves backups; doctor reads only)
-- [ ] Step 4: Implement session commands (start validates preflight; pause/resume/close send typed events; status reads snapshot; verify-ledger does full chain; export-evidence writes sanitized package + manifest)
-- [ ] Step 5: Run command tests — PASS
-- [ ] Step 6: Commit: `feat: add madv tui command surface`
+- [x] Step 1: Write command-contract tests (exact names, unknown-command rejection, read-only doctor, no filesystem changes on failed preflight, complete envelope confirmation, nonzero exit for blocked/invalid/interrupted)
+- [x] Step 2: Run tests — FAIL
+- [x] Step 3: Implement init + doctor (init previews runtime dir + CLI config changes, requests confirmation, creates approved dirs, preserves backups; doctor reads only)
+- [x] Step 4: Implement session commands (start validates preflight; pause/resume/close send typed events; status reads snapshot; verify-ledger does full chain; export-evidence writes sanitized package + manifest)
+- [x] Step 5: Run command tests — PASS
+- [x] Step 6: Commit: `feat: add madv tui command surface`
 
 ### Task 10: Interruption, Reconciliation, Deterministic Restart
+
+- [x] Done. Delivered via PR #1 squash merge `dcef949`; original task commits are preserved on `origin/review/f9e36d5-trust-boundary`.
 
 **Files:** `packages/broker/src/reconciliation.ts` + `packages/broker/test/reconciliation.test.ts` + extend `packages/ledger/src/rebuild.ts` + `packages/broker/src/broker.ts`
 
 **Produces:** `interruptSession(reason)`, `reconcileRepository(input)`, `resumeSession(approval)`, `rebuildBrokerState(events)`
 
-- [ ] Step 1: Write disconnect/restart tests (CLI exit, adapter loss, broker restart, frozen actions, invalidated token, persisted fingerprint, broken-chain/ambiguous-worktree blocks, re-attestation, Founder-visible reconciliation, new token only after resume)
-- [ ] Step 2: Run tests — FAIL
-- [ ] Step 3: Implement fail-closed interruption (atomically append incident → interrupted; mark token unusable; no auto-resume)
-- [ ] Step 4: Implement repository reconciliation (compare identity/fingerprint, record changed paths, re-attest both, produce reconciled/ambiguous/mismatch; only reconciled + typed resume returns to active)
-- [ ] Step 5: Run recovery tests — PASS
-- [ ] Step 6: Commit: `feat: add fail closed session recovery`
+- [x] Step 1: Write disconnect/restart tests (CLI exit, adapter loss, broker restart, frozen actions, invalidated token, persisted fingerprint, broken-chain/ambiguous-worktree blocks, re-attestation, Founder-visible reconciliation, new token only after resume)
+- [x] Step 2: Run tests — FAIL
+- [x] Step 3: Implement fail-closed interruption (atomically append incident → interrupted; mark token unusable; no auto-resume)
+- [x] Step 4: Implement repository reconciliation (compare identity/fingerprint, record changed paths, re-attest both, produce reconciled/ambiguous/mismatch; only reconciled + typed resume returns to active)
+- [x] Step 5: Run recovery tests — PASS
+- [x] Step 6: Commit: `feat: add fail closed session recovery`
 
 ### Task 11: Migrate Prototype, Remove Obsolete Duplicates
 
+- [x] Done. Delivered via PR #1 squash merge `dcef949`; original task commits are preserved on `origin/review/f9e36d5-trust-boundary`.
+
 **Delete after parity:** `src/tui/`, `src/broker/`, `src/mcp/`, `src/adapters/`, `src/permissions/`, `src/shared/`
 
-- [ ] Step 1: Inventory prototype (`rg ... src apps packages`), document unmatched
-- [ ] Step 2: Strengthen boundary test (exactly one production definition for broker/policy/protocol/ledger/approval; no `/tmp/` socket)
-- [ ] Step 3: Run full suite before deletion — PASS
-- [ ] Step 4: Delete obsolete paths (preserve git history)
-- [ ] Step 5: Run full suite after deletion — PASS
-- [ ] Step 6: Commit: `refactor: retire prototype bridge duplicates`
+- [x] Step 1: Inventory prototype (`rg ... src apps packages`), document unmatched
+- [x] Step 2: Strengthen boundary test (exactly one production definition for broker/policy/protocol/ledger/approval; no `/tmp/` socket)
+- [x] Step 3: Run full suite before deletion — PASS
+- [x] Step 4: Delete obsolete paths (preserve git history)
+- [x] Step 5: Run full suite after deletion — PASS
+- [x] Step 6: Commit: `refactor: retire prototype bridge duplicates`
 
 ### Task 12: Negative Controls and Acceptance Gate
 
+- [x] Done. Delivered via PR #1 squash merge `dcef949`; original task commits are preserved on `origin/review/f9e36d5-trust-boundary`.
+
 **Files:** `test/acceptance/` + `docs/verification/` + `README.md`
 
-- [ ] Step 1: Disposable repo fixture (temp dir, git init, one file, Claude + AGY worktrees, cleanup handles; refuse production path or main/master for destructive tests)
-- [ ] Step 2: Two-way collaboration + artifact tests (typed messages both directions, action request/accept/reject, bounded artifact publication, inbox ack, no arbitrary shell/FS MCP)
-- [ ] Step 3: Ownership + negative controls (transfer both directions; reject concurrent writers, stale tokens, write after release, wrong fingerprint, unauthorized path/command/data/egress, forged/expired credentials, replay, unsupported protocol, oversized payload, model mismatch, self-review, terminal prose claiming authority)
-- [ ] Step 4: Interruption + evidence tests (kill each CLI and broker separately; verify fail-closed interruption, restart, re-attestation, reconciliation, typed resume, complete hash-chain, manifest equals repo state)
-- [ ] Step 5: Run acceptance gate (`bun install --frozen-lockfile && bun run typecheck && bun test && bun run apps/madbridge/src/cli.ts doctor --json && bun run apps/madbridge/src/cli.ts verify-ledger --json`)
-- [ ] Step 6: Record fresh evidence (SHA, versions, protocol, adapter status, ledger hash, manifest hash, limitations)
-- [ ] Step 7: Request independent code review
-- [ ] Step 8: Commit: `test: verify madventures tui version 1`
+- [x] Step 1: Disposable repo fixture (temp dir, git init, one file, Claude + AGY worktrees, cleanup handles; refuse production path or main/master for destructive tests)
+- [x] Step 2: Two-way collaboration + artifact tests (typed messages both directions, action request/accept/reject, bounded artifact publication, inbox ack, no arbitrary shell/FS MCP)
+- [x] Step 3: Ownership + negative controls (transfer both directions; reject concurrent writers, stale tokens, write after release, wrong fingerprint, unauthorized path/command/data/egress, forged/expired credentials, replay, unsupported protocol, oversized payload, model mismatch, self-review, terminal prose claiming authority)
+- [x] Step 4: Interruption + evidence tests (kill each CLI and broker separately; verify fail-closed interruption, restart, re-attestation, reconciliation, typed resume, complete hash-chain, manifest equals repo state)
+- [x] Step 5: Run acceptance gate (`bun install --frozen-lockfile && bun run typecheck && bun test && bun run apps/madbridge/src/cli.ts doctor --json && bun run apps/madbridge/src/cli.ts verify-ledger --json`)
+- [x] Step 6: Record fresh evidence (SHA, versions, protocol, adapter status, ledger hash, manifest hash, limitations)
+- [x] Step 7: Request independent code review
+- [x] Step 8: Commit: `test: verify madventures tui version 1`
 
 ---
 
 ## Release Boundary
 
 The Builder may open a review branch or PR after Task 12. A green suite authorizes neither merge nor installation. The Founder separately reviews the exact tested tree, independent review verdict, adapter capability results, evidence-chain verification, and final manifest before any merge, local installation, or operational use.
+
+> **Update (2026-08-09):** Independent review occurred on PR #1 (`dcef949`) against the `f9e36d5` / `a0b4301` review state. Follow-up remediation landed in PRs #2 (`e6c3ea8`), #3 (`0f262c4`), and #4 (`fd8322e`). All five trust-boundary findings (5.1–5.5) are closed. The test suite is green (401 pass, 0 fail). Founder review remains required before operational use.
