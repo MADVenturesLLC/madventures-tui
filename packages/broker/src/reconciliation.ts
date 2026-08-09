@@ -105,6 +105,10 @@ export interface RebuiltBrokerState {
  * Deterministically reconstruct broker state from verified ledger events.
  * Replays the event stream to derive session state, fencing token, and
  * last known repository fingerprint.
+ *
+ * When the stream has no explicit start event, the first normal activity
+ * event synthesizes starting -> active (same set as ledger rebuild.ts) so
+ * durable broker and ledger replay stay aligned.
  */
 export function rebuildBrokerState(rows: readonly LedgerRow[]): RebuiltBrokerState {
   if (rows.length === 0) {
@@ -152,7 +156,16 @@ export function rebuildBrokerState(rows: readonly LedgerRow[]): RebuiltBrokerSta
       case "ownership_reject":
       case "verification_result":
       case "review_verdict":
-        // Normal activity keeps the session in its current state
+        // First normal activity synthesizes starting -> active when the ledger
+        // stream has no explicit start event (parity with ledger rebuild.ts).
+        // Only applies while still starting; interrupted/paused/etc. are unchanged.
+        if (state.kind === "starting") {
+          try {
+            state = transitionSession(state, { type: "start" });
+          } catch {
+            // ignore illegal start (should not occur from starting)
+          }
+        }
         break;
 
       case "pause":

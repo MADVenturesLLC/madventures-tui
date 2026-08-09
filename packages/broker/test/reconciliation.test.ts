@@ -434,7 +434,8 @@ describe("rebuildBrokerState — deterministic reconstruction", () => {
     expect(state.count).toBe(2);
     expect(state.hasIncident).toBe(false);
     expect(state.tokenUsable).toBe(true);
-    expect(state.sessionState.kind).toBe("starting"); // no start event, stays starting
+    // First normal activity synthesizes starting -> active (no explicit start).
+    expect(state.sessionState.kind).toBe("active");
   });
 
   test("reconstructs incident and marks token unusable", () => {
@@ -521,5 +522,60 @@ describe("rebuildBrokerState — deterministic reconstruction", () => {
     expect(state.sessionState.kind).toBe("interrupted");
     expect(state.hasIncident).toBe(true);
     expect(state.tokenUsable).toBe(false);
+  });
+
+  test("normal activity then session_close replays to closed", () => {
+    // Follow-up defect 7: without start synthesis, [message, session_close]
+    // left the session at starting because close is only legal from active.
+    const rows = makeLedgerRows([
+      makeEvent("message"),
+      makeEvent("session_close"),
+    ]);
+
+    const state = rebuildBrokerState(rows);
+    expect(state.sessionState.kind).toBe("closed");
+    expect(state.hasIncident).toBe(false);
+    expect(state.tokenUsable).toBe(true);
+  });
+
+  test("normal activity then incident produces interrupted through legal transition", () => {
+    // message synthesizes start -> active, then incident: active -> interrupted.
+    const rows = makeLedgerRows([
+      makeEvent("message"),
+      makeEvent("incident"),
+    ]);
+
+    const state = rebuildBrokerState(rows);
+    expect(state.sessionState.kind).toBe("interrupted");
+    expect(state.hasIncident).toBe(true);
+    expect(state.tokenUsable).toBe(false);
+  });
+
+  test("interrupted plus normal activity does not become active without reconciliation", () => {
+    // After incident, further messages must not re-activate the session.
+    // Start synthesis only applies while state is starting.
+    const rows = makeLedgerRows([
+      makeEvent("message"),
+      makeEvent("incident"),
+      makeEvent("message"),
+      makeEvent("action_request"),
+    ]);
+
+    const state = rebuildBrokerState(rows);
+    expect(state.sessionState.kind).toBe("interrupted");
+    expect(state.hasIncident).toBe(true);
+    expect(state.tokenUsable).toBe(false);
+    expect(state.currentFencingToken).toBeNull();
+  });
+
+  test("start synthesis is a no-op when already active (second normal event)", () => {
+    const rows = makeLedgerRows([
+      makeEvent("message"),
+      makeEvent("action_request"),
+      makeEvent("verification_result"),
+    ]);
+
+    const state = rebuildBrokerState(rows);
+    expect(state.sessionState.kind).toBe("active");
   });
 });
