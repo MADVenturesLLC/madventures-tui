@@ -212,6 +212,21 @@ describe("fail-closed interruption", () => {
     expect(result.state.kind).toBe("interrupted");
   });
 
+  test("paused session is interrupted through the state machine", () => {
+    // paused -> interrupted is a legal transition; interruption takes the
+    // exact same path as an active session (no reconciliation bypass).
+    const result = interruptSession({
+      reason: "adapter_disconnect",
+      sessionState: { kind: "paused" },
+      currentWriterToken: 11,
+      ledgerRows: makeLedgerRows([makeEvent("pause")]),
+    });
+
+    expect(result.state.kind).toBe("interrupted");
+    expect(result.tokenInvalidated).toBe(11);
+    expect(result.autoResumed).toBe(false);
+  });
+
   test("token is marked unusable after interruption", async () => {
     const broker = await createInMemoryBrokerForTest();
     try {

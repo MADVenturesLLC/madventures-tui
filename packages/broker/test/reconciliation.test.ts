@@ -9,6 +9,7 @@ import {
   rebuildBrokerState,
 } from "../src/reconciliation";
 import type { InterruptReason, RepositorySnapshot, ReconcileInput } from "../src/reconciliation";
+import { InvalidTransitionError } from "../src/session-machine";
 import type { BridgeEventV1, RepositoryFingerprint } from "@madventures/protocol";
 import { PROTOCOL_VERSION, sha256Hex } from "@madventures/protocol";
 import type { LedgerRow } from "@madventures/ledger";
@@ -205,6 +206,50 @@ describe("fail-closed interruption", () => {
     });
 
     expect(result.incidentEvent.repository_fingerprint.sha256).toBe(fp.sha256);
+  });
+});
+
+describe("paused interruption goes through the state machine", () => {
+  test("paused session interruption uses the normal transition and produces interrupted", () => {
+    const result = interruptSession({
+      reason: "cli_exit",
+      sessionState: { kind: "paused" },
+      currentWriterToken: 9,
+      ledgerRows: makeLedgerRows([makeEvent("pause")]),
+    });
+
+    // Same single path as an active session: state-machine transition,
+    // incident event, token invalidation, no auto-resume.
+    expect(result.state.kind).toBe("interrupted");
+    expect(result.incidentEvent.event_type).toBe("incident");
+    expect(result.incidentEvent.payload["reason"]).toBe("cli_exit");
+    expect(result.tokenInvalidated).toBe(9);
+    expect(result.autoResumed).toBe(false);
+  });
+
+  test("no forced interrupted fallback when the transition is invalid", () => {
+    // closed -> interrupted is not a legal transition. The old code caught
+    // the state-machine error and force-set interrupted anyway; the fix
+    // makes the violation visible instead of silently bypassing the machine.
+    expect(() =>
+      interruptSession({
+        reason: "cli_exit",
+        sessionState: { kind: "closed" },
+        currentWriterToken: 1,
+        ledgerRows: makeLedgerRows([makeEvent("message")]),
+      }),
+    ).toThrow(InvalidTransitionError);
+
+    // Already interrupted: re-interrupt is also invalid — no silent no-op
+    // coercion to interrupted, the machine decides.
+    expect(() =>
+      interruptSession({
+        reason: "adapter_disconnect",
+        sessionState: { kind: "interrupted" },
+        currentWriterToken: 2,
+        ledgerRows: makeLedgerRows([makeEvent("message")]),
+      }),
+    ).toThrow(InvalidTransitionError);
   });
 });
 
@@ -437,5 +482,44 @@ describe("rebuildBrokerState — deterministic reconstruction", () => {
     expect(state.sessionState.kind).toBe("starting");
     expect(state.tokenUsable).toBe(false);
     expect(state.currentFencingToken).toBeNull();
+  });
+
+  test("incident after close does not force-set interrupted", () => {
+    // Regression: the old rebuild catch forced { kind: "interrupted" } when
+    // the machine rejected the transition. Replay legitimately reaches
+    // `closed` via interrupt → resume → session_close, and closed ->
+    // interrupted is not a legal transition, so the trailing incident must
+    // keep `closed` while still recording the fail-closed signals.
+    const rows = makeLedgerRows([
+      makeEvent("message"),
+      makeEvent("incident"),
+      makeEvent("resume"),
+      makeEvent("session_close"),
+      makeEvent("incident"),
+    ]);
+
+    const state = rebuildBrokerState(rows);
+    expect(state.sessionState.kind).toBe("closed");
+    // Fail-closed signals still apply: incident recorded, token unusable.
+    expect(state.hasIncident).toBe(true);
+    expect(state.tokenUsable).toBe(false);
+  });
+
+  test("rebuild routes paused interruption through the state machine", () => {
+    // Replay reaches `paused` via interrupt → resume → pause, then a second
+    // incident interrupts the paused session through the machine (paused ->
+    // interrupted is now a legal transition, not a forced fallback).
+    const rows = makeLedgerRows([
+      makeEvent("message"),
+      makeEvent("incident"),
+      makeEvent("resume"),
+      makeEvent("pause"),
+      makeEvent("incident"),
+    ]);
+
+    const state = rebuildBrokerState(rows);
+    expect(state.sessionState.kind).toBe("interrupted");
+    expect(state.hasIncident).toBe(true);
+    expect(state.tokenUsable).toBe(false);
   });
 });

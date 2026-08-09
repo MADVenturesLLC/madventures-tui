@@ -184,8 +184,9 @@ export function rebuildBrokerState(rows: readonly LedgerRow[]): RebuiltBrokerSta
         try {
           state = transitionSession(state, { type: "interrupt" });
         } catch {
-          // already interrupted or invalid — force interrupted
-          state = { kind: "interrupted" };
+          // Invalid transition (e.g. session already closed) — keep the
+          // machine-derived state. Never force-set interrupted; the incident
+          // is still recorded via hasIncident and tokenUsable above.
         }
         break;
 
@@ -262,14 +263,11 @@ export function interruptSession(input: InterruptInput): InterruptResult {
     previous_event_hash: previousHash,
   };
 
-  // Transition to interrupted — fail-closed
-  let newState: SessionState;
-  try {
-    newState = transitionSession(input.sessionState, { type: "interrupt" });
-  } catch {
-    // If we can't transition normally, force to interrupted
-    newState = { kind: "interrupted" };
-  }
+  // Transition to interrupted through the state machine. Every interruption —
+  // whether the session is active or paused — uses this single path. Invalid
+  // transitions (e.g. from `closed`) throw rather than being silently
+  // overridden; the caller decides how to fail closed.
+  const newState = transitionSession(input.sessionState, { type: "interrupt" });
 
   return {
     state: newState,

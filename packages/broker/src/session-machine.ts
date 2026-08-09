@@ -2,6 +2,7 @@
 // Session lifecycle state machine.
 // starting -> active -> paused -> active -> closing -> closed
 //                 \-> interrupted -> reconciling -> active
+// paused can also be interrupted directly (paused -> interrupted).
 //
 // Unlisted transitions throw InvalidTransitionError. No default branch coerces unknown state.
 
@@ -35,7 +36,7 @@ export class InvalidTransitionError extends Error {
 const TRANSITIONS: Record<string, Set<string>> = {
   starting: new Set(["start", "interrupt"]),
   active: new Set(["pause", "interrupt", "close"]),
-  paused: new Set(["resume"]),
+  paused: new Set(["resume", "interrupt"]),
   interrupted: new Set(["reconcile"]),
   reconciling: new Set(["resume", "interrupt"]),
   closing: new Set(["complete"]),
