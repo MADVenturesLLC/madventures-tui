@@ -6,29 +6,53 @@
 //
 // There is NO approval toggle. The ApprovalDialog emits typed events with
 // explicit text for every color state. The broker records the ledger entry.
+//
+// Approval keys are INERT unless ALL of:
+//   - showApprovalDialog === true
+//   - displayedApprovalId !== null
+//   - focus === "governance"
+//   - the stored approval still exists in the snapshot
+//   - approval.colorState.kind === "pending"
+//   - the approval ID is not already in resolvedApprovalIds
+// Claude, Antigravity, and Events focus are ALL inert.
+//
+// The ApprovalDialog.onResolve callback goes through the SAME guard — it
+// does not bypass the keyboard-router validation.
 
-import { useReducer, useCallback, useMemo, useState } from "react";
+import { useReducer, useCallback, useMemo, useEffect, useRef } from "react";
+import { useKeyboard as useOpenTuiKeyboard } from "@opentui/react";
+import type { KeyEvent } from "@opentui/core";
 import { ClaudePane } from "./panes/ClaudePane";
 import { AntigravityPane } from "./panes/AntigravityPane";
 import { GovernancePane } from "./panes/GovernancePane";
 import { ApprovalDialog } from "./components/ApprovalDialog";
 import { StatusBar } from "./components/StatusBar";
+import { FixtureBanner } from "./components/FixtureBanner";
 import { EventLog } from "./components/EventLog";
 import { useBrokerState } from "./hooks/useBrokerState";
-import { useKeyboard } from "./hooks/useKeyboard";
-import { loadKeybindings } from "./keybindings";
-import type { FocusTarget, BrokerSnapshot, ApprovalRequestEvent } from "./types";
+import { loadKeybindings, resolveKey, translateKeyEvent } from "./keybindings";
+import type { KeyAction } from "./keybindings";
+import type { FocusTarget, BrokerSnapshot, ApprovalRequestEvent, PendingApproval } from "./types";
+import { routeKeyEvent, validateApprovalResolution, pruneResolvedIds } from "./keyboard-router";
+import type { KeyboardRouterState } from "./keyboard-router";
 
 interface UIState {
   focus: FocusTarget;
   showApprovalDialog: boolean;
+  displayedApprovalId: string | null;
+  /** IDs of approvals that have already been submitted (accept or reject).
+   * Once submitted, an approval ID cannot be resolved again or auto-reopened
+   * while the broker snapshot still contains it. */
+  resolvedApprovalIds: ReadonlySet<string>;
   claudeOutput: string;
   antigravityOutput: string;
 }
 
 type UIAction =
   | { type: "focus"; target: FocusTarget }
-  | { type: "show-approval"; show: boolean }
+  | { type: "show-approval"; show: boolean; approvalId: string | null }
+  | { type: "add-resolved"; id: string }
+  | { type: "prune-resolved"; ids: ReadonlySet<string> }
   | { type: "pty-output"; pane: "claude" | "antigravity"; data: string };
 
 function uiReducer(state: UIState, action: UIAction): UIState {
@@ -36,7 +60,14 @@ function uiReducer(state: UIState, action: UIAction): UIState {
     case "focus":
       return { ...state, focus: action.target };
     case "show-approval":
-      return { ...state, showApprovalDialog: action.show };
+      return { ...state, showApprovalDialog: action.show, displayedApprovalId: action.approvalId };
+    case "add-resolved": {
+      const newSet = new Set(state.resolvedApprovalIds);
+      newSet.add(action.id);
+      return { ...state, resolvedApprovalIds: newSet };
+    }
+    case "prune-resolved":
+      return { ...state, resolvedApprovalIds: action.ids };
     case "pty-output": {
       if (action.pane === "claude") {
         return { ...state, claudeOutput: state.claudeOutput + action.data };
@@ -55,56 +86,190 @@ interface AppProps {
   onApprovalResolve?: (event: ApprovalRequestEvent) => void;
   /** Quit callback. */
   onQuit?: () => void;
+  /** Fixture mode — permanently labels the view as fixture data. */
+  fixture?: boolean;
 }
 
-export function App({ subscribe, onPtyWrite, onApprovalResolve, onQuit }: AppProps) {
+export function App({ subscribe, onPtyWrite, onApprovalResolve, onQuit, fixture = false }: AppProps) {
   const { state, connected } = useBrokerState(subscribe);
   const keybindings = useMemo(() => loadKeybindings(), []);
 
   const [ui, dispatch] = useReducer(uiReducer, {
     focus: "claude",
     showApprovalDialog: false,
+    displayedApprovalId: null,
+    resolvedApprovalIds: new Set<string>(),
     claudeOutput: "",
     antigravityOutput: "",
   });
 
+  // Keep refs for the keyboard handler so it always sees the latest state.
+  // The ref is updated synchronously in the dispatch wrapper below so that
+  // rapid keypresses within the same flush cycle see the updated state.
+  const stateRef = useRef(state);
+  const uiRef = useRef(ui);
+  stateRef.current = state;
+
+  // Synchronous dispatch wrapper — updates the ref immediately so the
+  // keyboard handler sees the latest focus/dialog state within the same
+  // event loop tick, before React re-renders.
+  const dispatchSync = useCallback((action: UIAction) => {
+    uiRef.current = uiReducer(uiRef.current, action);
+    dispatch(action);
+  }, []);
+
   const handlePtyWrite = useCallback((data: string) => {
     onPtyWrite?.(data);
-    // PTY output is routed back via broker — no parsing in React
   }, [onPtyWrite]);
 
   const handleFocusChange = useCallback((target: FocusTarget) => {
-    dispatch({ type: "focus", target });
-  }, []);
+    dispatchSync({ type: "focus", target });
+  }, [dispatchSync]);
 
-  const handleApproval = useCallback((accept: boolean) => {
-    const pending = state?.pendingApprovals?.[0];
-    if (pending) {
-      onApprovalResolve?.({
-        taskId: pending.taskId,
-        actor: pending.actor,
-        scope: pending.scope,
-        repositoryFingerprint: pending.repositoryFingerprint,
-        timestamp: new Date().toISOString(),
-        resolution: accept ? "accept" : "reject",
-      });
-    }
-    dispatch({ type: "show-approval", show: false });
-  }, [state, onApprovalResolve]);
+  const handleApprovalResolve = useCallback((event: ApprovalRequestEvent) => {
+    onApprovalResolve?.(event);
+  }, [onApprovalResolve]);
 
   const handleQuit = useCallback(() => {
     onQuit?.();
   }, [onQuit]);
 
-  const onKey = useKeyboard({
-    bindings: keybindings,
-    onFocusChange: handleFocusChange,
-    onApproval: handleApproval,
-    onQuit: handleQuit,
-    onPtyWrite: handlePtyWrite,
+  const handleShowApprovalDialog = useCallback((show: boolean, approvalId: string | null) => {
+    dispatchSync({ type: "show-approval", show, approvalId });
+  }, [dispatchSync]);
+
+  // Prune resolvedApprovalIds when the snapshot changes — remove IDs
+  // that no longer exist in the pending array so a fresh approval with
+  // the same ID (after snapshot rotation) can be opened.
+  useEffect(() => {
+    const pruned = pruneResolvedIds(ui.resolvedApprovalIds, state);
+    if (pruned.size !== ui.resolvedApprovalIds.size) {
+      dispatchSync({ type: "prune-resolved", ids: pruned });
+    }
+  }, [state, ui.resolvedApprovalIds, dispatchSync]);
+
+  // Auto-open decision dialog when governance is focused and a pending
+  // approval exists and no dialog is currently shown. This makes the
+  // ApprovalDialog reachable. Prevents auto-reopen of already-resolved
+  // approvals while the snapshot still contains them.
+  useEffect(() => {
+    // Use uiRef.current for the resolvedApprovalIds check because the
+    // dispatchSync wrapper updates the ref synchronously, while the
+    // React state (ui.resolvedApprovalIds) may lag behind by one render
+    // cycle when multiple keypresses are processed in a single flush.
+    const currentResolved = uiRef.current.resolvedApprovalIds;
+    if (ui.focus === "governance" && !ui.showApprovalDialog) {
+      const firstPending = state?.pendingApprovals?.find(
+        (a: PendingApproval) =>
+          a.colorState.kind === "pending" &&
+          !currentResolved.has(a.id),
+      );
+      if (firstPending) {
+        dispatchSync({ type: "show-approval", show: true, approvalId: firstPending.id });
+      }
+    }
+    // If the displayed approval disappears from the pending array or
+    // is no longer pending, close the dialog safely.
+    if (ui.showApprovalDialog && ui.displayedApprovalId !== null) {
+      const stillPending = state?.pendingApprovals?.find(
+        (a: PendingApproval) => a.id === ui.displayedApprovalId,
+      );
+      if (!stillPending || stillPending.colorState.kind !== "pending") {
+        dispatchSync({ type: "show-approval", show: false, approvalId: null });
+      }
+    }
+  }, [ui.focus, ui.showApprovalDialog, ui.displayedApprovalId, ui.resolvedApprovalIds, state, dispatchSync]);
+
+  // Wire OpenTUI's useKeyboard KeyEvent stream through the translator
+  // and the extracted routeKeyEvent production logic.
+  useOpenTuiKeyboard((keyEvent: KeyEvent) => {
+    const keyStr = translateKeyEvent({
+      name: keyEvent.name,
+      ctrl: keyEvent.ctrl,
+      meta: keyEvent.meta,
+      shift: keyEvent.shift,
+    });
+
+    const action: KeyAction | null = resolveKey(keyStr, keybindings);
+
+    const routerState: KeyboardRouterState = {
+      focus: uiRef.current.focus,
+      showApprovalDialog: uiRef.current.showApprovalDialog,
+      displayedApprovalId: uiRef.current.displayedApprovalId,
+      resolvedApprovalIds: uiRef.current.resolvedApprovalIds,
+    };
+
+    const newState = routeKeyEvent({
+      keyStr,
+      action,
+      sequence: keyEvent.sequence,
+      name: keyEvent.name,
+      state: routerState,
+      snapshot: stateRef.current,
+      callbacks: {
+        onFocusChange: handleFocusChange,
+        onApprovalResolve: (event) => {
+          handleApprovalResolve(event);
+          // Mark the approval as resolved to prevent duplicate submission.
+          if (uiRef.current.displayedApprovalId) {
+            dispatchSync({ type: "add-resolved", id: uiRef.current.displayedApprovalId });
+          }
+        },
+        onPtyWrite: handlePtyWrite,
+        onQuit: handleQuit,
+        onShowApprovalDialog: handleShowApprovalDialog,
+      },
+      bindings: keybindings,
+    });
+
+    // Sync resolvedApprovalIds if routeKeyEvent added to the set.
+    if (newState.resolvedApprovalIds !== uiRef.current.resolvedApprovalIds) {
+      dispatchSync({ type: "prune-resolved", ids: newState.resolvedApprovalIds });
+    }
   });
 
-  const pendingApproval = state?.pendingApprovals?.[0] ?? null;
+  // The approval displayed in the dialog — looked up by the stored ID,
+  // NOT pendingApprovals[0].
+  const pendingApproval = state?.pendingApprovals?.find(
+    (a: PendingApproval) => a.id === ui.displayedApprovalId,
+  ) ?? null;
+
+  // Shared resolution function — used by BOTH the keyboard router and
+  // the ApprovalDialog.onResolve callback. This prevents the component
+  // callback from bypassing the keyboard-router guard.
+  const resolveApproval = useCallback((accept: boolean) => {
+    const routerState: KeyboardRouterState = {
+      focus: ui.focus,
+      showApprovalDialog: ui.showApprovalDialog,
+      displayedApprovalId: ui.displayedApprovalId,
+      resolvedApprovalIds: ui.resolvedApprovalIds,
+    };
+
+    const pending = validateApprovalResolution(routerState, state);
+    if (!pending) {
+      // If the stored approval is gone or not pending, close safely.
+      if (ui.showApprovalDialog && ui.displayedApprovalId !== null) {
+        const stillExists = state?.pendingApprovals?.find(
+          (a: PendingApproval) => a.id === ui.displayedApprovalId,
+        );
+        if (!stillExists) {
+          dispatchSync({ type: "show-approval", show: false, approvalId: null });
+        }
+      }
+      return;
+    }
+
+    handleApprovalResolve({
+      taskId: pending.taskId,
+      actor: pending.actor,
+      scope: pending.scope,
+      repositoryFingerprint: pending.repositoryFingerprint,
+      timestamp: new Date().toISOString(),
+      resolution: accept ? "accept" : "reject",
+    });
+    dispatchSync({ type: "add-resolved", id: pending.id });
+    dispatchSync({ type: "show-approval", show: false, approvalId: null });
+  }, [ui, state, handleApprovalResolve, dispatchSync]);
 
   return (
     <box flexDirection="column" flexGrow={1}>
@@ -131,20 +296,20 @@ export function App({ subscribe, onPtyWrite, onApprovalResolve, onQuit }: AppPro
         <EventLog entries={state?.eventLog ?? []} />
       )}
 
-      {/* Bottom: status bar always visible — persistent labels even in narrow layouts */}
+      {/* Bottom: fixture banner (separate truth band) + status bar. */}
+      {fixture && <FixtureBanner />}
       <StatusBar state={state} connected={connected} focus={ui.focus} />
 
-      {/* Overlay: approval dialog — shows pending approval events from broker.
-          UI does NOT create authority. It displays broker authority events.
-          Acceptance/rejection is sent to the broker, which records a ledger entry.
-          NO approval toggle — explicit text for every color state. */}
-      {ui.showApprovalDialog && pendingApproval && (
+      {/* Overlay: approval dialog — visible only when showApprovalDialog is
+          true AND the displayed approval still exists and is pending.
+          The onResolve callback goes through the SAME validation guard as
+          the keyboard router — it does not bypass the check. */}
+      {ui.showApprovalDialog && pendingApproval && pendingApproval.colorState.kind === "pending" && (
         <ApprovalDialog
           approval={pendingApproval}
-          onResolve={(event) => {
-            onApprovalResolve?.(event);
-            dispatch({ type: "show-approval", show: false });
-          }}
+          onResolve={() => resolveApproval(true)}
+          onReject={() => resolveApproval(false)}
+          keybindings={keybindings}
         />
       )}
     </box>

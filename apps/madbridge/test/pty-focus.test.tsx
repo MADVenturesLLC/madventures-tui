@@ -3,12 +3,12 @@
 //
 // 1. Keyboard bytes go only to focused PTY
 // 2. Bare digits pass through unchanged
-// 3. Global actions require configured modifier/prefix
+// 3. Global actions require configured modifier/prefix (alt+ by default)
 // 4. Terminal output containing "Founder approved" changes no broker state
 
 import { test, expect, describe } from "bun:test";
 import { PtyManager } from "@madventures/broker";
-import { loadKeybindings, resolveKey, isGlobalAction, DEFAULT_KEYBINDINGS } from "../src/tui/keybindings";
+import { loadKeybindings, resolveKey, isGlobalAction, DEFAULT_KEYBINDINGS, translateKeyEvent } from "../src/tui/keybindings";
 import type { BrokerSnapshot } from "../src/tui/types";
 
 describe("PTY focus and keyboard routing", () => {
@@ -52,42 +52,76 @@ describe("PTY focus and keyboard routing", () => {
   test("global actions require configured modifier/prefix", () => {
     const bindings = loadKeybindings();
 
-    // ctrl+1 IS a global action
-    expect(isGlobalAction("ctrl+1", bindings)).toBe(true);
-    expect(isGlobalAction("ctrl+2", bindings)).toBe(true);
-    expect(isGlobalAction("ctrl+3", bindings)).toBe(true);
-    expect(isGlobalAction("ctrl+4", bindings)).toBe(true);
-    expect(isGlobalAction("ctrl+y", bindings)).toBe(true);
-    expect(isGlobalAction("ctrl+n", bindings)).toBe(true);
-    expect(isGlobalAction("ctrl+q", bindings)).toBe(true);
+    // alt+1 IS a global action (terminal-deliverable Alt+digit)
+    expect(isGlobalAction("alt+1", bindings)).toBe(true);
+    expect(isGlobalAction("alt+2", bindings)).toBe(true);
+    expect(isGlobalAction("alt+3", bindings)).toBe(true);
+    expect(isGlobalAction("alt+4", bindings)).toBe(true);
+    expect(isGlobalAction("alt+y", bindings)).toBe(true);
+    expect(isGlobalAction("alt+n", bindings)).toBe(true);
+    expect(isGlobalAction("alt+q", bindings)).toBe(true);
 
-    // resolveKey returns the action for ctrl+ prefixed keys
-    expect(resolveKey("ctrl+1", bindings)).toBe("focus-claude");
-    expect(resolveKey("ctrl+2", bindings)).toBe("focus-antigravity");
-    expect(resolveKey("ctrl+3", bindings)).toBe("focus-governance");
-    expect(resolveKey("ctrl+4", bindings)).toBe("focus-events");
-    expect(resolveKey("ctrl+y", bindings)).toBe("accept-approval");
-    expect(resolveKey("ctrl+n", bindings)).toBe("reject-approval");
-    expect(resolveKey("ctrl+q", bindings)).toBe("quit");
+    // resolveKey returns the action for alt+ prefixed keys
+    expect(resolveKey("alt+1", bindings)).toBe("focus-claude");
+    expect(resolveKey("alt+2", bindings)).toBe("focus-antigravity");
+    expect(resolveKey("alt+3", bindings)).toBe("focus-governance");
+    expect(resolveKey("alt+4", bindings)).toBe("focus-events");
+    expect(resolveKey("alt+y", bindings)).toBe("accept-approval");
+    expect(resolveKey("alt+n", bindings)).toBe("reject-approval");
+    expect(resolveKey("alt+q", bindings)).toBe("quit");
   });
 
   test("custom keybindings from env override defaults", () => {
     const origEnv = process.env.FOUNDER_TUI_KEYS;
-    process.env.FOUNDER_TUI_KEYS = "ctrl+a:focus-claude,ctrl+s:focus-antigravity";
+    process.env.FOUNDER_TUI_KEYS = "alt+a:focus-claude,alt+s:focus-antigravity";
 
     const bindings = loadKeybindings();
-    expect(resolveKey("ctrl+a", bindings)).toBe("focus-claude");
-    expect(resolveKey("ctrl+s", bindings)).toBe("focus-antigravity");
-    // Default ctrl+1 should NOT be in custom bindings
-    expect(resolveKey("ctrl+1", bindings)).toBeNull();
+    expect(resolveKey("alt+a", bindings)).toBe("focus-claude");
+    expect(resolveKey("alt+s", bindings)).toBe("focus-antigravity");
+    // Default alt+1 should NOT be in custom bindings
+    expect(resolveKey("alt+1", bindings)).toBeNull();
 
     process.env.FOUNDER_TUI_KEYS = origEnv;
   });
 
-  test("default keybindings all require ctrl+ prefix", () => {
+  test("default keybindings all require alt+ prefix", () => {
     for (const binding of DEFAULT_KEYBINDINGS) {
-      expect(binding.key.startsWith("ctrl+")).toBe(true);
+      expect(binding.key.startsWith("alt+")).toBe(true);
     }
+  });
+});
+
+describe("KeyEvent-to-action translation", () => {
+  test("translateKeyEvent produces alt+digit for meta+digit", () => {
+    // OpenTUI KeyEvent uses meta=true for Alt. The translator maps
+    // meta to "alt" in the keybinding string format.
+    expect(translateKeyEvent({ name: "1", ctrl: false, meta: true, shift: false })).toBe("alt+1");
+    expect(translateKeyEvent({ name: "2", ctrl: false, meta: true, shift: false })).toBe("alt+2");
+    expect(translateKeyEvent({ name: "y", ctrl: false, meta: true, shift: false })).toBe("alt+y");
+  });
+
+  test("translateKeyEvent produces ctrl+ for ctrl keys", () => {
+    expect(translateKeyEvent({ name: "c", ctrl: true, meta: false, shift: false })).toBe("ctrl+c");
+  });
+
+  test("translateKeyEvent returns bare name for no modifier", () => {
+    expect(translateKeyEvent({ name: "a", ctrl: false, meta: false, shift: false })).toBe("a");
+    expect(translateKeyEvent({ name: "1", ctrl: false, meta: false, shift: false })).toBe("1");
+    expect(translateKeyEvent({ name: "9", ctrl: false, meta: false, shift: false })).toBe("9");
+  });
+
+  test("translateKeyEvent round-trips through resolveKey for alt+ bindings", () => {
+    const bindings = loadKeybindings();
+
+    // Simulate an Alt+1 keypress as OpenTUI delivers it
+    const translated = translateKeyEvent({ name: "1", ctrl: false, meta: true, shift: false });
+    expect(translated).toBe("alt+1");
+    expect(resolveKey(translated, bindings)).toBe("focus-claude");
+
+    // Bare digit translates to just "1" — not a global action
+    const bareTranslated = translateKeyEvent({ name: "1", ctrl: false, meta: false, shift: false });
+    expect(bareTranslated).toBe("1");
+    expect(resolveKey(bareTranslated, bindings)).toBeNull();
   });
 });
 
