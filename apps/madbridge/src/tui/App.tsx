@@ -20,7 +20,7 @@
 // does not bypass the keyboard-router validation.
 
 import { useReducer, useCallback, useMemo, useEffect, useRef } from "react";
-import { useKeyboard as useOpenTuiKeyboard } from "@opentui/react";
+import { useKeyboard as useOpenTuiKeyboard, useTerminalDimensions } from "@opentui/react";
 import type { KeyEvent } from "@opentui/core";
 import { ClaudePane } from "./panes/ClaudePane";
 import { AntigravityPane } from "./panes/AntigravityPane";
@@ -29,12 +29,18 @@ import { ApprovalDialog } from "./components/ApprovalDialog";
 import { StatusBar } from "./components/StatusBar";
 import { FixtureBanner } from "./components/FixtureBanner";
 import { EventLog } from "./components/EventLog";
+import { DockStrip } from "./components/DockStrip";
+import { PaneTabs } from "./components/PaneTabs";
 import { useBrokerState } from "./hooks/useBrokerState";
 import { loadKeybindings, resolveKey, translateKeyEvent } from "./keybindings";
 import type { KeyAction } from "./keybindings";
 import type { FocusTarget, BrokerSnapshot, ApprovalRequestEvent, PendingApproval } from "./types";
 import { routeKeyEvent, validateApprovalResolution, pruneResolvedIds } from "./keyboard-router";
 import type { KeyboardRouterState } from "./keyboard-router";
+
+// Wide mode threshold: terminal width >= 80 shows stage + dock composition.
+// Narrow mode (< 80) shows a tab row + a single selected surface.
+const WIDE_MODE_MIN_WIDTH = 80;
 
 interface UIState {
   focus: FocusTarget;
@@ -271,29 +277,82 @@ export function App({ subscribe, onPtyWrite, onApprovalResolve, onQuit, fixture 
     dispatchSync({ type: "show-approval", show: false, approvalId: null });
   }, [ui, state, handleApprovalResolve, dispatchSync]);
 
+  // ─── Composition: wide (>=80) vs narrow (<80) ───
+  // Wide mode: the focused agent/surface occupies the full-width stage; the
+  //   other agent appears as a compact dock strip below it.
+  // Narrow mode: a tab row projects the current FocusTarget; exactly one
+  //   selected surface renders full-width. No three-pane squeezing.
+  const { width: termWidth } = useTerminalDimensions();
+  const wideMode = termWidth >= WIDE_MODE_MIN_WIDTH;
+
+  // The docked agent is whichever of Claude/Antigravity is NOT focused.
+  // When a non-agent surface (Governance/Events) is focused in wide mode,
+  // both agents remain reachable via their dock strips.
+  const claudeFocused = ui.focus === "claude";
+  const antigravityFocused = ui.focus === "antigravity";
+  const governanceFocused = ui.focus === "governance";
+  const eventsFocused = ui.focus === "events";
+
   return (
     <box flexDirection="column" flexGrow={1}>
-      {/* Top: three panes side by side */}
-      <box flexDirection="row" flexGrow={1}>
-        <ClaudePane
-          active={ui.focus === "claude"}
-          state={state}
-          ptyOutput={ui.claudeOutput}
-        />
-        <AntigravityPane
-          active={ui.focus === "antigravity"}
-          state={state}
-          ptyOutput={ui.antigravityOutput}
-        />
-        <GovernancePane
-          active={ui.focus === "governance"}
-          state={state}
-        />
-      </box>
+      {/* ── Stage area ── */}
+      {wideMode ? (
+        <>
+          {/* Wide mode: focused surface is the full-width stage. */}
+          {claudeFocused && (
+            <ClaudePane active={true} state={state} ptyOutput={ui.claudeOutput} />
+          )}
+          {antigravityFocused && (
+            <AntigravityPane active={true} state={state} ptyOutput={ui.antigravityOutput} />
+          )}
+          {governanceFocused && (
+            <GovernancePane active={true} state={state} />
+          )}
+          {eventsFocused && (
+            <EventLog entries={state?.eventLog ?? []} />
+          )}
 
-      {/* Middle: event log (visible when focused) */}
-      {ui.focus === "events" && (
-        <EventLog entries={state?.eventLog ?? []} />
+          {/* Dock strips: the non-focused agent(s) appear as compact strips. */}
+          {!claudeFocused && !governanceFocused && !eventsFocused && (
+            // Antigravity is focused → Claude is docked.
+            <DockStrip surface="claude-code" state={state} ptyOutput={ui.claudeOutput} />
+          )}
+          {!antigravityFocused && !governanceFocused && !eventsFocused && (
+            // Claude is focused → Antigravity is docked.
+            <DockStrip surface="antigravity" state={state} ptyOutput={ui.antigravityOutput} />
+          )}
+          {governanceFocused && (
+            // Governance is the stage → both agents are docked and reachable.
+            <>
+              <DockStrip surface="claude-code" state={state} ptyOutput={ui.claudeOutput} />
+              <DockStrip surface="antigravity" state={state} ptyOutput={ui.antigravityOutput} />
+            </>
+          )}
+          {eventsFocused && (
+            // Events is the stage → both agents are docked and reachable.
+            <>
+              <DockStrip surface="claude-code" state={state} ptyOutput={ui.claudeOutput} />
+              <DockStrip surface="antigravity" state={state} ptyOutput={ui.antigravityOutput} />
+            </>
+          )}
+        </>
+      ) : (
+        <>
+          {/* Narrow mode: tab row + exactly one selected surface. */}
+          <PaneTabs focus={ui.focus} />
+          {claudeFocused && (
+            <ClaudePane active={true} state={state} ptyOutput={ui.claudeOutput} />
+          )}
+          {antigravityFocused && (
+            <AntigravityPane active={true} state={state} ptyOutput={ui.antigravityOutput} />
+          )}
+          {governanceFocused && (
+            <GovernancePane active={true} state={state} />
+          )}
+          {eventsFocused && (
+            <EventLog entries={state?.eventLog ?? []} />
+          )}
+        </>
       )}
 
       {/* Bottom: fixture banner (separate truth band) + status bar. */}
