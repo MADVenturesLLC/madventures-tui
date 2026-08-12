@@ -6,13 +6,13 @@
 
 **Architecture:** One foreground supervisor uses an in-process `BrokerClient`, append-only lifecycle truth, per-child PTY hosts with anonymous lifelines, validated host-owned storage, and a structurally test-only runtime harness. Phase 3A does not activate a real live session or connect the production TUI.
 
-**Baseline:** `aa16032c56fdf6c7105e99b1765ed9365d605bf4`
+**Source baseline:** `SOURCE_BASELINE_SHA` = `aa16032c56fdf6c7105e99b1765ed9365d605bf4` — the immutable comparison baseline. See §0A for the distinction from `IMPLEMENTATION_BASE_SHA`, the commit implementation actually starts from.
 
 **Authority:** The approved Phase 3A specification and `DEC-20260812-01`.
 
 **Implementation status:** NOT AUTHORIZED until this plan receives independent review and Founder approval at an exact SHA.
 
-**Approval status:** CONDITIONAL. All 60 tasks are specified and reviewable now. **Plan approval alone starts nothing.** Eight tasks become *eligible* — not started — once all three gates are satisfied: Tier-2 approval of the exact plan SHA, Founder approval of that exact SHA, and separate Founder authorization of the specific task (Stage 0: Task 60, Tasks 1–5, and the M17 dual-host spike, 38–39). The remaining 52 are additionally blocked behind Tasks 6, 34, 35, and 37 — which need the five `PLAN-OPEN-*` Founder rulings in §1A — and behind the M17 gate. `PLAN-OPEN-1` alone unblocks 28 of the 52. See §13.9 for the staged execution map.
+**Approval status:** CONDITIONAL. All 60 tasks are specified and reviewable now. **Plan approval alone starts nothing.** Three gates must be satisfied before any task begins: Tier-2 approval of the exact plan SHA, Founder approval of that exact SHA, and separate Founder authorization of the specific task. The Stage 0 execution path contains 8 tasks (Task 60, Tasks 1–5, and the M17 dual-host spike, 38–39), but Stage 0 membership is **not** simultaneous eligibility — only **Task 60 and Task 1** are initially eligible, and only after `IMPLEMENTATION_BASE_SHA` is recorded per §0A. The other six unlock through their own written preconditions, in order. The remaining 52 tasks are additionally blocked behind Tasks 6, 34, 35, and 37 — which need the five `PLAN-OPEN-*` Founder rulings in §1A — and behind the M17 gate. `PLAN-OPEN-1` alone unblocks 28 of the 52. See §13.9 for the staged execution map.
 
 ---
 
@@ -21,7 +21,7 @@
 | Fact | Verified value | How verified |
 | --- | --- | --- |
 | Branch | `design-phase-3a-runtime-foundation-plan` | `git branch --show-current` |
-| HEAD | `aa16032c56fdf6c7105e99b1765ed9365d605bf4` | `git rev-parse HEAD` |
+| HEAD **at plan authoring** | `aa16032c56fdf6c7105e99b1765ed9365d605bf4` | `git rev-parse HEAD` |
 | Worktree | clean | `git status -sb` |
 | Suite | 714 pass, 0 fail, 2606 `expect()`, 35 files | `bun test` |
 | TypeScript | clean (exit 0) | `bunx tsc --noEmit` |
@@ -29,6 +29,34 @@
 | Plan-authoring host | `x86_64`, macOS 13.7.8 build 22H730, Bun 1.3.14 | `uname -m`, `sw_vers`, `bun --version` |
 
 Every path in this plan was confirmed against the live tree at that SHA. No path or interface is quoted from memory.
+
+---
+
+## 0A. Execution base semantics
+
+This plan was authored at one commit and will be executed from a different one. Those are two distinct SHAs and the plan names them separately. Conflating them is what made an earlier revision of Task 1 unexecutable — it required `HEAD` to equal the authoring baseline, which stops being true the moment the plan itself is committed.
+
+| Name | Value | Role |
+| --- | --- | --- |
+| `SOURCE_BASELINE_SHA` | `aa16032c56fdf6c7105e99b1765ed9365d605bf4` — **fixed, immutable** | The comparison baseline for every Phase 3A diff, regression check, file-map claim, and suite-floor measurement. Every `git diff` in §12 compares against this. It never changes. |
+| `IMPLEMENTATION_BASE_SHA` | **Not yet determined — a Founder-recorded value, fixed before Task 1.** | The exact clean commit the implementation branch starts from, after the approved plan disposition is complete. |
+
+**`IMPLEMENTATION_BASE_SHA` is deliberately not filled in here.** It cannot be known while the plan's own disposition is unresolved: it depends on whether the Founder starts implementation from the approved plan commit, from a later plan-merge commit, or from some other clean commit of their choosing. Inventing a value would be fabricating an authorization the Founder has not given.
+
+It is **not** a `PLAN-OPEN-*` item. The five `PLAN-OPEN-*` items are authority-bearing *architecture* values reserved to the Founder. This is a pre-execution *bookkeeping* record: the Founder writes down which commit implementation starts from. It gates Task 1 and therefore everything downstream, but it settles no design question and needs no architectural review.
+
+**Required before Task 1 may begin:**
+
+1. The Founder records the exact `IMPLEMENTATION_BASE_SHA` and approves it explicitly.
+2. The implementation worktree is clean and `HEAD` equals that SHA.
+3. The range `SOURCE_BASELINE_SHA..IMPLEMENTATION_BASE_SHA` is verified to contain **only approved documentation changes** — no production source, test, manifest, or lockfile change:
+   ```bash
+   git diff --name-only "$SOURCE_BASELINE_SHA".."$IMPLEMENTATION_BASE_SHA"
+   # every path must be under docs/ ; any packages/, apps/, test/, *.json, or bun.lock entry fails this check
+   ```
+4. Task 1 has its own separate Founder authorization under the per-task rule in §5.
+
+If the range check surfaces any non-documentation change, **stop under §10 condition 2** — the live repository has diverged from the tree this plan was written against, and the file map's presence/absence claims in §13.4 can no longer be trusted without re-verification.
 
 ---
 
@@ -263,12 +291,20 @@ Twenty-six milestones. The ordering is derived from the actual dependency graph 
 
 > **Founder deviation ruling (2026-08-12):** rubric §7.2 places surface investigations at milestone 1. The formal machine-readable investigations remain at M25 because their required records depend on M15/M16 tooling, itself gated on `PLAN-OPEN-2` and `PLAN-OPEN-3`. The Stage 0 preliminary Antigravity evidence pass (Task 60) preserves specification §2.3's requirement that Antigravity is investigated first and the locked cheapest-moment principle. This ruling accepts the M25 placement of the formal investigations on that basis.
 
-**Stage 0 early deliverables (outside M1–M26).** Two tasks carry no dependency on the milestone chain and are therefore eligible earliest. They do not add a twenty-seventh plan milestone; the plan still has exactly twenty-six.
+**Stage 0 execution path.** Stage 0 is the earliest-reachable *path* through the plan, not a set of simultaneously eligible tasks. It contains eight tasks, of which **only Task 60 is outside M1–M26**; the other seven keep their milestone membership. Stage 0 adds no twenty-seventh plan milestone — the plan still has exactly twenty-six.
 
-| Task | Deliverable | Rubric §7.2 milestone | Technical precondition |
-| --- | --- | --- | --- |
-| **60** | Preliminary Antigravity evidence pass — human-readable report only | 1 | none |
-| 38–39 | `Bun.Terminal` dual-host spike (M17) | 2 | M1 |
+| Task | Deliverable | Milestone | Rubric §7.2 milestone | Unlocks when |
+| --- | --- | --- | --- | --- |
+| **60** | Preliminary Antigravity evidence pass — human-readable report only | **outside M1–M26** | 1 | immediately, after the three gates and `IMPLEMENTATION_BASE_SHA` (§0A) |
+| 1 | Suite floor and no-silent-skip guard | M1 | 9 | immediately, after the three gates and `IMPLEMENTATION_BASE_SHA` (§0A) |
+| 2 | Production-source scan covers every package | M1 | 9 | after Task 1 commits |
+| 3 | Normalization algorithms | M2 | 3 | after M1 is reviewed |
+| 4 | Branded `SurfaceId` | M2 | 3 | after Task 3 commits |
+| 5 | `ExecutionIdentity` migration | M2 | 3 | after Task 4 commits |
+| 38 | `Bun.Terminal` spike primitive | M17 | 2 | after M1 is reviewed |
+| 39 | Two signed dual-host spike reports | M17 | 2 | after Task 38 commits **and** the same candidate has run on both Founder Macs |
+
+Tasks 38–39 depend on M1 — they are early, not dependency-free. Only Task 60 has no technical precondition at all.
 
 | # | Milestone | Rubric §7.2 milestone | Depends on | Reviewable deliverable |
 | --- | --- | --- | --- | --- |
@@ -316,7 +352,7 @@ Twenty-six milestones. The ordering is derived from the actual dependency graph 
 
 ---
 
-### Stage 0 early deliverable (outside M1–M26)
+### Stage 0 early deliverable — Task 60 (the only task outside M1–M26)
 
 #### Task 60: Preliminary Antigravity evidence pass
 
@@ -369,7 +405,11 @@ Twenty-six milestones. The ordering is derived from the actual dependency graph 
 - Produces: `describe("Phase 3A baseline floor")` containing `test("no source file marks a test .only")` and `test("no required test file uses test.skip or describe.skip without a disposition marker")`. The disposition marker is the exact comment `// FOUNDER-DISPOSITION:` on the line above the skip.
 
 **Preconditions:**
-- HEAD is `aa16032c56fdf6c7105e99b1765ed9365d605bf4`; worktree clean.
+- The Founder has recorded and explicitly approved `IMPLEMENTATION_BASE_SHA` (§0A).
+- `HEAD === IMPLEMENTATION_BASE_SHA` and the worktree is clean.
+- The docs-only baseline-range check passes: `git diff --name-only "$SOURCE_BASELINE_SHA".."$IMPLEMENTATION_BASE_SHA"` lists only paths under `docs/`.
+- Task 1 has its own separate Founder authorization (§5 per-task rule).
+- **Not** `HEAD === SOURCE_BASELINE_SHA`. That is the comparison baseline, not the execution base, and it stopped being `HEAD` the moment this plan was committed.
 
 - [ ] Step 1: Write the named failing test — in `test/phase3a/architecture-phase3a.test.ts`, add `test("no required test file uses test.skip or describe.skip without a disposition marker")`, which walks `packages/**/test`, `apps/**/test`, and `test/**`, greps for `test.skip(`, `describe.skip(`, `it.skip(`, `test.only(`, `describe.only(`, `it.only(`, and asserts every hit is preceded by `// FOUNDER-DISPOSITION:`.
 - [ ] Step 2: Run `bun test test/phase3a/architecture-phase3a.test.ts -t "no required test file uses test.skip or describe.skip without a disposition marker"` — expected RED: `Cannot find module 'test/phase3a/architecture-phase3a.test.ts'` is not the failure; the file exists, so the expected RED is the assertion failing only if a skip already exists. If the tree is already clean the test passes on creation, which is **not** an acceptable RED. Therefore first add a temporary `test.skip("temp-red", () => {})` to `test/phase3a/architecture-phase3a.test.ts` itself and confirm the guard reports it.
@@ -2375,7 +2415,7 @@ Twenty-six milestones. The ordering is derived from the actual dependency graph 
 - [ ] Step 2: Run `bun test test/phase3a/architecture-phase3a.test.ts -t "merge gate item 1: the suite has not regressed below the Phase 2 floor"` — expected RED: the floor constants are not yet declared in the test file; the assertion references an undefined baseline.
 - [ ] Step 3: Implement the minimum authorized behavior — declare `PHASE_2_FLOOR = { tests: 714, expects: 2606, files: 35 }` and implement the six assertions. Create the correction-round log with the §7.3 running record.
 - [ ] Step 4: Run the file — expected GREEN. Invariant established: **the merge gate is machine-checked wherever it can be, and the production gate is proven closed at merge time.**
-- [ ] Step 5: Run `bun test` (full), `bunx tsc --noEmit`, `git diff --check aa16032c56fdf6c7105e99b1765ed9365d605bf4`, `git status -sb`, and `git ls-files --others --exclude-standard` on both hosts.
+- [ ] Step 5: Run `bun test` (full), `bunx tsc --noEmit`, `git diff --check "$SOURCE_BASELINE_SHA"` (§0A; `aa16032c56fdf6c7105e99b1765ed9365d605bf4`), `git status -sb`, and `git ls-files --others --exclude-standard` on both hosts.
 - [ ] Step 6: Inspect the complete diff against the baseline SHA and verify every changed file appears in §3.
 - [ ] Step 7: Commit the listed files with message: `test(phase3a): assert the machine-checkable Phase 3A merge-gate items`
 - [ ] Step 8: Stop for the final Founder merge review. **Do not merge. Do not remove the start gate.**
@@ -2579,16 +2619,19 @@ shasum -a 256 "$(which bun)"
 printf '%s\n' "$TERM"
 printf '%s\n' "$SHELL"
 
-# 1. Repository state capture
+# 1. Repository state capture. All diffs compare against SOURCE_BASELINE_SHA (§0A),
+#    never against IMPLEMENTATION_BASE_SHA — the baseline is what the file map and
+#    the 714/2606/35 suite floor were measured against.
+SOURCE_BASELINE_SHA=aa16032c56fdf6c7105e99b1765ed9365d605bf4
 git rev-parse HEAD
 git branch --show-current
 git status -sb
 git ls-files --others --exclude-standard
-git diff --name-only aa16032c56fdf6c7105e99b1765ed9365d605bf4
+git diff --name-only "$SOURCE_BASELINE_SHA"
 
 # 2. Static verification
 bunx tsc --noEmit
-git diff --check aa16032c56fdf6c7105e99b1765ed9365d605bf4
+git diff --check "$SOURCE_BASELINE_SHA"
 
 # 3. Complete suite (unfiltered — this is the number that goes in the report)
 bun test
@@ -2783,7 +2826,7 @@ Every proposed commit in §5 carries: the exact files to stage (Step 7 lists the
 
 | Milestone | Tasks | Commits | Reviewer checkpoint |
 | --- | --- | --- | --- |
-| **Stage 0 (outside M1–M26)** | **60** | **1** | **Founder review of the investigation verdict** |
+| **Task 60 (the only task outside M1–M26)** | **60** | **1** | **Founder review of the investigation verdict** |
 | M1 | 1–2 | 2 | Plato/Codex pre-commit |
 | M2 | 3–6 | 4 | Plato/Codex; Founder ruling on `PLAN-OPEN-1` before Task 6 |
 | M3 | 7–9 | 3 | Plato/Codex |
@@ -2841,9 +2884,11 @@ Run these on **both** Founder Macs at the candidate SHA, on a clean worktree.
 ### 12.1 Pinned baseline commands
 
 ```bash
+# Diffs compare against SOURCE_BASELINE_SHA (§0A), never IMPLEMENTATION_BASE_SHA.
+SOURCE_BASELINE_SHA=aa16032c56fdf6c7105e99b1765ed9365d605bf4
 bun test
 bunx tsc --noEmit
-git diff --check aa16032c56fdf6c7105e99b1765ed9365d605bf4
+git diff --check "$SOURCE_BASELINE_SHA"
 git status -sb
 git ls-files --others --exclude-standard
 ```
@@ -3006,7 +3051,7 @@ Every type and function name is used identically across §3, §5, §6, and §12:
 
 ### 13.4 File existence
 
-Every path marked **Modify**, **Preserve**, or **Test (existing)** in §3 was confirmed present at `aa16032`. Every path marked **Create** was confirmed **absent** at `aa16032`. The four spec-pinned paths — `packages/protocol/src/adapter-registry.ts`, `packages/ledger/src/rebuild.ts`, `packages/broker/src/reconciliation.ts`, `packages/pty-host/src/main.ts`, `test/phase3a/runtime-harness.ts` — are used exactly as the specification names them.
+Every path marked **Modify**, **Preserve**, or **Test (existing)** in §3 was confirmed present at `SOURCE_BASELINE_SHA` (`aa16032`). Every path marked **Create** was confirmed **absent** at that SHA. These presence and absence claims hold for `IMPLEMENTATION_BASE_SHA` only if the §0A docs-only range check passes; that check is what makes them transferable. The four spec-pinned paths — `packages/protocol/src/adapter-registry.ts`, `packages/ledger/src/rebuild.ts`, `packages/broker/src/reconciliation.ts`, `packages/pty-host/src/main.ts`, `test/phase3a/runtime-harness.ts` — are used exactly as the specification names them.
 
 ### 13.5 RED test per production change
 
@@ -3054,11 +3099,15 @@ The plan divides into two portions, and only one of them is reviewable today.
 
 > Stage 0 tasks require no additional `PLAN-OPEN-*` ruling, but none may start until the exact-SHA plan is approved and the Founder separately authorizes that specific task.
 
+A fourth precondition applies to every task in the plan: `IMPLEMENTATION_BASE_SHA` must be recorded and approved, and the §0A docs-only range check must pass. Until that happens, nothing is eligible.
+
 | Portion | Status |
 | --- | --- |
 | **Specified and reviewable** — all 60 tasks | **Pass.** Complete, self-consistent, RED-first (with the Task 60 evidence-only exception recorded in §13.5), traceable. Tier-2 may review the whole document now. |
-| **Eligible after the three gates, no `PLAN-OPEN-*` ruling required** — 8 tasks | **Eligible, not started.** See Stage 0. |
+| **Stage 0 execution path, no `PLAN-OPEN-*` ruling required** — 8 tasks | **Path open; not simultaneously eligible.** Only Task 60 and Task 1 are *initially* eligible after the three gates and §0A. Tasks 2–5 and 38–39 unlock through their own written preconditions, in order. |
 | **Gated** — 52 tasks, additionally blocked behind Tasks 6, 34, 35, 37 and the M17 dual-host gate | **Not eligible.** Specified down to interfaces and tests, but blocked on rulings or on an upstream gate. |
+
+**Stage 0 membership is not eligibility.** Being in Stage 0 means a task needs no `PLAN-OPEN-*` ruling — nothing more. The unlock order inside Stage 0 is: Task 60 and Task 1 first (independently of each other); Task 2 after Task 1 commits; Task 3 and Task 38 after M1 is reviewed; Task 4 after Task 3; Task 5 after Task 4; Task 39 after Task 38 commits and the same candidate has run on both Founder Macs. An implementer who reads "8 Stage 0 tasks" as "8 tasks I may start now" would begin Tasks 2–5 or 38–39 before their preconditions hold.
 
 #### Staged execution map
 
@@ -3066,7 +3115,7 @@ Every stage below is additionally subject to the three gates above. "Unblocked b
 
 | Stage | Additionally unblocked by | Tasks | Count |
 | --- | --- | --- | --- |
-| **0 — post-authorization / no additional `PLAN-OPEN` ruling** | nothing beyond the three gates | **Task 60 (preliminary Antigravity evidence)**; M1 (1–2); M2 partial (3–5); **M17 spike (38–39)** | 8 |
+| **0 — post-authorization / no additional `PLAN-OPEN` ruling** | nothing beyond the three gates and §0A — but sequenced internally, not simultaneous | **Task 60** (outside M1–M26) and **Task 1** (M1) are initially eligible; then Task 2 (M1) → M1 review → Tasks 3 and 38 → Task 4 → Task 5 (M2) and Task 39 (M17) | 8 |
 | **1** | `PLAN-OPEN-1` | Task 6 → M2 review completes → M3 (7–9), M4 (10–11), M5 (12), M6 (13–14), M7 (15–16), M8 (17–19), M9 (20–21), M10 (22–25), M11 (26–28), M12 (29), M13 (30–32), M14 Task 33 | 28 |
 | **2** | `PLAN-OPEN-4`, `PLAN-OPEN-6` | Task 34 → M14 review completes | 1 |
 | **3** | `PLAN-OPEN-3` | Tasks 35–36 → M15 review completes | 2 |
@@ -3074,9 +3123,9 @@ Every stage below is additionally subject to the three gates above. "Unblocked b
 | **5** | Stages 1–4 **and** the M17 dual-host gate passing on both Macs | M18 (40–41), M19 (42–44), M20 (45), M21 (46–47), M22 (48–50), M23 (51–54), M24 (55), M25 (56–57), M26 (58–59) | 20 |
 | | | **Total** | **60** |
 
-**Why the spike is in Stage 0.** M17 is the only milestone that can stop the phase outright, and it depends on nothing but `Bun.Terminal` and a test directory. Placing it early means a `Bun.Terminal` failure surfaces before any of the five rulings are needed and before thirty-seven tasks of investment — which is the whole point of a rubric-first spike. A prior revision of Task 38 listed "M16 reviewed" as its precondition, contradicting the M17 row of the §4 milestone table and manufacturing a false dependency on `PLAN-OPEN-2`. Corrected: **M1 only**.
+**Why the spike is in Stage 0.** M17 is the only milestone that can stop the phase outright, and beyond M1 it depends on nothing but `Bun.Terminal` and a test directory. Placing it early means a `Bun.Terminal` failure surfaces before any of the five rulings are needed and before thirty-seven tasks of investment — which is the whole point of a rubric-first spike. A prior revision of Task 38 listed "M16 reviewed" as its precondition, contradicting the M17 row of the §4 milestone table and manufacturing a false dependency on `PLAN-OPEN-2`. Corrected: **M1 only** — which is a real dependency, not none. Tasks 38–39 remain M17 members and are not "outside the milestone chain".
 
-**Why Task 60 is in Stage 0.** Specification §2.3 requires Antigravity to be investigated first, and the formal investigation (Task 56) cannot run until M15/M16 tooling exists behind `PLAN-OPEN-2` and `PLAN-OPEN-3`. The preliminary evidence pass has no technical precondition at all, so it satisfies the "investigated first" ordering at the cheapest possible moment without producing a capability record it is not entitled to produce. See the Founder deviation ruling in §4.
+**Why Task 60 is in Stage 0.** Specification §2.3 requires Antigravity to be investigated first, and the formal investigation (Task 56) cannot run until M15/M16 tooling exists behind `PLAN-OPEN-2` and `PLAN-OPEN-3`. The preliminary evidence pass has no technical precondition at all — it is the one task in the plan with none — so it satisfies the "investigated first" ordering at the cheapest possible moment without producing a capability record it is not entitled to produce. It is also the only task outside M1–M26. See the Founder deviation ruling in §4.
 
 **Critical-path consequence.** `PLAN-OPEN-1` alone unblocks 28 of the 52 gated tasks — more than every other ruling combined. If the rulings arrive serially, that one first.
 
@@ -3091,8 +3140,8 @@ A verdict of "Pass" over unresolved values of that kind would misrepresent the p
 
 **Consequences for review sequencing.**
 
-1. Tier-2 review may proceed now over the **whole** document — every task is specified. The verdict should record that approval makes only Stage 0 *eligible*, and starts nothing.
+1. Tier-2 review may proceed now over the **whole** document — every task is specified. The verdict should record that approval opens only the Stage 0 path, makes only Task 60 and Task 1 initially eligible, and starts nothing.
 2. The four ruled tasks require a second, narrow review **after** the Founder rulings are recorded, because the ruled values themselves are authority-bearing and were not reviewed in round one.
 3. Founder approval of the plan SHA is **not** sufficient to start Tasks 6, 34, 35, or 37. Each additionally requires its own `PLAN-OPEN-*` ruling in writing, exactly as stop condition 16 requires.
-4. With the plan approved and no rulings yet recorded, the eligible set is **Stage 0 (8 tasks)** — each still requiring its own Founder authorization before it begins — after which work halts at the M2 review boundary. It does not proceed into M3–M13; those preconditions are unsatisfied until Task 6 completes.
-5. The implementer must not treat an ungated task as eligible merely because its own content needs no ruling. The binding questions are whether its stated **precondition** — usually "M*n* reviewed" — is satisfied, and whether the Founder has authorized that specific task.
+4. With the plan approved, `IMPLEMENTATION_BASE_SHA` recorded, and no `PLAN-OPEN-*` rulings yet, the reachable work is the **Stage 0 path (8 tasks)** — entered at Task 60 and Task 1, advancing only as each written precondition is met, and each task still requiring its own Founder authorization. Work then halts at the M2 review boundary. It does not proceed into M3–M13; those preconditions are unsatisfied until Task 6 completes.
+5. The implementer must not treat an ungated task as eligible merely because its own content needs no ruling, nor because it appears in Stage 0. Three questions bind, and all three must be yes: is its stated **precondition** — usually "M*n* reviewed" or "Task *n* committed" — satisfied; is `IMPLEMENTATION_BASE_SHA` recorded and the §0A range check passing; and has the Founder authorized that specific task.
