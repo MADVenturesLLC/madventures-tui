@@ -1,6 +1,6 @@
 # MADVentures TUI — Phase 3A Production Runtime Foundation
 
-**Status:** Founder-approved design; pending Founder review of this assembled written specification  
+**Status:** Founder-approved architecture; contract addendum pending Founder review  
 **Date:** 2026-08-12  
 **Repository:** `MADVenturesLLC/madventures-tui`  
 **Baseline branch:** `main`  
@@ -77,15 +77,20 @@ multi-client support.
 ### 1.2 Generic identities, exactly two active surfaces
 
 The runtime is generic over execution identities but strictly limited to two
-active surfaces in Version 1. Each envelope declares a collection of:
+active surfaces in Version 1. The existing protocol `ExecutionIdentity` remains
+canonical and is evolved in Phase 3A. Each envelope declares a collection of:
 
 ```ts
-interface SurfaceIdentity {
-  surface: string;
-  provider: string;
-  exactModel: string;
-  executionId: string;
-  role: string;
+type SurfaceId = string & { readonly __brand: "SurfaceId" };
+
+interface ExecutionIdentity {
+  readonly execution_id: string;
+  readonly role: "builder" | "independent-reviewer" | "observer";
+  readonly surface: SurfaceId;
+  readonly model: string;
+  readonly provider: string;
+  readonly independence_domain: string;
+  readonly effort: "low" | "medium" | "high";
 }
 ```
 
@@ -94,7 +99,7 @@ enforce `surfaces.length === MAX_ACTIVE_SURFACES_V1`. No other module may
 encode cardinality.
 
 Downstream supervisor, broker, ledger, lifeline, adapter, capability, and
-evidence modules iterate over `SurfaceIdentity[]`. They must not use paired
+evidence modules iterate over `ExecutionIdentity[]`. They must not use paired
 tuple types, `surfaceA`/`surfaceB` identifiers, or independent literal-two
 checks. Pair-level validation still evaluates the complete requested pair for:
 
@@ -166,7 +171,7 @@ Startup has a pure preflight phase followed by a transactional build phase.
 Pure preflight:
 
 1. parses and validates the task envelope;
-2. validates exactly two declared `SurfaceIdentity` records;
+2. validates exactly two declared `ExecutionIdentity` records;
 3. fingerprints the repository and worktree;
 4. resolves each executable to an absolute path and hashes its artifact;
 5. runs fresh non-mutating, non-interactive identity and auth-readiness probes;
@@ -195,8 +200,8 @@ Only after preflight succeeds does the build phase:
 5. launch and begin monitoring every PTY host;
 6. instruct each host to re-hash its absolute executable immediately adjacent
    to `exec`, then launch that exact artifact in a new PTY/process group;
-7. perform live-session re-attestation where the CLI exposes a passing
-   primitive;
+7. perform live-session re-attestation; absence of a passing primitive makes
+   the surface ineligible for live use;
 8. launch adapters; and
 9. in Phase 3B only, present the TUI after every required component is healthy.
 
@@ -235,8 +240,9 @@ The identity rubric is fixed before any surface investigation:
 A probe invocation and a governed session are different processes. To narrow
 that TOCTOU gap, Phase 3A resolves and hashes the absolute executable during
 preflight, and the host re-hashes the same path directly before `exec`.
-Where possible, the live process re-attests. A binary that truthfully attests
-one identity during the probe and lies during the governed session remains a
+The live process re-attests through a passing actual-session primitive; absence
+or mismatch fails closed. A binary that truthfully attests one identity during
+the probe and lies during the governed session remains a
 documented residual; the system does not claim to solve malicious-provider
 misrepresentation.
 
@@ -445,7 +451,7 @@ The Phase 3A contract is:
 interface BrokerClient {
   getSnapshot(): Promise<BrokerSnapshot>;
   snapshots(): AsyncIterable<BrokerSnapshot>;
-  output(surfaceId: string): AsyncIterable<OutputFrame>;
+  output(executionId: string): AsyncIterable<OutputFrame>;
   request(command: BrokerCommand): Promise<BrokerResult>;
   close(): Promise<void>;
 }
@@ -458,7 +464,7 @@ interface BrokerSnapshot {
 
 interface OutputFrame {
   sessionId: string;
-  surfaceId: string;
+  executionId: string;
   outputSeq: number;
   bytes: Uint8Array;
 }
@@ -471,9 +477,9 @@ invariant failure. In the in-process client, an unexplained gap interrupts the
 session rather than being hidden. Replay and reconnect are deferred with the
 external transport.
 
-`BrokerCommand` is a closed discriminated union. It includes exact-byte input,
-resize, typed governance actions, and authorized session close. Input and
-resize bind to `sessionId`, `surfaceId`, execution identity, and the current
+`BrokerCommand` is the closed discriminated union in Section 9.3. It includes
+exact-byte input, resize, typed governance actions, and authorized session
+close. Input and resize bind to `sessionId`, `executionId`, and the current
 fencing token so stale clients cannot write.
 
 `BrokerClient.close()` releases only that client's subscriptions and resources.
@@ -652,9 +658,9 @@ Each adapter has a versioned configuration defining:
 - capability and review limitations.
 
 Forwarding is not custody. A secret-bearing provider variable may be forwarded
-from the ambient host into an allowlisted child without the supervisor
-intentionally reading, logging, or persisting its value. Secret-marked values
-are redacted from diagnostic output, errors, environment reports, and evidence.
+from the ambient host into an allowlisted child. MADVentures runtime code does
+not intentionally log, persist, or export its value. Secret-marked values are
+redacted from diagnostic output, errors, environment reports, and evidence.
 Variable names may be recorded; values may not.
 
 Identity probes, auth-readiness probes, PTY hosts, and governed children receive
@@ -720,7 +726,7 @@ omission.
 Pure tests cover:
 
 - envelope parsing and exact two-surface cardinality;
-- `SurfaceIdentity` completeness and uniqueness;
+- `ExecutionIdentity` completeness and uniqueness;
 - pair eligibility, role compatibility, and provider independence;
 - executable resolution and hashing;
 - capability freshness and staleness;
@@ -880,7 +886,8 @@ Phase 3A may merge only when all of the following are true:
 9. Fixture-generated evidence passes production `export-evidence` and
     sanitization checks.
 10. Every warning and review finding has an explicit disposition.
-11. Gemini Antigravity issues a Tier-2 verdict for the exact candidate SHA.
+11. Gemini Antigravity issues an approving Tier-2 verdict for the exact
+    candidate SHA.
 12. Production `start` still returns `live_runtime_not_certified`.
 13. Production `start` is structurally unable to reach the runtime or harness.
 14. External-control placeholders return their stable typed errors and inspect
@@ -1062,3 +1069,591 @@ from `madbridge start`.
 The next authorized activity after Founder approval of this written spec is a
 separate implementation plan. No implementation is authorized by this document
 alone.
+
+## 9. Binding contract and legacy-disposition addendum
+
+This addendum closes the contract gaps found during written-spec review. It is
+binding with Sections 0–8 and controls if an earlier sentence can be read two
+ways. It does not reopen the approved architecture.
+
+The supersession authority for legacy V1 conflicts is
+[`DEC-20260812-01`](../../decisions/DEC-20260812-01-phase-3a-runtime-foundation-supersession.md).
+This specification and that decision record form one review instrument. Neither
+authorizes implementation without a separately approved implementation plan.
+
+### 9.1 Canonical identity and envelope admission
+
+Phase 3A does not create a second identity system. The existing protocol
+`ExecutionIdentity` is the canonical envelope and runtime identity. The
+architecture terms map to these canonical fields:
+
+| Architecture term | Canonical `ExecutionIdentity` field |
+| --- | --- |
+| `surface` | `surface` |
+| `provider` | `provider` |
+| `exactModel` | `model` |
+| `executionId` | `execution_id` |
+| `role` | `role` |
+
+Phase 3A evolves the existing snake-case schema rather than introducing a
+parallel camel-case schema:
+
+```ts
+type SurfaceId = string & { readonly __brand: "SurfaceId" };
+
+interface ExecutionIdentity {
+  readonly execution_id: string;
+  readonly role: "builder" | "independent-reviewer" | "observer";
+  readonly surface: SurfaceId;
+  readonly model: string;
+  readonly provider: string;
+  readonly independence_domain: string;
+  readonly effort: "low" | "medium" | "high";
+}
+```
+
+`CliSurface = "claude-code" | "antigravity"` and `KNOWN_SURFACES` are retired
+as admission authority. A `SurfaceId` is a normalized lowercase identifier
+matching `^[a-z][a-z0-9-]{1,63}$`; accepting the string syntactically does not
+make it eligible.
+
+A production envelope admits a surface only when all of these are true:
+
+- a Founder-approved adapter registration exists for the exact `SurfaceId`;
+- a fresh passing capability record exists for the current binary hash, CLI
+  version, host, and time horizon;
+- the envelope explicitly names its surface, provider, exact model, execution
+  ID, role, independence domain, and effort; and
+- the requested two-surface pair passes Section 9.2.
+
+Fixture-only surface IDs are registered only inside
+`test/phase3a/runtime-harness.ts`. They are invalid in production envelopes and
+cannot be reached from the production CLI.
+
+The envelope schema change is Phase 3A scope. Parsers, types, fixtures, adapters,
+and tests migrate together; no compatibility coercion silently maps unknown
+legacy values.
+
+### 9.2 Exact two-surface pair eligibility
+
+A Version 1 live pair is eligible only when:
+
+1. the envelope contains exactly two executions with distinct execution IDs;
+2. it contains exactly one `builder` and one `independent-reviewer`;
+3. `observer` is not an active role in a Version 1 live pair;
+4. the normalized providers differ;
+5. the normalized `independence_domain` values differ;
+6. neither capability record identifies common review control or the same
+   provider organization for both executions;
+7. the independent reviewer is not the builder, did not produce the artifact
+   under review, and cannot approve its own output;
+8. both surfaces are individually admitted under Section 9.1; and
+9. every envelope constraint is at least as strict as these global rules.
+
+The envelope adds this closed object:
+
+```ts
+interface PairConstraintsV1 {
+  readonly required_roles: readonly ["builder", "independent-reviewer"];
+  readonly require_distinct_providers: true;
+  readonly require_distinct_independence_domains: true;
+  readonly prohibit_self_review: true;
+  readonly allowed_surface_pairs?: readonly (
+    readonly [SurfaceId, SurfaceId]
+  )[];
+}
+```
+
+`allowed_surface_pairs`, when present, narrows eligibility. It cannot override
+or weaken a global rule. There is no Founder bypass field. A future exception
+requires a new design and decision record, not an envelope value.
+
+### 9.3 Closed BrokerClient command and result contract
+
+The identity key for client operations is `executionId`, not display surface
+name. `output(executionId)` is the final signature. `surfaceId` is not used as a
+parallel key. Every command includes a unique `commandId` and `sessionId`.
+
+The supervisor constructs each in-process client already bound to an immutable
+principal; callers cannot declare or change their own principal:
+
+```ts
+type ClientPrincipal =
+  | { readonly kind: "founder_tui" }
+  | { readonly kind: "execution"; readonly executionId: string };
+
+interface BrokerClient {
+  getSnapshot(): Promise<BrokerSnapshot>;
+  snapshots(): AsyncIterable<BrokerSnapshot>;
+  output(executionId: string): AsyncIterable<OutputFrame>;
+  request(command: BrokerCommand): Promise<BrokerResult>;
+  publish(event: BridgeEventV1): Promise<BrokerResult>;
+  close(): Promise<void>;
+}
+```
+
+The Founder TUI principal may request PTY input, resize, termination, and the
+four governance actions below. An execution principal may call `publish()` only
+when `event.sender_execution_id` equals its bound execution ID and every event
+identity field matches the canonical envelope. It cannot issue Founder
+governance commands. `publish()` is how adapters remain behind `BrokerClient`
+without converting `BridgeEventV1` into a second command schema.
+
+For `publish()`, `BrokerResult.commandId` equals `event.event_id`. The broker
+independently validates that an approval is still pending, unresolved, bound to
+the requested ID, and not masked by an incident. The existing TUI governance-
+focus guard remains mandatory in Phase 3B; broker validation is additional and
+does not replace it.
+
+```ts
+type BrokerCommand =
+  | {
+      readonly kind: "pty_input";
+      readonly commandId: string;
+      readonly sessionId: string;
+      readonly executionId: string;
+      readonly fencingToken: number;
+      readonly bytes: Uint8Array;
+    }
+  | {
+      readonly kind: "pty_resize";
+      readonly commandId: string;
+      readonly sessionId: string;
+      readonly executionId: string;
+      readonly fencingToken: number;
+      readonly cols: number;
+      readonly rows: number;
+    }
+  | {
+      readonly kind: "pty_terminate";
+      readonly commandId: string;
+      readonly sessionId: string;
+      readonly executionId: string;
+      readonly reason: "founder_request" | "session_interrupt" | "rollback";
+    }
+  | {
+      readonly kind: "approval_resolve";
+      readonly commandId: string;
+      readonly sessionId: string;
+      readonly approvalId: string;
+      readonly decision: "accept" | "reject";
+    }
+  | {
+      readonly kind: "session_pause";
+      readonly commandId: string;
+      readonly sessionId: string;
+      readonly reason: string;
+    }
+  | {
+      readonly kind: "session_resume";
+      readonly commandId: string;
+      readonly sessionId: string;
+      readonly reconciliationId: string;
+      readonly approvalId: string;
+    }
+  | {
+      readonly kind: "session_close";
+      readonly commandId: string;
+      readonly sessionId: string;
+      readonly reason: string;
+    };
+
+type BrokerErrorCode =
+  | "invalid_command"
+  | "unauthorized"
+  | "session_mismatch"
+  | "execution_not_found"
+  | "identity_mismatch"
+  | "stale_fencing_token"
+  | "session_not_writable"
+  | "invalid_dimensions"
+  | "approval_not_pending"
+  | "incident_active"
+  | "reconciliation_required"
+  | "host_unavailable"
+  | "ledger_write_failed"
+  | "invariant_failure";
+
+type BrokerResult =
+  | {
+      readonly ok: true;
+      readonly commandId: string;
+      readonly acceptedSnapshotSeq: number;
+    }
+  | {
+      readonly ok: false;
+      readonly commandId: string;
+      readonly error: BrokerErrorCode;
+      readonly detail: string;
+    };
+```
+
+`pty_input` and `pty_resize` require the exact current positive fencing token
+and an active declared execution. The token rejects stale-session input; it
+does not convert keyboard focus into repository write authority. A non-writer
+surface may receive terminal input under its read/review scope, while the
+broker's ownership and policy layers continue to reject unauthorized writes.
+`pty_terminate` is an explicit mechanical termination request; it does not
+transfer ownership or preserve the session. Terminating one required surface
+interrupts the whole session.
+
+`approval_resolve`, `session_pause`, `session_resume`, and `session_close` are
+the complete Phase 3A governance command set and are fixture-tested. Phase 3B
+wires the existing TUI to these variants; it does not add an unreviewed command
+variant. Ownership requests and collaboration events from execution surfaces
+remain typed `BridgeEventV1` inputs validated by the broker; they are not
+`BrokerClient` commands.
+
+Every unknown variant or unknown field fails with `invalid_command`; there is no
+default coercion. `BrokerResult.detail` is sanitized and must not contain a
+secret-marked environment value.
+
+### 9.4 Required snapshot and output fields
+
+The complete minimum snapshot contract is:
+
+```ts
+interface BrokerSnapshot {
+  readonly sessionId: string;
+  readonly snapshotSeq: number;
+  readonly connected: boolean;
+  readonly phase:
+    | "starting"
+    | "active"
+    | "paused"
+    | "interrupted"
+    | "reconciling"
+    | "closing"
+    | "closed";
+  readonly taskEnvelopeHash: string;
+  readonly task: TaskEnvelopeV1;
+  readonly repositoryFingerprint: RepositoryFingerprint;
+  readonly executions: readonly ExecutionSnapshot[];
+  readonly activeWriterExecutionId: string | null;
+  readonly fencingToken: number | null;
+  readonly tokenState: "not_issued" | "valid" | "invalidated";
+  readonly pendingApprovals: readonly PendingApprovalSnapshot[];
+  readonly pendingTransfers: readonly PendingTransferSnapshot[];
+  readonly permissionSummary: PermissionSummarySnapshot;
+  readonly transferPhase: string | null;
+  readonly verification: VerificationSnapshot | null;
+  readonly review: ReviewSnapshot | null;
+  readonly incident: IncidentSnapshot | null;
+  readonly eventLog: readonly LedgerEntrySnapshot[];
+  readonly queueDepth: number;
+  readonly ledgerSeq: number;
+}
+
+interface ExecutionSnapshot {
+  readonly identity: ExecutionIdentity;
+  readonly state:
+    | "declared"
+    | "host-starting"
+    | "launching"
+    | "attesting"
+    | "ready"
+    | "exited"
+    | "failed";
+  readonly hostPid: number | null;
+  readonly childPid: number | null;
+  readonly processGroupId: number | null;
+  readonly executablePath: string;
+  readonly executableSha256: string;
+  readonly exitCode: number | null;
+  readonly exitSignal: string | null;
+}
+
+interface OutputFrame {
+  readonly sessionId: string;
+  readonly executionId: string;
+  readonly outputSeq: number;
+  readonly bytes: Uint8Array;
+}
+
+interface PendingApprovalSnapshot {
+  readonly id: string;
+  readonly type: string;
+  readonly actor: string;
+  readonly taskId: string;
+  readonly repositoryFingerprint: RepositoryFingerprint;
+  readonly scope: string;
+  readonly timestamp: string;
+  readonly state: "pending" | "approved" | "rejected" | "expired";
+}
+
+interface PendingTransferSnapshot {
+  readonly id: string;
+  readonly from: string;
+  readonly to: string;
+  readonly reason: string;
+  readonly fencingToken: number;
+  readonly timestamp: string;
+}
+
+interface PermissionSummarySnapshot {
+  readonly allowedReadPaths: readonly string[];
+  readonly allowedWritePaths: readonly string[];
+  readonly allowedCommandCategories: readonly string[];
+  readonly allowedEgressDestinations: readonly string[];
+  readonly dataClass: string;
+}
+
+interface VerificationSnapshot {
+  readonly result: "pass" | "fail" | "warning" | "pending";
+  readonly detail: string;
+  readonly verifiedBy: string;
+  readonly timestamp: string;
+}
+
+interface ReviewSnapshot {
+  readonly decision:
+    | "approved"
+    | "changes-requested"
+    | "rejected"
+    | "pending";
+  readonly comments: string;
+  readonly reviewedBy: string;
+  readonly timestamp: string;
+}
+
+interface IncidentSnapshot {
+  readonly id: string;
+  readonly reason: string;
+  readonly timestamp: string;
+  readonly severity: "low" | "medium" | "high";
+}
+
+interface LedgerEntrySnapshot {
+  readonly seq: number;
+  readonly type: string;
+  readonly actor: string;
+  readonly fencingToken: number | null;
+  readonly hash: string;
+  readonly timestamp: string;
+}
+```
+
+These projections deliberately preserve the Phase 2 truth fields while adding
+session identity, sequencing, launch facts, and explicit token state. They are
+immutable plain data produced from ledger/broker truth, not terminal prose.
+
+### 9.5 Fencing-token issuance and invalidation
+
+No fencing token exists during pure preflight or transactional `starting`.
+`fencingToken` is `null` and `tokenState` is `not_issued`.
+
+The initial token is issued only after both PTY hosts and children are launched,
+their identities are attested, required adapters are ready, and the broker is
+prepared to transition the complete pair to `active`. The broker appends
+`fencing_token_issued` to the existing ledger before publishing the first
+`active` snapshot. The initial value is `1`.
+
+If that append fails, the token never becomes valid and the transactional build
+rolls back. Every ownership transfer increments the token and appends a new
+`fencing_token_issued` event before the successor writer may send bytes.
+
+Interruption first makes the in-memory token unusable, then attempts to append
+`fencing_token_invalidated`. If durable writing is unavailable, reconciliation
+records the invalidation and unclean closure at next start. No successor
+session inherits a token.
+
+### 9.6 Existing ledger, new lifecycle events
+
+Phase 3A extends the existing `bun:sqlite` append-only hash-chained ledger. It
+does not create a second session database or a parallel event store.
+
+Execution collaboration remains `BridgeEventV1`. Broker lifecycle truth uses a
+second closed protocol record in the same ledger—not a fabricated execution
+identity:
+
+```ts
+interface SessionLifecycleEventV1 {
+  readonly protocol_version: typeof PROTOCOL_VERSION;
+  readonly event_id: string;
+  readonly session_id: string;
+  readonly event_type:
+    | "session_open"
+    | "session_abort"
+    | "session_unclean_closure"
+    | "fencing_token_issued"
+    | "fencing_token_invalidated";
+  readonly actor: "madbridge";
+  readonly task_envelope_hash: string;
+  readonly repository_fingerprint: RepositoryFingerprint;
+  readonly fencing_token: number | null;
+  readonly reason_code: string | null;
+  readonly payload: Record<string, unknown>;
+  readonly created_at: string;
+  readonly previous_event_hash: string;
+}
+
+type LedgerEventV1 = BridgeEventV1 | SessionLifecycleEventV1;
+```
+
+The lifecycle event set is exactly:
+
+- `session_open`;
+- `session_abort`;
+- `session_unclean_closure`;
+- `fencing_token_issued`; and
+- `fencing_token_invalidated`.
+
+Both union members use the existing `events` table, sequence, canonical JSON,
+previous hash, event hash, and chain head. `Ledger.append()` evolves from
+`BridgeEventV1` to `LedgerEventV1`. Schema migration may add indexes or typed
+projections only if the implementation plan names them; it may not create an
+authority-bearing second chain.
+
+`session_open` is the durable boundary for rollback and retention:
+
+- if failure occurs before `session_open` is appended, a newly created
+  session directory may be removed during rollback;
+- if `session_open` exists, the session directory persists permanently under
+  Phase 3A retention rules and receives `session_abort` when durable writing is
+  possible; and
+- capability records, once written, are never deleted by startup rollback.
+
+If an abort or interruption cannot be appended, next-start reconciliation
+appends `session_unclean_closure` and the missing token invalidation to the same
+ledger chain.
+
+### 9.7 PTY-host production artifact and spike primitive
+
+The private internal PTY executable is named `madv-pty-host`, with source entry
+point `packages/pty-host/src/main.ts`. It is installed or invoked only by the
+supervisor process and is not a `madbridge`/`madv-tui` subcommand, not listed in
+operator help, and not a session-start entry point.
+
+`madv-pty-host` cannot construct a broker, ledger, adapter set, task envelope,
+or TUI. It accepts no executable path or launch authority from ordinary command
+line flags or ambient environment. It requires the inherited private control
+channel and one validated launch frame from the broker module. Direct invocation
+without that channel fails before PTY or child creation.
+
+The pre-written Bun spike candidate is `Bun.Terminal`, using its macOS PTY
+implementation. The spike must prove every Section 3.6 criterion before the
+production PTY host is built. FFI `posix_openpt`, `node-pty`, another native
+dependency, or a pipe fallback is not an implementation choice. Any alternative
+requires a stop, a written evidence report, and a new Founder-approved design
+amendment.
+
+### 9.8 Fixed PTY-host response deadlines
+
+Every broker command frame requires a matching host acknowledgement or first
+command-specific fact within 250 ms. For termination, the host must report
+`termination_started` within 500 ms of the broker's command.
+
+If the 250 ms acknowledgement deadline expires, the supervisor closes host
+stdin and starts the host-bypassing escalation ladder. Direct PGID kill and host
+kill must be initiated no later than 500 ms after the original command. The
+existing two-second child grace applies only after a responsive host confirms
+`SIGTERM`; an unresponsive or `SIGSTOP` host does not earn an additional grace
+period. Every governed process must be gone within the Section 3 five-second
+outer deadline.
+
+All deadlines use a monotonic clock and are reported as observed durations in
+dual-host evidence.
+
+### 9.9 `init` and CLI truth-surface disposition
+
+Phase 3A replaces repo-local initialization. `init` becomes an optional
+host-storage initializer using the Section 5 validator. It:
+
+- resolves passwd home and validates `$HOME` consistency;
+- previews the default root or `MADV_STORAGE_DIR` override;
+- previews only the root, `sessions/`, and `capability/` directories;
+- creates those directories as `0700` only after Founder confirmation;
+- writes no repository-local config, backup, `.madv-runtime`, session
+  directory, ledger, artifact, or evidence file; and
+- is not required for transactional startup, which may create the same root
+  through the same validator.
+
+Current `.madv-runtime` data is legacy user data. Phase 3A does not delete,
+migrate, or treat it as live automatically. A future migration requires a
+separate Founder-authorized procedure.
+
+The following legacy assertions are intentionally replaced and must be updated,
+not skipped or hidden:
+
+- Phase 2 `cli.test.ts` assertions for `start`, `status`, `pause`, `resume`, and
+  `close`;
+- `init` tests expecting `.madv-runtime` creation;
+- help text claiming `start` launches a session;
+- help text or JSON claiming socket-backed external control; and
+- tests treating socket-file existence as broker liveness.
+
+Help must state that `start` is present but live runtime is not certified;
+`status`/`pause`/`resume`/`close` are reserved external-control names; and
+`doctor`, `init`, `verify-ledger`, and `export-evidence` retain their scoped
+responsibilities. Exact placeholder output remains Section 4 authority.
+
+### 9.10 Legacy broker, socket, MCP, adapter, and PTY disposition
+
+| Existing item | Phase 3A disposition |
+| --- | --- |
+| `packages/broker/src/socket.ts` and its direct unit test | Retain as dormant historical scaffolding and direct isolated test only. Remove public re-export and every production/harness import. It may create no path during the 3A suite except inside its explicit isolated legacy unit test. |
+| `BrokerSocket` inside `createInMemoryBrokerForTest()` | Remove. The legacy fixture may remain only after all socket imports, runtime/socket fields, and side effects are severed. Rename it to make test-only status explicit if required by the implementation plan. |
+| `packages/broker/src/index.ts` socket exports | Remove in 3A. Production consumers cannot reach `BrokerSocket`, `MADV_RUNTIME_DIR`, or `MADV_SOCKET_PATH` through `@madventures/broker`. |
+| `packages/broker/src/pty-manager.ts` | Retire from production and remove its public export. It is pipe-based and cannot satisfy PTY containment. If Phase 2 focus tests need a byte-routing fake, move the minimum fake under test fixtures; it may not spawn a real process or be called a PTY. |
+| `packages/broker/src/mcp-server.ts` tool catalog | Quarantine from Phase 3A production and harness startup graphs. Its schema tests may remain as legacy protocol tests. It is not the `BrokerClient` or PTY-host transport. Live agent-to-broker MCP transport requires Phase 3B certification. |
+| Adapter `mcp-config.ts` and `unix://madbridge.sock` previews | Quarantine and remove from adapter launch/readiness paths. They must not write provider config or advertise a nonexistent socket. Any future MCP activation is Phase 3B scope with preview and Founder approval. |
+| Current adapter `launch()` methods | Do not use for Phase 3A child ownership. They are replaced by broker-authorized PTY-host launch descriptors. Retain only attestation/config-independent logic that passes the new adapter contract. Random pseudo-PIDs are test data, never launch facts. |
+| `createInMemoryBrokerForTest()` legacy tests | Preserve behavioral coverage by adapting the fixture or replacing it with narrower pure fixtures. They do not certify the Phase 3A runtime. The full suite floor remains binding. |
+
+The architecture test distinguishes a direct isolated legacy socket unit test
+from a startup-graph import. Dormant means unreachable from production and the
+Phase 3A harness, not deleted history.
+
+### 9.11 Harness entry point and production separation
+
+The only Phase 3A runtime harness entry is
+`test/phase3a/runtime-harness.ts`. Test files may import it directly. No source
+under `apps/` or a published package index may import or dynamically resolve it.
+
+The harness accepts only controlled fixture adapters and disposable validated
+storage roots. It cannot admit a real provider surface or remove the production
+`start` gate. Architecture tests search static imports, dynamic imports,
+filesystem path construction, command dispatch, environment switches, and
+argument parsing for alternate reachability.
+
+### 9.12 Secret-environment wording
+
+Phase 3A does not claim a forwarded secret is unread. In Bun/JavaScript, an
+allowlisted value is present in the process environment map. The enforceable
+claim is:
+
+> Secret-marked environment values are forwarded only to their authorized host
+> and child. MADVentures runtime code does not intentionally log, persist, or
+> export their values. Diagnostics and evidence apply the approved redaction
+> rules.
+
+The agent/provider-output residual in Section 5.6 remains. Tests may prove the
+absence of intentional logging/persistence/export paths and successful
+redaction; they may not claim that application code is physically incapable of
+reading its own process environment.
+
+### 9.13 Live attestation eligibility
+
+The phrase “where the CLI exposes a passing primitive” does not waive live
+re-attestation. A surface without a machine-verifiable primitive for the actual
+session is ineligible for a live pair. It may be investigated and represented
+by controlled fixtures, but it cannot be certified, presented as eligible, or
+started live.
+
+At the Phase 3A baseline, the existing Antigravity adapter fails closed because
+no qualifying exact-model primitive has been established. Antigravity remains
+ineligible until a fresh investigation produces passing evidence under Section
+2.2. No configured model string, flag, provider file, or marketing output can
+substitute.
+
+### 9.14 Approval semantics for review and planning
+
+Merge-gate item 11 requires an **approving** Tier-2 verdict for the exact
+candidate SHA. A `REQUEST_CHANGES`, rejection, inconclusive verdict, or review
+of another SHA does not satisfy the gate.
+
+This amended specification remains NO-GO for implementation planning until the
+Founder approves both this addendum and `DEC-20260812-01` as one instrument.
+After that approval, the next authorized action is to write the Phase 3A
+implementation plan. Implementation remains separately gated behind approval
+of that plan.
