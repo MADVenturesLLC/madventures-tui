@@ -32,6 +32,8 @@ all forward runtime work:
 | §10 Commands and installation behavior | Live `start` and externally observable session commands | Companion §§4.2–4.3 and 9.9: certified gate and truthful placeholders |
 | §12.2 Integration verification | Unix-socket authentication and pipe-era managed PTY expectations | Companion §§3 and 6: PTY-host containment, anonymous lifelines, fixture/adversarial and dual-host gates |
 | Socket/runtime layout wherever repeated | Runtime socket directory and repo/runtime assumptions | Companion §§4.4, 5.1–5.2, and 9.9–9.10 |
+| §6.1 Session lifecycle | Same-session `interrupted → reconciling → active` recovery | Companion §§2.5 and 9.3–9.4: interrupt is terminal-bound; recovery is reconciliation plus a new Founder-authorized envelope; `session_resume` is pause-recovery only; `"reconciling"` is not a Phase 3A phase |
+| §11 Reliability and recovery | Disconnect recovery restores `active` in the same session after re-attestation and resume | Companion §2.5: interrupt closes the session; the next session requires a new Founder-authorized envelope |
 
 All non-conflicting principles of the 2026-08-08 design remain in force,
 including broker authority, TUI-as-projection, typed events, append-only

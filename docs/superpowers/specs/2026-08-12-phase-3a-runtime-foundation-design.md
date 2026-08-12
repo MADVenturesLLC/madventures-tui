@@ -1,10 +1,11 @@
 # MADVentures TUI — Phase 3A Production Runtime Foundation
 
-**Status:** Founder-approved architecture; contract addendum pending Founder review  
+**Status:** Founder-approved architecture; contract addendum corrected for findings 1–12; pending Founder review of this SHA  
 **Date:** 2026-08-12  
 **Repository:** `MADVenturesLLC/madventures-tui`  
 **Baseline branch:** `main`  
 **Baseline SHA:** `0b942771fc07e5eb05203b1d3d641d3e8ad101f1`  
+**Corrects:** `203c310a0c4fdca74dbbc4622e91fafd4c7fe432` findings 1–12  
 **Required Phase 3A merge state:** runtime foundation present behind a mandatory live-start gate  
 **Live-session certification:** deferred to Phase 3B
 
@@ -78,30 +79,18 @@ multi-client support.
 
 The runtime is generic over execution identities but strictly limited to two
 active surfaces in Version 1. The existing protocol `ExecutionIdentity` remains
-canonical and is evolved in Phase 3A. Each envelope declares a collection of:
-
-```ts
-type SurfaceId = string & { readonly __brand: "SurfaceId" };
-
-interface ExecutionIdentity {
-  readonly execution_id: string;
-  readonly role: "builder" | "independent-reviewer" | "observer";
-  readonly surface: SurfaceId;
-  readonly model: string;
-  readonly provider: string;
-  readonly independence_domain: string;
-  readonly effort: "low" | "medium" | "high";
-}
-```
+canonical and is evolved in Phase 3A as specified in Section 9.1. Each envelope
+declares `executions: readonly ExecutionIdentity[]`. There is no `surfaces`
+collection and no `SurfaceIdentity` type.
 
 One named constraint, `MAX_ACTIVE_SURFACES_V1 = 2`, and one envelope validator
-enforce `surfaces.length === MAX_ACTIVE_SURFACES_V1`. No other module may
+enforce `executions.length === MAX_ACTIVE_SURFACES_V1`. No other module may
 encode cardinality.
 
 Downstream supervisor, broker, ledger, lifeline, adapter, capability, and
-evidence modules iterate over `ExecutionIdentity[]`. They must not use paired
-tuple types, `surfaceA`/`surfaceB` identifiers, or independent literal-two
-checks. Pair-level validation still evaluates the complete requested pair for:
+evidence modules iterate over `executions`. They must not use paired tuple
+types, `surfaceA`/`surfaceB` identifiers, or independent literal-two checks.
+Pair-level validation still evaluates the complete requested pair for:
 
 - provider disjointness;
 - compatible roles;
@@ -113,7 +102,12 @@ An architecture test asserts the enumerable form of this rule:
 - no two-tuple surface types outside the centralized validator;
 - no `surfaceA`/`surfaceB`, `adapterA`/`adapterB`, or equivalent paired names;
 - no literal cardinality check outside `MAX_ACTIVE_SURFACES_V1`; and
-- downstream orchestration iterates over the collection.
+- downstream orchestration iterates over `executions`.
+
+`PairConstraintsV1.allowed_surface_pairs` is a declared constraint value, not
+an identity system. It is exempt from the no-two-tuple assertion by that exact
+field name only. No other exemption exists beyond this and the documented TUI
+exemption.
 
 The test asserts these patterns; it does not claim to mathematically prove the
 absence of all two-surface assumptions.
@@ -298,11 +292,13 @@ Any of the following interrupts the entire session:
 The broker invalidates the fencing token, appends a typed incident and closure
 when durable writing remains possible, terminates all governed process groups,
 and closes every client stream. Recovery requires reconciliation and a new
-Founder-authorized envelope.
+Founder-authorized envelope. Same-session recovery from `interrupted` does not
+exist in Phase 3A. `session_resume` applies only to `paused` sessions.
 
 When durable writing is impossible—such as disk failure or supervisor
 `SIGKILL`—the next startup's ledger reconciliation detects and records an
-unclean closure. Reconciliation is the record of last resort.
+unclean closure. Reconciliation is a next-start activity, never an in-session
+phase. It is the record of last resort.
 
 ## 3. PTY host and fail-closed containment
 
@@ -375,7 +371,7 @@ Normal termination uses this bounded ladder:
 
 1. Broker sends a typed terminate command.
 2. Host sends `SIGTERM` to the child process group.
-3. Host waits at most two seconds.
+3. Host waits the Section 9.8 responsive-host child grace.
 4. Host sends `SIGKILL` to any surviving process group and reports exit.
 
 Deliberately closing one host's stdin is a second, simpler per-child kill
@@ -434,9 +430,8 @@ The spike must demonstrate:
 - clean exit reporting; and
 - measured timing against the fixed deadlines.
 
-Termination initiation must be observed within 500 ms of lifeline loss, the
-grace period is two seconds, and all governed processes must be gone within
-five seconds. Reports record observed values rather than merely saying “pass.”
+Timing is measured against the sole deadline table in Section 9.8. Reports
+record observed values rather than merely saying “pass.”
 
 One adaptive TUI will later run on both hosts. Machine-specific UI forks are
 out of scope.
@@ -445,50 +440,35 @@ out of scope.
 
 ### 4.1 Client contract
 
-The Phase 3A contract is:
+The normative `BrokerClient` contract — every command variant, result, error
+code, snapshot field, output frame, and event-publishing path — is defined
+solely in Sections 9.3–9.4. This section states only the boundary rules. Where
+any prose elsewhere summarizes the contract, Section 9 prevails. No second copy
+of the interface may appear anywhere in this instrument.
 
-```ts
-interface BrokerClient {
-  getSnapshot(): Promise<BrokerSnapshot>;
-  snapshots(): AsyncIterable<BrokerSnapshot>;
-  output(executionId: string): AsyncIterable<OutputFrame>;
-  request(command: BrokerCommand): Promise<BrokerResult>;
-  close(): Promise<void>;
-}
-
-interface BrokerSnapshot {
-  sessionId: string;
-  snapshotSeq: number;
-  // Remaining state is immutable plain data.
-}
-
-interface OutputFrame {
-  sessionId: string;
-  executionId: string;
-  outputSeq: number;
-  bytes: Uint8Array;
-}
-```
+The boundary carries asynchronous, serializable-shaped plain data. No PTY file
+descriptor, subprocess handle, ledger handle, policy object, callback carrying
+mutable state, or other shared mutable state crosses it. The in-process client
+must remain replaceable later with a socket-backed client without changing TUI
+code. Daemon transport, wire-format standardization, client authentication,
+daemon restart, discovery, and multi-client support remain deferred.
 
 Snapshots are state projections; PTY throughput uses the separate ordered byte
 stream. `snapshotSeq` is monotonic per session. `outputSeq` is monotonic per
-session and surface. Session mismatch, duplicate, regression, or gap is a typed
-invariant failure. In the in-process client, an unexplained gap interrupts the
-session rather than being hidden. Replay and reconnect are deferred with the
-external transport.
+session and execution. Session mismatch, duplicate, regression, or gap is a
+typed invariant failure. In the in-process client, an unexplained gap
+interrupts the session rather than being hidden. Replay and reconnect are
+deferred with the external transport.
 
-`BrokerCommand` is the closed discriminated union in Section 9.3. It includes
-exact-byte input, resize, typed governance actions, and authorized session
-close. Input and resize bind to `sessionId`, `executionId`, and the current
-fencing token so stale clients cannot write.
+Input and resize bind to `sessionId`, `executionId`, and the current fencing
+token so stale clients cannot write.
 
 `BrokerClient.close()` releases only that client's subscriptions and resources.
 It does not terminate the governed session. Session termination is a separate
 typed broker command with its own authorization.
 
-No raw handle, process object, ledger object, callback carrying mutable state,
-or policy implementation crosses this boundary. The PTY-host frame protocol is
-private infrastructure and is not the future public daemon protocol.
+The PTY-host frame protocol is private infrastructure and is not the future
+public daemon protocol.
 
 ### 4.2 Production `start` gate
 
@@ -647,13 +627,16 @@ Phase 3A does not become a credential-management system. Provider
 authentication remains installed and owned by the host user. The supervisor
 does not store, copy, refresh, broker, or initiate login flows.
 
-Each adapter has a versioned configuration defining:
+Each adapter's versioned configuration lives only in the Founder-approved
+adapter registration named in Section 9.1. That registration is the sole
+admission source and includes:
 
-- authorized executable and supported versions;
-- identity and auth-readiness probes;
+- authorized executable name and supported versions;
+- identity and auth-readiness probe configuration;
 - required non-interactive launch flags;
-- an exact child-environment allowlist;
+- an exact child-environment allowlist reference;
 - which allowed variables are `secret: true`;
+- `independence_domain` and `organization_id`;
 - authentication-failure detection; and
 - capability and review limitations.
 
@@ -683,6 +666,8 @@ Machine-readable capability records live under
 `<storage-root>/capability/<surface>/`. Each records:
 
 - surface, provider, requested exact model, and role eligibility;
+- `independence_domain` and `organization_id`, copied from the adapter
+  registration at investigation time;
 - CLI version, absolute binary path, and binary hash;
 - evaluation date and expiration horizon;
 - host architecture, macOS version/build, Bun version/path/hash, `TERM`, and
@@ -748,7 +733,8 @@ Architecture tests assert:
 
 - the single centralized cardinality constraint and enumerable absence of
   two-ness elsewhere;
-- the documented TUI exemption and no broader exemption;
+- the documented TUI exemption, the `PairConstraintsV1.allowed_surface_pairs`
+  field-name exemption, and no broader exemption;
 - TUI/adapters reach PTYs only through `BrokerClient`;
 - PTY hosts import no application authority or persistence modules;
 - production `start` cannot statically or dynamically reach the harness/runtime;
@@ -810,8 +796,9 @@ Adversarial tests cover at least:
     ledger session, or live token remains.
 
 Each timing test reports observed detection, `SIGTERM`, escalation, and final
-death times. Passing requires termination initiation within 500 ms, a two-second
-grace period, and complete removal within five seconds.
+death times. Passing requires the Section 9.8 deadlines. The Layer 4 `SIGSTOP`
+scenario asserts the no-grace path: an unresponsive or `SIGSTOP` host does not
+earn the responsive-host child grace.
 
 ### 6.5 Layer 5 — dual-host certification evidence
 
@@ -1072,9 +1059,11 @@ alone.
 
 ## 9. Binding contract and legacy-disposition addendum
 
-This addendum closes the contract gaps found during written-spec review. It is
-binding with Sections 0–8 and controls if an earlier sentence can be read two
-ways. It does not reopen the approved architecture.
+This addendum closes the contract gaps found during written-spec review,
+including findings 1–12 against SHA
+`203c310a0c4fdca74dbbc4622e91fafd4c7fe432`. It is binding with Sections 0–8
+and controls if an earlier sentence can be read two ways. It does not reopen
+the approved architecture.
 
 The supersession authority for legacy V1 conflicts is
 [`DEC-20260812-01`](../../decisions/DEC-20260812-01-phase-3a-runtime-foundation-supersession.md).
@@ -1112,18 +1101,36 @@ interface ExecutionIdentity {
 }
 ```
 
+`independence_domain` is a string matching `^[a-z][a-z0-9-]{1,63}$`.
+Normalization is lowercase, trimmed, and hyphenated. Any other value fails
+parsing. The source of truth is the adapter registration below. The envelope
+value MUST equal the registered value for that `SurfaceId`; inequality is a
+typed preflight failure (`identity_mismatch`).
+
 `CliSurface = "claude-code" | "antigravity"` and `KNOWN_SURFACES` are retired
 as admission authority. A `SurfaceId` is a normalized lowercase identifier
 matching `^[a-z][a-z0-9-]{1,63}$`; accepting the string syntactically does not
 make it eligible.
 
+The registration authority is `packages/protocol/src/adapter-registry.ts` — a
+closed, Founder-approved, compile-time map keyed by `SurfaceId`. Values include
+authorized executable name and supported versions, identity and auth-readiness
+probe configuration, non-interactive launch flags, environment allowlist
+reference, `independence_domain`, and `organization_id`. Admission reads only
+this registry. An architecture test asserts no other admission source exists.
+Fixture surfaces register through the test-only harness path, never in the
+production registry.
+
 A production envelope admits a surface only when all of these are true:
 
-- a Founder-approved adapter registration exists for the exact `SurfaceId`;
+- a Founder-approved adapter registration exists for the exact `SurfaceId` in
+  `packages/protocol/src/adapter-registry.ts`;
 - a fresh passing capability record exists for the current binary hash, CLI
   version, host, and time horizon;
 - the envelope explicitly names its surface, provider, exact model, execution
-  ID, role, independence domain, and effort; and
+  ID, role, independence domain, and effort;
+- the envelope `independence_domain` equals the registered value for that
+  `SurfaceId`; and
 - the requested two-surface pair passes Section 9.2.
 
 Fixture-only surface IDs are registered only inside
@@ -1143,14 +1150,16 @@ A Version 1 live pair is eligible only when:
 3. `observer` is not an active role in a Version 1 live pair;
 4. the normalized providers differ;
 5. the normalized `independence_domain` values differ;
-6. neither capability record identifies common review control or the same
-   provider organization for both executions;
+6. the two executions do not share common review control, defined as equal
+   `independence_domain` or equal `organization_id` on their capability
+   records;
 7. the independent reviewer is not the builder, did not produce the artifact
    under review, and cannot approve its own output;
 8. both surfaces are individually admitted under Section 9.1; and
 9. every envelope constraint is at least as strict as these global rules.
 
-The envelope adds this closed object:
+`PairConstraintsV1` is a required field of the envelope. An envelope without
+it fails parsing with a typed error. There is no default-constraints path.
 
 ```ts
 interface PairConstraintsV1 {
@@ -1162,10 +1171,28 @@ interface PairConstraintsV1 {
     readonly [SurfaceId, SurfaceId]
   )[];
 }
+
+interface TaskEnvelopeV1 {
+  readonly protocol_version: typeof PROTOCOL_VERSION;
+  readonly task_id: string;
+  readonly authorization_reference: string;
+  readonly repository: string;
+  readonly branch: string;
+  readonly worktree: string;
+  readonly repository_fingerprint: RepositoryFingerprint;
+  readonly executions: readonly ExecutionIdentity[];
+  readonly initial_writer: string;
+  readonly scope: TaskScope;
+  readonly pair_constraints: PairConstraintsV1;
+  readonly expires_at: string;
+  readonly created_at: string;
+  readonly envelope_hash: string;
+}
 ```
 
-`allowed_surface_pairs`, when present, narrows eligibility. It cannot override
-or weaken a global rule. There is no Founder bypass field. A future exception
+`pair_constraints` joins the parser's known-key set. `allowed_surface_pairs`,
+when present inside the object, narrows eligibility. It cannot override or
+weaken a global rule. There is no Founder bypass field. A future exception
 requires a new design and decision record, not an envelope value.
 
 ### 9.3 Closed BrokerClient command and result contract
@@ -1248,8 +1275,6 @@ type BrokerCommand =
       readonly kind: "session_resume";
       readonly commandId: string;
       readonly sessionId: string;
-      readonly reconciliationId: string;
-      readonly approvalId: string;
     }
   | {
       readonly kind: "session_close";
@@ -1304,6 +1329,23 @@ variant. Ownership requests and collaboration events from execution surfaces
 remain typed `BridgeEventV1` inputs validated by the broker; they are not
 `BrokerClient` commands.
 
+`session_resume` is pause-recovery only. It is legal only when
+`phase === "paused"`. From any other phase it fails with
+`session_not_writable`. It carries no `reconciliationId` and no `approvalId`.
+Pause does not invalidate the fencing token; resume does not increment it.
+There is no same-session interrupt-recovery command.
+
+`session_pause` is legal only when `phase === "active"`; otherwise
+`session_not_writable`. `session_close` is legal only when
+`phase === "active"`; otherwise `session_not_writable`. During `interrupted`,
+`closing`, or `closed`, observation (`getSnapshot`, `snapshots`, `output`)
+remains available; governance commands fail with `session_not_writable` or
+`incident_active`.
+
+`reconciliation_required` is produced only by next-start when a prior
+session's required unclean-closure records have not yet been appended. Founder
+`session_resume` never produces it.
+
 Every unknown variant or unknown field fails with `invalid_command`; there is no
 default coercion. `BrokerResult.detail` is sanitized and must not contain a
 secret-marked environment value.
@@ -1322,7 +1364,6 @@ interface BrokerSnapshot {
     | "active"
     | "paused"
     | "interrupted"
-    | "reconciling"
     | "closing"
     | "closed";
   readonly taskEnvelopeHash: string;
@@ -1335,7 +1376,7 @@ interface BrokerSnapshot {
   readonly pendingApprovals: readonly PendingApprovalSnapshot[];
   readonly pendingTransfers: readonly PendingTransferSnapshot[];
   readonly permissionSummary: PermissionSummarySnapshot;
-  readonly transferPhase: string | null;
+  readonly ownershipState: OwnershipState;
   readonly verification: VerificationSnapshot | null;
   readonly review: ReviewSnapshot | null;
   readonly incident: IncidentSnapshot | null;
@@ -1433,6 +1474,25 @@ interface LedgerEntrySnapshot {
 }
 ```
 
+`phase === "interrupted"` is transient and terminal-bound: the broker appends
+the typed incident and closure when durable writing remains possible and
+proceeds to `closing`/`closed` without accepting further governance commands.
+`"reconciling"` is not a Phase 3A command or snapshot phase.
+
+```ts
+type OwnershipState =
+  | "free"
+  | "owned"
+  | "transfer-requested"
+  | "sender-released"
+  | "receiver-validating"
+  | "rejected";
+```
+
+`ownershipState` is the existing Phase 2 closed union, unmodified. There is no
+`transferPhase` field. Any display label is derived by the consumer from
+`ownershipState`.
+
 These projections deliberately preserve the Phase 2 truth fields while adding
 session identity, sequencing, launch facts, and explicit token state. They are
 immutable plain data produced from ledger/broker truth, not terminal prose.
@@ -1452,9 +1512,17 @@ If that append fails, the token never becomes valid and the transactional build
 rolls back. Every ownership transfer increments the token and appends a new
 `fencing_token_issued` event before the successor writer may send bytes.
 
+Fencing tokens are scoped to one `session_id`. The uniqueness key is
+`(session_id, fencing_token)`. A new governed session begins at
+`fencing_token_issued` with value `1` after both children are ready. Pause does
+not invalidate the token and does not increment it. Interrupt ends the session.
+No in-session re-issue path exists after invalidation in Phase 3A. Any replay
+yielding `tokenState: "invalidated"` is a closed or closing session.
+Cross-session monotonicity is not required.
+
 Interruption first makes the in-memory token unusable, then attempts to append
-`fencing_token_invalidated`. If durable writing is unavailable, reconciliation
-records the invalidation and unclean closure at next start. No successor
+`fencing_token_invalidated`. If durable writing is unavailable, next-start
+reconciliation records the invalidation and unclean closure. No successor
 session inherits a token.
 
 ### 9.6 Existing ledger, new lifecycle events
@@ -1475,6 +1543,11 @@ interface SessionLifecycleEventV1 {
     | "session_open"
     | "session_abort"
     | "session_unclean_closure"
+    | "session_paused"
+    | "session_resumed"
+    | "session_closed"
+    | "session_incident"
+    | "approval_resolved"
     | "fencing_token_issued"
     | "fencing_token_invalidated";
   readonly actor: "madbridge";
@@ -1490,13 +1563,49 @@ interface SessionLifecycleEventV1 {
 type LedgerEventV1 = BridgeEventV1 | SessionLifecycleEventV1;
 ```
 
-The lifecycle event set is exactly:
+The lifecycle event set is exactly those ten `event_type` values. No
+`BridgeEventV1` is ever minted with a fabricated execution sender.
 
-- `session_open`;
-- `session_abort`;
-- `session_unclean_closure`;
-- `fencing_token_issued`; and
-- `fencing_token_invalidated`.
+`actor: "madbridge"` records that the broker authored the record. The
+authorizing principal and command are carried in payload. For
+`session_paused`, `session_resumed`, `session_closed`, and
+`approval_resolved`:
+
+```ts
+payload: {
+  readonly command_id: string;
+  readonly authorized_by: "founder";
+}
+```
+
+`approval_resolved` additionally carries `approval_id` and
+`resolution: "approved" | "rejected"`. The command field `decision`
+(`"accept" | "reject"`) maps `accept → approved` and `reject → rejected`.
+
+The broker appends the lifecycle record and receives the ledger sequence
+**before** the state transition is exposed in any snapshot.
+`BrokerResult.acceptedSnapshotSeq` follows that durable append. A failed
+append is `ledger_write_failed` and interrupts the session (Section 5.3).
+
+Normative `rebuildBrokerState` mapping:
+
+| Lifecycle event | Rebuild effect |
+| --- | --- |
+| `session_open` | session exists; phase `starting`; `tokenState: "not_issued"`; `fencingToken: null` |
+| `fencing_token_issued` | `fencingToken = event.fencing_token`; `tokenState: "valid"`; `tokenUsable: true` |
+| `session_paused` | phase `paused` (token unchanged) |
+| `session_resumed` | phase `active` (token unchanged, no increment) |
+| `approval_resolved` | remove matching pending approval; record resolution |
+| `session_incident` | `incident` populated; phase `interrupted` |
+| `fencing_token_invalidated` | `tokenState: "invalidated"`; `tokenUsable: false` |
+| `session_abort` | phase `closed` (aborted); `tokenUsable: false` |
+| `session_closed` | phase `closed`; `tokenUsable: false` |
+| `session_unclean_closure` | phase `closed` (unclean); `tokenUsable: false` |
+
+Unknown lifecycle event types in replay are a typed reconciliation failure,
+not a silent `default: break`. Baseline `BridgeEventV1` types `pause`,
+`resume`, `incident`, and `session_close` remain historical execution-authored
+events. They are not the durable record of Founder governance commands.
 
 Both union members use the existing `events` table, sequence, canonical JSON,
 previous hash, event hash, and chain head. `Ledger.append()` evolves from
@@ -1539,17 +1648,27 @@ amendment.
 
 ### 9.8 Fixed PTY-host response deadlines
 
+This table is the sole normative deadline table. Sections 3.6 and 6.4 measure
+against it and do not restate independent numbers.
+
+| Bound | Value |
+| --- | --- |
+| Host acknowledgement of any command, or first command-specific fact | 250 ms |
+| Escalation initiation after missed acknowledgement or lifeline loss | 500 ms |
+| Child grace after a **responsive** host confirms `SIGTERM` | 2 s |
+| Unresponsive or `SIGSTOP` host | no grace; direct PGID path |
+| Outer bound: all governed processes gone | 5 s |
+
 Every broker command frame requires a matching host acknowledgement or first
 command-specific fact within 250 ms. For termination, the host must report
 `termination_started` within 500 ms of the broker's command.
 
 If the 250 ms acknowledgement deadline expires, the supervisor closes host
-stdin and starts the host-bypassing escalation ladder. Direct PGID kill and host
-kill must be initiated no later than 500 ms after the original command. The
-existing two-second child grace applies only after a responsive host confirms
-`SIGTERM`; an unresponsive or `SIGSTOP` host does not earn an additional grace
-period. Every governed process must be gone within the Section 3 five-second
-outer deadline.
+stdin and starts the host-bypassing escalation ladder. Direct PGID kill and
+host kill must be initiated no later than 500 ms after the original command.
+The two-second child grace applies only after a responsive host confirms
+`SIGTERM`; an unresponsive or `SIGSTOP` host does not earn an additional
+grace period. Every governed process must be gone within five seconds.
 
 All deadlines use a monotonic clock and are reported as observed durations in
 dual-host evidence.
@@ -1599,6 +1718,9 @@ responsibilities. Exact placeholder output remains Section 4 authority.
 | Adapter `mcp-config.ts` and `unix://madbridge.sock` previews | Quarantine and remove from adapter launch/readiness paths. They must not write provider config or advertise a nonexistent socket. Any future MCP activation is Phase 3B scope with preview and Founder approval. |
 | Current adapter `launch()` methods | Do not use for Phase 3A child ownership. They are replaced by broker-authorized PTY-host launch descriptors. Retain only attestation/config-independent logic that passes the new adapter contract. Random pseudo-PIDs are test data, never launch facts. |
 | `createInMemoryBrokerForTest()` legacy tests | Preserve behavioral coverage by adapting the fixture or replacing it with narrower pure fixtures. They do not certify the Phase 3A runtime. The full suite floor remains binding. |
+| `packages/broker/src/session-machine.ts` `interrupted` / `reconciling` transitions | Named replacement. Update to Phase 3A semantics: `interrupted` is terminal-bound; `"reconciling"` is removed from the Phase 3A surface; `resume` is legal only from `paused`. Existing tests are replaced, not silently skipped. |
+| `packages/ledger/src/rebuild.ts` resume token increment and same-session recovery | Named replacement. Rebuild uses the Section 9.6 lifecycle mapping. `session_resumed` does not increment the token. Unknown lifecycle types fail replay. Existing tests are replaced, not silently skipped. |
+| Phase 2 tests of `interrupted → reconciling → active` | Named replacement. Update to Phase 3A interrupt-and-closure semantics. Counts toward no-test-count-regression via replacement tests. |
 
 The architecture test distinguishes a direct isolated legacy socket unit test
 from a startup-graph import. Dormant means unreachable from production and the
