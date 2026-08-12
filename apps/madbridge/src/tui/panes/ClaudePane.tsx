@@ -34,17 +34,17 @@ export function ClaudePane({ active, state, ptyOutput }: ClaudePaneProps) {
   const writer = isActiveWriter(state, surface);
   const tok = writerToken(state, surface);
   const live = livenessWord(state);
-  const disconnected = live !== "LIVE";
 
   // Build the header line truthfully.
   const headerParts: string[] = ["CLAUDE CODE"];
   if (active) headerParts.push("FOCUSED");
   if (writer && tok !== null) {
     headerParts.push("WRITER tok#" + String(tok));
-  } else if (disconnected) {
-    // No current-writer claim while disconnected — show an explicit ended
-    // word. Real buffered PTY output below is still preserved.
-    headerParts.push("STREAM ENDED");
+  } else if (live !== "LIVE") {
+    // No current-writer claim while not live (disconnected, interrupted,
+    // or incident). Show the truthful liveness word instead. Real buffered
+    // PTY output below is still preserved.
+    headerParts.push(live);
   }
   headerParts.push(role);
   headerParts.push(model);

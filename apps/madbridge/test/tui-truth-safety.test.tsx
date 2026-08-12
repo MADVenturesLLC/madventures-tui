@@ -21,8 +21,10 @@ import { test, expect, describe } from "bun:test";
 import { act } from "react";
 import { testRender } from "@opentui/react/test-utils";
 import { StatusBar, buildStatusLine, computeLedgerSeq, abbreviateWriter } from "../src/tui/components/StatusBar";
+import { truncateToWidth } from "../src/tui/components/agent-identity";
 import { FixtureBanner, buildFixtureBanner, FIXTURE_BANNER_TEXT } from "../src/tui/components/FixtureBanner";
 import { ApprovalDialog } from "../src/tui/components/ApprovalDialog";
+import { GovernancePane } from "../src/tui/panes/GovernancePane";
 import { App } from "../src/tui/App";
 import {
   loadKeybindings,
@@ -1190,7 +1192,7 @@ describe("App lifecycle: approval dialog auto-open and resolution", () => {
       await setup.flush(); // extra flush for useEffect to run
       const frame = setup.captureCharFrame();
       // The dialog should be visible (it renders the approval ID)
-      expect(frame).toContain("Event ID: approval-A");
+      expect(frame).toContain("ID:approval-A");
       expect(resolutions).toEqual([]); // no resolution yet
     } finally {
       setup.renderer.destroy();
@@ -1357,7 +1359,7 @@ describe("App lifecycle: approval dialog auto-open and resolution", () => {
       // Assert the approval dialog text is absent — not only that a
       // second event is not emitted, but the dialog itself is gone.
       const frameAfterRefocus = setup.captureCharFrame();
-      expect(frameAfterRefocus).not.toContain("Event ID: approval-A");
+      expect(frameAfterRefocus).not.toContain("ID:approval-A");
 
       // Try to accept again
       act(() => { setup.mockInput.pressKey("y", { meta: true }); });
@@ -1389,7 +1391,7 @@ describe("App lifecycle: approval dialog auto-open and resolution", () => {
       await setup.flush();
       await setup.flush();
       const frameBefore = setup.captureCharFrame();
-      expect(frameBefore).toContain("Event ID: approval-A");
+      expect(frameBefore).toContain("ID:approval-A");
 
       // Change the snapshot: the approval is now expired
       currentSnapshot = makeSnapshotWithApproval("approval-A",
@@ -1404,7 +1406,7 @@ describe("App lifecycle: approval dialog auto-open and resolution", () => {
       // Assert the approval dialog is absent — the dialog text should
       // no longer be visible before we test that Alt+Y emits nothing.
       const frameAfterExpiry = setup.captureCharFrame();
-      expect(frameAfterExpiry).not.toContain("Event ID: approval-A");
+      expect(frameAfterExpiry).not.toContain("ID:approval-A");
 
       // Try to accept — should emit nothing
       setup.mockInput.pressKey("y", { meta: true });
@@ -1412,6 +1414,574 @@ describe("App lifecycle: approval dialog auto-open and resolution", () => {
       expect(resolutions).toEqual([]);
     } finally {
       setup.renderer.destroy();
+    }
+  });
+});
+
+// ─── Fencing-token truthfulness: token 0 must not look like issued authority ───
+
+describe("Fencing-token truthfulness: token <= 0 never renders as issued", () => {
+  // Base input with token 0 for all tests.
+  const tokenZeroInput = {
+    connected: true,
+    sessionWord: "active",
+    ownerWord: "exec-claude-code (token none)",
+    pendingCount: 1,
+    ledgerSeq: 3,
+    focusWord: "CLAUDE",
+  };
+
+  test("120 columns, token 0: no #0 in the status line", () => {
+    const line = buildStatusLine({ ...tokenZeroInput, width: 120 });
+    expect(line).not.toContain("#0");
+    expect(line).toContain("token none");
+    expect(line.length).toBe(120);
+  });
+
+  test("80 columns, token 0: no #0 in the status line", () => {
+    const line = buildStatusLine({ ...tokenZeroInput, width: 80 });
+    expect(line).not.toContain("#0");
+    expect(line).toContain(" T:none");
+    expect(line.length).toBe(80);
+  });
+
+  test("60 columns, token 0: no #0 in the status line", () => {
+    const line = buildStatusLine({ ...tokenZeroInput, width: 60 });
+    expect(line).not.toContain("#0");
+    expect(line).toContain(" T:none");
+    expect(line.length).toBe(60);
+  });
+
+  test("token 7 at 120 columns: existing #7 evidence retained", () => {
+    const line = buildStatusLine({
+      connected: true,
+      sessionWord: "active",
+      ownerWord: "exec-claude-code #7",
+      pendingCount: 1,
+      ledgerSeq: 3,
+      focusWord: "CLAUDE",
+      width: 120,
+    });
+    expect(line).toContain("#7");
+    expect(line).not.toContain("none");
+  });
+
+  test("token 7 at 80 columns: existing #7 evidence retained", () => {
+    const line = buildStatusLine({
+      connected: true,
+      sessionWord: "active",
+      ownerWord: "exec-claude-code #7",
+      pendingCount: 1,
+      ledgerSeq: 3,
+      focusWord: "CLAUDE",
+      width: 80,
+    });
+    expect(line).toContain("#7");
+  });
+
+  test("token 7 at 60 columns: existing #7 evidence retained", () => {
+    const line = buildStatusLine({
+      connected: true,
+      sessionWord: "active",
+      ownerWord: "exec-claude-code #7",
+      pendingCount: 1,
+      ledgerSeq: 3,
+      focusWord: "CLAUDE",
+      width: 60,
+    });
+    expect(line).toContain("#7");
+  });
+
+  test("one-row guarantee: line length equals width at 120, 80, 60 with token 0", () => {
+    for (const w of [120, 80, 60]) {
+      const line = buildStatusLine({ ...tokenZeroInput, width: w });
+      expect(line.length).toBe(w);
+    }
+  });
+
+  test("StatusBar render with fencingToken 0: no #0, writer identity preserved", async () => {
+    const snapshot: BrokerSnapshot = {
+      ...makeConnectedSnapshot(),
+      fencingToken: 0,
+      activeWriter: "exec-claude-code",
+      ownershipState: "owned",
+    };
+    const setup = await testRender(
+      <StatusBar state={snapshot} connected={true} focus="claude" widthOverride={120} />,
+      { width: 120, height: 34 },
+    );
+    try {
+      await setup.flush();
+      const frame = setup.captureCharFrame();
+      expect(frame).not.toContain("#0");
+      // The writer identity is preserved
+      expect(frame).toContain("exec-claude-code");
+      // Explicit no-token marker
+      expect(frame.toLowerCase()).toContain("none");
+    } finally {
+      setup.renderer.destroy();
+    }
+  });
+
+  for (const width of [80, 60]) {
+    test(`StatusBar render at ${width} columns with fencingToken 0 uses T:none`, async () => {
+      const snapshot: BrokerSnapshot = {
+        ...makeConnectedSnapshot(),
+        fencingToken: 0,
+        activeWriter: "exec-claude-code",
+        ownershipState: "owned",
+      };
+      const setup = await testRender(
+        <StatusBar state={snapshot} connected={true} focus="claude" widthOverride={width} />,
+        { width, height: 34 },
+      );
+      try {
+        await setup.flush();
+        const frame = setup.captureCharFrame();
+        const statusLine = frame.split("\n").find((line) => line.includes("W:"));
+        expect(statusLine).toBeDefined();
+        expect(statusLine).not.toContain("#0");
+        expect(statusLine).toContain("W:exec-claude-code T:none");
+        expect(statusLine?.length).toBe(width);
+      } finally {
+        setup.renderer.destroy();
+      }
+    });
+  }
+
+  test("interrupted snapshot with writer identity and token 0: no #0", () => {
+    const line = buildStatusLine({
+      connected: true,
+      sessionWord: "interrupted",
+      ownerWord: "exec-claude-code (token none)",
+      pendingCount: 0,
+      ledgerSeq: 3,
+      focusWord: "CLAUDE",
+      width: 120,
+    });
+    expect(line).not.toContain("#0");
+    expect(line).toContain("token none");
+    expect(line.length).toBe(120);
+  });
+});
+
+// ─── Compact no-token marker: " T:none", not "|T:none" or "tokennone" ───
+//
+// The narrow status format is pipe-delimited, so a "|" inside the writer
+// value reads as a seventh governance fact. The compact no-token state must
+// therefore use a space-separated marker that keeps the writer as ONE field
+// while remaining readable (never the collapsed "tokennone").
+
+describe("Compact no-token marker keeps the writer a single field", () => {
+  const zeroTokenInput = {
+    connected: true,
+    sessionWord: "active",
+    ownerWord: "exec-claude-code (token none)",
+    pendingCount: 1,
+    ledgerSeq: 3,
+    focusWord: "CLAUDE",
+  };
+
+  test("S1. abbreviateWriter emits the space-separated marker, never a pipe or 'tokennone'", () => {
+    const out = abbreviateWriter("exec-claude-code (token none)", 30);
+    expect(out).toBe("exec-claude-code T:none");
+    expect(out).not.toContain("|");
+    expect(out).not.toContain("tokennone");
+  });
+
+  test("S2. 80 columns: writer field reads W:<id> T:none", () => {
+    const line = buildStatusLine({ ...zeroTokenInput, width: 80 });
+    expect(line).toContain("W:exec-claude-code T:none");
+    expect(line).not.toContain("|T:none");
+    expect(line).not.toContain("tokennone");
+    expect(line).not.toContain("#0");
+    expect(line.length).toBe(80);
+  });
+
+  test("S3. 60 columns: writer field reads W:<id> T:none", () => {
+    const line = buildStatusLine({ ...zeroTokenInput, width: 60 });
+    expect(line).toContain("W:exec-claude-code T:none");
+    expect(line).not.toContain("|T:none");
+    expect(line).not.toContain("tokennone");
+    expect(line).not.toContain("#0");
+    expect(line.length).toBe(60);
+  });
+
+  test("S4. 60 columns: the no-token marker does not create a seventh pipe field", () => {
+    const line = buildStatusLine({ ...zeroTokenInput, width: 60 }).trimEnd();
+    const fields = line.split("|");
+    expect(fields.length).toBe(6);
+    // All six governance facts survive, in order.
+    expect(fields[0]).toBe("CONN");
+    expect(fields[1]).toStartWith("S:");
+    expect(fields[2]).toStartWith("W:");
+    expect(fields[3]).toStartWith("P:");
+    expect(fields[4]).toStartWith("F:");
+    expect(fields[5]).toStartWith("L:");
+  });
+
+  test("S5. 80 columns: the no-token marker does not create a seventh field", () => {
+    const line = buildStatusLine({ ...zeroTokenInput, width: 80 }).trimEnd();
+    const fields = line.split(" | ");
+    expect(fields.length).toBe(6);
+    expect(fields[2]).toBe("W:exec-claude-code T:none");
+  });
+
+  test("S6. positive token 7 is unaffected at 120, 80, and 60 columns", () => {
+    for (const w of [120, 80, 60]) {
+      const line = buildStatusLine({
+        ...zeroTokenInput,
+        ownerWord: "exec-claude-code #7",
+        width: w,
+      });
+      expect(line).toContain("#7");
+      expect(line).not.toContain("T:none");
+      expect(line.length).toBe(w);
+    }
+  });
+
+  test("S7. StatusBar render at 80 and 60 columns shows the space-separated marker", async () => {
+    for (const width of [80, 60]) {
+      const snapshot: BrokerSnapshot = {
+        ...makeConnectedSnapshot(),
+        fencingToken: 0,
+        activeWriter: "exec-claude-code",
+        ownershipState: "owned",
+      };
+      const setup = await testRender(
+        <StatusBar state={snapshot} connected={true} focus="claude" widthOverride={width} />,
+        { width, height: 34 },
+      );
+      try {
+        await setup.flush();
+        const frame = setup.captureCharFrame();
+        const statusLine = frame.split("\n").find((l) => l.includes("W:"));
+        expect(statusLine).toBeDefined();
+        expect(statusLine!).toContain("W:exec-claude-code T:none");
+        expect(statusLine!).not.toContain("|T:none");
+        expect(statusLine!).not.toContain("#0");
+        expect(statusLine!.length).toBe(width);
+      } finally {
+        setup.renderer.destroy();
+      }
+    }
+  });
+
+  test("S8. writer field carries no #0 even when the ledger renders its approved #0 default", () => {
+    // Boundary case: the ledger's "#0" for an empty projection is a
+    // separately approved honest default (see the computeLedgerSeq suite).
+    // It must not be confused with a fabricated *fencing token*.
+    for (const w of [120, 80, 60]) {
+      const line = buildStatusLine({ ...zeroTokenInput, ledgerSeq: 0, width: w });
+      const writerField = w >= 100
+        ? line.split(" | ").find((f) => f.startsWith("writer "))
+        : (w >= 80 ? line.split(" | ") : line.split("|")).find((f) => f.startsWith("W:"));
+      expect(writerField).toBeDefined();
+      expect(writerField!).not.toContain("#0");
+      expect(writerField!).not.toContain("#");
+    }
+  });
+});
+
+// ─── Finding 2: 120-col zero-token line has exactly six facts ───
+
+describe("Finding 2: zero-token 120-col line splits into exactly six facts", () => {
+  const zeroTokenOwned = {
+    connected: true,
+    sessionWord: "active",
+    ownerWord: "exec-claude-code (token none)",
+    pendingCount: 1,
+    ledgerSeq: 3,
+    focusWord: "CLAUDE",
+  };
+
+  test("F2a. 120-col zero-token owned line has exactly six ' | ' fields", () => {
+    const line = buildStatusLine({ ...zeroTokenOwned, width: 120 });
+    expect(line).not.toContain("#0");
+    expect(line).toContain("token none");
+    const fields = line.trimEnd().split(" | ");
+    expect(fields.length).toBe(6);
+  });
+
+  test("F2b. all six facts in expected order", () => {
+    const line = buildStatusLine({ ...zeroTokenOwned, width: 120 });
+    const fields = line.trimEnd().split(" | ");
+    expect(fields[0]).toBe("CONNECTED");
+    expect(fields[1]).toBe("session active");
+    expect(fields[2]).toContain("exec-claude-code");
+    expect(fields[2]).toContain("token none");
+    expect(fields[3]).toBe("pending 1");
+    expect(fields[4]).toBe("focus CLAUDE");
+    expect(fields[5]).toBe("ledger #3");
+  });
+
+  test("F2c. positive token 7 at 120/80/60 remains unchanged", () => {
+    for (const w of [120, 80, 60]) {
+      const line = buildStatusLine({
+        ...zeroTokenOwned,
+        ownerWord: "exec-claude-code #7",
+        width: w,
+      });
+      expect(line).toContain("#7");
+      expect(line).not.toContain("token none");
+      expect(line).not.toContain("T:none");
+    }
+  });
+
+  test("F2d. transfer-requested zero-token follows same rule at 120 cols", () => {
+    const line = buildStatusLine({
+      ...zeroTokenOwned,
+      ownerWord: "transfer-req (token none)",
+      width: 120,
+    });
+    expect(line).not.toContain("#0");
+    expect(line).toContain("token none");
+    const fields = line.trimEnd().split(" | ");
+    expect(fields.length).toBe(6);
+  });
+
+  test("F2e. sender-released zero-token follows same rule at 120 cols", () => {
+    const line = buildStatusLine({
+      ...zeroTokenOwned,
+      ownerWord: "released (token none)",
+      width: 120,
+    });
+    expect(line).not.toContain("#0");
+    expect(line).toContain("token none");
+    const fields = line.trimEnd().split(" | ");
+    expect(fields.length).toBe(6);
+  });
+
+  test("F2f. abbreviateWriter compacts '(token none)' to T:none at 80/60 widths", () => {
+    // The parenthesized form must compact to the existing T:none marker.
+    const compact = abbreviateWriter("exec-claude-code (token none)", 30);
+    expect(compact).toBe("exec-claude-code T:none");
+    expect(compact).not.toContain("(");
+    expect(compact).not.toContain(")");
+    expect(compact).not.toContain("|");
+  });
+
+  test("F2g. ledger #0 remains allowed as the separate approved empty-projection value", () => {
+    const line = buildStatusLine({
+      ...zeroTokenOwned,
+      ledgerSeq: 0,
+      width: 120,
+    });
+    expect(line).toContain("ledger #0");
+    // The writer field still has no #0
+    const writerField = line.split(" | ").find((f) => f.startsWith("writer "));
+    expect(writerField).toBeDefined();
+    expect(writerField!).not.toContain("#0");
+  });
+});
+
+// ─── Finding 1: Unicode terminal display width ───
+//
+// truncateToWidth and StatusBar budgeting must use terminal display cells,
+// not JavaScript .length (UTF-16 code units).
+
+describe("Finding 1: Unicode display-width correctness", () => {
+  // Import the display-width helper for test assertions.
+  // We test through the public API (truncateToWidth, buildStatusLine) and
+  // verify display width using Intl.Segmenter-based measurement.
+
+  /**
+   * Measure terminal display width: 2 for CJK/emoji, 1 for normal, 0 for
+   * combining marks / zero-width. Uses Intl.Segmenter for grapheme clusters.
+   */
+  function displayWidth(text: string): number {
+    const segmenter = new Intl.Segmenter("en", { granularity: "grapheme" });
+    let width = 0;
+    for (const { segment } of segmenter.segment(text)) {
+      const cp = segment.codePointAt(0)!;
+      // Emoji and CJK wide ranges → 2 columns
+      if (
+        (cp >= 0x1100 && cp <= 0x115f) ||  // Hangul Jamo
+        (cp >= 0x2329 && cp <= 0x232a) ||
+        (cp >= 0x2e80 && cp <= 0xa4cf && cp !== 0x303f) ||  // CJK
+        (cp >= 0xac00 && cp <= 0xd7a3) ||  // Hangul Syllables
+        (cp >= 0xf900 && cp <= 0xfaff) ||  // CJK Compat
+        (cp >= 0xfe30 && cp <= 0xfe4f) ||
+        (cp >= 0xff00 && cp <= 0xff60) ||  // Fullwidth Forms
+        (cp >= 0xffe0 && cp <= 0xffe6) ||
+        (cp >= 0x1f300 && cp <= 0x1faff) || // Emoji blocks
+        (cp >= 0x1f000 && cp <= 0x1f02f) ||
+        (cp >= 0x20000 && cp <= 0x3fffd)
+      ) {
+        width += 2;
+      } else {
+        width += 1;
+      }
+    }
+    return width;
+  }
+
+  test("F1a. long CJK verification detail at 60 cols truncates by display width", async () => {
+    // This must exercise GovernancePane: the StatusBar never renders a
+    // verification detail at all, so rendering it here would assert nothing
+    // about the CJK detail row.
+    const snapshot: BrokerSnapshot = {
+      ...makeConnectedSnapshot(),
+      verificationStatus: {
+        result: "pass",
+        detail: "全ての統合テストが成功しました。所有権移行検証が完了しています。" +
+                "追加のセーフガードが配置されています。",
+        verifiedBy: "exec-claude-code",
+        timestamp: "2026-08-08T12:30:00Z",
+      },
+    };
+    const setup = await testRender(
+      <GovernancePane active={true} state={snapshot} />,
+      { width: 60, height: 24 },
+    );
+    try {
+      await setup.flush();
+      const frame = setup.captureCharFrame();
+      const rows = frame.split("\n");
+
+      // 1. The Governance verification label survives truncation and the
+      //    CJK detail is genuinely rendered by the pane.
+      const verificationRow = rows.find((r) => r.includes("Verification:"));
+      expect(verificationRow).toBeDefined();
+      expect(verificationRow!).toContain("pass");
+      expect(verificationRow!).toContain("全ての統合テスト");
+      // Wide content forces truncation — the marker proves display-width
+      // truncation ran rather than a raw overflow.
+      expect(verificationRow!).toContain("…");
+      // Provenance still renders on its own row.
+      expect(frame).toContain("Verified at: 2026-08-08T12:30:00Z");
+
+      // 2. The CJK row does not interleave with its neighbours: the label
+      //    starts the row and no adjacent row's label bleeds into it.
+      expect(verificationRow!.replace(/^│/, "").trimStart()).toStartWith("Verification:");
+      for (const label of ["Verified at:", "Review:", "Commands:", "Task ID:"]) {
+        expect(verificationRow!).not.toContain(label);
+      }
+
+      // 3. No rendered row exceeds the intended width. The single-bordered
+      //    pane is 60 display columns wide with 58 columns of inner content.
+      for (const row of rows) {
+        expect(displayWidth(row.replace(/\s+$/, ""))).toBeLessThanOrEqual(60);
+      }
+      const borderedRows = rows.filter((r) => r.includes("│"));
+      expect(borderedRows.length).toBeGreaterThan(0);
+      for (const row of borderedRows) {
+        const first = row.indexOf("│");
+        const last = row.lastIndexOf("│");
+        expect(last).toBeGreaterThan(first);
+        expect(displayWidth(row.slice(first + 1, last))).toBeLessThanOrEqual(58);
+      }
+    } finally {
+      setup.renderer.destroy();
+    }
+  });
+
+  test("F1b. StatusBar at 60 cols with Unicode writer identity stays within width", () => {
+    // CJK characters in the writer identity — each takes 2 display cells
+    const line = buildStatusLine({
+      connected: true,
+      sessionWord: "active",
+      ownerWord: "執筆者コード #7",
+      pendingCount: 1,
+      ledgerSeq: 3,
+      focusWord: "CLAUDE",
+      width: 60,
+    });
+    expect(displayWidth(line.trimEnd())).toBeLessThanOrEqual(60);
+    expect(line).toContain("#7");
+  });
+
+  test("F1c. StatusBar at 80 cols with Unicode writer identity stays within width", () => {
+    const line = buildStatusLine({
+      connected: true,
+      sessionWord: "active",
+      ownerWord: "執筆者コード #7",
+      pendingCount: 1,
+      ledgerSeq: 3,
+      focusWord: "CLAUDE",
+      width: 80,
+    });
+    expect(displayWidth(line.trimEnd())).toBeLessThanOrEqual(80);
+    expect(line).toContain("#7");
+  });
+
+  test("F1d. T:none marker preserved under Unicode width pressure at 60 cols", () => {
+    const line = buildStatusLine({
+      connected: true,
+      sessionWord: "active",
+      ownerWord: "執筆者コード (token none)",
+      pendingCount: 1,
+      ledgerSeq: 3,
+      focusWord: "CLAUDE",
+      width: 60,
+    });
+    expect(displayWidth(line.trimEnd())).toBeLessThanOrEqual(60);
+    expect(line).toContain("T:none");
+    expect(line).not.toContain("#0");
+  });
+
+  test("F1e. positive #N marker preserved under Unicode width pressure at 60 cols", () => {
+    const line = buildStatusLine({
+      connected: true,
+      sessionWord: "active",
+      ownerWord: "執筆者コード #42",
+      pendingCount: 1,
+      ledgerSeq: 3,
+      focusWord: "CLAUDE",
+      width: 60,
+    });
+    expect(displayWidth(line.trimEnd())).toBeLessThanOrEqual(60);
+    expect(line).toContain("#42");
+  });
+
+  test("F1f. truncateToWidth budgets by display cells, not UTF-16 length", () => {
+    // CJK characters: each is 1 UTF-16 code unit but 2 display cells.
+    // "日本語テストabc" = 13 display cells (5×2 + 3×1).
+    const cjk = "日本語テストabc";
+    // Truncate to 10 display cells → with … marker (1 cell), budget = 9.
+    // 4 CJK chars (8 cells) fit, + … marker = 9 cells ≤ 10.
+    const result = truncateToWidth(cjk, 10);
+    expect(displayWidth(result)).toBeLessThanOrEqual(10);
+    // Must contain CJK characters and the truncation marker, not ASCII tail
+    expect(result).toContain("…");
+    expect(result).toContain("日");
+    // Must NOT contain the ASCII tail that would only fit under .length budgeting
+    expect(result).not.toContain("abc");
+  });
+
+  test("F1g. emoji content handled correctly by truncateToWidth", () => {
+    // Emoji are 2 display cells each
+    const emojiText = "hello 🎉🚀💻 world";
+    const result = truncateToWidth(emojiText, 8);
+    expect(displayWidth(result)).toBeLessThanOrEqual(8);
+  });
+
+  test("F1h. combining marks do not inflate display width", () => {
+    // e + combining acute → 1 display cell per grapheme cluster
+    const combining = "café résumé naïve";
+    const result = truncateToWidth(combining, 6);
+    expect(displayWidth(result)).toBeLessThanOrEqual(6);
+  });
+
+  test("F1i. no row wrapping at 60 cols with mixed CJK and ASCII content", async () => {
+    const snapshot: BrokerSnapshot = {
+      ...makeConnectedSnapshot(),
+      activeWriter: "実行クリエイティブコード",
+      fencingToken: 42,
+    };
+    for (const w of [60, 80]) {
+      const line = buildStatusLine({
+        connected: true,
+        sessionWord: "active",
+        ownerWord: "実行クリエイティブコード #42",
+        pendingCount: 1,
+        ledgerSeq: 3,
+        focusWord: "GOVERNANCE",
+        width: w,
+      });
+      expect(displayWidth(line.trimEnd())).toBeLessThanOrEqual(w);
+      // Must still contain the token
+      expect(line).toContain("#42");
     }
   });
 });

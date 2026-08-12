@@ -36,16 +36,15 @@ export function AntigravityPane({ active, state, ptyOutput }: AntigravityPanePro
   const writer = isActiveWriter(state, surface);
   const tok = writerToken(state, surface);
   const live = livenessWord(state);
-  const disconnected = live !== "LIVE";
 
   const headerParts: string[] = ["ANTIGRAVITY"];
   if (active) headerParts.push("FOCUSED");
   if (writer && tok !== null) {
     headerParts.push("WRITER tok#" + String(tok));
-  } else if (disconnected) {
-    // No current-writer claim while disconnected — show an explicit ended
-    // word. Real buffered PTY output below is still preserved.
-    headerParts.push("STREAM ENDED");
+  } else if (live !== "LIVE") {
+    // No current-writer claim while not live (disconnected, interrupted,
+    // or incident). Show the truthful liveness word instead.
+    headerParts.push(live);
   }
   headerParts.push(role);
   headerParts.push(model);

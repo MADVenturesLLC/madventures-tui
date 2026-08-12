@@ -781,8 +781,8 @@ describe("8. Narrow mode (60×24): only the selected surface renders", () => {
     try {
       await setup.flush();
       const frame = setup.captureCharFrame();
-      // Governance content visible
-      expect(frame).toContain("Identities");
+      // Governance content visible (Phase 2 redesigned pane shows GOVERNANCE title)
+      expect(frame).toContain("GOVERNANCE");
       // Claude pane content not rendered (only governance surface)
       expect(frame).not.toContain("CLAUDE CODE");
     } finally {
@@ -825,8 +825,9 @@ describe("10. Governance and Events remain reachable and render full-width when 
     try {
       await setup.flush();
       const frame = setup.captureCharFrame();
-      expect(frame).toContain("Identities");
-      expect(frame).toContain("Governance");
+      // Phase 2 redesigned pane shows GOVERNANCE title and permission scope
+      expect(frame).toContain("GOVERNANCE");
+      expect(frame).toContain("Read:");
     } finally {
       setup.renderer.destroy();
     }

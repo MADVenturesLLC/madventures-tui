@@ -60,9 +60,11 @@ export interface RouteKeyInput {
  * 1. showApprovalDialog === true
  * 2. displayedApprovalId !== null
  * 3. focus === "governance" (Claude, Antigravity, Events are ALL inert)
- * 4. The stored approval ID still exists in the snapshot's pendingApprovals
- * 5. approval.colorState.kind === "pending" (expired/approved/rejected are inert)
- * 6. The approval ID is NOT in resolvedApprovalIds (no duplicate submission)
+ * 4. No incident/interruption has precedence (fail closed when
+ *    snapshot.sessionState === "interrupted" or snapshot.incident !== null)
+ * 5. The stored approval ID still exists in the snapshot's pendingApprovals
+ * 6. approval.colorState.kind === "pending" (expired/approved/rejected are inert)
+ * 7. The approval ID is NOT in resolvedApprovalIds (no duplicate submission)
  */
 export function validateApprovalResolution(
   state: KeyboardRouterState,
@@ -78,18 +80,25 @@ export function validateApprovalResolution(
   // are ALL inert even if the dialog is somehow visible.
   if (state.focus !== "governance") return null;
 
-  // 4. The stored approval must still exist in the pending array.
+  // 4. Incident/interruption precedence — fail closed. A hidden decision
+  // must never be accepted behind the incident surface. Both keyboard
+  // resolution and any shared component resolution callback inherit this
+  // guard because they all call this single function.
+  if (snapshot?.sessionState === "interrupted") return null;
+  if (snapshot?.incident) return null;
+
+  // 5. The stored approval must still exist in the pending array.
   // If it's been removed, resolution emits nothing.
   const pending = snapshot?.pendingApprovals?.find(
     (a: PendingApproval) => a.id === state.displayedApprovalId,
   );
   if (!pending) return null;
 
-  // 5. The approval must still be in "pending" state — not expired,
+  // 6. The approval must still be in "pending" state — not expired,
   // approved, or rejected.
   if (pending.colorState.kind !== "pending") return null;
 
-  // 6. Prevent duplicate submission — if this ID was already submitted,
+  // 7. Prevent duplicate submission — if this ID was already submitted,
   // it must remain non-resolvable.
   if (state.resolvedApprovalIds.has(pending.id)) return null;
 

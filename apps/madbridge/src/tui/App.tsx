@@ -1,23 +1,25 @@
 // apps/madbridge/src/tui/App.tsx
-// Root layout — three-pane OpenTUI React UI.
+// Root layout — Writer's Stage TUI.
 // React is presentation only: it projects broker state and routes keyboard
 // input. It cannot decide authority, permissions, ownership, evidence
 // acceptance, hashing, or recovery.
 //
-// There is NO approval toggle. The ApprovalDialog emits typed events with
-// explicit text for every color state. The broker records the ledger entry.
+// There is NO approval toggle. The DecisionStrip is the live Founder
+// decision surface (double border). It is presentation-only — resolution
+// goes through the keyboard router's shared validation guard. The broker
+// records the ledger entry.
 //
 // Approval keys are INERT unless ALL of:
-//   - showApprovalDialog === true
-//   - displayedApprovalId !== null
+//   - a pending approval is bound (displayedApprovalId !== null)
 //   - focus === "governance"
+//   - no incident/interruption has precedence
 //   - the stored approval still exists in the snapshot
 //   - approval.colorState.kind === "pending"
 //   - the approval ID is not already in resolvedApprovalIds
 // Claude, Antigravity, and Events focus are ALL inert.
 //
-// The ApprovalDialog.onResolve callback goes through the SAME guard — it
-// does not bypass the keyboard-router validation.
+// Resolution flows through a single guarded path:
+//   routeKeyEvent() → validateApprovalResolution() → onApprovalResolve
 
 import { useReducer, useCallback, useMemo, useEffect, useRef } from "react";
 import { useKeyboard as useOpenTuiKeyboard, useTerminalDimensions } from "@opentui/react";
@@ -25,7 +27,8 @@ import type { KeyEvent } from "@opentui/core";
 import { ClaudePane } from "./panes/ClaudePane";
 import { AntigravityPane } from "./panes/AntigravityPane";
 import { GovernancePane } from "./panes/GovernancePane";
-import { ApprovalDialog } from "./components/ApprovalDialog";
+import { DecisionStrip } from "./components/DecisionStrip";
+import { IncidentBand, incidentActive } from "./components/IncidentBand";
 import { StatusBar } from "./components/StatusBar";
 import { FixtureBanner } from "./components/FixtureBanner";
 import { EventLog } from "./components/EventLog";
@@ -35,7 +38,7 @@ import { useBrokerState } from "./hooks/useBrokerState";
 import { loadKeybindings, resolveKey, translateKeyEvent } from "./keybindings";
 import type { KeyAction } from "./keybindings";
 import type { FocusTarget, BrokerSnapshot, ApprovalRequestEvent, PendingApproval } from "./types";
-import { routeKeyEvent, validateApprovalResolution, pruneResolvedIds } from "./keyboard-router";
+import { routeKeyEvent, pruneResolvedIds } from "./keyboard-router";
 import type { KeyboardRouterState } from "./keyboard-router";
 
 // Wide mode threshold: terminal width >= 80 shows stage + dock composition.
@@ -154,17 +157,20 @@ export function App({ subscribe, onPtyWrite, onApprovalResolve, onQuit, fixture 
     }
   }, [state, ui.resolvedApprovalIds, dispatchSync]);
 
-  // Auto-open decision dialog when governance is focused and a pending
-  // approval exists and no dialog is currently shown. This makes the
-  // ApprovalDialog reachable. Prevents auto-reopen of already-resolved
-  // approvals while the snapshot still contains them.
+  // Auto-bind the decision surface to a pending approval whenever one
+  // exists and no incident has precedence. The DecisionStrip is visible
+  // across ALL focus targets (not just governance) so the Founder always
+  // sees what awaits decision. The surface is only ARMED for resolution
+  // when Governance is focused.
+  //
+  // Stored-ID binding: the displayed approval ID is set once and never
+  // recalculated from pendingApprovals[0] at resolution time. Queue
+  // reordering cannot change which approval is resolved.
   useEffect(() => {
-    // Use uiRef.current for the resolvedApprovalIds check because the
-    // dispatchSync wrapper updates the ref synchronously, while the
-    // React state (ui.resolvedApprovalIds) may lag behind by one render
-    // cycle when multiple keypresses are processed in a single flush.
     const currentResolved = uiRef.current.resolvedApprovalIds;
-    if (ui.focus === "governance" && !ui.showApprovalDialog) {
+
+    // If no incident is active, bind to the first unresolved pending approval.
+    if (!incidentActive(state) && !ui.showApprovalDialog) {
       const firstPending = state?.pendingApprovals?.find(
         (a: PendingApproval) =>
           a.colorState.kind === "pending" &&
@@ -174,15 +180,25 @@ export function App({ subscribe, onPtyWrite, onApprovalResolve, onQuit, fixture 
         dispatchSync({ type: "show-approval", show: true, approvalId: firstPending.id });
       }
     }
-    // If the displayed approval disappears from the pending array or
-    // is no longer pending, close the dialog safely.
+
+    // If the displayed approval disappears, expires, changes state, or
+    // becomes locally resolved, close/unarm the surface safely. Never
+    // substitute another approval during the same key action.
     if (ui.showApprovalDialog && ui.displayedApprovalId !== null) {
       const stillPending = state?.pendingApprovals?.find(
         (a: PendingApproval) => a.id === ui.displayedApprovalId,
       );
-      if (!stillPending || stillPending.colorState.kind !== "pending") {
+      if (!stillPending || stillPending.colorState.kind !== "pending" || currentResolved.has(stillPending.id)) {
         dispatchSync({ type: "show-approval", show: false, approvalId: null });
       }
+    }
+
+    // If an incident arrives, close the decision surface — IncidentBand
+    // takes precedence. The displayed approval remains in the snapshot's
+    // pending array (represented by the StatusBar pending count) but the
+    // decision surface is unarmed.
+    if (incidentActive(state) && ui.showApprovalDialog) {
+      dispatchSync({ type: "show-approval", show: false, approvalId: null });
     }
   }, [ui.focus, ui.showApprovalDialog, ui.displayedApprovalId, ui.resolvedApprovalIds, state, dispatchSync]);
 
@@ -234,48 +250,12 @@ export function App({ subscribe, onPtyWrite, onApprovalResolve, onQuit, fixture 
     }
   });
 
-  // The approval displayed in the dialog — looked up by the stored ID,
-  // NOT pendingApprovals[0].
+  // The approval displayed in the DecisionStrip — looked up by the stored
+  // ID, NOT pendingApprovals[0]. Queue reordering cannot change which
+  // approval is resolved.
   const pendingApproval = state?.pendingApprovals?.find(
     (a: PendingApproval) => a.id === ui.displayedApprovalId,
   ) ?? null;
-
-  // Shared resolution function — used by BOTH the keyboard router and
-  // the ApprovalDialog.onResolve callback. This prevents the component
-  // callback from bypassing the keyboard-router guard.
-  const resolveApproval = useCallback((accept: boolean) => {
-    const routerState: KeyboardRouterState = {
-      focus: ui.focus,
-      showApprovalDialog: ui.showApprovalDialog,
-      displayedApprovalId: ui.displayedApprovalId,
-      resolvedApprovalIds: ui.resolvedApprovalIds,
-    };
-
-    const pending = validateApprovalResolution(routerState, state);
-    if (!pending) {
-      // If the stored approval is gone or not pending, close safely.
-      if (ui.showApprovalDialog && ui.displayedApprovalId !== null) {
-        const stillExists = state?.pendingApprovals?.find(
-          (a: PendingApproval) => a.id === ui.displayedApprovalId,
-        );
-        if (!stillExists) {
-          dispatchSync({ type: "show-approval", show: false, approvalId: null });
-        }
-      }
-      return;
-    }
-
-    handleApprovalResolve({
-      taskId: pending.taskId,
-      actor: pending.actor,
-      scope: pending.scope,
-      repositoryFingerprint: pending.repositoryFingerprint,
-      timestamp: new Date().toISOString(),
-      resolution: accept ? "accept" : "reject",
-    });
-    dispatchSync({ type: "add-resolved", id: pending.id });
-    dispatchSync({ type: "show-approval", show: false, approvalId: null });
-  }, [ui, state, handleApprovalResolve, dispatchSync]);
 
   // ─── Composition: wide (>=80) vs narrow (<80) ───
   // Wide mode: the focused agent/surface occupies the full-width stage; the
@@ -293,84 +273,117 @@ export function App({ subscribe, onPtyWrite, onApprovalResolve, onQuit, fixture 
   const governanceFocused = ui.focus === "governance";
   const eventsFocused = ui.focus === "events";
 
+  // IncidentBand is active when sessionState is interrupted or an incident
+  // record exists. It takes precedence over DecisionStrip.
+  const incident = incidentActive(state);
+
+  // DecisionStrip binding: visible only when no incident is active AND a
+  // pending approval is bound AND it still exists and is pending.
+  // The surface is ARMED for resolution only when Governance is focused.
+  // `pendingApproval` is already looked up by stored ID above.
+  const decisionVisible =
+    !incident &&
+    ui.showApprovalDialog &&
+    pendingApproval !== null &&
+    pendingApproval.colorState.kind === "pending" &&
+    !ui.resolvedApprovalIds.has(pendingApproval.id);
+
+  // Compute position: 1-based index among unresolved pending approvals.
+  const unresolvedPending = state?.pendingApprovals?.filter(
+    (a) => a.colorState.kind === "pending" && !ui.resolvedApprovalIds.has(a.id),
+  ) ?? [];
+  const decisionPosition = pendingApproval
+    ? unresolvedPending.findIndex((a) => a.id === pendingApproval.id) + 1
+    : 1;
+
+  // Armed = Governance focused + no incident + approval is pending + bound.
+  const decisionArmed = decisionVisible && governanceFocused && !incident;
+
   return (
     <box flexDirection="column" flexGrow={1}>
-      {/* ── Stage area ── */}
-      {wideMode ? (
-        <>
-          {/* Wide mode: focused surface is the full-width stage. */}
-          {claudeFocused && (
-            <ClaudePane active={true} state={state} ptyOutput={ui.claudeOutput} />
-          )}
-          {antigravityFocused && (
-            <AntigravityPane active={true} state={state} ptyOutput={ui.antigravityOutput} />
-          )}
-          {governanceFocused && (
-            <GovernancePane active={true} state={state} />
-          )}
-          {eventsFocused && (
-            <EventLog entries={state?.eventLog ?? []} />
-          )}
+      {/* ── IncidentBand: before the stage area, takes precedence ── */}
+      {incident && <IncidentBand state={state} />}
 
-          {/* Dock strips: the non-focused agent(s) appear as compact strips. */}
-          {!claudeFocused && !governanceFocused && !eventsFocused && (
-            // Antigravity is focused → Claude is docked.
-            <DockStrip surface="claude-code" state={state} ptyOutput={ui.claudeOutput} />
-          )}
-          {!antigravityFocused && !governanceFocused && !eventsFocused && (
-            // Claude is focused → Antigravity is docked.
-            <DockStrip surface="antigravity" state={state} ptyOutput={ui.antigravityOutput} />
-          )}
-          {governanceFocused && (
-            // Governance is the stage → both agents are docked and reachable.
-            <>
+      {/* ── Stage area (wrapped so bands/status bar get reserved space) ── */}
+      <box flexGrow={1} flexDirection="column">
+        {wideMode ? (
+          <>
+            {/* Wide mode: focused surface is the full-width stage. */}
+            {claudeFocused && (
+              <ClaudePane active={true} state={state} ptyOutput={ui.claudeOutput} />
+            )}
+            {antigravityFocused && (
+              <AntigravityPane active={true} state={state} ptyOutput={ui.antigravityOutput} />
+            )}
+            {governanceFocused && (
+              <GovernancePane active={true} state={state} />
+            )}
+            {eventsFocused && (
+              <EventLog entries={state?.eventLog ?? []} />
+            )}
+
+            {/* Dock strips: the non-focused agent(s) appear as compact strips. */}
+            {!claudeFocused && !governanceFocused && !eventsFocused && (
+              // Antigravity is focused → Claude is docked.
               <DockStrip surface="claude-code" state={state} ptyOutput={ui.claudeOutput} />
+            )}
+            {!antigravityFocused && !governanceFocused && !eventsFocused && (
+              // Claude is focused → Antigravity is docked.
               <DockStrip surface="antigravity" state={state} ptyOutput={ui.antigravityOutput} />
-            </>
-          )}
-          {eventsFocused && (
-            // Events is the stage → both agents are docked and reachable.
-            <>
-              <DockStrip surface="claude-code" state={state} ptyOutput={ui.claudeOutput} />
-              <DockStrip surface="antigravity" state={state} ptyOutput={ui.antigravityOutput} />
-            </>
-          )}
-        </>
-      ) : (
-        <>
-          {/* Narrow mode: tab row + exactly one selected surface. */}
-          <PaneTabs focus={ui.focus} />
-          {claudeFocused && (
-            <ClaudePane active={true} state={state} ptyOutput={ui.claudeOutput} />
-          )}
-          {antigravityFocused && (
-            <AntigravityPane active={true} state={state} ptyOutput={ui.antigravityOutput} />
-          )}
-          {governanceFocused && (
-            <GovernancePane active={true} state={state} />
-          )}
-          {eventsFocused && (
-            <EventLog entries={state?.eventLog ?? []} />
-          )}
-        </>
+            )}
+            {governanceFocused && (
+              // Governance is the stage → both agents are docked and reachable.
+              <>
+                <DockStrip surface="claude-code" state={state} ptyOutput={ui.claudeOutput} />
+                <DockStrip surface="antigravity" state={state} ptyOutput={ui.antigravityOutput} />
+              </>
+            )}
+            {eventsFocused && (
+              // Events is the stage → both agents are docked and reachable.
+              <>
+                <DockStrip surface="claude-code" state={state} ptyOutput={ui.claudeOutput} />
+                <DockStrip surface="antigravity" state={state} ptyOutput={ui.antigravityOutput} />
+              </>
+            )}
+          </>
+        ) : (
+          <>
+            {/* Narrow mode: tab row + exactly one selected surface. */}
+            <PaneTabs focus={ui.focus} />
+            {claudeFocused && (
+              <ClaudePane active={true} state={state} ptyOutput={ui.claudeOutput} />
+            )}
+            {antigravityFocused && (
+              <AntigravityPane active={true} state={state} ptyOutput={ui.antigravityOutput} />
+            )}
+            {governanceFocused && (
+              <GovernancePane active={true} state={state} />
+            )}
+            {eventsFocused && (
+              <EventLog entries={state?.eventLog ?? []} />
+            )}
+          </>
+        )}
+      </box>
+
+      {/* ── DecisionStrip: full width after stage/dock, before banner/status.
+          Replaces the overlay ApprovalDialog as the live decision surface.
+          Not rendered concurrently with IncidentBand (incident takes
+          precedence). Presentation-only — resolution goes through the
+          existing shared validation and resolution logic. ── */}
+      {decisionVisible && pendingApproval && (
+        <DecisionStrip
+          approval={pendingApproval}
+          position={decisionPosition}
+          total={unresolvedPending.length}
+          armed={decisionArmed}
+          keybindings={keybindings}
+        />
       )}
 
       {/* Bottom: fixture banner (separate truth band) + status bar. */}
       {fixture && <FixtureBanner />}
       <StatusBar state={state} connected={connected} focus={ui.focus} />
-
-      {/* Overlay: approval dialog — visible only when showApprovalDialog is
-          true AND the displayed approval still exists and is pending.
-          The onResolve callback goes through the SAME validation guard as
-          the keyboard router — it does not bypass the check. */}
-      {ui.showApprovalDialog && pendingApproval && pendingApproval.colorState.kind === "pending" && (
-        <ApprovalDialog
-          approval={pendingApproval}
-          onResolve={() => resolveApproval(true)}
-          onReject={() => resolveApproval(false)}
-          keybindings={keybindings}
-        />
-      )}
     </box>
   );
 }

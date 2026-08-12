@@ -57,10 +57,16 @@ export function resolveExecutionId(state: BrokerSnapshot | null, surface: AgentS
  *
  * Uses the snapshot's activeWriter (the execution_id) — never focus.
  *
- * Truthfulness: a writer claim is only valid while the session is connected.
- * When `connected === false`, no agent is the current writer, even if the
- * snapshot still carries a retained `activeWriter`/`fencingToken`. The
- * caller should render a `STREAM ENDED` / `DISCONNECTED` word instead.
+ * Truthfulness: a writer claim is only valid while the session is connected
+ * AND not interrupted AND no incident is active.
+ *   - `connected === false` → no current writer (retained data is historical)
+ *   - `sessionState === "interrupted"` → writing is frozen; the retained
+ *     token is incident evidence, not live authority
+ *   - `incident !== null` → an incident takes precedence; no writer claim
+ *
+ * The caller should render a `STREAM ENDED` / `WRITING FROZEN` /
+ * `SESSION INTERRUPTED` word instead. The retained token may still be
+ * displayed as incident evidence — just not as an active writer badge.
  */
 export function isActiveWriter(
   state: BrokerSnapshot | null,
@@ -68,6 +74,8 @@ export function isActiveWriter(
 ): boolean {
   if (!state) return false;
   if (!state.connected) return false;
+  if (state.sessionState === "interrupted") return false;
+  if (state.incident !== null) return false;
   const id = resolveIdentity(state, surface);
   if (!id) return false;
   return state.activeWriter === id.execution_id;
@@ -83,19 +91,24 @@ export function writerToken(state: BrokerSnapshot | null, surface: AgentSurface)
 }
 
 /**
- * A truthful liveness word derived from the snapshot connection state.
+ * A truthful liveness word derived from the snapshot state.
  *
- * - connected === true  → "LIVE"
- * - connected === false → "STREAM ENDED" (the stream is no longer live; any
- *   retained writer/identity is historical, not current)
- * - state === null      → "STREAM ENDED"
+ * - connected AND active AND no incident → "LIVE"
+ * - sessionState === "interrupted"       → "WRITING FROZEN"
+ * - incident !== null                    → "WRITING FROZEN"
+ * - connected === false                  → "STREAM ENDED"
+ * - state === null                       → "STREAM ENDED"
  *
  * This is text, never a color claim. The caller may still display real
- * buffered PTY output alongside this word.
+ * buffered PTY output alongside this word. The retained fencing token
+ * may be shown as incident evidence — just not as a live writer badge.
  */
 export function livenessWord(state: BrokerSnapshot | null): string {
-  if (state && state.connected) return "LIVE";
-  return "STREAM ENDED";
+  if (!state) return "STREAM ENDED";
+  if (!state.connected) return "STREAM ENDED";
+  if (state.sessionState === "interrupted") return "WRITING FROZEN";
+  if (state.incident !== null) return "WRITING FROZEN";
+  return "LIVE";
 }
 
 /**
@@ -150,4 +163,75 @@ export function countBufferedLines(output: string): number {
     count--;
   }
   return count;
+}
+
+/**
+ * Measure the terminal display width of a string in columns.
+ *
+ * Uses Intl.Segmenter for grapheme-cluster segmentation, then assigns each
+ * cluster a width of 2 (CJK/full-width/emoji) or 1 (all others). Combining
+ * marks attach to their base and do not inflate the width. This matches
+ * terminal rendering where CJK and emoji occupy two cells.
+ */
+export function displayWidth(text: string): number {
+  const segmenter = new Intl.Segmenter("en", { granularity: "grapheme" });
+  let width = 0;
+  for (const { segment } of segmenter.segment(text)) {
+    const cp = segment.codePointAt(0)!;
+    if (
+      (cp >= 0x1100 && cp <= 0x115f) ||
+      (cp >= 0x2329 && cp <= 0x232a) ||
+      (cp >= 0x2e80 && cp <= 0xa4cf && cp !== 0x303f) ||
+      (cp >= 0xac00 && cp <= 0xd7a3) ||
+      (cp >= 0xf900 && cp <= 0xfaff) ||
+      (cp >= 0xfe30 && cp <= 0xfe4f) ||
+      (cp >= 0xff00 && cp <= 0xff60) ||
+      (cp >= 0xffe0 && cp <= 0xffe6) ||
+      (cp >= 0x1f000 && cp <= 0x1f02f) ||
+      (cp >= 0x1f300 && cp <= 0x1faff) ||
+      (cp >= 0x20000 && cp <= 0x3fffd)
+    ) {
+      width += 2;
+    } else {
+      width += 1;
+    }
+  }
+  return width;
+}
+
+/**
+ * Slice a string to fit within `maxDisplayWidth` terminal display columns,
+ * respecting grapheme-cluster boundaries. Returns the substring (by grapheme
+ * segments) whose display width is <= maxDisplayWidth.
+ */
+export function sliceByDisplayWidth(text: string, maxDisplayWidth: number): string {
+  if (maxDisplayWidth <= 0) return "";
+  const segmenter = new Intl.Segmenter("en", { granularity: "grapheme" });
+  let width = 0;
+  let result = "";
+  for (const { segment } of segmenter.segment(text)) {
+    const segWidth = displayWidth(segment);
+    if (width + segWidth > maxDisplayWidth) break;
+    width += segWidth;
+    result += segment;
+  }
+  return result;
+}
+
+/**
+ * Truncate a string to fit within `maxWidth` DISPLAY columns, appending a
+ * visible truncation marker (`…`) if truncation occurs. Returns the original
+ * string unchanged if it already fits.
+ *
+ * Budgets by terminal display cells (CJK = 2, ASCII = 1), not UTF-16 code
+ * units. Never splits grapheme clusters, surrogate pairs, or combining marks.
+ * The result's display width never exceeds `maxWidth`.
+ */
+export function truncateToWidth(text: string, maxWidth: number): string {
+  if (displayWidth(text) <= maxWidth) return text;
+  if (maxWidth <= 0) return "";
+  const MARKER = "…";
+  if (maxWidth <= displayWidth(MARKER)) return sliceByDisplayWidth(text, maxWidth);
+  const budget = maxWidth - displayWidth(MARKER);
+  return sliceByDisplayWidth(text, budget) + MARKER;
 }

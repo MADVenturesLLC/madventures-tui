@@ -69,16 +69,16 @@ export function buildDockLine(
   const model = resolveModel(state, surface);
   const lines = countBufferedLines(ptyOutput);
   const live = livenessWord(state);
-  const disconnected = live !== "LIVE";
 
   // Build the priority-ordered field list. WRITER badge is only emitted
-  // while connected AND the docked agent is the current writer.
+  // while live AND the docked agent is the current writer.
   const fields: string[] = [label, "docked"];
 
-  if (disconnected) {
-    // No current-writer claim while disconnected — show the ended word in
-    // the WRITER slot's priority position.
-    fields.push("STREAM ENDED");
+  if (live !== "LIVE") {
+    // No current-writer claim while not live (disconnected, interrupted,
+    // or incident). Show the truthful liveness word in the WRITER slot's
+    // priority position.
+    fields.push(live);
   } else if (isActiveWriter(state, surface)) {
     const tok = writerToken(state, surface);
     fields.push("WRITER tok#" + String(tok));

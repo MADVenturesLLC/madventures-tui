@@ -10,9 +10,15 @@
 //   CONN|S:active|W:exec-claude-code#3|P:1|F:CLAUDE|L:#3
 // Full format (wide):
 //   CONNECTED | session active | writer exec-claude-code #3 | pending 1 | focus CLAUDE | ledger #3
+//
+// Fencing tokens are 1-based. When no token has been issued the writer field
+// carries the explicit marker " T:none" instead of a fabricated "#0":
+//   CONN|S:active|W:exec-claude-code T:none|P:1|F:CLAUDE|L:#3
+// The marker is space-separated so the writer stays exactly ONE pipe field.
 
 import { useTerminalDimensions } from "@opentui/react";
 import type { BrokerSnapshot, FocusTarget } from "../types";
+import { displayWidth, sliceByDisplayWidth } from "./agent-identity";
 
 interface Props {
   state: BrokerSnapshot | null;
@@ -87,7 +93,7 @@ export function buildStatusLine(input: StatusLineInput): string {
   // ── Wide format (>=100): full words with " | " separators ──
   const wideTokens = [connToken, sessToken, writerToken, pendToken, focusToken, ledgerToken];
   const wideLine = wideTokens.join(" | ");
-  if (wideLine.length <= width) {
+  if (displayWidth(wideLine) <= width) {
     return padToWidth(wideLine, width);
   }
 
@@ -103,7 +109,7 @@ export function buildStatusLine(input: StatusLineInput): string {
   const writerMedium = "W:" + abbreviateWriter(input.ownerWord, 30);
   const medTokens = [connCompact, sessCompact, writerMedium, pendCompact, focusCompact, ledgerCompact];
   const medLine = medTokens.join(" | ");
-  if (medLine.length <= width) {
+  if (displayWidth(medLine) <= width) {
     return padToWidth(medLine, width);
   }
 
@@ -115,20 +121,20 @@ export function buildStatusLine(input: StatusLineInput): string {
   const SEP_NARROW = "|";
   const sepCount = 5; // 6 tokens → 5 separators
 
-  // Fixed tokens (all except writer)
+  // Fixed tokens (all except writer) — budget by display width
   const fixedTokens = [connCompact, sessCompact, pendCompact, focusCompact, ledgerCompact];
-  const fixedLen = fixedTokens.reduce((sum, t) => sum + t.length, 0) + sepCount * SEP_NARROW.length;
+  const fixedLen = fixedTokens.reduce((sum, t) => sum + displayWidth(t), 0) + sepCount * displayWidth(SEP_NARROW);
 
-  // Writer budget = width - fixedLen - "W:".length
+  // Writer budget = width - fixedLen - displayWidth("W:")
   // Must be at least 3 (for "#N" minimum) to preserve the fencing token.
   const writerPrefix = "W:";
-  const writerBudget = Math.max(3, width - fixedLen - writerPrefix.length);
+  const writerBudget = Math.max(3, width - fixedLen - displayWidth(writerPrefix));
 
   const writerNarrow = writerPrefix + abbreviateWriter(input.ownerWord, writerBudget);
   const narrowTokens = [connCompact, sessCompact, writerNarrow, pendCompact, focusCompact, ledgerCompact];
   const narrowLine = narrowTokens.join(SEP_NARROW);
 
-  if (narrowLine.length <= width) {
+  if (displayWidth(narrowLine) <= width) {
     return padToWidth(narrowLine, width);
   }
 
@@ -139,7 +145,7 @@ export function buildStatusLine(input: StatusLineInput): string {
   const minimalTokens = [connCompact, sessCompact, writerMinimal, pendCompact, focusCompact, ledgerCompact];
   const minimalLine = minimalTokens.join(SEP_NARROW);
 
-  if (minimalLine.length <= width) {
+  if (displayWidth(minimalLine) <= width) {
     return padToWidth(minimalLine, width);
   }
 
@@ -151,18 +157,20 @@ export function buildStatusLine(input: StatusLineInput): string {
     const dropIndices = new Set(dropOrder.slice(0, dropCount));
     const kept = narrowTokens.filter((_, i) => !dropIndices.has(i));
     const line = kept.join("|");
-    if (line.length <= width) {
+    if (displayWidth(line) <= width) {
       return padToWidth(line, width);
     }
   }
 
-  // Extreme narrow: hard truncate — never wrap.
-  return padToWidth(narrowLine.slice(0, width), width);
+  // Extreme narrow: hard truncate by display width — never wrap.
+  return padToWidth(sliceByDisplayWidth(narrowLine, width), width);
 }
 
 function padToWidth(line: string, width: number): string {
-  if (line.length < width) {
-    return line + " ".repeat(width - line.length);
+  // Pad by display width so Unicode content doesn't under/over-pad.
+  const dw = displayWidth(line);
+  if (dw < width) {
+    return line + " ".repeat(width - dw);
   }
   return line;
 }
@@ -170,39 +178,61 @@ function padToWidth(line: string, width: number): string {
 /**
  * Deterministically abbreviate a writer token to fit within `maxLen` chars.
  *
- * The input is the describeOwner() output, e.g. "exec-claude-code #3" or
- * "free" or "transfer-req #5". The fencing token (#N) is always preserved.
+ * The input is the describeOwner() output, e.g. "exec-claude-code #3",
+ * "exec-claude-code (token none)", or "transfer-req #5". Issued fencing
+ * tokens (#N) are always preserved. The explicit no-token state is compacted
+ * to the marker " T:none" — space-separated, never "|T:none" and never the
+ * collapsed "tokennone". The narrow format is pipe-delimited, so a "|" inside
+ * the writer value would read as a seventh governance fact; the single space
+ * keeps the writer exactly one field while staying readable.
  * The writer ID is truncated to fit the remaining budget.
  *
  * Examples with maxLen=18:
  *   "exec-claude-code #3" → "exec-claude-co #3"  (ID truncated to 13)
  *   "exec-claude-code-sonnet-4-20260809 #42" → "exec-claude-c #42"
+ *   "exec-claude-code (token none)" → "exec-cla T:none"
  *   "free" → "free"
  *   "none" → "none"
  */
+const NO_TOKEN_MARKER = " T:none";
+
 export function abbreviateWriter(ownerWord: string, maxLen: number): string {
+  // maxLen is a display-width budget, not a UTF-16 length.
+  // Explicit no-token state: keep the marker attached to the writer ID with a
+  // single space, and preserve the marker the same way an issued "#N" token is
+  // preserved — the ID yields budget first.
+  const noTokenMatch = /^(.*?)\s*\(token\s+none\)\s*$/i.exec(ownerWord);
+  if (noTokenMatch) {
+    const id = (noTokenMatch[1] ?? "").replace(/\s+/g, "");
+    if (displayWidth(id) + displayWidth(NO_TOKEN_MARKER) <= maxLen) return id + NO_TOKEN_MARKER;
+    const idBudget = maxLen - displayWidth(NO_TOKEN_MARKER);
+    // Marker alone exceeds the budget — keep the marker, drop the ID.
+    if (idBudget <= 0) return NO_TOKEN_MARKER.trimStart().slice(0, maxLen);
+    return sliceByDisplayWidth(id, idBudget) + NO_TOKEN_MARKER;
+  }
+
   // Remove spaces (the compact format has no spaces)
   const noSpace = ownerWord.replace(/\s+/g, "");
 
-  if (noSpace.length <= maxLen) return noSpace;
+  if (displayWidth(noSpace) <= maxLen) return noSpace;
 
   // Split on "#" to separate the ID from the token
   const hashIdx = noSpace.lastIndexOf("#");
   if (hashIdx === -1) {
-    // No token — just truncate
-    return noSpace.slice(0, maxLen);
+    // No token — just truncate by display width
+    return sliceByDisplayWidth(noSpace, maxLen);
   }
 
   const tokenPart = noSpace.slice(hashIdx); // e.g. "#42"
   const idPart = noSpace.slice(0, hashIdx); // e.g. "exec-claude-code"
-  const idBudget = maxLen - tokenPart.length;
+  const idBudget = maxLen - displayWidth(tokenPart);
 
   if (idBudget <= 0) {
     // Token alone exceeds budget — keep token, drop ID
-    return tokenPart.slice(0, maxLen);
+    return sliceByDisplayWidth(tokenPart, maxLen);
   }
 
-  return idPart.slice(0, idBudget) + tokenPart;
+  return sliceByDisplayWidth(idPart, idBudget) + tokenPart;
 }
 
 /**
@@ -226,20 +256,35 @@ export function computeLedgerSeq(
   return max;
 }
 
+/**
+ * Describe the owner/writer state as a compact word for the StatusBar.
+ *
+ * Fencing tokens are 1-based. When fencingToken <= 0, no token has been
+ * issued. The UI must never present zero as issued authority — render
+ * "(token none)" instead of "#0" so the writer identity is preserved as
+ * historical/projected data without implying a token was granted.
+ *
+ * The parenthesized form avoids the " | " delimiter so the 120-column
+ * wide-mode line splits into exactly six facts, not seven.
+ */
 function describeOwner(state: BrokerSnapshot | null): string {
   if (!state) return "none";
   const o = state.ownershipState;
   const w = state.activeWriter;
   const tok = state.fencingToken;
+  const hasToken = tok > 0;
   switch (o) {
     case "free":
       return "free";
     case "owned":
-      return (w ?? "unknown") + " #" + String(tok);
+      if (hasToken) return (w ?? "unknown") + " #" + String(tok);
+      return (w ?? "unknown") + " (token none)";
     case "transfer-requested":
-      return "transfer-req #" + String(tok);
+      if (hasToken) return "transfer-req #" + String(tok);
+      return "transfer-req (token none)";
     case "sender-released":
-      return "released #" + String(tok);
+      if (hasToken) return "released #" + String(tok);
+      return "released (token none)";
     case "receiver-validating":
       return "validating";
     case "rejected":
