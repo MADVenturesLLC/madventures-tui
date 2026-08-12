@@ -1,11 +1,11 @@
 # MADVentures TUI — Phase 3A Production Runtime Foundation
 
-**Status:** Founder-approved architecture; contract addendum corrected for findings 1–12; pending Founder review of this SHA  
+**Status:** Founder-approved architecture; contract corrections through N1–N3 and remaining F4; pending Founder review of this SHA\
 **Date:** 2026-08-12  
 **Repository:** `MADVenturesLLC/madventures-tui`  
 **Baseline branch:** `main`  
 **Baseline SHA:** `0b942771fc07e5eb05203b1d3d641d3e8ad101f1`  
-**Corrects:** `203c310a0c4fdca74dbbc4622e91fafd4c7fe432` findings 1–12 and `e60e8c87fa00096b4db2e003f94914e312b08a17` findings F1–F6  
+**Corrects:** `203c310a0c4fdca74dbbc4622e91fafd4c7fe432` findings 1–12; `e60e8c87fa00096b4db2e003f94914e312b08a17` findings F1–F6; and `8564fcd1759c9b13216ada24873e6349666fcc2b` findings N1–N3 plus remaining F4\
 **Required Phase 3A merge state:** runtime foundation present behind a mandatory live-start gate  
 **Live-session certification:** deferred to Phase 3B
 
@@ -196,8 +196,10 @@ Only after preflight succeeds does the build phase:
    to `exec`, then launch that exact artifact in a new PTY/process group;
 7. perform live-session re-attestation; absence of a passing primitive makes
    the surface ineligible for live use;
-8. launch adapters; and
-9. in Phase 3B only, present the TUI after every required component is healthy.
+8. launch adapters;
+9. append `fencing_token_issued`, then `session_activated`, and expose the
+   first `active` snapshot only after both records are durable; and
+10. in Phase 3B only, present the TUI after every required component is healthy.
 
 Hash verification is per child and part of the launch path itself. No storage,
 broker, or lifeline step is allowed between the final verification and that
@@ -291,18 +293,21 @@ Any of the following interrupts the entire session:
 
 The broker performs interruption as one durable, ordered lifecycle sequence
 when writing remains possible: `session_interrupted` records the typed incident,
-`fencing_token_invalidated` makes the token unusable, and
-`session_closed` records terminal closure with `closure_kind:
-"interruption"`. The broker then terminates every governed process group and
-closes every client stream. `interrupted` is terminal-bound; no command can
-return that session to `active`. Recovery requires next-start reconciliation
-and a new Founder-authorized envelope. `session_resume` is legal only for
-`paused` sessions and is not interrupt recovery.
+`fencing_token_invalidated` makes the token unusable,
+`session_closing` records terminal intent, and `session_closed` records
+completed closure with `closure_kind: "interruption"`. Governed process-group
+termination occurs after `session_closing` and before `session_closed`; client
+streams close with the terminal transition. `interrupted` is terminal-bound;
+no command can return that session to `active`. Recovery requires next-start
+reconciliation and a new Founder-authorized envelope. `session_resume` is
+legal only for `paused` sessions and is not interrupt recovery.
 
 When durable writing is impossible—such as disk failure or supervisor
-`SIGKILL`—the next startup's ledger reconciliation detects and records an
-unclean closure. Reconciliation is a next-start activity, never an in-session
-phase. It is the record of last resort.
+`SIGKILL`—next-start reconciliation is the record of last resort. If no typed
+terminal prefix was durable, it appends `session_unclean_closure`. If a typed
+interruption or closing prefix was durable, it completes that exact prefix
+under Section 9.5 instead of adding a second closure kind. Reconciliation is a
+next-start activity, never an in-session phase.
 
 ## 3. PTY host and fail-closed containment
 
@@ -1246,11 +1251,13 @@ identity field matches the canonical envelope. It cannot issue Founder
 governance commands. `publish()` is how adapters remain behind `BrokerClient`
 without converting `BridgeEventV1` into a second command schema.
 
-For `publish()`, `BrokerResult.commandId` equals `event.event_id`. The broker
-independently validates that an approval is still pending, unresolved, bound to
-the requested ID, and not masked by an incident. The existing TUI governance-
-focus guard remains mandatory in Phase 3B; broker validation is additional and
-does not replace it.
+For `publish()`, `BrokerResult.commandId` equals `event.event_id`. When a
+published event references a pending approval or ownership request, the broker
+independently validates that exact referenced record is still pending,
+unresolved, bound to the requested ID, and not masked by an incident. Ordinary
+collaboration events do not require an unrelated pending approval. The existing
+TUI governance-focus guard remains mandatory in Phase 3B; broker validation is
+additional and does not replace it.
 
 ```ts
 type BrokerCommand =
@@ -1382,6 +1389,68 @@ The command error policy is therefore pinned, not an or-choice:
 | `session_resume` | paused | any other phase | `session_not_writable` |
 | `session_close` | active + no incident | active + incident | `incident_active` |
 | `session_close` | active + no incident | any other phase | `session_not_writable` |
+
+The `publish()` path has its own closed event/phase contract:
+
+```ts
+type PublishableCollaborationEventTypeV1 =
+  | "message"
+  | "action_request"
+  | "action_accept"
+  | "action_reject"
+  | "artifact_publish"
+  | "ownership_request"
+  | "ownership_release"
+  | "ownership_accept"
+  | "ownership_reject"
+  | "verification_result"
+  | "review_verdict";
+```
+
+A normal collaboration event is accepted only in `active`, with no incident,
+from a bound execution whose snapshot state is `ready`. In `starting`,
+`paused`, `interrupted`, `closing`, or `closed`, it returns
+`session_not_writable`. An active state with a non-null incident returns
+`incident_active` and is itself handled as an invariant-triggered
+interruption.
+
+A published `incident` is a fail-closed control trigger, not ordinary
+collaboration. It is accepted only from a bound, `ready` execution while the
+session is `active` or `paused`. The broker validates `PublishedIncidentPayloadV1`
+from Section 9.6 and atomically appends the original
+`BridgeEventV1` plus its derived `session_interrupted` lifecycle record.
+There is no snapshot or callback between those two appends. The reducer applies
+only `session_interrupted` to lifecycle state, so an `active + incident`
+snapshot cannot be emitted. The accepted `BrokerResult` is returned only after
+the lifecycle record is durable and the snapshot phase is `interrupted`.
+The broker then completes the mandatory invalidation/closing/closed sequence.
+
+Legacy execution-authored `pause`, `resume`, and `session_close`
+`BridgeEventV1` values are rejected by `publish()` with `unauthorized`;
+only Founder `BrokerCommand` variants may cause those lifecycle changes.
+A published `incident` outside `active` or `paused`, any normal event
+outside `active`, and every publish during `interrupted`, `closing`, or
+`closed` returns `session_not_writable`. If phase is still `active` or
+`paused` but an incident is already non-null, the request returns
+`incident_active`; after the first incident has transitioned the phase to
+`interrupted`, a later incident returns `session_not_writable`. Unknown
+event types or malformed incident payloads return `invalid_command`.
+
+| `publish()` event family | Legal state | Failure state | Error |
+| --- | --- | --- | --- |
+| normal collaboration set above | active + ready + no incident | any non-active phase | `session_not_writable` |
+| normal collaboration set above | active + ready + no incident | active + incident | `incident_active` |
+| `incident` | active/paused + ready + no incident | starting/interrupted/closing/closed | `session_not_writable` |
+| `incident` | active/paused + ready + no incident | active/paused + existing incident | `incident_active` |
+| legacy `pause`/`resume`/`session_close` | none | every phase | `unauthorized` |
+| unknown or malformed event | none | every phase | `invalid_command` |
+
+When multiple failures apply, `publish()` validates in this fixed order:
+schema/event type (`invalid_command`), bound principal and event identity
+(`unauthorized`, `session_mismatch`, or `identity_mismatch`), reserved
+legacy governance type (`unauthorized`), then phase/incident state. Thus a
+malformed incident in a closed session is `invalid_command`, while a valid
+incident in a closed session is `session_not_writable`.
 
 `reconciliation_required` is produced only by next-start when a prior
 session's required unclean-closure records have not yet been appended. Founder
@@ -1515,9 +1584,12 @@ interface LedgerEntrySnapshot {
 }
 ```
 
-`phase === "interrupted"` is transient and terminal-bound: the broker appends
-the typed incident and closure when durable writing remains possible and
-proceeds to `closing`/`closed` without accepting further governance commands.
+`phase === "active"` is produced only by reducing `session_activated` at
+initial startup or `session_resumed` from `paused`. `phase ===
+"interrupted"` is transient and terminal-bound. The reducer reaches
+`closing` only from `session_closing` and reaches `closed` only from
+`session_closed`, `session_abort`, or `session_unclean_closure`. No
+governance command is accepted during `interrupted` or `closing`.
 `"reconciling"` is not a Phase 3A command or snapshot phase.
 
 ```ts
@@ -1538,152 +1610,275 @@ These projections deliberately preserve the Phase 2 truth fields while adding
 session identity, sequencing, launch facts, and explicit token state. They are
 immutable plain data produced from ledger/broker truth, not terminal prose.
 
-### 9.5 Fencing-token issuance and invalidation
+### 9.5 Fencing-token issuance, activation, and invalidation
 
-No fencing token exists during pure preflight or transactional `starting`.
-`fencingToken` is `null` and `tokenState` is `not_issued`.
+No fencing token exists during pure preflight or initial transactional
+`starting`. `fencingToken` is `null` and `tokenState` is `not_issued`.
 
 The initial token is issued only after both PTY hosts and children are launched,
 their identities are attested, required adapters are ready, and the broker is
-prepared to transition the complete pair to `active`. The broker appends
-`fencing_token_issued` to the existing ledger before publishing the first
-`active` snapshot. The initial value is `1`.
+prepared to activate the complete pair. Startup appends exactly:
 
-If that append fails, the token never becomes valid and the transactional build
-rolls back. Every ownership transfer increments the token and appends a new
-`fencing_token_issued` event before the successor writer may send bytes.
+1. `fencing_token_issued` with value `1`; then
+2. `session_activated` naming the complete ready execution set.
 
-Fencing tokens are scoped to one `session_id`. The uniqueness key is
-`(session_id, fencing_token)`. A new governed session begins at
-`fencing_token_issued` with value `1` after both children are ready. Pause does
-not invalidate the token and does not increment it. Interrupt ends the session.
-No in-session re-issue path exists after invalidation in Phase 3A. Any replay
-yielding `tokenState: "invalidated"` is a closed or closing session.
-Cross-session monotonicity is not required.
+The reducer leaves phase `starting` after the first record and changes it to
+`active` only when it reduces the second. The first `active` snapshot is
+published only after both records are durable. If token issuance fails, no
+token becomes valid. If activation append fails after token issuance, rollback
+appends `fencing_token_invalidated` and `session_abort`; no `active`
+snapshot is ever exposed.
 
-Interruption first makes the in-memory token unusable, then attempts to append
-`fencing_token_invalidated`. If durable writing is unavailable, next-start
-reconciliation records the invalidation and unclean closure. No successor
-session inherits a token.
+Every ownership transfer increments the token and appends a new
+`fencing_token_issued` event before the successor writer may send bytes. A
+transfer-time issuance changes the token but does not change phase.
 
-### 9.6 Existing ledger, new lifecycle events
+Fencing tokens are scoped to one `session_id`; the uniqueness key is
+`(session_id, fencing_token)`. Pause does not invalidate or increment the
+token. Interrupt and close both make it unusable and append
+`fencing_token_invalidated`. No in-session re-issue exists after interruption.
+A successor session begins again at value `1`; cross-session monotonicity is
+not required.
+
+Token invalidation does not itself imply a single phase. A valid replay may
+contain an invalidated token only in `interrupted`, `closing`, or `closed`.
+It is invalid in `starting`, `active`, or `paused`, except for the
+recognized incomplete-start rollback prefix described below. The reducer never
+infers closure merely from token state.
+
+For interruption, the in-memory token becomes unusable before the broker
+attempts the durable sequence. The durable order is
+`session_interrupted → fencing_token_invalidated → session_closing →
+session_closed`. For Founder close, the durable order is
+`session_closing → fencing_token_invalidated → session_closed`.
+`session_closed` is appended only after governed processes are gone.
+
+Next-start reconciliation completes durable prefixes deterministically:
+
+| Durable prior tail | Required next-start completion |
+| --- | --- |
+| `session_open` with no activation | append `session_abort`; if a token was issued, append `fencing_token_invalidated` first |
+| `session_interrupted` only | append `fencing_token_invalidated` when a valid token existed, then `session_closing`, then `session_closed` |
+| `session_interrupted → fencing_token_invalidated` | append `session_closing`, then `session_closed` |
+| interruption prefix through `session_closing` | verify no governed process remains, then append `session_closed` |
+| Founder-close prefix at `session_closing` | append missing `fencing_token_invalidated`, verify no governed process remains, then append `session_closed` |
+| open/active prior session with no typed interruption or closing record | append missing invalidation, then `session_unclean_closure` |
+
+Prefix completion reuses the original incident ID and reason code and never
+invokes Founder `session_close`. If the durable order is impossible—for
+example, `session_closed` precedes `session_closing`—replay fails with a
+typed reconciliation error. `session_unclean_closure` is used only when no
+typed interruption/closing prefix exists; it is not appended after a completed
+typed interruption sequence.
+
+### 9.6 Existing ledger, typed lifecycle events, and one reducer
 
 Phase 3A extends the existing `bun:sqlite` append-only hash-chained ledger. It
 does not create a second session database or a parallel event store.
 
-Execution collaboration remains `BridgeEventV1`. Broker lifecycle truth uses a
-second closed protocol record in the same ledger—not a fabricated execution
+Execution collaboration remains `BridgeEventV1`. Broker lifecycle truth uses
+a second closed protocol record in the same ledger—not a fabricated execution
 identity:
 
 ```ts
-interface SessionLifecycleEventV1 {
+type SessionLifecycleEventTypeV1 =
+  | "session_open"
+  | "session_abort"
+  | "session_unclean_closure"
+  | "session_activated"
+  | "session_paused"
+  | "session_resumed"
+  | "session_closing"
+  | "session_closed"
+  | "session_interrupted"
+  | "approval_resolved"
+  | "fencing_token_issued"
+  | "fencing_token_invalidated";
+
+type InterruptionReasonCodeV1 =
+  | "child_failure"
+  | "adapter_failure"
+  | "pty_host_failure"
+  | "host_command_deadline_expired"
+  | "authentication_expired"
+  | "identity_mismatch"
+  | "output_sequence_invariant_failed"
+  | "snapshot_sequence_invariant_failed"
+  | "ledger_write_failed"
+  | "broker_invariant_failed"
+  | "containment_failed"
+  | "execution_reported_incident";
+
+interface PublishedIncidentPayloadV1 {
+  readonly incident_id: string;
+  readonly reason: string;
+  readonly severity: "low" | "medium" | "high";
+}
+
+interface SessionInterruptedPayloadV1 extends PublishedIncidentPayloadV1 {
+  readonly source_event_id: string | null;
+  readonly reported_by_execution_id: string | null;
+}
+
+type LifecyclePayloadByTypeV1 = {
+  readonly session_open: {
+    readonly authorization_reference: string;
+    readonly execution_ids: readonly string[];
+  };
+  readonly session_abort: { readonly abort_reason: string };
+  readonly session_unclean_closure: {
+    readonly detected_at_startup: true;
+    readonly last_durable_event_id: string | null;
+  };
+  readonly session_activated: {
+    readonly execution_ids: readonly string[];
+    readonly readiness_snapshot_seq: number;
+  };
+  readonly session_paused: FounderCommandPayloadV1;
+  readonly session_resumed: FounderCommandPayloadV1;
+  readonly session_closing: SessionTerminalPayloadV1;
+  readonly session_closed: SessionTerminalPayloadV1;
+  readonly session_interrupted: SessionInterruptedPayloadV1;
+  readonly approval_resolved: FounderCommandPayloadV1 & {
+    readonly approval_id: string;
+    readonly resolution: "approved" | "rejected";
+  };
+  readonly fencing_token_issued: {
+    readonly writer_execution_id: string;
+  };
+  readonly fencing_token_invalidated: {
+    readonly invalidation_reason:
+      | "interruption"
+      | "founder_close"
+      | "rollback";
+    readonly incident_id: string | null;
+  };
+};
+
+interface FounderCommandPayloadV1 {
+  readonly command_id: string;
+  readonly authorized_by: "founder";
+}
+
+type SessionTerminalPayloadV1 =
+  | (FounderCommandPayloadV1 & {
+      readonly closure_kind: "founder";
+      readonly incident_id: null;
+    })
+  | {
+      readonly closure_kind: "interruption";
+      readonly incident_id: string;
+      readonly reason_code: InterruptionReasonCodeV1;
+    };
+
+type SessionLifecycleEventBaseV1<K extends SessionLifecycleEventTypeV1> = {
   readonly protocol_version: typeof PROTOCOL_VERSION;
   readonly event_id: string;
   readonly session_id: string;
-  readonly event_type:
-    | "session_open"
-    | "session_abort"
-    | "session_unclean_closure"
-    | "session_paused"
-    | "session_resumed"
-    | "session_closed"
-    | "session_interrupted"
-    | "approval_resolved"
-    | "fencing_token_issued"
-    | "fencing_token_invalidated";
+  readonly event_type: K;
   readonly actor: "madbridge";
   readonly task_envelope_hash: string;
   readonly repository_fingerprint: RepositoryFingerprint;
   readonly fencing_token: number | null;
-  readonly reason_code: string | null;
-  readonly payload: Record<string, unknown>;
+  readonly reason_code: K extends "session_interrupted"
+    ? InterruptionReasonCodeV1
+    : string | null;
   readonly created_at: string;
   readonly previous_event_hash: string;
-}
+};
+
+type SessionLifecycleEventV1 = {
+  [K in SessionLifecycleEventTypeV1]:
+    SessionLifecycleEventBaseV1<K> & {
+      readonly payload: LifecyclePayloadByTypeV1[K];
+    };
+}[SessionLifecycleEventTypeV1];
 
 type LedgerEventV1 = BridgeEventV1 | SessionLifecycleEventV1;
 ```
 
-The lifecycle event set is exactly these ten `event_type` values. No
-`BridgeEventV1` is ever minted with a fabricated execution sender.
-`session_interrupted` is the designated typed interruption record;
-`session_closed` is the designated terminal closure record and carries
-`closure_kind: "founder" | "interruption"` in its payload. For a live
-interruption the durable order is `session_interrupted`,
-`fencing_token_invalidated`, then `session_closed`.
+The lifecycle event set is exactly those twelve values. The validator requires
+`session_interrupted.reason_code` to be non-null and requires its payload to
+match `SessionInterruptedPayloadV1`. Interruption-kind
+`session_closing`/`session_closed` records must carry the same incident ID
+and reason code as that `session_interrupted`; their top-level
+`reason_code` equals the terminal payload reason code. Founder-kind terminal
+records use `reason_code: null`. `session_activated.execution_ids` must
+equal the complete set of envelope execution IDs; order is irrelevant and
+duplicates are invalid. No `BridgeEventV1` is minted with a fabricated sender.
 
-`actor: "madbridge"` records that the broker authored the record. The
-authorizing principal and command are carried in payload. Founder governance
-records `session_paused`, `session_resumed`, and a Founder-requested
-`session_closed` use:
+`IncidentSnapshot` is derived only from `session_interrupted`:
 
-```ts
-payload: {
-  readonly command_id: string;
-  readonly authorized_by: "founder";
-  readonly closure_kind?: "founder";
-}
-```
+- `id = payload.incident_id`;
+- `reason = payload.reason`;
+- `timestamp = event.created_at`; and
+- `severity = payload.severity`.
 
-An interruption-produced `session_closed` instead uses the typed terminal
-payload `{ closure_kind: "interruption", incident_id: string, reason_code:
-string }` and has no Founder command claim. `approval_resolved` additionally
-carries `approval_id` and `resolution: "approved" | "rejected"`. The command
-field `decision` (`"accept" | "reject"`) maps `accept → approved` and
-`reject → rejected`.
+The optional originating `BridgeEventV1 incident` is evidence of who reported
+the problem; it does not populate `IncidentSnapshot` and does not mutate
+lifecycle state. Its event ID and sender execution ID must equal
+`source_event_id` and `reported_by_execution_id` in the derived lifecycle
+payload. Supervisor-originated interruptions set both fields to `null`.
 
-The broker appends the lifecycle record and receives the ledger sequence
-**before** the state transition is exposed in any snapshot.
-`BrokerResult.acceptedSnapshotSeq` follows that durable append. A failed
-append is `ledger_write_failed` and interrupts the session (Section 5.3).
+The broker appends each lifecycle record and receives its ledger sequence
+before exposing the resulting state in any snapshot. For a published execution
+incident, the source `BridgeEventV1` and derived `session_interrupted` record
+are one SQLite transaction, and no snapshot is exposed between them.
+`BrokerResult.acceptedSnapshotSeq` follows the durable lifecycle append. A
+failed append is `ledger_write_failed` and still triggers mechanical teardown.
 
-Normative `rebuildBrokerState` mapping:
+Normative `reduceLedgerEvent` mapping:
 
-| Lifecycle event | Rebuild effect |
+| Lifecycle event | Reducer precondition and effect |
 | --- | --- |
-| `session_open` | session exists; phase `starting`; `tokenState: "not_issued"`; `fencingToken: null` |
-| `fencing_token_issued` | `fencingToken = event.fencing_token`; `tokenState: "valid"`; `tokenUsable: true` |
-| `session_paused` | phase `paused` (token unchanged) |
-| `session_resumed` | phase `active` (token unchanged, no increment) |
-| `approval_resolved` | remove matching pending approval; record resolution |
-| `session_interrupted` | `incident` populated; phase `interrupted`; terminal-bound |
-| `fencing_token_invalidated` | `tokenState: "invalidated"`; `tokenUsable: false` |
-| `session_abort` | phase `closed` (aborted); `tokenUsable: false` |
-| `session_closed` | phase `closed`; `tokenUsable: false` |
-| `session_unclean_closure` | phase `closed` (unclean); `tokenUsable: false` |
+| `session_open` | create session; phase `starting`; token `not_issued`/`null` |
+| `fencing_token_issued` | require initial `starting` or active ownership transfer; set token/value valid; do not change phase |
+| `session_activated` | require `starting`, valid token, and complete ready execution set; phase `active` |
+| `session_paused` | require `active`; phase `paused`; token unchanged |
+| `session_resumed` | require `paused`; phase `active`; token unchanged |
+| `approval_resolved` | require `active`; remove matching pending approval; record resolution |
+| `session_interrupted` | require `active` or `paused`; populate incident exactly as above; phase `interrupted`; token unusable in memory |
+| `fencing_token_invalidated` | require recognized rollback/interrupt/close prefix; set token `invalidated` and unusable; do not infer phase |
+| `session_closing` | require `active` for Founder close or `interrupted` for interruption; phase `closing`; token unusable |
+| `session_abort` | require incomplete `starting`; phase `closed` (aborted); token unusable |
+| `session_closed` | require `closing` and matching closure kind/incident ID; phase `closed`; token unusable |
+| `session_unclean_closure` | require next-start detection with no typed terminal prefix; phase `closed` (unclean); token unusable |
+
+No normal `BridgeEventV1` changes phase, incident, or fencing state. A
+published execution `incident` is paired atomically with
+`session_interrupted`; only the lifecycle member changes state. Legacy
+execution-authored `pause`, `resume`, and `session_close` are rejected by
+the Phase 3A `publish()` contract and remain historical data only.
 
 Live application and replay are single-sourced. The canonical reducer is
-`packages/ledger/src/rebuild.ts:reduceLedgerEvent`; the broker calls that same
-function immediately after each successful append, and
-`packages/broker/src/reconciliation.ts` delegates to it rather than
-maintaining a second reducer or transition table. A lifecycle event is never
-applied by ad-hoc broker mutation.
+`packages/ledger/src/rebuild.ts:reduceLedgerEvent`; the broker calls that exact
+function after each successful append/transaction, and
+`packages/broker/src/reconciliation.ts` delegates to it. Neither broker module
+may maintain a second transition table, synthesize first activity into
+`active`, or mutate lifecycle state ad hoc.
 
-Unknown lifecycle event types in replay or live apply are a typed reconciliation
-failure, not a silent `default: break`. Baseline `BridgeEventV1` types
-`pause`, `resume`, `incident`, and `session_close` remain historical
-execution-authored events. They cannot mutate lifecycle phase or fencing state;
-Founder commands are translated to the corresponding `SessionLifecycleEventV1`
-before append. No `BridgeEventV1` is published with a fabricated sender.
+Unknown lifecycle types, impossible ordering, mismatched incident IDs, and
+invalid phase preconditions are typed reconciliation failures in both live
+apply and replay; there is no silent default branch.
 
 Both union members use the existing `events` table, sequence, canonical JSON,
 previous hash, event hash, and chain head. `Ledger.append()` evolves from
-`BridgeEventV1` to `LedgerEventV1`. Schema migration may add indexes or typed
-projections only if the implementation plan names them; it may not create an
-authority-bearing second chain.
+`BridgeEventV1` to `LedgerEventV1`; the incident pair uses an atomic
+multi-append transaction on that same chain. Schema migration may add indexes
+or typed projections only if the implementation plan names them; it may not
+create an authority-bearing second chain.
 
 `session_open` is the durable boundary for rollback and retention:
 
-- if failure occurs before `session_open` is appended, a newly created
-  session directory may be removed during rollback;
-- if `session_open` exists, the session directory persists permanently under
-  Phase 3A retention rules and receives `session_abort` when durable writing is
-  possible; and
-- capability records, once written, are never deleted by startup rollback.
+- before `session_open`, a newly created session directory may be removed;
+- after `session_open`, the directory persists and receives
+  `session_abort` for incomplete startup when writing remains possible; and
+- capability records are never deleted by startup rollback.
 
-If an abort or interruption cannot be appended, next-start reconciliation
-appends `session_unclean_closure` and the missing token invalidation to the same
-ledger chain.
+Next-start reconciliation follows the prefix table in Section 9.5. It completes
+a recognized typed interruption/closing prefix with the missing lifecycle
+records. It uses `session_unclean_closure` only when no typed terminal prefix
+exists. Nothing calls Founder `session_close` during reconciliation.
 
 ### 9.7 PTY-host production artifact and spike primitive
 
@@ -1833,8 +2028,9 @@ This subsection is the authoritative correction index for the six findings close
 by this revision:
 
 1. **Interrupt closure:** `session_interrupted`,
-   `fencing_token_invalidated`, and `session_closed` are the required ordered
-   durable sequence; interruption is terminal-bound and requires a new envelope.
+   `fencing_token_invalidated`, `session_closing`, and `session_closed` are
+   the required ordered durable sequence; interruption is terminal-bound and
+   requires a new envelope.
 2. **Single reducer:** live broker application and next-start replay call the
    same `packages/ledger/src/rebuild.ts:reduceLedgerEvent`; broker
    reconciliation has no duplicate transition logic.
@@ -1855,7 +2051,32 @@ two-surface, no-substitution, storage, PTY-host, or production-start-gate
 architecture. They close authority-bearing contracts so the implementation plan
 need not invent behavior.
 
-### 9.15 Approval semantics for review and planning
+### 9.15 N1–N3 and remaining F4 contract corrections
+
+This revision closes the re-review findings against
+`8564fcd1759c9b13216ada24873e6349666fcc2b`:
+
+1. **N1 — replayable active and closing phases:** `session_activated`
+   exclusively produces initial `active`; `session_resumed` produces
+   pause-recovery `active`; and `session_closing` exclusively produces
+   `closing`. No first-activity synthesis or ad-hoc mutation remains.
+2. **N2 — durable prefix completion:** token invalidation is legal in
+   `interrupted` as well as `closing`/`closed`; Section 9.5 defines exact
+   next-start completion for every recognized startup, interruption, and close
+   prefix.
+3. **N3 — typed interruption:** `session_interrupted` has a closed reason-code
+   union and typed payload, maps exactly to `IncidentSnapshot`, and a
+   published execution incident is atomically paired with that lifecycle
+   record so `active + incident` cannot be emitted.
+4. **Remaining F4 — `publish()` legality:** the closed event set, phase
+   conditions, incident handling, error precedence, and rejection of legacy
+   execution pause/resume/close events are pinned in Section 9.3.
+
+These corrections preserve the approved supervisor, socket dormancy,
+two-surface, no-substitution, storage, PTY-host, and production-start-gate
+architecture. They authorize no plan or implementation.
+
+### 9.16 Approval semantics for review and planning
 
 Merge-gate item 11 requires an **approving** Tier-2 verdict for the exact
 candidate SHA. A `REQUEST_CHANGES`, rejection, inconclusive verdict, or review
