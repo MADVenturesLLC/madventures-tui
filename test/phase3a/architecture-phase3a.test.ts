@@ -20,7 +20,12 @@ const DISPOSITION_MARKER = "// FOUNDER-DISPOSITION:";
 const SKIP_CALLS = [/test\.skip\(/, /describe\.skip\(/, /it\.skip\(/];
 const ONLY_CALLS = [/test\.only\(/, /describe\.only\(/, /it\.only\(/];
 
-/** Recursively list every .ts file beneath a directory. */
+/** Recursively list every executable TypeScript test-source file beneath a directory.
+
+ * On this repository the governed roots carry both `.ts` and `.tsx` test sources,
+ * so both extensions are enumerated. The set is closed: speculative extensions
+ * that do not appear under the governed roots are intentionally not added.
+ */
 function listTsFiles(dir: string): string[] {
   if (!existsSync(dir)) return [];
   const out: string[] = [];
@@ -28,7 +33,7 @@ function listTsFiles(dir: string): string[] {
     const full = join(dir, entry.name);
     if (entry.isDirectory()) {
       out.push(...listTsFiles(full));
-    } else if (entry.name.endsWith(".ts")) {
+    } else if (entry.name.endsWith(".ts") || entry.name.endsWith(".tsx")) {
       out.push(full);
     }
   }
