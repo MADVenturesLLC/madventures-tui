@@ -121,4 +121,19 @@ describe("workspace boundaries", () => {
     expect(source).not.toMatch(/from\s+["']\.\/permissions\//);
     expect(source).not.toMatch(/from\s+["']\.\/tui\//);
   });
+
+  test("production source scan covers every workspace package", () => {
+    const packageRoots = readdirSync("packages", { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name);
+
+    const scannedFiles = listSourceFiles("packages").filter(
+      (file) => !file.includes("/test/") && !file.includes("/node_modules/"),
+    );
+
+    for (const pkg of packageRoots) {
+      const prefix = `packages/${pkg}/src/`;
+      expect(scannedFiles.some((file) => file.startsWith(prefix))).toBe(true);
+    }
+  });
 });
