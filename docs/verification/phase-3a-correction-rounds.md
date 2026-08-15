@@ -96,3 +96,16 @@ authority-boundary ruling under plan §10 item 17 and does not count as a correc
   tests, implemented in the same follow-up commit as this record; exact SHA is verifiable from history
 - **Current Task 5 count:** 1 of 2
 - **Task 6 remains unauthorized.**
+
+## Round 2
+
+- **Verdict target:** `41d213b65b249ae9773f5efc5c8a6bdb66896f4c`
+- **Reviewer:** Plato/Codex pre-merge verification of CodeRabbit's corrected-SHA feedback
+- **Findings in the single verdict:**
+  - canonical hash regression test did not directly compare returned hash to the pre-parse signed hash;
+  - the `rejects unknown surface` name misclassified malformed syntax, while CodeRabbit's proposed valid-unknown rejection would improperly introduce Task 6 eligibility into Task 5
+- **Resolution:** preserve both pre-parse-hash and recomputation assertions; rename the malformed-syntax test; add the syntactically valid unregistered-surface schema-layer test
+- **Resolution implemented in the same follow-up commit; exact SHA is verifiable from history**
+- **Current Task 5 count:** 2 of 2
+- **No reassignment trigger yet; plan requires reassignment only at more than two rounds**
+- **Task 6 remains unauthorized.**

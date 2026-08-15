@@ -216,12 +216,21 @@ test("rejects unknown role", () => {
   expect(() => parseTaskEnvelope(env)).toThrow("unknown role");
 });
 
-test("rejects unknown surface", () => {
+test("rejects malformed surface syntax", () => {
   const env = validEnvelope();
   const execs = env["executions"] as Array<Record<string, unknown>>;
   if (execs && execs[0]) execs[0]["surface"] = "Codex";
   signEnvelope(env);
   expect(() => parseTaskEnvelope(env)).toThrow("unknown surface");
+});
+
+test("a syntactically valid unregistered surface is not rejected as malformed", () => {
+  const env = validEnvelope();
+  const execs = env["executions"] as Array<Record<string, unknown>>;
+  if (execs && execs[0]) execs[0]["surface"] = "unknown-surface";
+  signEnvelope(env);
+  const parsed = parseTaskEnvelope(env);
+  expect(parsed.executions[0]?.surface as string).toBe("unknown-surface");
 });
 
 test("rejects automatic model selection", () => {
@@ -400,8 +409,13 @@ test("a signed noncanonical independence_domain is rejected without mutating the
 test("a canonical independence_domain preserves the returned envelope hash", () => {
   const env = validEnvelope();
   signEnvelope(env);
+  const signedHash = env["envelope_hash"];
+  if (typeof signedHash !== "string") {
+    throw new Error("signed envelope_hash missing");
+  }
   const parsed = parseTaskEnvelope(env);
   const toHash: Record<string, unknown> = { ...parsed };
   delete toHash["envelope_hash"];
+  expect(parsed.envelope_hash).toBe(signedHash);
   expect(sha256CanonicalSync(toHash)).toBe(parsed.envelope_hash);
 });
