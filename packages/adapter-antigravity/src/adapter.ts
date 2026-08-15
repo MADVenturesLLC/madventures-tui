@@ -59,7 +59,7 @@ export class AntigravityAdapter implements AdapterV1 {
   ) {}
 
   async attest(): Promise<ExecutionIdentity> {
-    return await attestAntigravity(this.shell, "reviewer");
+    return await attestAntigravity(this.shell, "independent-reviewer");
   }
 
   async prepareConfigPreview(): Promise<ConfigChangeSet> {

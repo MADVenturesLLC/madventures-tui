@@ -8,7 +8,7 @@ import { resolveExecutable, type Shell } from "./shell";
 
 export interface AttestationResult {
   readonly executionId: string;
-  readonly role: "builder" | "reviewer" | "observer";
+  readonly role: "builder" | "independent-reviewer" | "observer";
   readonly surface: "antigravity";
   readonly model: string;
   readonly provider: string;
@@ -30,7 +30,7 @@ function newExecutionId(): string {
 // version. We probe for one; if absent, fail closed.
 export async function attestAntigravity(
   shell: Shell,
-  role: "builder" | "reviewer" | "observer" = "reviewer",
+  role: "builder" | "independent-reviewer" | "observer" = "independent-reviewer",
 ): Promise<AttestationResult> {
   const executable = await resolveExecutable(shell, "agy");
   const versionOut = await shell.run(`${executable} --version`);

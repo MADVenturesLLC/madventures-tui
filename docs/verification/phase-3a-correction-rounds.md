@@ -74,3 +74,38 @@ rubric-milestone total.
 No timestamps, reviewer identities, or verdict links are invented in this record beyond the commit SHAs
 and reviewer role recorded above, which are verifiable in the repository history and the review
 trail.
+
+---
+
+# Phase 3A Task 5 — Correction-Round Record
+
+**Task:** 5
+**Plan milestone:** M2
+**Rubric §7.2 milestone:** 3
+**Authority:** Founder Task 5 correction-round-1 authorization for the signed-envelope hash contract.
+This section is appended after the Task 60 record. The earlier Task 5 scope reconciliation remains an
+authority-boundary ruling under plan §10 item 17 and does not count as a correction round.
+
+## Round 1
+
+- **Verdict target:** `43300d438daf845821c7336a5a4e27cf12d45471`
+- **Reviewer:** Plato/Codex pre-merge verification
+- **Finding:** normalization mutated a successfully verified signed envelope, leaving returned contents
+  inconsistent with `envelope_hash`
+- **Resolution:** fail-closed rejection of noncanonical wire domains plus the two named regression
+  tests, implemented in the same follow-up commit as this record; exact SHA is verifiable from history
+- **Current Task 5 count:** 1 of 2
+- **Task 6 remains unauthorized.**
+
+## Round 2
+
+- **Verdict target:** `41d213b65b249ae9773f5efc5c8a6bdb66896f4c`
+- **Reviewer:** Plato/Codex pre-merge verification of CodeRabbit's corrected-SHA feedback
+- **Findings in the single verdict:**
+  - canonical hash regression test did not directly compare returned hash to the pre-parse signed hash;
+  - the `rejects unknown surface` name misclassified malformed syntax, while CodeRabbit's proposed valid-unknown rejection would improperly introduce Task 6 eligibility into Task 5
+- **Resolution:** preserve both pre-parse-hash and recomputation assertions; rename the malformed-syntax test; add the syntactically valid unregistered-surface schema-layer test
+- **Resolution implemented in the same follow-up commit; exact SHA is verifiable from history**
+- **Current Task 5 count:** 2 of 2
+- **No reassignment trigger yet; plan requires reassignment only at more than two rounds**
+- **Task 6 remains unauthorized.**

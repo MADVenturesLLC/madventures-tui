@@ -46,7 +46,7 @@ function makeEvent(
     parent_event_id: null,
     sender_execution_id: sender,
     receiver_execution_id: receiver,
-    sender_role: senderSurface === "claude-code" ? "builder" : "reviewer",
+    sender_role: senderSurface === "claude-code" ? "builder" : "independent-reviewer",
     sender_surface: senderSurface,
     sender_model: senderModel,
     sender_provider: senderSurface === "claude-code" ? "anthropic" : "google",

@@ -26,7 +26,7 @@ import type {
   PendingApproval,
   ApprovalColorState,
 } from "../src/tui/types";
-import type { TaskEnvelopeV1, ExecutionIdentity, RepositoryFingerprint } from "@madventures/protocol";
+import { parseSurfaceId, type TaskEnvelopeV1, type ExecutionIdentity, type RepositoryFingerprint } from "@madventures/protocol";
 
 // ─── Fixtures ───
 
@@ -42,12 +42,14 @@ function makeExecution(
   surface: "claude-code" | "antigravity",
   overrides?: Partial<ExecutionIdentity>,
 ): ExecutionIdentity {
+  const isBuilder = surface === "claude-code";
   const base: ExecutionIdentity = {
     execution_id: `exec-${surface}`,
-    role: surface === "claude-code" ? "builder" : "reviewer",
-    surface,
-    model: surface === "claude-code" ? "claude-sonnet-4" : "gemini-2.5-pro",
-    provider: surface === "claude-code" ? "anthropic" : "google",
+    role: isBuilder ? "builder" : "independent-reviewer",
+    surface: parseSurfaceId(surface),
+    model: isBuilder ? "claude-sonnet-4" : "gemini-2.5-pro",
+    provider: isBuilder ? "anthropic" : "google",
+    independence_domain: isBuilder ? "fixture-builder-control" : "fixture-review-control",
     effort: "medium",
   };
   return overrides ? { ...base, ...overrides } : base;
@@ -1204,8 +1206,8 @@ describe("Correction 2: no interleaving at 60 columns with long values", () => {
   test("2c. long execution IDs at 60 cols — no interleaving", async () => {
     const snapshot = makeSnapshot({
       executions: [
-        { execution_id: "exec-claude-code-sonnet-4-20250811-long-id", role: "builder", surface: "claude-code", model: "claude-sonnet-4", provider: "anthropic", effort: "medium" },
-        { execution_id: "exec-antigravity-gemini-pro-20250811-long-id", role: "reviewer", surface: "antigravity", model: "gemini-2.5-pro", provider: "google", effort: "medium" },
+        { execution_id: "exec-claude-code-sonnet-4-20250811-long-id", role: "builder", surface: parseSurfaceId("claude-code"), model: "claude-sonnet-4", provider: "anthropic", independence_domain: "fixture-builder-control", effort: "medium" },
+        { execution_id: "exec-antigravity-gemini-pro-20250811-long-id", role: "independent-reviewer", surface: parseSurfaceId("antigravity"), model: "gemini-2.5-pro", provider: "google", independence_domain: "fixture-review-control", effort: "medium" },
       ],
     });
     const setup = await renderApp(snapshot, 60, 24, "governance");

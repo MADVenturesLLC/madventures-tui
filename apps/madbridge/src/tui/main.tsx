@@ -9,7 +9,7 @@ import { createRoot } from "@opentui/react";
 import type { ReactNode } from "react";
 import { App } from "./App";
 import type { BrokerSnapshot } from "./types";
-import type { ExecutionIdentity, RepositoryFingerprint, TaskEnvelopeV1 } from "@madventures/protocol";
+import { parseSurfaceId, type ExecutionIdentity, type RepositoryFingerprint, type TaskEnvelopeV1 } from "@madventures/protocol";
 
 /**
  * Fixture snapshot for demo mode.
@@ -26,18 +26,20 @@ export function makeFixtureSnapshot(): BrokerSnapshot {
   const claude: ExecutionIdentity = {
     execution_id: "exec-claude-code",
     role: "builder",
-    surface: "claude-code",
+    surface: parseSurfaceId("claude-code"),
     model: "claude-sonnet-4",
     provider: "anthropic",
+    independence_domain: "fixture-builder-control",
     effort: "medium",
   };
 
   const antigravity: ExecutionIdentity = {
     execution_id: "exec-antigravity",
-    role: "reviewer",
-    surface: "antigravity",
+    role: "independent-reviewer",
+    surface: parseSurfaceId("antigravity"),
     model: "gemini-2.5-pro",
     provider: "google",
+    independence_domain: "fixture-review-control",
     effort: "medium",
   };
 

@@ -16,7 +16,7 @@ import type {
   ApprovalColorState,
   ApprovalRequestEvent,
 } from "../src/tui/types";
-import type { TaskEnvelopeV1, ExecutionIdentity, RepositoryFingerprint } from "@madventures/protocol";
+import { parseSurfaceId, type TaskEnvelopeV1, type ExecutionIdentity, type RepositoryFingerprint } from "@madventures/protocol";
 
 // ─── Test fixtures ───
 
@@ -29,12 +29,14 @@ function makeFingerprint(): RepositoryFingerprint {
 }
 
 function makeExecution(surface: "claude-code" | "antigravity"): ExecutionIdentity {
+  const isBuilder = surface === "claude-code";
   return {
     execution_id: `exec-${surface}`,
-    role: surface === "claude-code" ? "builder" : "reviewer",
-    surface,
-    model: surface === "claude-code" ? "claude-sonnet-4" : "gemini-2.5-pro",
-    provider: surface === "claude-code" ? "anthropic" : "google",
+    role: isBuilder ? "builder" : "independent-reviewer",
+    surface: parseSurfaceId(surface),
+    model: isBuilder ? "claude-sonnet-4" : "gemini-2.5-pro",
+    provider: isBuilder ? "anthropic" : "google",
+    independence_domain: isBuilder ? "fixture-builder-control" : "fixture-review-control",
     effort: "medium",
   };
 }

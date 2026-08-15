@@ -7,7 +7,7 @@ import { resolveExecutable, type Shell } from "./shell";
 
 export interface AttestationResult {
   readonly executionId: string;
-  readonly role: "builder" | "reviewer" | "observer";
+  readonly role: "builder" | "independent-reviewer" | "observer";
   readonly surface: "claude-code";
   readonly model: string;
   readonly provider: string;
@@ -27,7 +27,7 @@ function newExecutionId(): string {
 
 export async function attestClaudeCode(
   shell: Shell,
-  role: "builder" | "reviewer" | "observer" = "builder",
+  role: "builder" | "independent-reviewer" | "observer" = "builder",
 ): Promise<AttestationResult> {
   const executable = await resolveExecutable(shell, "claude");
   const versionOut = await shell.run(`${executable} --version`);

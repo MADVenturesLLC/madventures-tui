@@ -37,7 +37,7 @@ export type PolicyDecision =
   | { allowed: false; code: "authorization_missing" | "expired" | "role_denied" | "model_denied" | "surface_denied" | "repository_denied" | "path_denied" | "command_denied" | "data_class_denied" | "egress_denied" | "self_review_denied" };
 
 const KNOWN_SURFACES = new Set(["claude-code", "antigravity"]);
-const KNOWN_ROLES = new Set(["builder", "reviewer", "observer"]);
+const KNOWN_ROLES = new Set(["builder", "independent-reviewer", "observer"]);
 
 // Known models per surface — used for model validation
 const SURFACE_MODELS: Record<string, Set<string>> = {
