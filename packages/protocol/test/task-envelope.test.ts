@@ -386,3 +386,22 @@ test("an execution without independence_domain is rejected", () => {
   signEnvelope(env);
   expect(() => parseTaskEnvelope(env)).toThrow("missing independence_domain");
 });
+
+test("a signed noncanonical independence_domain is rejected without mutating the envelope", () => {
+  const env = validEnvelope();
+  const execs = env["executions"] as Array<Record<string, unknown>>;
+  if (execs && execs[0]) execs[0]["independence_domain"] = "Review Team";
+  signEnvelope(env);
+  const preserved = structuredClone(env);
+  expect(() => parseTaskEnvelope(env)).toThrow("noncanonical independence_domain");
+  expect(env).toEqual(preserved);
+});
+
+test("a canonical independence_domain preserves the returned envelope hash", () => {
+  const env = validEnvelope();
+  signEnvelope(env);
+  const parsed = parseTaskEnvelope(env);
+  const toHash: Record<string, unknown> = { ...parsed };
+  delete toHash["envelope_hash"];
+  expect(sha256CanonicalSync(toHash)).toBe(parsed.envelope_hash);
+});

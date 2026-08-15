@@ -194,7 +194,11 @@ export function parseTaskEnvelope(raw: Record<string, unknown>): TaskEnvelopeV1 
     if (typeof e["independence_domain"] !== "string" || e["independence_domain"].length === 0) {
       throw new Error("missing independence_domain");
     }
-    e["independence_domain"] = normalizeIndependenceDomain(e["independence_domain"]);
+    const suppliedDomain = e["independence_domain"];
+    const normalizedDomain = normalizeIndependenceDomain(suppliedDomain);
+    if (normalizedDomain !== suppliedDomain) {
+      throw new Error("noncanonical independence_domain");
+    }
     if (typeof e["model"] !== "string" || e["model"] === "auto" || e["model"].length === 0) {
       throw new Error("automatic model selection is prohibited");
     }
