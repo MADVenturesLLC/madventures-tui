@@ -18,7 +18,7 @@ import { App } from "../src/tui/App";
 import { DockStrip, countBufferedLines, buildDockLine } from "../src/tui/components/DockStrip";
 import { PaneTabs } from "../src/tui/components/PaneTabs";
 import type { BrokerSnapshot, FocusTarget, ApprovalRequestEvent } from "../src/tui/types";
-import type { TaskEnvelopeV1, ExecutionIdentity, RepositoryFingerprint } from "@madventures/protocol";
+import { parseSurfaceId, type TaskEnvelopeV1, type ExecutionIdentity, type RepositoryFingerprint } from "@madventures/protocol";
 
 // ─── Fixtures ───
 
@@ -34,12 +34,14 @@ function makeExecution(
   surface: "claude-code" | "antigravity",
   overrides?: Partial<ExecutionIdentity>,
 ): ExecutionIdentity {
+  const isBuilder = surface === "claude-code";
   const base: ExecutionIdentity = {
     execution_id: `exec-${surface}`,
-    role: surface === "claude-code" ? "builder" : "reviewer",
-    surface,
-    model: surface === "claude-code" ? "claude-sonnet-4" : "gemini-2.5-pro",
-    provider: surface === "claude-code" ? "anthropic" : "google",
+    role: isBuilder ? "builder" : "independent-reviewer",
+    surface: parseSurfaceId(surface),
+    model: isBuilder ? "claude-sonnet-4" : "gemini-2.5-pro",
+    provider: isBuilder ? "anthropic" : "google",
+    independence_domain: isBuilder ? "fixture-builder-control" : "fixture-review-control",
     effort: "medium",
   };
   return overrides ? { ...base, ...overrides } : base;
@@ -281,7 +283,7 @@ describe("4. Headers display the exact role and model from the matching executio
     try {
       await setup.flush();
       const frame = setup.captureCharFrame();
-      expect(frame).toContain("reviewer");
+      expect(frame).toContain("independent-reviewer");
       expect(frame).toContain("gemini-2.5-pro");
     } finally {
       setup.renderer.destroy();
@@ -430,7 +432,7 @@ describe("6. Dock buffered-line count derived from real PTY output", () => {
       const frame = setup.captureCharFrame();
       expect(frame).toContain("ANTIGRAVITY");
       expect(frame).toContain("docked");
-      expect(frame).toContain("reviewer");
+      expect(frame).toContain("independent-reviewer");
       expect(frame).toContain("gemini-2.5-pro");
     } finally {
       setup.renderer.destroy();
@@ -485,8 +487,8 @@ describe("Finding 1: connected===false with retained data stays truthful", () =>
       activeWriter: "exec-claude-code",
       fencingToken: 3,
       executions: [
-        { execution_id: "exec-claude-code", role: "builder", surface: "claude-code", model: "claude-sonnet-4", provider: "anthropic", effort: "medium" },
-        { execution_id: "exec-antigravity", role: "reviewer", surface: "antigravity", model: "gemini-2.5-pro", provider: "google", effort: "medium" },
+        { execution_id: "exec-claude-code", role: "builder", surface: parseSurfaceId("claude-code"), model: "claude-sonnet-4", provider: "anthropic", independence_domain: "fixture-builder-control", effort: "medium" },
+        { execution_id: "exec-antigravity", role: "independent-reviewer", surface: parseSurfaceId("antigravity"), model: "gemini-2.5-pro", provider: "google", independence_domain: "fixture-review-control", effort: "medium" },
       ],
       ...overrides,
     });

@@ -17,6 +17,7 @@ export type {
   ArtifactCategory,
   Effort,
 } from "./task-envelope";
+export type { SurfaceId } from "./surface-id";
 export {
   parseTaskEnvelope,
   KNOWN_ROLES,
@@ -24,6 +25,7 @@ export {
   KNOWN_DATA_CLASSES,
   KNOWN_COMMAND_CATEGORIES,
 } from "./task-envelope";
+export { parseSurfaceId } from "./surface-id";
 
 export { canonicalJson, sha256Canonical, sha256CanonicalSync } from "./canonical-json";
 export { sha256Hex } from "./crypto";

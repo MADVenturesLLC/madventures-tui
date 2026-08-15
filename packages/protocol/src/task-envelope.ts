@@ -2,12 +2,14 @@
 // Task envelope V1 — the sole authority source for a session.
 
 import { sha256CanonicalSync } from "./canonical-json";
+import { normalizeIndependenceDomain } from "./normalization";
+import { InvalidSurfaceIdError, parseSurfaceId, type SurfaceId } from "./surface-id";
 
 export const PROTOCOL_VERSION = "madbridge-protocol/v1" as const;
 
 export type CliSurface = "claude-code" | "antigravity";
 
-export type ExecutionRole = "builder" | "reviewer" | "observer";
+export type ExecutionRole = "builder" | "independent-reviewer" | "observer";
 
 export type DataClass = "public" | "internal" | "confidential" | "restricted";
 
@@ -17,7 +19,7 @@ export type ArtifactCategory = "code" | "diff" | "document" | "report" | "test-r
 
 export type Effort = "low" | "medium" | "high";
 
-export const KNOWN_ROLES: readonly ExecutionRole[] = ["builder", "reviewer", "observer"];
+export const KNOWN_ROLES: readonly ExecutionRole[] = ["builder", "independent-reviewer", "observer"];
 export const KNOWN_SURFACES: readonly CliSurface[] = ["claude-code", "antigravity"];
 export const KNOWN_DATA_CLASSES: readonly DataClass[] = ["public", "internal", "confidential", "restricted"];
 export const KNOWN_COMMAND_CATEGORIES: readonly CommandCategory[] = ["read", "write", "build", "test", "git", "shell", "network"];
@@ -25,9 +27,10 @@ export const KNOWN_COMMAND_CATEGORIES: readonly CommandCategory[] = ["read", "wr
 export interface ExecutionIdentity {
   readonly execution_id: string;
   readonly role: ExecutionRole;
-  readonly surface: CliSurface;
+  readonly surface: SurfaceId;
   readonly model: string;        // exact model, not "auto"
   readonly provider: string;     // e.g. "anthropic", "google"
+  readonly independence_domain: string;
   readonly effort: Effort;
 }
 
@@ -177,9 +180,21 @@ export function parseTaskEnvelope(raw: Record<string, unknown>): TaskEnvelopeV1 
     if (!KNOWN_ROLES.includes(e["role"] as ExecutionRole)) {
       throw new Error(`unknown role: ${String(e["role"])}`);
     }
-    if (!KNOWN_SURFACES.includes(e["surface"] as CliSurface)) {
+    if (typeof e["surface"] !== "string") {
       throw new Error(`unknown surface: ${String(e["surface"])}`);
     }
+    try {
+      e["surface"] = parseSurfaceId(e["surface"]);
+    } catch (err) {
+      if (err instanceof InvalidSurfaceIdError) {
+        throw new Error(`unknown surface: ${e["surface"]}`);
+      }
+      throw err;
+    }
+    if (typeof e["independence_domain"] !== "string" || e["independence_domain"].length === 0) {
+      throw new Error("missing independence_domain");
+    }
+    e["independence_domain"] = normalizeIndependenceDomain(e["independence_domain"]);
     if (typeof e["model"] !== "string" || e["model"] === "auto" || e["model"].length === 0) {
       throw new Error("automatic model selection is prohibited");
     }

@@ -27,14 +27,16 @@ function validEnvelope(): Record<string, unknown> {
         surface: "claude-code",
         model: "claude-sonnet-4",
         provider: "anthropic",
+        independence_domain: "fixture-builder-control",
         effort: "high",
       },
       {
         execution_id: "exec-agy",
-        role: "reviewer",
+        role: "independent-reviewer",
         surface: "antigravity",
         model: "gemini-2.5-pro",
         provider: "google",
+        independence_domain: "fixture-review-control",
         effort: "medium",
       },
     ],
@@ -217,7 +219,7 @@ test("rejects unknown role", () => {
 test("rejects unknown surface", () => {
   const env = validEnvelope();
   const execs = env["executions"] as Array<Record<string, unknown>>;
-  if (execs && execs[0]) execs[0]["surface"] = "codex";
+  if (execs && execs[0]) execs[0]["surface"] = "Codex";
   signEnvelope(env);
   expect(() => parseTaskEnvelope(env)).toThrow("unknown surface");
 });
@@ -367,4 +369,20 @@ test("rejects initial_writer matching camelCase id but not snake_case id", () =>
   }
   signEnvelope(env);
   expect(() => parseTaskEnvelope(env)).toThrow("initial_writer not in executions");
+});
+
+test("legacy role reviewer is rejected without coercion", () => {
+  const env = validEnvelope();
+  const execs = env["executions"] as Array<Record<string, unknown>>;
+  if (execs && execs[1]) execs[1]["role"] = "reviewer";
+  signEnvelope(env);
+  expect(() => parseTaskEnvelope(env)).toThrow("unknown role: reviewer");
+});
+
+test("an execution without independence_domain is rejected", () => {
+  const env = validEnvelope();
+  const execs = env["executions"] as Array<Record<string, unknown>>;
+  if (execs && execs[0]) delete execs[0]["independence_domain"];
+  signEnvelope(env);
+  expect(() => parseTaskEnvelope(env)).toThrow("missing independence_domain");
 });
