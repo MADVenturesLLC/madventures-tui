@@ -50,21 +50,102 @@ const ANTIGRAVITY_V1: EnvironmentAllowlistV1 = {
 
 ---
 
-## `CLAUDE_CONFIG_DIR` — shared installation-profile contract
+## Installation identity boundary
 
-The approved installation path is `<passwd-home>/.claude-madventures-v5`, where `<passwd-home>` is resolved from the authenticated user's passwd entry.
+Each governed adapter installation is per-user. There is no cross-user
+handoff.
 
-**Installation:** During installation, the launcher configuration resolves `<passwd-home>` from `getpwuid(getuid())` and records that installation-scoped value. The live POSIX launcher (`madbridge-claude-v5`) contains an installation-resolved export — it does not dynamically call `getpwuid` at each invocation.
+The common per-user installation profile used by both `claude-code-v1` and
+`antigravity-v1` records:
 
-**Launcher:** `madbridge-claude-v5` exports the installation-scoped value before executing Claude Code.
+- `installation_uid` — `os.userInfo().uid` at installation time
+- `passwd_home` — `os.userInfo().homedir`
+- `approved_path` — the PATH approved by the governed installer
 
-**Supervisor:** The supervisor inherits `CLAUDE_CONFIG_DIR` through that governed process environment. Before `buildAllowlistedEnvironment()` runs, the supervisor independently derives the expected value from `getpwuid(getuid())` and validates that ambient `CLAUDE_CONFIG_DIR` exists and equals it byte-for-byte. Missing or differing ambient `CLAUDE_CONFIG_DIR` fails closed.
+`os.userInfo()` represents the authenticated user's passwd entry through the
+standard Node.js interface used by the TypeScript runtime. No direct FFI or
+native `getpwuid()` call is required.
 
-**Constructed environment:** `buildAllowlistedEnvironment()` copies the validated ambient value into the constructed environment.
+The `claude-code-v1` profile additionally records:
 
-**Four-way equality:** A subsequent invocation of `madbridge-claude-v5` may re-export the same installation-scoped value idempotently. A differing value violates four-way equality and fails closed.
+- `claude_config_dir` — `<passwd_home>/.claude-madventures-v5`
 
-**No alternate variable or personal path:** The allowlist contains exactly `CLAUDE_CONFIG_DIR`. The repository must not commit a personal absolute path or introduce `MADBRIDGE_CLAUDE_CONFIG_DIR`.
+Invocation is eligible only when **all** of the following are true:
+
+1. `os.userInfo().uid` equals the recorded `installation_uid`
+2. `os.userInfo().homedir` equals the recorded `passwd_home`
+3. *(claude-code-v1 only)* The recorded `claude_config_dir` equals
+   `<recorded-passwd-home>/.claude-madventures-v5`
+4. *(claude-code-v1 only)* Ambient `CLAUDE_CONFIG_DIR` exists and equals
+   the recorded value byte-for-byte
+5. Ambient `HOME` exists and equals the recorded `passwd_home` byte-for-byte
+
+Predicates 1, 2, and 5 apply to both adapters. Predicates 3 and 4 apply only to
+`claude-code-v1`.
+
+A different UID fails closed even if two passwd entries happen to share the same
+home path. Missing or differing `HOME` fails closed as `home_mismatch`. A
+required `HOME` value is never copied into the constructed environment until
+this validation passes.
+
+These checks are preconditions to environment construction;
+`buildAllowlistedEnvironment()` is not reached if any fails.
+
+---
+
+## `SHELL` — trusted producer
+
+Ambient `SHELL` must exist and equal `os.userInfo().shell`
+byte-for-byte. Missing or differing `SHELL` fails closed.
+
+This rule applies to both `claude-code-v1` and `antigravity-v1`.
+
+## `PATH` — trusted producer
+
+The trusted `PATH` producer is the common per-user installation profile used by
+both governed adapters. Before `buildAllowlistedEnvironment()` runs, the
+supervisor reads the recorded `approved_path`, validates every component under
+the rules below, and requires ambient `PATH` to equal the recorded value
+byte-for-byte. The validated value is then copied into the constructed
+environment. A provider launcher may only inherit or idempotently re-export that
+same value; it is not the authority.
+
+The installer may record only `PATH` entries that:
+
+- are absolute;
+- contain no empty component;
+- resolve to existing directories;
+- are owned by root or the recorded `installation_uid`; and
+- are not group-writable or world-writable.
+
+Missing or differing `PATH`, or an invalid recorded component, fails closed.
+Runtime ambient `PATH` is not the authority.
+
+This rule applies to both `claude-code-v1` and `antigravity-v1`.
+
+## `HOME` — trusted producer
+
+Ambient `HOME` must exist and equal the recorded `passwd_home` byte-for-byte.
+Missing or differing `HOME` fails closed as `home_mismatch`.
+
+This rule applies to both `claude-code-v1` and `antigravity-v1`.
+
+## `CLAUDE_CONFIG_DIR` — claude-code-v1 only
+
+The recorded `claude_config_dir` is `<passwd_home>/.claude-madventures-v5`.
+Ambient `CLAUDE_CONFIG_DIR` must exist and equal the recorded value
+byte-for-byte. Missing or differing `CLAUDE_CONFIG_DIR` fails closed.
+
+This rule applies only to `claude-code-v1`.
+
+**No alternate variable or personal path:** The repository must not commit a
+personal absolute path or introduce `MADBRIDGE_CLAUDE_CONFIG_DIR`.
+`claude-code-v1` uses only the installation-profile `claude_config_dir` and the
+allowlisted `CLAUDE_CONFIG_DIR`.
+
+If the live launcher or installation profile cannot yet satisfy the `PATH`,
+`SHELL`, `HOME`, or `CLAUDE_CONFIG_DIR` requirements, the affected profile
+remains ineligible rather than falling back.
 
 ---
 
@@ -141,9 +222,46 @@ apiProvider === "firstParty"
 subscriptionType === "max"
 ```
 
-Exit code 0 alone is insufficient — it proves only "logged in," not that subscription OAuth is the active credential source. All four fields must match exactly. Any mismatch, missing field, or non-zero exit code fails the auth probe.
+The parser requires a JSON object containing all four predicate fields with
+these exact types and values. Missing fields, incorrect types, mismatched
+values, malformed JSON, or a non-zero exit code fail the auth probe. Unrelated
+additive fields are permitted and ignored; they do not change eligibility.
 
-If a future Claude Code version changes the output shape, removes these fields, or the approved non-interactive probe (`["auth", "status"]`) no longer exposes them, Claude Code is classified as ineligible until a qualifying primitive is approved.
+`subscriptionType === "max"` is intentional. The `claude-code-v1` profile
+authorizes the Max subscription tier only. Any other subscription tier requires
+a separately Founder-approved profile or ruling.
+
+If a future Claude Code version removes, renames, changes the type of, or
+changes the meaning of a required predicate field — or the approved
+non-interactive probe (`["auth", "status"]`) no longer exposes it — Claude Code
+is ineligible until a qualifying primitive is approved.
+
+---
+
+## Enforcement ownership
+
+Task 37 implements the pure allowlist constructor. It copies required and
+present optional variables only after its caller supplies an eligible ambient
+environment; it does not read or validate the installation profile.
+
+Task 45 owns the preflight validation of:
+
+- installation UID and passwd home;
+- `HOME`;
+- `CLAUDE_CONFIG_DIR`;
+- `PATH`;
+- `SHELL`;
+- effective Claude Code settings sources;
+- absence of `apiKeyHelper` and `--settings`; and
+- the auth-readiness predicate.
+
+Task 45 must complete these checks before calling
+`buildAllowlistedEnvironment()`. Missing or differing `HOME` produces
+`home_mismatch`. An invalid installation UID, passwd-home relationship,
+installation profile, `CLAUDE_CONFIG_DIR`, `PATH`, `SHELL`, effective settings
+source, `apiKeyHelper`, `--settings` argument, or auth-readiness result produces
+`auth_not_ready`. No governed process is launched. This ruling does not add a
+new `PreflightFailure` member.
 
 ---
 

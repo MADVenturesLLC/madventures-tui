@@ -1555,8 +1555,10 @@ Tasks 38–39 depend on M1 — they are early, not dependency-free. Only Task 60
 Delete the two broker-daemon lines from `README.md`'s Bash command block
 (lines 59–60 at the plan baseline):
 
-    # Broker daemon
-    bun run broker
+```bash
+# Broker daemon
+bun run broker
+```
 
 Do not insert replacement prose inside the code fence. The surrounding
 block remains a valid Bash code block.
