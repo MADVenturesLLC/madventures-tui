@@ -4,6 +4,7 @@
 **Plan reference:** `docs/superpowers/plans/2026-08-12-phase-3a-runtime-foundation.md` §1A
 **Blocks:** Task 37 and tasks dependent on M16. Does not block independently reachable Tasks 38–39.
 **Repository:** `MADVenturesLLC/madventures-tui`
+**Founder approval record:** [Phase 3A PLAN-OPEN Rulings — Founder Approval Record](PLAN-OPEN-approval-record.md)
 
 ---
 

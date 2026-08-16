@@ -4,6 +4,7 @@
 **Plan reference:** `docs/superpowers/plans/2026-08-12-phase-3a-runtime-foundation.md` §1A
 **Blocks:** Task 34 (manifest edit)
 **Repository:** `MADVenturesLLC/madventures-tui`
+**Founder approval record:** [Phase 3A PLAN-OPEN Rulings — Founder Approval Record](PLAN-OPEN-approval-record.md)
 
 ---
 
