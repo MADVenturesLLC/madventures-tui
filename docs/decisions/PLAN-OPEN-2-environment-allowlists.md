@@ -62,9 +62,11 @@ The common per-user installation profile used by both `claude-code-v1` and
 - `passwd_home` — `os.userInfo().homedir`
 - `approved_path` — the PATH approved by the governed installer
 
-`os.userInfo()` represents the authenticated user's passwd entry through the
-standard Node.js interface used by the TypeScript runtime. No direct FFI or
-native `getpwuid()` call is required.
+`os.userInfo()` represents the current effective OS user. On POSIX, it returns
+information from the passwd entry corresponding to that effective user,
+including the UID, home directory, and shell used by this ruling. The standard
+Node.js interface used by the TypeScript runtime is sufficient; no direct FFI
+or native `getpwuid()` call is required.
 
 The `claude-code-v1` profile additionally records:
 
@@ -226,6 +228,49 @@ The parser requires a JSON object containing all four predicate fields with
 these exact types and values. Missing fields, incorrect types, mismatched
 values, malformed JSON, or a non-zero exit code fail the auth probe. Unrelated
 additive fields are permitted and ignored; they do not change eligibility.
+
+### Bounded auth-probe execution
+
+The approved `["auth", "status"]` probe has these exact execution bounds:
+
+- execution timeout: `5_000` milliseconds, measured with a monotonic clock from
+  successful spawn until process exit;
+- stdout limit: `65_536` raw bytes;
+- stderr limit: `65_536` raw bytes; and
+- termination grace: `500` milliseconds, measured with a monotonic clock.
+
+Exactly `65_536` bytes on either stream is permitted. Receiving the first byte
+beyond either limit is oversized output and fails closed.
+
+The probe accepts the preflight cancellation signal. Cancellation before spawn
+prevents the probe from starting. Cancellation after spawn, timeout, or
+oversized output terminates the probe. The supervisor sends `SIGTERM`, waits no
+more than the `500` millisecond termination grace, sends `SIGKILL` if the probe
+is still alive, and reaps the process before returning.
+
+The following each produce `auth_not_ready`:
+
+- timeout;
+- cancellation;
+- termination by any signal;
+- stdout exceeding its limit;
+- stderr exceeding its limit;
+- failure to terminate and reap within the bounded cleanup path;
+- malformed JSON;
+- a missing, incorrectly typed, or mismatched predicate field; or
+- a non-zero exit code.
+
+Parsing occurs only after a clean zero-status exit within the timeout and both
+output limits. Raw oversized output is not included in diagnostics or evidence;
+only the stream name, observed byte count, and typed failure may be recorded.
+
+These bounds apply only to the auth-readiness probe. They do not amend §9.8,
+which remains the normative deadline table for PTY-host response and
+termination.
+
+Task 45 must include deterministic tests for timeout, pre-spawn cancellation,
+post-spawn cancellation, signal termination, stdout overflow, stderr overflow,
+forced `SIGKILL`, and successful bounded execution.
 
 `subscriptionType === "max"` is intentional. The `claude-code-v1` profile
 authorizes the Max subscription tier only. Any other subscription tier requires
