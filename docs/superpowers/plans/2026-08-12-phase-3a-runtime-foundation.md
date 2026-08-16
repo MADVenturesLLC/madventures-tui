@@ -1538,6 +1538,7 @@ Tasks 38–39 depend on M1 — they are early, not dependency-free. Only Task 60
 - Modify: `packages/broker/package.json` (**`PLAN-OPEN-4`**)
 - Modify: `bun.lock` (**`PLAN-OPEN-4`**)
 - Modify: `package.json` (**`PLAN-OPEN-6`**)
+- Modify: `README.md`
 - Test: `test/phase3a/architecture-phase3a.test.ts`
 
 **Interfaces:**
@@ -1549,11 +1550,20 @@ Tasks 38–39 depend on M1 — they are early, not dependency-free. Only Task 60
 
 - [ ] Step 1: Write the named failing test — add `test("running the full suite creates no broker.sock anywhere under the runtime directory")` which records `existsSync` of `/tmp/madv-broker-runtime/broker.sock` before and after importing every production entry point, asserting both are `false`; `test("no workspace manifest declares a native PTY dependency")` asserting no `package.json` under `packages/` or `apps/` matches `node-pty|node-addon-api`; `test("root package.json exposes no script that runs a quarantined module")` asserting no script value matches `broker\.ts|mcp-server\.ts`; `test("the negative control detects a seeded broker.sock and exits 1")` creating a real unix socket named `broker.sock` inside a disposable `MADV_STORAGE_DIR` and asserting the script names it and exits `1`; `test("the negative control respects its depth bound")` seeding a socket at depth 7 and asserting it is not reported; `test("the negative control never reads MADV_RUNTIME_DIR")` setting that variable to a seeded directory and asserting the script ignores it and audits the fixed literal path instead.
 - [ ] Step 2: Run `bun test test/phase3a/architecture-phase3a.test.ts -t "no workspace manifest declares a native PTY dependency"` — expected RED: `packages/broker/package.json:11` declares `"node-pty": "^1.1.0"`. Run the script test — expected RED: root `package.json` declares `"broker"` and `"mcp"`.
-- [ ] Step 3: Implement the minimum authorized behavior — create `test/phase3a/negative-control.ts` (depth bound 6, `isSymbolicLink()` entries skipped without following, passwd home via `os.userInfo().homedir`, `MADV_STORAGE_DIR` override, fixed literal `/tmp/madv-broker-runtime`, per-root match counts, `process.exit(1)` on any hit); remove the `node-pty` dependency line; run `bun install` to regenerate `bun.lock` (this removes the two `node-pty` entries; no package is added); remove the two root scripts and add the four new ones.
+- [ ] Step 3: Implement the minimum authorized behavior — create `test/phase3a/negative-control.ts` (depth bound 6, `isSymbolicLink()` entries skipped without following, passwd home via `os.userInfo().homedir`, `MADV_STORAGE_DIR` override, fixed literal `/tmp/madv-broker-runtime`, per-root match counts, `process.exit(1)` on any hit); remove the `node-pty` dependency line; run `bun install` to regenerate `bun.lock`. The regeneration must remove the broker workspace dependency edge for `node-pty`, the resolved `node-pty@1.1.0` entry, and the resolved `node-addon-api` entry when no remaining workspace dependency requires it. At baseline `e68e57b19d9b601a832caa884518d978b1d895ab`, `node-addon-api` exists solely through `node-pty` and therefore must be removed. No package is added; remove the two root scripts and add the four new ones.
+
+Delete the two broker-daemon lines from `README.md`'s Bash command block
+(lines 59–60 at the plan baseline):
+
+    # Broker daemon
+    bun run broker
+
+Do not insert replacement prose inside the code fence. The surrounding
+block remains a valid Bash code block.
 - [ ] Step 4: Run all six focused tests — expected GREEN: 6 pass. Invariant established: **no named endpoint can be created, no native PTY dependency is declared, and the negative control provably detects a violation rather than only reporting clean.**
 - [ ] Step 5: Run `bun test` (full) and `bunx tsc --noEmit`; run `git diff bun.lock` and confirm the diff is a pure removal.
 - [ ] Step 6: Inspect the diff; confirm `bun.lock` gained no entry.
-- [ ] Step 7: Commit `packages/broker/package.json bun.lock package.json test/phase3a/architecture-phase3a.test.ts` with message: `chore!: remove the unused node-pty declaration and quarantined run scripts`
+- [ ] Step 7: Commit `packages/broker/package.json bun.lock package.json README.md test/phase3a/negative-control.ts test/phase3a/architecture-phase3a.test.ts` with message: `chore!: remove the unused node-pty declaration and quarantined run scripts`
 - [ ] Step 8: Stop for the M14 review checkpoint.
 
 ---

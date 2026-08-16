@@ -11,7 +11,7 @@
 
 Remove the root `package.json` scripts `"broker"` and `"mcp"` — operator-reachable entry points into modules §9.10 quarantines.
 
-The approved plan separately requires adding `test:phase3a`, `test:arch`, `test:adversarial`, and `verify:phase3a`. This PLAN-OPEN-6 ruling authorizes removal of `broker` and `mcp`; it does not independently ratify command bodies not specified by the approved plan.
+The approved plan separately requires adding four new script names. This PLAN-OPEN-6 ruling authorizes removal of `broker` and `mcp`; it does not independently ratify command bodies, and it does not authorize any file outside the root `package.json`.
 
 ## Removed
 
