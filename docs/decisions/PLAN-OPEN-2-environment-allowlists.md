@@ -233,14 +233,20 @@ additive fields are permitted and ignored; they do not change eligibility.
 
 The approved `["auth", "status"]` probe has these exact execution bounds:
 
-- execution timeout: `5_000` milliseconds, measured with a monotonic clock from
-  successful spawn until process exit;
+- total probe deadline: `5_000` milliseconds, measured with a monotonic clock
+  from probe invocation through spawn, normal exit observation, and normal
+  reaping;
 - stdout limit: `65_536` raw bytes;
 - stderr limit: `65_536` raw bytes; and
 - termination grace: `500` milliseconds, measured with a monotonic clock.
 
 Exactly `65_536` bytes on either stream is permitted. Receiving the first byte
 beyond either limit is oversized output and fails closed.
+
+Any failure to spawn the probe, including a missing executable or a permission
+error, produces `auth_not_ready`. The deadline starts at probe invocation, so a
+probe that fails to spawn consumes bounded time and fails closed without a
+result.
 
 The probe accepts the preflight cancellation signal. Cancellation before spawn
 prevents the probe from starting. Cancellation after spawn, timeout, or
@@ -251,6 +257,7 @@ is still alive, and reaps the process before returning.
 The following each produce `auth_not_ready`:
 
 - timeout;
+- spawn failure, including a missing executable or permission error;
 - cancellation;
 - termination by any signal;
 - stdout exceeding its limit;
@@ -260,15 +267,28 @@ The following each produce `auth_not_ready`:
 - a missing, incorrectly typed, or mismatched predicate field; or
 - a non-zero exit code.
 
-Parsing occurs only after a clean zero-status exit within the timeout and both
-output limits. Raw oversized output is not included in diagnostics or evidence;
-only the stream name, observed byte count, and typed failure may be recorded.
+Parsing occurs only after a clean zero-status exit within the deadline, normal
+reaping complete, and both output limits respected. Raw stdout and stderr are
+never included in diagnostics or evidence.
+
+Diagnostics and evidence may contain only:
+
+- the normalized auth-readiness result (`pass` or `auth_not_ready`);
+- the approved probe primitive;
+- exit or signal status;
+- stream names; and
+- stream byte counts.
+
+`email`, `orgId`, `orgName`, and every unapproved additive field must always be
+omitted or redacted.
 
 These bounds apply only to the auth-readiness probe. They do not amend §9.8,
 which remains the normative deadline table for PTY-host response and
 termination.
 
-Task 45 must include deterministic tests for timeout, pre-spawn cancellation,
+Task 45 must include deterministic tests for spawn failure, full-deadline
+accounting through normal reaping, metadata-only evidence and redaction on
+successful output and every failure path, timeout, pre-spawn cancellation,
 post-spawn cancellation, signal termination, stdout overflow, stderr overflow,
 forced `SIGKILL`, and successful bounded execution.
 
