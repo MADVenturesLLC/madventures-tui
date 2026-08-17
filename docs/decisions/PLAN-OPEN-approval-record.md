@@ -2,7 +2,7 @@
 
 **Approver:** Michael Alberto Daley, Founder and President, MAD Ventures Holdings LLC
 **Original ruling date:** 2026-08-15
-**Final content ratification date:** 2026-08-16
+**Final content ratification date:** 2026-08-17
 **Repository:** `MADVenturesLLC/madventures-tui`
 **PR:** `#17`
 **Branch:** `governance/phase-3a-plan-open-rulings`
@@ -24,7 +24,7 @@ content of each decision as it stands with this record's pointer applied.
 | `PLAN-OPEN-3-capability-horizon.md` | `eb4dbdba0c281aba935f2322461953d3f7bf1bfb690e9c630d6494dd302b7551` |
 | `PLAN-OPEN-4-node-pty-removal.md` | `e662936c0a2f91b25c4f9f38d791bb59182b22cc4ed19ce577afa81e34eeb460` |
 | `PLAN-OPEN-6-root-scripts.md` | `26270a7af4c932dd122bfd6ed3383e845bb655886a8d7efe8e152939ce7a957f` |
-| `2026-08-12-phase-3a-runtime-foundation.md` (Task 34 amendment) | `6801f5b0ce85ac38a8e1ebded0f65340e615822ec1f485c4f4a687b26ab31ba1` |
+| `2026-08-12-phase-3a-runtime-foundation.md` (Task 34 and Task 48 amendments) | `09fae39993cb7123c5b00be5e2e1820dbe9ac4c615d040e3905d50bddf89ec0f` |
 
 ## Scope and blocking scope
 
@@ -35,7 +35,7 @@ content of each decision as it stands with this record's pointer applied.
 | PLAN-OPEN-3 | Thirty-day expiration horizon; exact staleness order; eight-field host comparison; pass-and-fresh `latestFreshRecord()` selection; and append-only historical preservation | M15 (Tasks 35–36) |
 | PLAN-OPEN-4 | Remove `node-pty`; regenerate the lockfile; remove orphaned `node-addon-api` when no remaining dependency requires it; and add no replacement native dependency | Task 34 (manifest edit) |
 | PLAN-OPEN-6 | Remove root `broker` and `mcp` scripts; recognize the four plan-required script names; defer their command bodies to Task 34; and authorize no file outside root `package.json` | Task 34 (script removal) |
-| Phase 3A plan | Task 34 amendment covering its file list, lockfile regeneration, README deletion instruction, and commit list | Task 34 (amended plan) |
+| Phase 3A plan | Task 34 amendment covering its file list, lockfile regeneration, README deletion instruction, and commit list; and Task 48 amendment adding the isolated fixture-harness no-socket runtime test | Tasks 34 and 48 (amended plan) |
 
 ## Approval lineage
 
@@ -48,9 +48,10 @@ content of each decision as it stands with this record's pointer applied.
 | Revision 5.6 | `6553d456bdd470516c57b58f8fa9de6d28ac885fad548b7f28b2f7334e37b038` | 3,424 | `4f9bb946713d255e98fcdcce7a28840b35342a31` |
 | Revision 5.7 | `7770b2df7a2e09b3d80bd521ba241b4706a0163e73a0b96b8741fddd82d00ffb` | 8,162 | `fb6670f214fde4e14e82d3be691b9c1ae6f80454` |
 | Revision 5.8 | Recorded in [Founder authorization artifact #18](https://github.com/MADVenturesLLC/madventures-tui/issues/18) | Recorded in issue #18 | Post-approval commit recorded in issue #18 |
+| Revision 5.9 | Recorded in [Founder authorization artifact #18](https://github.com/MADVenturesLLC/madventures-tui/issues/18) | Recorded in issue #18 | Post-approval commit recorded in issue #18 |
 
-Because Revision 5.8 changes this approval record itself, its patch SHA-256,
-byte count, resulting approval-record SHA-256, and commit identity are recorded
+Because Revisions 5.8 and 5.9 change this approval record itself, their patch SHA-256 values,
+byte counts, resulting approval-record SHA-256, and commit identities are recorded
 externally in Founder authorization artifact #18 rather than embedded
 self-referentially in this file.
 
@@ -65,7 +66,8 @@ The post-pointer document SHA-256 values in this record identify the final
 Founder-ratified decision content. No authorization is inferred or backfilled.
 
 The approval record's own SHA-256 is not embedded in itself; it is reported in
-the verification report and PR body only.
+Founder authorization artifact #18, the verification report, and the PR body.
+All three values must match.
 
 ## Ratification boundary
 
