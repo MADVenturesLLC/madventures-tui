@@ -24,7 +24,7 @@ content of each decision as it stands with this record's pointer applied.
 | `PLAN-OPEN-3-capability-horizon.md` | `eb4dbdba0c281aba935f2322461953d3f7bf1bfb690e9c630d6494dd302b7551` |
 | `PLAN-OPEN-4-node-pty-removal.md` | `e662936c0a2f91b25c4f9f38d791bb59182b22cc4ed19ce577afa81e34eeb460` |
 | `PLAN-OPEN-6-root-scripts.md` | `26270a7af4c932dd122bfd6ed3383e845bb655886a8d7efe8e152939ce7a957f` |
-| `2026-08-12-phase-3a-runtime-foundation.md` (Task 34 and Task 48 amendments) | `09fae39993cb7123c5b00be5e2e1820dbe9ac4c615d040e3905d50bddf89ec0f` |
+| `2026-08-12-phase-3a-runtime-foundation.md` (Task 34 and Task 48 amendments) | `392de30f41a9d7253a31a344d80c170f52757cc81be810f4d82e5673d94c34e7` |
 
 ## Scope and blocking scope
 
@@ -35,7 +35,7 @@ content of each decision as it stands with this record's pointer applied.
 | PLAN-OPEN-3 | Thirty-day expiration horizon; exact staleness order; eight-field host comparison; pass-and-fresh `latestFreshRecord()` selection; and append-only historical preservation | M15 (Tasks 35–36) |
 | PLAN-OPEN-4 | Remove `node-pty`; regenerate the lockfile; remove orphaned `node-addon-api` when no remaining dependency requires it; and add no replacement native dependency | Task 34 (manifest edit) |
 | PLAN-OPEN-6 | Remove root `broker` and `mcp` scripts; recognize the four plan-required script names; defer their command bodies to Task 34; and authorize no file outside root `package.json` | Task 34 (script removal) |
-| Phase 3A plan | Task 34 amendment covering its file list, lockfile regeneration, README deletion instruction, and commit list; and Task 48 amendment adding the isolated fixture-harness no-socket runtime test | Tasks 34 and 48 (amended plan) |
+| Phase 3A plan | Task 34 amendment covering its file list, lockfile regeneration, README deletion instruction, and commit list; and Task 48 amendment adding the isolated fixture-harness no-socket runtime test; Revision 5.10 strengthens the Task 34 depth-bound test to cover both depth 6 (detected) and depth 7 (ignored) using two isolated disposable roots, strengthens the Task 34 native-dependency test to inspect all dependency-bearing manifest sections (`dependencies`, `devDependencies`, `peerDependencies`, `optionalDependencies`) in workspace and root manifests plus `bun.lock` and assert removal of the broker workspace dependency edge and resolved `node-pty` and `node-addon-api` entries, strengthens the Task 34 script test to assert the `broker` and `mcp` keys are absent regardless of value, and strengthens the three Task 48 harness-separation structural tests to a fail-closed AST structural analyzer using the TypeScript compiler API covering all six §9.11 reachability forms plus standalone logical gates with const, method-alias, and namespace-import resolution and seeded positive fixtures for every evasion class | Tasks 34 and 48 (amended plan) |
 
 ## Approval lineage
 
@@ -49,8 +49,9 @@ content of each decision as it stands with this record's pointer applied.
 | Revision 5.7 | `7770b2df7a2e09b3d80bd521ba241b4706a0163e73a0b96b8741fddd82d00ffb` | 8,162 | `fb6670f214fde4e14e82d3be691b9c1ae6f80454` |
 | Revision 5.8 | Recorded in [Founder authorization artifact #18](https://github.com/MADVenturesLLC/madventures-tui/issues/18) | Recorded in issue #18 | Post-approval commit recorded in issue #18 |
 | Revision 5.9 | Recorded in [Founder authorization artifact #18](https://github.com/MADVenturesLLC/madventures-tui/issues/18) | Recorded in issue #18 | Post-approval commit recorded in issue #18 |
+| Revision 5.10 | Recorded in [Founder authorization artifact #18](https://github.com/MADVenturesLLC/madventures-tui/issues/18) | Recorded in issue #18 | Post-approval commit recorded in issue #18 |
 
-Because Revisions 5.8 and 5.9 change this approval record itself, their patch SHA-256 values,
+Because Revisions 5.8, 5.9, and 5.10 change this approval record itself, their patch SHA-256 values,
 byte counts, resulting approval-record SHA-256, and commit identities are recorded
 externally in Founder authorization artifact #18 rather than embedded
 self-referentially in this file.
