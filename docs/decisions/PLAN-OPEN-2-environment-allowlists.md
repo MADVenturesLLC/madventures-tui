@@ -194,6 +194,38 @@ Additionally:
 
 These are configuration-source invariants, distinct from the process-environment discard rule above.
 
+### Provider-routing and endpoint invariant
+
+For `claude-code-v1`, the approved settings-source allowlist for
+provider-routing and endpoint overrides is empty.
+
+Across every effective settings source — managed, CLI, local
+(`.claude/settings.local.json`), project (`.claude/settings.json`), and user
+(`CLAUDE_CONFIG_DIR/settings.json`) — the following are prohibited regardless
+of value:
+
+- any top-level provider-routing or endpoint control, including
+  `apiProvider` or `customApiUrl`;
+- `apiKeyHelper`;
+- any endpoint override supplied through `env`, including
+  `ANTHROPIC_BASE_URL`, `ANTHROPIC_BEDROCK_BASE_URL`,
+  `ANTHROPIC_BEDROCK_MANTLE_BASE_URL`, `ANTHROPIC_VERTEX_BASE_URL`, or
+  `ANTHROPIC_FOUNDRY_BASE_URL`;
+- any provider selector supplied through `env`, including
+  `CLAUDE_CODE_USE_BEDROCK`, `CLAUDE_CODE_USE_MANTLE`,
+  `CLAUDE_CODE_USE_VERTEX`, or `CLAUDE_CODE_USE_FOUNDRY`; and
+- any additional control recognized by the supported CLI version as selecting
+  a provider, endpoint, proxy, or gateway.
+
+The existing environment-allowlist rule independently rejects these variables
+because none belongs to `claude-code-v1`. Their presence in any effective
+settings source fails closed.
+
+After settings-source validation, the approved auth-readiness probe must report
+`apiProvider === "firstParty"`. This field is probe evidence, not an allowed
+settings control. Any other result fails as `auth_not_ready`, and no governed
+child is launched.
+
 ### Antigravity
 
 Antigravity's active CLI session tokens are maintained through its host-owned login/keyring mechanism. Google API keys, ADC/cloud variables, and OAuth-token environment variables are excluded. `HOME` permits access to the CLI's host-owned configuration paths.
