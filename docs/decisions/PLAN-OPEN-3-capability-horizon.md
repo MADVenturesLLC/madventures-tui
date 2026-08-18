@@ -18,6 +18,25 @@
 
 A record is stale when `now >= expires_at`. There is no grace period.
 
+## Timestamp validation
+
+`evaluated_at` and `expires_at` are stored as canonical UTC ISO-8601 strings.
+`parseCapabilityRecord()` rejects any record whose stored `evaluated_at` or
+`expires_at` is malformed, nonfinite, or noncanonical, and rejects any record
+unless `expires_at` equals `evaluated_at` plus exactly
+`30 × 24 × 60 × 60 × 1000` milliseconds, before freshness evaluation. A
+producer verifies the parsed millisecond value is finite before
+calling `toISOString()`, requires exact canonical UTC `toISOString()` round-trip
+equality, and sets `expires_at` equal to `evaluated_at` plus exactly 30 days.
+
+`now` is caller input validated separately before freshness evaluation. An
+invalid `now` is rejected and cannot return `fresh: true`.
+
+Corrupt records are rejected at the schema boundary; they are not represented
+as a fifth staleness reason. `StalenessReason` remains exactly
+`binary_hash_changed`, `cli_version_changed`, `host_changed`, and
+`horizon_expired`.
+
 ## Event-driven invalidation
 
 CLI-version change, binary-hash change, or host change invalidates the record **immediately** regardless of its remaining time. These are evaluated by `evaluateCapabilityFreshness()` (Task 35) in the following fixed order:
@@ -68,7 +87,7 @@ Failed records use the same 30-day horizon. They remain preserved as historical 
 
 `evaluateCapabilityFreshness(record, now, observed)` returns `{ fresh: true }` or `{ fresh: false; reason: StalenessReason }` in the plan-specified order. It is the sole evaluator of staleness.
 
-Any capability-record producer MUST set `expires_at` to `new Date(new Date(evaluated_at).getTime() + 30 * 24 * 60 * 60 * 1000).toISOString()`. Task 35 parses the timestamp and evaluates freshness; it does not create records.
+Any capability-record producer MUST set `expires_at` to `new Date(new Date(evaluated_at).getTime() + 30 * 24 * 60 * 60 * 1000).toISOString()` only after verifying the parsed millisecond value is finite and after requiring exact canonical UTC `toISOString()` round-trip equality, so that `expires_at` equals `evaluated_at` plus exactly 30 days. `parseCapabilityRecord()` rejects any stored `evaluated_at` or `expires_at` that is malformed, nonfinite, or noncanonical, and rejects any record unless `expires_at` equals `evaluated_at` plus exactly `30 × 24 × 60 × 60 × 1000` milliseconds, before freshness evaluation. Task 35 validates the caller-supplied `now` separately and rejects an invalid `now`; it parses timestamps and evaluates freshness and does not create records.
 
 ### Task 36 — `latestFreshRecord()`
 
@@ -76,7 +95,9 @@ Any capability-record producer MUST set `expires_at` to `new Date(new Date(evalu
 
 - reads the persisted records for the surface from the validated storage root;
 - accepts only records where `overall === "pass"` AND `evaluateCapabilityFreshness(record, now, observed).fresh === true`;
-- returns the newest qualifying record by `evaluated_at`;
+- returns the newest qualifying record by descending `evaluated_at`, breaking
+  equal `evaluated_at` values by the canonical capability-record filename in
+  descending lexical order;
 - returns `null` when none qualify.
 
 This excludes records that are:
@@ -87,4 +108,7 @@ This excludes records that are:
 - CLI-invalidated (`cli_version_changed`); or
 - host-invalidated (`host_changed`).
 
-Records are appended, never overwritten. Expired and invalidated records remain in storage.
+Records are appended, never overwritten. Expired and invalidated records remain
+in storage. `writeCapabilityRecord` creates records exclusively: it fails closed
+when the canonical filename already exists; there is no overwrite and no
+check-then-write race.

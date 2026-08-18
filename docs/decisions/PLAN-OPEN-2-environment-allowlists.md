@@ -266,26 +266,34 @@ additive fields are permitted and ignored; they do not change eligibility.
 
 The approved `["auth", "status"]` probe has these exact execution bounds:
 
-- total probe deadline: `5_000` milliseconds, measured with a monotonic clock
+- execution deadline: `5_000` milliseconds, measured with a monotonic clock
   from probe invocation through spawn, normal exit observation, and normal
   reaping;
-- stdout limit: `65_536` raw bytes;
-- stderr limit: `65_536` raw bytes; and
-- termination grace: `500` milliseconds, measured with a monotonic clock.
+- forced-cleanup budget: at most `1_000` additional milliseconds, measured with
+  a monotonic clock — a `SIGTERM` grace of no more than the first `500`
+  milliseconds, then `SIGKILL` if the probe is still alive with no more than
+  the remaining `500` milliseconds to observe and reap termination;
+- maximum total elapsed time: `6_000` milliseconds, the execution deadline plus
+  the forced-cleanup budget;
+- stdout limit: `65_536` raw bytes; and
+- stderr limit: `65_536` raw bytes.
 
 Exactly `65_536` bytes on either stream is permitted. Receiving the first byte
 beyond either limit is oversized output and fails closed.
 
 Any failure to spawn the probe, including a missing executable or a permission
-error, produces `auth_not_ready`. The deadline starts at probe invocation, so a
-probe that fails to spawn consumes bounded time and fails closed without a
-result.
+error, produces `auth_not_ready`. The execution deadline starts at probe
+invocation, so a probe that fails to spawn consumes bounded time and fails
+closed without a result.
 
 The probe accepts the preflight cancellation signal. Cancellation before spawn
 prevents the probe from starting. Cancellation after spawn, timeout, or
-oversized output terminates the probe. The supervisor sends `SIGTERM`, waits no
-more than the `500` millisecond termination grace, sends `SIGKILL` if the probe
-is still alive, and reaps the process before returning.
+oversized output terminates the probe within the forced-cleanup budget: the
+supervisor sends `SIGTERM`, waits no more than the first `500` milliseconds of
+grace, sends `SIGKILL` if the probe is still alive, and observes and reaps the
+termination within the remaining `500` milliseconds. Cleanup or reaping failure
+is fail-closed `auth_not_ready`, and no governed launch may proceed after
+cleanup-budget exhaustion.
 
 The following each produce `auth_not_ready`:
 
@@ -300,9 +308,9 @@ The following each produce `auth_not_ready`:
 - a missing, incorrectly typed, or mismatched predicate field; or
 - a non-zero exit code.
 
-Parsing occurs only after a clean zero-status exit within the deadline, normal
-reaping complete, and both output limits respected. Raw stdout and stderr are
-never included in diagnostics or evidence.
+Parsing occurs only after a clean zero-status exit within the execution
+deadline, normal reaping complete, and both output limits respected. Raw stdout
+and stderr are never included in diagnostics or evidence.
 
 Diagnostics and evidence may contain only:
 
@@ -319,11 +327,13 @@ These bounds apply only to the auth-readiness probe. They do not amend §9.8,
 which remains the normative deadline table for PTY-host response and
 termination.
 
-Task 45 must include deterministic tests for spawn failure, full-deadline
-accounting through normal reaping, metadata-only evidence and redaction on
-successful output and every failure path, timeout, pre-spawn cancellation,
-post-spawn cancellation, signal termination, stdout overflow, stderr overflow,
-forced `SIGKILL`, and successful bounded execution.
+Task 45 must include deterministic tests for spawn failure, execution-deadline
+accounting through normal reaping, forced-cleanup-budget accounting (the
+`SIGTERM` grace, `SIGKILL` escalation, and reaping within the `1_000`
+millisecond budget), cleanup-budget exhaustion, metadata-only evidence and
+redaction on successful output and every failure path, timeout, pre-spawn
+cancellation, post-spawn cancellation, signal termination, stdout overflow,
+stderr overflow, forced `SIGKILL`, and successful bounded execution.
 
 `subscriptionType === "max"` is intentional. The `claude-code-v1` profile
 authorizes the Max subscription tier only. Any other subscription tier requires
@@ -349,6 +359,8 @@ Task 45 owns the preflight validation of:
 - `CLAUDE_CONFIG_DIR`;
 - `PATH`;
 - `SHELL`;
+- `TERM`;
+- `TMPDIR`;
 - effective Claude Code settings sources;
 - absence of `apiKeyHelper` and `--settings`; and
 - the auth-readiness predicate.
@@ -356,16 +368,17 @@ Task 45 owns the preflight validation of:
 Task 45 must complete these checks before calling
 `buildAllowlistedEnvironment()`. Missing or differing `HOME` produces
 `home_mismatch`. An invalid installation UID, passwd-home relationship,
-installation profile, `CLAUDE_CONFIG_DIR`, `PATH`, `SHELL`, effective settings
-source, `apiKeyHelper`, `--settings` argument, or auth-readiness result produces
-`auth_not_ready`. No governed process is launched. This ruling does not add a
-new `PreflightFailure` member.
+installation profile, `CLAUDE_CONFIG_DIR`, `PATH`, `SHELL`, `TERM`, `TMPDIR`,
+effective settings source, `apiKeyHelper`, `--settings` argument, or
+auth-readiness result produces `auth_not_ready`. No governed process is
+launched. This ruling does not add a new `PreflightFailure` member;
+`PreflightFailure` remains exactly eleven members.
 
 ---
 
 ## Four-way equality semantics
 
-1. **Missing required variables** → `buildAllowlistedEnvironment()` throws `MissingRequiredVariableError` (Task 37). Any Task 45 translation to a preflight failure code follows the approved preflight contract.
+1. **Missing required variables** → Task 45 validates `TERM` and `TMPDIR` before `buildAllowlistedEnvironment()`; a missing `TERM` or `TMPDIR` maps to `auth_not_ready`. `buildAllowlistedEnvironment()` still throws `MissingRequiredVariableError` (Task 37) for any required variable that reaches it, and Task 45 catches that error and maps it to `auth_not_ready` as a fail-closed fallback.
 2. **Missing optional variables** → permitted (variable is absent from the constructed environment).
 3. **Non-allowlisted ambient variables** → discarded (dropped, not treated as preflight failures).
 4. The resulting constructed environment is reused **byte-for-byte** across:
