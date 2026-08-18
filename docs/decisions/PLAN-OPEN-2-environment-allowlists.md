@@ -361,17 +361,23 @@ Task 45 owns the preflight validation of:
 - `SHELL`;
 - `TERM`;
 - `TMPDIR`;
-- effective Claude Code settings sources;
-- absence of `apiKeyHelper` and `--settings`; and
-- the auth-readiness predicate.
+- effective Claude Code settings sources; and
+- absence of `apiKeyHelper` and `--settings`.
 
-Task 45 must complete these checks before calling
-`buildAllowlistedEnvironment()`. Missing or differing `HOME` produces
-`home_mismatch`. An invalid installation UID, passwd-home relationship,
-installation profile, `CLAUDE_CONFIG_DIR`, `PATH`, `SHELL`, `TERM`, `TMPDIR`,
-effective settings source, `apiKeyHelper`, `--settings` argument, or
-auth-readiness result produces `auth_not_ready`. No governed process is
-launched. This ruling does not add a new `PreflightFailure` member;
+Task 45 must complete these environment-independent checks before calling
+`buildAllowlistedEnvironment()`, and must construct the allowlisted environment
+exactly once. After construction succeeds, Task 45 runs the identity probe and
+the auth-readiness probe using that exact constructed environment. No governed
+process may launch until both probes succeed. An identity-probe failure
+continues to map to `identity_mismatch` under the existing PLAN-OPEN-1 and
+Task 45 contract; this revision does not alter that mapping.
+
+Missing or differing `HOME` produces `home_mismatch`. An invalid installation
+UID, passwd-home relationship, installation profile, `CLAUDE_CONFIG_DIR`,
+`PATH`, `SHELL`, `TERM`, `TMPDIR`, effective settings source, `apiKeyHelper`,
+or `--settings` argument produces `auth_not_ready`, and a non-passing
+auth-readiness result likewise produces `auth_not_ready`. No governed process
+is launched. This ruling does not add a new `PreflightFailure` member;
 `PreflightFailure` remains exactly eleven members.
 
 ---
