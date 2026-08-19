@@ -367,9 +367,14 @@ function enumerateProductionFiles(root: string): string[] {
 /**
  * Elements of a collection initializer — an array literal, or the array
  * literal argument of `new Set([...])` — or null if the node is neither.
+ * Direct Map entry tuples are excluded here; Map keys are handled by
+ * `mapInitializerKeyElements` so Map values are not treated as tuple elements.
  */
 function collectionInitializerElements(node: ts.Node): readonly ts.Expression[] | null {
-  if (ts.isArrayLiteralExpression(node)) return node.elements;
+  if (ts.isArrayLiteralExpression(node)) {
+    if (isDirectMapEntryTuple(node)) return null;
+    return node.elements;
+  }
   if (
     ts.isNewExpression(node) &&
     ts.isIdentifier(node.expression) &&
@@ -383,17 +388,73 @@ function collectionInitializerElements(node: ts.Node): readonly ts.Expression[] 
   return null;
 }
 
-// Mutable collection writes that can populate a collection created empty:
-// Set.add and Array.push/unshift. A collection is an admission source whether
-// its registered SurfaceIds arrive in the initializer or are written in
-// afterwards, so both forms are inspected identically.
-const MUTABLE_COLLECTION_WRITE_MEMBERS: ReadonlySet<string> = new Set(["add", "push", "unshift"]);
+/**
+ * True when `node` is a direct entry tuple of `new Map([[k, v], ...])` — an
+ * array-literal element of the Map constructor's array-literal argument.
+ * Suppressing generic array treatment for these tuples prevents Map values
+ * from being flagged while still allowing recursive visitation of nested
+ * independent admission collections inside those values.
+ */
+function isDirectMapEntryTuple(node: ts.ArrayLiteralExpression): boolean {
+  const parent = node.parent;
+  if (!parent || !ts.isArrayLiteralExpression(parent)) return false;
+  const grand = parent.parent;
+  return (
+    !!grand &&
+    ts.isNewExpression(grand) &&
+    ts.isIdentifier(grand.expression) &&
+    grand.expression.text === "Map" &&
+    !!grand.arguments &&
+    grand.arguments[0] === parent
+  );
+}
 
 /**
- * Arguments of a mutable collection write — `x.add(...)`, `x.push(...)`, or
- * `x.unshift(...)` — or null if the node is not such a call. This closes the
- * empty-initializer gap: `new Set<SurfaceId>()` followed by `.add("claude-code")`
- * carries exactly the admission authority that `new Set(["claude-code"])` does.
+ * Map keys from `new Map([[k, v], ...])` entry tuples — only element 0 of each
+ * direct entry-tuple array literal. Returns null when the node is not a Map
+ * constructed from an array literal of entry tuples.
+ */
+function mapInitializerKeyElements(node: ts.Node): readonly ts.Expression[] | null {
+  if (
+    !(
+      ts.isNewExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === "Map" &&
+      node.arguments &&
+      node.arguments.length > 0 &&
+      ts.isArrayLiteralExpression(node.arguments[0]!)
+    )
+  ) {
+    return null;
+  }
+  const keys: ts.Expression[] = [];
+  for (const entry of (node.arguments[0] as ts.ArrayLiteralExpression).elements) {
+    if (ts.isArrayLiteralExpression(entry) && entry.elements.length > 0) {
+      keys.push(entry.elements[0]!);
+    }
+  }
+  return keys;
+}
+
+// Mutable collection writes that can populate a collection created empty:
+// Set.add, Array.push/unshift, and Map.set. A collection is an admission
+// source whether its registered SurfaceIds arrive in the initializer or are
+// written in afterwards, so both forms are inspected. For `.set()`, only
+// argument 0 (the Map key) is an admission authority.
+const MUTABLE_COLLECTION_WRITE_MEMBERS: ReadonlySet<string> = new Set([
+  "add",
+  "push",
+  "unshift",
+  "set",
+]);
+
+/**
+ * Arguments of a mutable collection write — `x.add(...)`, `x.push(...)`,
+ * `x.unshift(...)`, or `x.set(k, v)` — or null if the node is not such a call.
+ * For `.set()`, only argument 0 is returned so Map values are not inspected.
+ * This closes the empty-initializer gap: `new Set<SurfaceId>()` followed by
+ * `.add("claude-code")` carries exactly the admission authority that
+ * `new Set(["claude-code"])` does; likewise `map.set("claude-code", v)`.
  */
 function mutableCollectionWriteArguments(node: ts.Node): readonly ts.Expression[] | null {
   if (
@@ -401,6 +462,9 @@ function mutableCollectionWriteArguments(node: ts.Node): readonly ts.Expression[
     ts.isPropertyAccessExpression(node.expression) &&
     MUTABLE_COLLECTION_WRITE_MEMBERS.has(node.expression.name.text)
   ) {
+    if (node.expression.name.text === "set") {
+      return node.arguments.length > 0 ? [node.arguments[0]!] : [];
+    }
     return node.arguments;
   }
   return null;
@@ -410,13 +474,14 @@ function mutableCollectionWriteArguments(node: ts.Node): readonly ts.Expression[
  * Syntax-aware detection of surface-admission collections whose contents
  * include a currently registered SurfaceId value, in either of the two forms
  * a collection can acquire them: a collection initializer (an array literal,
- * or `new Set([...])`), or a mutable collection write (`.add`, `.push`,
- * `.unshift`) into a collection that may have been created empty. This is
- * what closes the identifier-name gap: an admission list under any name is
- * still a collection built from ratified SurfaceId strings, whenever those
- * strings are put into it. A bare SurfaceId string used outside a collection
- * initializer or a mutable collection write (a comparison, an ordinary call
- * argument, a type literal) is never flagged.
+ * `new Set([...])`, or Map entry keys of `new Map([[k, v], ...])`), or a
+ * mutable collection write (`.add`, `.push`, `.unshift`, `.set` key) into a
+ * collection that may have been created empty. This is what closes the
+ * identifier-name gap: an admission list under any name is still a collection
+ * built from ratified SurfaceId strings, whenever those strings are put into
+ * it. A bare SurfaceId string used outside a collection initializer or a
+ * mutable collection write (a comparison, an ordinary call argument, a type
+ * literal), and a SurfaceId used only as a Map value, is never flagged.
  */
 function findRegisteredSurfaceCollectionsInSource(sourceText: string, fileName: string): number[] {
   const sourceFile = ts.createSourceFile(
@@ -429,7 +494,10 @@ function findRegisteredSurfaceCollectionsInSource(sourceText: string, fileName: 
   const lineNumbers: number[] = [];
 
   const visit = (node: ts.Node): void => {
-    const elements = collectionInitializerElements(node) ?? mutableCollectionWriteArguments(node);
+    const elements =
+      mapInitializerKeyElements(node) ??
+      collectionInitializerElements(node) ??
+      mutableCollectionWriteArguments(node);
     if (elements) {
       const carriesRegisteredSurface = elements.some(
         (el) => ts.isStringLiteralLike(el) && REGISTERED_SURFACE_IDS.has(el.text),
@@ -613,6 +681,114 @@ describe("Phase 3A admission authority", () => {
       );
       expect(violations.some((v) => v.file === "packages/adapter-y/src/bare-usage.ts")).toBe(false);
       expect(violations).toHaveLength(2);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("admission-source scanner treats Map keys and .set() argument 0 as admission authorities", () => {
+    const root = makeTempRoot();
+    try {
+      writeTempFile(root, ADAPTER_REGISTRY_PATH, "export const ADAPTER_REGISTRY = new Map();\n");
+      // Ensure apps/ exists so the fail-closed packages/+apps/ gate accepts the temp root.
+      writeTempFile(root, "apps/foo/src/.keep.ts", "export {};\n");
+
+      // P0 — preservation control: registered SurfaceId as Map key must remain detected.
+      writeTempFile(
+        root,
+        "packages/adapter-y/src/map-key.ts",
+        'const ratifiedByKey = new Map([["claude-code", true]]);\n',
+      );
+      // R1 — false-negative RED: registered SurfaceId as .set() first argument must be detected.
+      writeTempFile(
+        root,
+        "packages/adapter-y/src/map-set-key.ts",
+        'const collection = new Map<string, boolean>();\ncollection.set("antigravity", true);\n',
+      );
+      // Nested independent admission collection inside a Map value must remain detectable.
+      writeTempFile(
+        root,
+        "packages/adapter-y/src/map-nested-set.ts",
+        'const nested = new Map([["alias", new Set(["claude-code"])]]);\n',
+      );
+      // Existing Array / Set initializer and mutable-write forms remain admission authorities.
+      writeTempFile(
+        root,
+        "packages/adapter-y/src/preserved-forms.ts",
+        [
+          'const asArray = ["claude-code"];',
+          'const asSet = new Set(["antigravity"]);',
+          "const emptySet = new Set<string>();",
+          'emptySet.add("claude-code");',
+          "const emptyArr: string[] = [];",
+          'emptyArr.push("antigravity");',
+          "const front: string[] = [];",
+          'front.unshift("claude-code");',
+          "",
+        ].join("\n"),
+      );
+
+      // R2 — false-positive RED: registered SurfaceId only as a Map value must NOT be detected.
+      writeTempFile(
+        root,
+        "packages/adapter-y/src/map-value-only.ts",
+        'const aliasMap = new Map([["alias", "claude-code"]]);\n',
+      );
+      // Registered SurfaceId only as .set() value argument must NOT be detected.
+      writeTempFile(
+        root,
+        "packages/adapter-y/src/map-set-value-only.ts",
+        'const collection = new Map<string, string>();\ncollection.set("alias", "antigravity");\n',
+      );
+      // Unknown IDs in Map keys are not admission authorities.
+      writeTempFile(
+        root,
+        "packages/adapter-y/src/map-unknown-key.ts",
+        'const other = new Map([["grok", true]]);\nother.set("codex", false);\n',
+      );
+      // Registered IDs in unrelated method/function arguments stay unflagged.
+      writeTempFile(
+        root,
+        "packages/adapter-y/src/unrelated-args.ts",
+        [
+          'declare function configure(id: string): void;',
+          'configure("claude-code");',
+          'console.log("antigravity");',
+          "",
+        ].join("\n"),
+      );
+      // Bare comparisons remain unflagged.
+      writeTempFile(
+        root,
+        "packages/adapter-y/src/bare-comparison.ts",
+        'export function isClaude(s: string): boolean {\n  return s === "claude-code";\n}\n',
+      );
+
+      const violations = scanAdmissionSources(root);
+      const flagged = new Set(violations.map((v) => `${v.file}:${v.line}`));
+      const flaggedFiles = new Set(violations.map((v) => v.file));
+
+      // P0 preservation plus the two RED controls in one object so a baseline run
+      // surfaces R1 (set-key miss) and R2 (map-value false positive) together.
+      expect({
+        // P0 — Map-key positive with exact 1-based file:line reporting.
+        mapKeyDetected: flagged.has("packages/adapter-y/src/map-key.ts:1"),
+        // R1 — .set() key positive with exact 1-based file:line reporting.
+        setKeyDetected: flagged.has("packages/adapter-y/src/map-set-key.ts:2"),
+        // R2 — Map-value-only must not be flagged.
+        mapValueOnlyDetected: flaggedFiles.has("packages/adapter-y/src/map-value-only.ts"),
+      }).toEqual({
+        mapKeyDetected: true,
+        setKeyDetected: true,
+        mapValueOnlyDetected: false,
+      });
+
+      expect(flaggedFiles.has("packages/adapter-y/src/map-nested-set.ts")).toBe(true);
+      expect(flaggedFiles.has("packages/adapter-y/src/preserved-forms.ts")).toBe(true);
+      expect(flaggedFiles.has("packages/adapter-y/src/map-set-value-only.ts")).toBe(false);
+      expect(flaggedFiles.has("packages/adapter-y/src/map-unknown-key.ts")).toBe(false);
+      expect(flaggedFiles.has("packages/adapter-y/src/unrelated-args.ts")).toBe(false);
+      expect(flaggedFiles.has("packages/adapter-y/src/bare-comparison.ts")).toBe(false);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
