@@ -302,3 +302,124 @@ describe("Phase 3A baseline floor", () => {
     }
   });
 });
+
+/**
+ * Phase 3A admission authority (Task 6).
+ *
+ * Invariant: production surface admission reads one closed, Founder-approved,
+ * immutable map — ADAPTER_REGISTRY in packages/protocol/src/adapter-registry.ts
+ * — and no other production module contains a surface-admission list.
+ * packages/policy/** is excluded: its surface/model constants are legacy
+ * Phase 2 action-policy validation, untouched in Phase 3A, and are not
+ * envelope-admission authorities (Q4). This scanner is distinct from the
+ * manual two-line grep verification: the scanner proves no admission source
+ * exists outside the registry (policy excluded by documented disposition);
+ * the grep proves token removal is complete outside the untouched policy
+ * package.
+ */
+
+const ADMISSION_LIST_PATTERN = /KNOWN_SURFACES|allowedSurfaces|SUPPORTED_SURFACES/;
+const ADAPTER_REGISTRY_PATH = "packages/protocol/src/adapter-registry.ts";
+
+interface AdmissionViolation {
+  file: string;
+  line: number;
+  text: string;
+}
+
+function reportAdmission(v: AdmissionViolation): string {
+  return `${v.file}:${v.line} [admission-list] ${v.text}`;
+}
+
+/** Recursively list .ts/.tsx production files under packages/ and apps/, excluding /test/ and /node_modules/. */
+function enumerateProductionFiles(root: string): string[] {
+  const files = new Set<string>();
+  for (const area of ["packages", "apps"]) {
+    for (const f of listSourceFiles(join(root, area))) {
+      if (f.includes("/node_modules/") || f.includes("/test/")) continue;
+      files.add(f);
+    }
+  }
+  return [...files].sort();
+}
+
+/**
+ * Scan production source under a repository root for surface-admission-list
+ * tokens outside the sanctioned adapter registry, excluding the untouched
+ * packages/policy/ package. Fails closed if packages/ or apps/ is absent.
+ */
+function scanAdmissionSources(root: string): AdmissionViolation[] {
+  if (!existsSync(join(root, "packages")) || !existsSync(join(root, "apps"))) {
+    throw new Error(
+      `Phase 3A admission-source scan: required packages/ and apps/ roots not found under ${root}`,
+    );
+  }
+  const violations: AdmissionViolation[] = [];
+  for (const file of enumerateProductionFiles(root)) {
+    const rel = relative(root, file);
+    if (rel === ADAPTER_REGISTRY_PATH) continue;
+    if (rel.startsWith("packages/policy/")) continue;
+    const lines = readFileSync(file, "utf8").split(/\r?\n/);
+    lines.forEach((lineText, idx) => {
+      if (ADMISSION_LIST_PATTERN.test(lineText)) {
+        violations.push({ file: rel, line: idx + 1, text: lineText.trim() });
+      }
+    });
+  }
+  return violations.sort((a, b) =>
+    a.file === b.file ? a.line - b.line : a.file < b.file ? -1 : 1,
+  );
+}
+
+describe("Phase 3A admission authority", () => {
+  test("adapter-registry.ts is the only production admission source", () => {
+    const violations = scanAdmissionSources(REPO_ROOT);
+    expect(violations.map(reportAdmission)).toEqual([]);
+  });
+
+  test("admission-source scanner detects a planted surface-admission list and scopes its exclusions exactly", () => {
+    const root = makeTempRoot();
+    try {
+      writeTempFile(
+        root,
+        "packages/protocol/src/task-envelope.ts",
+        'export const KNOWN_SURFACES = ["claude-code"];\n',
+      );
+      writeTempFile(
+        root,
+        "packages/adapter-x/src/a.ts",
+        "const allowedSurfaces: string[] = [];\n",
+      );
+      writeTempFile(root, "apps/foo/src/b.ts", "const SUPPORTED_SURFACES = [];\n");
+      writeTempFile(
+        root,
+        "packages/policy/src/engine.ts",
+        'const KNOWN_SURFACES = new Set(["claude-code", "antigravity"]);\n',
+      );
+      writeTempFile(
+        root,
+        ADAPTER_REGISTRY_PATH,
+        "// KNOWN_SURFACES referenced here only as prose; this is the authority file\nexport const ADAPTER_REGISTRY = new Map();\n",
+      );
+
+      const violations = scanAdmissionSources(root);
+      const flaggedFiles = new Set(violations.map((v) => v.file));
+
+      expect(flaggedFiles.has("packages/protocol/src/task-envelope.ts")).toBe(true);
+      expect(flaggedFiles.has("packages/adapter-x/src/a.ts")).toBe(true);
+      expect(flaggedFiles.has("apps/foo/src/b.ts")).toBe(true);
+      expect(flaggedFiles.has("packages/policy/src/engine.ts")).toBe(false);
+      expect(flaggedFiles.has(ADAPTER_REGISTRY_PATH)).toBe(false);
+      expect(violations).toHaveLength(3);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+
+    const emptyRoot = makeTempRoot();
+    try {
+      expect(() => scanAdmissionSources(emptyRoot)).toThrow();
+    } finally {
+      rmSync(emptyRoot, { recursive: true, force: true });
+    }
+  });
+});

@@ -21,7 +21,6 @@ export type { SurfaceId } from "./surface-id";
 export {
   parseTaskEnvelope,
   KNOWN_ROLES,
-  KNOWN_SURFACES,
   KNOWN_DATA_CLASSES,
   KNOWN_COMMAND_CATEGORIES,
 } from "./task-envelope";
@@ -32,3 +31,6 @@ export { sha256Hex } from "./crypto";
 export { newEventId, newSessionId } from "./ids";
 export { encodeWire, decodeWire } from "./wire";
 export type { WireMessage } from "./wire";
+
+export type { AdapterRegistrationV1 } from "./adapter-registry";
+export { ADAPTER_REGISTRY, lookupRegistration } from "./adapter-registry";
