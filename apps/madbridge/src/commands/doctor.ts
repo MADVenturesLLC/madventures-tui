@@ -9,7 +9,7 @@
 import { existsSync, accessSync, constants } from "fs";
 import { join } from "path";
 import { execSync } from "child_process";
-import { PROTOCOL_VERSION } from "@madventures/protocol";
+import { ADAPTER_REGISTRY, PROTOCOL_VERSION, type SurfaceId } from "@madventures/protocol";
 import type { CommandFlags, CommandContext, CommandResult } from "./types";
 
 interface Check {
@@ -90,16 +90,29 @@ function checkExactModelVisibility(): Check {
   const claudeConfig = join(process.env.HOME ?? "/tmp", ".claude", "settings.json");
   const geminiConfig = join(process.env.HOME ?? "/tmp", ".gemini", "antigravity", "settings.json");
 
-  const claudeExists = existsSync(claudeConfig);
-  const geminiExists = existsSync(geminiConfig);
+  // Configuration file locations are inherently provider-specific, so
+  // availability is resolved per provider. The surfaces themselves are never
+  // enumerated here: they are read from ADAPTER_REGISTRY, the sole admission
+  // authority, so this diagnostic can never drift from the registered set.
+  const configAvailableByProvider = new Map<string, boolean>([
+    ["anthropic", existsSync(claudeConfig)],
+    ["google", existsSync(geminiConfig)],
+  ]);
 
-  if (claudeExists && geminiExists) {
-    return { name: "exact-model-visibility", status: "ok", detail: "adapter config files present" };
+  // Registry iteration order is the reported order.
+  const missing: SurfaceId[] = [];
+  for (const registration of ADAPTER_REGISTRY.values()) {
+    // Fail closed: a provider with no known configuration location, or one
+    // whose configuration is absent, is reported as missing rather than
+    // silently assumed healthy.
+    if (configAvailableByProvider.get(registration.provider) !== true) {
+      missing.push(registration.surface);
+    }
   }
 
-  const missing: string[] = [];
-  if (!claudeExists) missing.push("claude-code");
-  if (!geminiExists) missing.push("antigravity");
+  if (missing.length === 0) {
+    return { name: "exact-model-visibility", status: "ok", detail: "adapter config files present" };
+  }
 
   return {
     name: "exact-model-visibility",

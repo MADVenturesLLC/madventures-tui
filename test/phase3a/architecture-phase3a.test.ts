@@ -12,6 +12,7 @@ import { join, dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import * as ts from "typescript";
+import { ADAPTER_REGISTRY } from "../../packages/protocol/src/adapter-registry";
 
 /**
  * Phase 3A baseline floor.
@@ -297,6 +298,647 @@ describe("Phase 3A baseline floor", () => {
       const v = scanRepository(root);
       expect(v.some((x) => x.reason === "skip")).toBe(true);
       expect(v.some((x) => x.reason === "focus")).toBe(true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
+ * Phase 3A admission authority (Task 6).
+ *
+ * Invariant: production surface admission reads one closed, Founder-approved,
+ * immutable map — ADAPTER_REGISTRY in packages/protocol/src/adapter-registry.ts
+ * — and no other production module contains a surface-admission list.
+ * packages/policy/** is excluded: its surface/model constants are legacy
+ * Phase 2 action-policy validation, untouched in Phase 3A, and are not
+ * envelope-admission authorities (Q4). This scanner is distinct from the
+ * manual two-line grep verification: the scanner proves no admission source
+ * exists outside the registry (policy excluded by documented disposition);
+ * the grep proves token removal is complete outside the untouched policy
+ * package.
+ */
+
+const ADMISSION_LIST_PATTERN = /KNOWN_SURFACES|allowedSurfaces|SUPPORTED_SURFACES/;
+const ADAPTER_REGISTRY_PATH = "packages/protocol/src/adapter-registry.ts";
+
+// The invariant is about admission by value, not by identifier name: any
+// production collection initializer carrying a currently registered
+// SurfaceId is an admission list, whatever it is called. Values are read
+// from the real registry so this check cannot drift from the actual
+// admission source.
+const REGISTERED_SURFACE_IDS: ReadonlySet<string> = new Set(
+  [...ADAPTER_REGISTRY.keys()].map(String),
+);
+
+interface AdmissionViolation {
+  file: string;
+  line: number;
+  text: string;
+}
+
+function reportAdmission(v: AdmissionViolation): string {
+  return `${v.file}:${v.line} [admission-list] ${v.text}`;
+}
+
+/**
+ * Convert a filesystem path to forward-slash form so exclusion and equality
+ * checks behave identically whether the host produced POSIX or Windows-style
+ * separators. Used only for string comparison — the original path (returned
+ * separately, untouched) is what filesystem calls must keep using.
+ */
+function toPortablePath(p: string): string {
+  return p.replace(/\\/g, "/");
+}
+
+/** Recursively list .ts/.tsx production files under packages/ and apps/, excluding /test/ and /node_modules/. */
+function enumerateProductionFiles(root: string): string[] {
+  const files = new Set<string>();
+  for (const area of ["packages", "apps"]) {
+    for (const f of listSourceFiles(join(root, area))) {
+      const portablePath = toPortablePath(f);
+      if (portablePath.includes("/node_modules/") || portablePath.includes("/test/")) continue;
+      files.add(f);
+    }
+  }
+  return [...files].sort();
+}
+
+/**
+ * Elements of a collection initializer — an array literal, or the array
+ * literal argument of `new Set([...])` — or null if the node is neither.
+ * Direct Map entry tuples are excluded here; Map keys are handled by
+ * `mapInitializerKeyElements` so Map values are not treated as tuple elements.
+ */
+function collectionInitializerElements(node: ts.Node): readonly ts.Expression[] | null {
+  if (ts.isArrayLiteralExpression(node)) {
+    if (isDirectMapEntryTuple(node)) return null;
+    return node.elements;
+  }
+  if (
+    ts.isNewExpression(node) &&
+    ts.isIdentifier(node.expression) &&
+    node.expression.text === "Set" &&
+    node.arguments &&
+    node.arguments.length > 0 &&
+    ts.isArrayLiteralExpression(node.arguments[0]!)
+  ) {
+    return (node.arguments[0] as ts.ArrayLiteralExpression).elements;
+  }
+  return null;
+}
+
+/**
+ * Peel transparent TypeScript expression wrappers — parentheses, `as` /
+ * `as const`, angle-bracket assertions, `satisfies`, and non-null `!` — so
+ * Map-shape recognition and StringLiteralLike key checks see the underlying
+ * node. Pure; does not unwrap identifiers, calls, spreads, or `await`.
+ */
+function unwrapTransparentExpression(node: ts.Node): ts.Node {
+  let current = node;
+  while (
+    ts.isParenthesizedExpression(current) ||
+    ts.isAsExpression(current) ||
+    ts.isTypeAssertionExpression(current) ||
+    ts.isSatisfiesExpression(current) ||
+    ts.isNonNullExpression(current)
+  ) {
+    current = current.expression;
+  }
+  return current;
+}
+
+/**
+ * True when `node` is a direct entry tuple of `new Map([[k, v], ...])` — an
+ * array-literal element of the Map constructor's array-literal argument.
+ * Suppressing generic array treatment for these tuples prevents Map values
+ * from being flagged while still allowing recursive visitation of nested
+ * independent admission collections inside those values. Transparent wrappers
+ * around the tuple or the Map iterable are peeled via
+ * `unwrapTransparentExpression` on the constructor argument and by climbing
+ * wrapper parents whose `.expression` is the wrapped child.
+ */
+function isDirectMapEntryTuple(node: ts.ArrayLiteralExpression): boolean {
+  let child: ts.Node = node;
+  let parent: ts.Node | undefined = node.parent;
+  while (
+    parent &&
+    (ts.isParenthesizedExpression(parent) ||
+      ts.isAsExpression(parent) ||
+      ts.isTypeAssertionExpression(parent) ||
+      ts.isSatisfiesExpression(parent) ||
+      ts.isNonNullExpression(parent)) &&
+    parent.expression === child
+  ) {
+    child = parent;
+    parent = parent.parent;
+  }
+  if (!parent || !ts.isArrayLiteralExpression(parent)) return false;
+
+  let iterableChild: ts.Node = parent;
+  let grand: ts.Node | undefined = parent.parent;
+  while (
+    grand &&
+    (ts.isParenthesizedExpression(grand) ||
+      ts.isAsExpression(grand) ||
+      ts.isTypeAssertionExpression(grand) ||
+      ts.isSatisfiesExpression(grand) ||
+      ts.isNonNullExpression(grand)) &&
+    grand.expression === iterableChild
+  ) {
+    iterableChild = grand;
+    grand = grand.parent;
+  }
+  return (
+    !!grand &&
+    ts.isNewExpression(grand) &&
+    ts.isIdentifier(grand.expression) &&
+    grand.expression.text === "Map" &&
+    !!grand.arguments &&
+    grand.arguments.length > 0 &&
+    unwrapTransparentExpression(grand.arguments[0]!) === parent
+  );
+}
+
+/**
+ * Map keys from `new Map([[k, v], ...])` entry tuples — only element 0 of each
+ * direct entry-tuple array literal. Returns null when the node is not a Map
+ * constructed from an array literal of entry tuples.
+ */
+function mapInitializerKeyElements(node: ts.Node): readonly ts.Expression[] | null {
+  if (
+    !(
+      ts.isNewExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === "Map" &&
+      node.arguments &&
+      node.arguments.length > 0 &&
+      ts.isArrayLiteralExpression(unwrapTransparentExpression(node.arguments[0]!))
+    )
+  ) {
+    return null;
+  }
+  const iterable = unwrapTransparentExpression(
+    node.arguments[0]!,
+  ) as ts.ArrayLiteralExpression;
+  const keys: ts.Expression[] = [];
+  for (const entry of iterable.elements) {
+    const unwrappedEntry = unwrapTransparentExpression(entry);
+    if (ts.isArrayLiteralExpression(unwrappedEntry) && unwrappedEntry.elements.length > 0) {
+      keys.push(unwrappedEntry.elements[0]!);
+    }
+  }
+  return keys;
+}
+
+// Mutable collection writes that can populate a collection created empty:
+// Set.add, Array.push/unshift, and Map.set. A collection is an admission
+// source whether its registered SurfaceIds arrive in the initializer or are
+// written in afterwards, so both forms are inspected. For `.set()`, only
+// argument 0 (the Map key) is an admission authority.
+const MUTABLE_COLLECTION_WRITE_MEMBERS: ReadonlySet<string> = new Set([
+  "add",
+  "push",
+  "unshift",
+  "set",
+]);
+
+/**
+ * Arguments of a mutable collection write — `x.add(...)`, `x.push(...)`,
+ * `x.unshift(...)`, or `x.set(k, v)` — or null if the node is not such a call.
+ * For `.set()`, only argument 0 is returned so Map values are not inspected.
+ * This closes the empty-initializer gap: `new Set<SurfaceId>()` followed by
+ * `.add("claude-code")` carries exactly the admission authority that
+ * `new Set(["claude-code"])` does; likewise `map.set("claude-code", v)`.
+ */
+function mutableCollectionWriteArguments(node: ts.Node): readonly ts.Expression[] | null {
+  if (
+    ts.isCallExpression(node) &&
+    ts.isPropertyAccessExpression(node.expression) &&
+    MUTABLE_COLLECTION_WRITE_MEMBERS.has(node.expression.name.text)
+  ) {
+    if (node.expression.name.text === "set") {
+      return node.arguments.length > 0 ? [node.arguments[0]!] : [];
+    }
+    return node.arguments;
+  }
+  return null;
+}
+
+/**
+ * Syntax-aware detection of surface-admission collections whose contents
+ * include a currently registered SurfaceId value, in either of the two forms
+ * a collection can acquire them: a collection initializer (an array literal,
+ * `new Set([...])`, or Map entry keys of `new Map([[k, v], ...])`), or a
+ * mutable collection write (`.add`, `.push`, `.unshift`, `.set` key) into a
+ * collection that may have been created empty. This is what closes the
+ * identifier-name gap: an admission list under any name is still a collection
+ * built from ratified SurfaceId strings, whenever those strings are put into
+ * it. A bare SurfaceId string used outside a collection initializer or a
+ * mutable collection write (a comparison, an ordinary call argument, a type
+ * literal), and a SurfaceId used only as a Map value, is never flagged.
+ */
+function findRegisteredSurfaceCollectionsInSource(sourceText: string, fileName: string): number[] {
+  const sourceFile = ts.createSourceFile(
+    fileName,
+    sourceText,
+    ts.ScriptTarget.Latest,
+    /* setParentNodes */ true,
+    scriptKindFor(fileName),
+  );
+  const lineNumbers: number[] = [];
+
+  const visit = (node: ts.Node): void => {
+    const elements =
+      mapInitializerKeyElements(node) ??
+      collectionInitializerElements(node) ??
+      mutableCollectionWriteArguments(node);
+    if (elements) {
+      const carriesRegisteredSurface = elements.some((el) => {
+        const unwrapped = unwrapTransparentExpression(el);
+        return (
+          ts.isStringLiteralLike(unwrapped) &&
+          REGISTERED_SURFACE_IDS.has((unwrapped as ts.StringLiteralLike).text)
+        );
+      });
+      if (carriesRegisteredSurface) {
+        const start = node.getStart(sourceFile);
+        lineNumbers.push(sourceFile.getLineAndCharacterOfPosition(start).line + 1);
+      }
+    }
+    node.forEachChild(visit);
+  };
+  visit(sourceFile);
+  return lineNumbers;
+}
+
+/**
+ * Scan production source under a repository root for surface-admission
+ * collections outside the sanctioned adapter registry, excluding the
+ * untouched packages/policy/ package. Detection is the union of two
+ * strategies: the legacy identifier-name pattern (KNOWN_SURFACES,
+ * allowedSurfaces, SUPPORTED_SURFACES) and syntax-aware detection of any
+ * collection carrying a registered SurfaceId value — by initializer or by
+ * mutable write — whatever its name. Fails closed if packages/ or apps/ is
+ * absent.
+ */
+function scanAdmissionSources(root: string): AdmissionViolation[] {
+  if (!existsSync(join(root, "packages")) || !existsSync(join(root, "apps"))) {
+    throw new Error(
+      `Phase 3A admission-source scan: required packages/ and apps/ roots not found under ${root}`,
+    );
+  }
+  const violations: AdmissionViolation[] = [];
+  for (const file of enumerateProductionFiles(root)) {
+    const rel = toPortablePath(relative(root, file));
+    if (rel === ADAPTER_REGISTRY_PATH) continue;
+    if (rel.startsWith("packages/policy/")) continue;
+
+    const sourceText = readFileSync(file, "utf8");
+    const lines = sourceText.split(/\r?\n/);
+    const flaggedLines = new Set<number>();
+    lines.forEach((lineText, idx) => {
+      if (ADMISSION_LIST_PATTERN.test(lineText)) {
+        flaggedLines.add(idx + 1);
+      }
+    });
+    for (const lineNumber of findRegisteredSurfaceCollectionsInSource(sourceText, rel)) {
+      flaggedLines.add(lineNumber);
+    }
+
+    for (const lineNumber of [...flaggedLines].sort((a, b) => a - b)) {
+      violations.push({ file: rel, line: lineNumber, text: lines[lineNumber - 1]!.trim() });
+    }
+  }
+  return violations.sort((a, b) =>
+    a.file === b.file ? a.line - b.line : a.file < b.file ? -1 : 1,
+  );
+}
+
+describe("Phase 3A admission authority", () => {
+  test("adapter-registry.ts is the only production admission source", () => {
+    const violations = scanAdmissionSources(REPO_ROOT);
+    expect(violations.map(reportAdmission)).toEqual([]);
+  });
+
+  test("admission-source scanner detects a planted surface-admission list and scopes its exclusions exactly", () => {
+    const root = makeTempRoot();
+    try {
+      writeTempFile(
+        root,
+        "packages/protocol/src/task-envelope.ts",
+        'export const KNOWN_SURFACES = ["claude-code"];\n',
+      );
+      writeTempFile(
+        root,
+        "packages/adapter-x/src/a.ts",
+        "const allowedSurfaces: string[] = [];\n",
+      );
+      writeTempFile(root, "apps/foo/src/b.ts", "const SUPPORTED_SURFACES = [];\n");
+      writeTempFile(
+        root,
+        "packages/policy/src/engine.ts",
+        'const KNOWN_SURFACES = new Set(["claude-code", "antigravity"]);\n',
+      );
+      writeTempFile(
+        root,
+        ADAPTER_REGISTRY_PATH,
+        "// KNOWN_SURFACES referenced here only as prose; this is the authority file\nexport const ADAPTER_REGISTRY = new Map();\n",
+      );
+      writeTempFile(
+        root,
+        "packages/adapter-y/src/shadow-admission.ts",
+        'const ratifiedAdapters = new Set(["claude-code", "antigravity"]);\n',
+      );
+
+      const violations = scanAdmissionSources(root);
+      const flaggedFiles = new Set(violations.map((v) => v.file));
+
+      expect(flaggedFiles.has("packages/protocol/src/task-envelope.ts")).toBe(true);
+      expect(flaggedFiles.has("packages/adapter-x/src/a.ts")).toBe(true);
+      expect(flaggedFiles.has("apps/foo/src/b.ts")).toBe(true);
+      expect(flaggedFiles.has("packages/policy/src/engine.ts")).toBe(false);
+      expect(flaggedFiles.has(ADAPTER_REGISTRY_PATH)).toBe(false);
+      // Differently named collection carrying registered SurfaceId values must
+      // still be caught — detection is by value, not only by legacy identifier.
+      expect(flaggedFiles.has("packages/adapter-y/src/shadow-admission.ts")).toBe(true);
+      expect(violations).toHaveLength(4);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+
+    const emptyRoot = makeTempRoot();
+    try {
+      expect(() => scanAdmissionSources(emptyRoot)).toThrow();
+    } finally {
+      rmSync(emptyRoot, { recursive: true, force: true });
+    }
+  });
+
+  test("path exclusions normalize Windows-style backslash separators identically to POSIX", () => {
+    const windowsTestFile = String.raw`C:\repo\packages\adapter-x\test\fixture.ts`;
+    expect(toPortablePath(windowsTestFile).includes("/test/")).toBe(true);
+
+    const windowsNodeModulesFile = String.raw`C:\repo\packages\adapter-x\node_modules\dep\index.ts`;
+    expect(toPortablePath(windowsNodeModulesFile).includes("/node_modules/")).toBe(true);
+
+    const windowsRegistryRelPath = String.raw`packages\protocol\src\adapter-registry.ts`;
+    expect(toPortablePath(windowsRegistryRelPath)).toBe(ADAPTER_REGISTRY_PATH);
+
+    const windowsPolicyRelPath = String.raw`packages\policy\src\engine.ts`;
+    expect(toPortablePath(windowsPolicyRelPath).startsWith("packages/policy/")).toBe(true);
+
+    // POSIX paths are unaffected by normalization (idempotent — no backslashes to convert).
+    const posixTestFile = "packages/adapter-x/test/fixture.ts";
+    expect(toPortablePath(posixTestFile)).toBe(posixTestFile);
+    const posixNodeModulesFile = "packages/adapter-x/node_modules/dep/index.ts";
+    expect(toPortablePath(posixNodeModulesFile)).toBe(posixNodeModulesFile);
+    expect(toPortablePath(ADAPTER_REGISTRY_PATH)).toBe(ADAPTER_REGISTRY_PATH);
+    expect(toPortablePath("packages/policy/src/engine.ts").startsWith("packages/policy/")).toBe(
+      true,
+    );
+  });
+
+  test("admission-source scanner detects registered SurfaceIds written into mutable collections", () => {
+    const root = makeTempRoot();
+    try {
+      // The authority file itself is always excluded; it only has to exist so
+      // the temp root is a well-formed scan target.
+      writeTempFile(root, ADAPTER_REGISTRY_PATH, "export const ADAPTER_REGISTRY = new Map();\n");
+      // Bypass 1: a Set created empty, then populated by .add().
+      writeTempFile(
+        root,
+        "packages/adapter-y/src/set-write.ts",
+        'const ratifiedAdapters = new Set<string>();\nratifiedAdapters.add("claude-code");\n',
+      );
+      // Bypass 2: an array created empty, then populated by .push().
+      writeTempFile(
+        root,
+        "apps/foo/src/array-write.ts",
+        'const ratifiedAdapters: string[] = [];\nratifiedAdapters.push("antigravity");\n',
+      );
+      // Unregistered values are not admission authorities and must stay unflagged.
+      writeTempFile(
+        root,
+        "packages/adapter-y/src/unregistered-write.ts",
+        'const other = new Set<string>();\nother.add("grok");\nconst more: string[] = [];\nmore.push("codex");\n',
+      );
+      // A bare registered ID outside any collection is still never flagged.
+      writeTempFile(
+        root,
+        "packages/adapter-y/src/bare-usage.ts",
+        'export function isClaude(s: string): boolean {\n  return s === "claude-code";\n}\n',
+      );
+
+      const violations = scanAdmissionSources(root);
+      const flagged = new Set(violations.map((v) => `${v.file}:${v.line}`));
+
+      expect(flagged.has("packages/adapter-y/src/set-write.ts:2")).toBe(true);
+      expect(flagged.has("apps/foo/src/array-write.ts:2")).toBe(true);
+      expect(violations.some((v) => v.file === "packages/adapter-y/src/unregistered-write.ts")).toBe(
+        false,
+      );
+      expect(violations.some((v) => v.file === "packages/adapter-y/src/bare-usage.ts")).toBe(false);
+      expect(violations).toHaveLength(2);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("admission-source scanner treats Map keys and .set() argument 0 as admission authorities", () => {
+    const root = makeTempRoot();
+    try {
+      writeTempFile(root, ADAPTER_REGISTRY_PATH, "export const ADAPTER_REGISTRY = new Map();\n");
+      // Ensure apps/ exists so the fail-closed packages/+apps/ gate accepts the temp root.
+      writeTempFile(root, "apps/foo/src/.keep.ts", "export {};\n");
+
+      // P0 — preservation control: registered SurfaceId as Map key must remain detected.
+      writeTempFile(
+        root,
+        "packages/adapter-y/src/map-key.ts",
+        'const ratifiedByKey = new Map([["claude-code", true]]);\n',
+      );
+      // R1 — false-negative RED: registered SurfaceId as .set() first argument must be detected.
+      writeTempFile(
+        root,
+        "packages/adapter-y/src/map-set-key.ts",
+        'const collection = new Map<string, boolean>();\ncollection.set("antigravity", true);\n',
+      );
+      // Nested independent admission collection inside a Map value must remain detectable.
+      writeTempFile(
+        root,
+        "packages/adapter-y/src/map-nested-set.ts",
+        'const nested = new Map([["alias", new Set(["claude-code"])]]);\n',
+      );
+      // Existing Array / Set initializer and mutable-write forms remain admission authorities.
+      writeTempFile(
+        root,
+        "packages/adapter-y/src/preserved-forms.ts",
+        [
+          'const asArray = ["claude-code"];',
+          'const asSet = new Set(["antigravity"]);',
+          "const emptySet = new Set<string>();",
+          'emptySet.add("claude-code");',
+          "const emptyArr: string[] = [];",
+          'emptyArr.push("antigravity");',
+          "const front: string[] = [];",
+          'front.unshift("claude-code");',
+          "",
+        ].join("\n"),
+      );
+
+      // R2 — false-positive RED: registered SurfaceId only as a Map value must NOT be detected.
+      writeTempFile(
+        root,
+        "packages/adapter-y/src/map-value-only.ts",
+        'const aliasMap = new Map([["alias", "claude-code"]]);\n',
+      );
+      // Registered SurfaceId only as .set() value argument must NOT be detected.
+      writeTempFile(
+        root,
+        "packages/adapter-y/src/map-set-value-only.ts",
+        'const collection = new Map<string, string>();\ncollection.set("alias", "antigravity");\n',
+      );
+      // Unknown IDs in Map keys are not admission authorities.
+      writeTempFile(
+        root,
+        "packages/adapter-y/src/map-unknown-key.ts",
+        'const other = new Map([["grok", true]]);\nother.set("codex", false);\n',
+      );
+      // Registered IDs in unrelated method/function arguments stay unflagged.
+      writeTempFile(
+        root,
+        "packages/adapter-y/src/unrelated-args.ts",
+        [
+          'declare function configure(id: string): void;',
+          'configure("claude-code");',
+          'console.log("antigravity");',
+          "",
+        ].join("\n"),
+      );
+      // Bare comparisons remain unflagged.
+      writeTempFile(
+        root,
+        "packages/adapter-y/src/bare-comparison.ts",
+        'export function isClaude(s: string): boolean {\n  return s === "claude-code";\n}\n',
+      );
+
+      const violations = scanAdmissionSources(root);
+      const flagged = new Set(violations.map((v) => `${v.file}:${v.line}`));
+      const flaggedFiles = new Set(violations.map((v) => v.file));
+
+      // P0 preservation plus the two RED controls in one object so a baseline run
+      // surfaces R1 (set-key miss) and R2 (map-value false positive) together.
+      expect({
+        // P0 — Map-key positive with exact 1-based file:line reporting.
+        mapKeyDetected: flagged.has("packages/adapter-y/src/map-key.ts:1"),
+        // R1 — .set() key positive with exact 1-based file:line reporting.
+        setKeyDetected: flagged.has("packages/adapter-y/src/map-set-key.ts:2"),
+        // R2 — Map-value-only must not be flagged.
+        mapValueOnlyDetected: flaggedFiles.has("packages/adapter-y/src/map-value-only.ts"),
+      }).toEqual({
+        mapKeyDetected: true,
+        setKeyDetected: true,
+        mapValueOnlyDetected: false,
+      });
+
+      expect(flaggedFiles.has("packages/adapter-y/src/map-nested-set.ts")).toBe(true);
+      expect(flaggedFiles.has("packages/adapter-y/src/preserved-forms.ts")).toBe(true);
+      expect(flaggedFiles.has("packages/adapter-y/src/map-set-value-only.ts")).toBe(false);
+      expect(flaggedFiles.has("packages/adapter-y/src/map-unknown-key.ts")).toBe(false);
+      expect(flaggedFiles.has("packages/adapter-y/src/unrelated-args.ts")).toBe(false);
+      expect(flaggedFiles.has("packages/adapter-y/src/bare-comparison.ts")).toBe(false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("admission-source scanner unwraps transparent AST wrappers around Map structure", () => {
+    const root = makeTempRoot();
+    try {
+      writeTempFile(root, ADAPTER_REGISTRY_PATH, "export const ADAPTER_REGISTRY = new Map();\n");
+      writeTempFile(root, "apps/foo/src/.keep.ts", "export {};\n");
+
+      // R3-1 — false positive: Map iterable wrapped (W1–W6).
+      writeTempFile(
+        root,
+        "packages/adapter-y/src/wrapped-iterable.ts",
+        [
+          'const a = new Map(([["alias", "claude-code"]]));',
+          'const b = new Map([["alias", "claude-code"]] as const);',
+          'const c = new Map([["alias", "claude-code"]] as Array<[string, string]>);',
+          'const d = new Map(<Array<[string, string]>>[["alias", "claude-code"]]);',
+          'const e = new Map([["alias", "claude-code"]] satisfies Array<[string, string]>);',
+          'const f = new Map(([["alias", "claude-code"]])!);',
+          "",
+        ].join("\n"),
+      );
+      // R3-2 — false positive: one wrapped tuple inside a bare iterable (W7).
+      writeTempFile(
+        root,
+        "packages/adapter-y/src/wrapped-tuple.ts",
+        'const a = new Map([["alias", "claude-code"] as const]);\n',
+      );
+      // R3-3 — false negative: wrapped Map keys (W8/W9).
+      writeTempFile(
+        root,
+        "packages/adapter-y/src/wrapped-map-key.ts",
+        [
+          'const a = new Map([[("claude-code"), true]]);',
+          'const b = new Map([["claude-code" as const, true]]);',
+          "",
+        ].join("\n"),
+      );
+      // R3-4 — false negative: wrapped .set() keys (W10).
+      writeTempFile(
+        root,
+        "packages/adapter-y/src/wrapped-set-key.ts",
+        [
+          "const m = new Map<string, boolean>();",
+          'm.set(("claude-code"), true);',
+          'm.set("antigravity" as const, true);',
+          "",
+        ].join("\n"),
+      );
+      // W11 — preservation: wrapped Set iterable must remain detected.
+      writeTempFile(
+        root,
+        "packages/adapter-y/src/wrapped-set-iterable.ts",
+        'const s = new Set((["claude-code"]));\n',
+      );
+      // Nested independent Set inside a wrapped Map value must remain detected.
+      writeTempFile(
+        root,
+        "packages/adapter-y/src/wrapped-nested-set.ts",
+        'const nested = new Map([["alias", new Set(["claude-code"])] as const]);\n',
+      );
+
+      const violations = scanAdmissionSources(root);
+      const flagged = new Set(violations.map((v) => `${v.file}:${v.line}`));
+      const flaggedFiles = new Set(violations.map((v) => v.file));
+
+      expect({
+        // R3-1 — wrapped Map iterables must not flag Map values.
+        wrappedIterableDetected: flaggedFiles.has("packages/adapter-y/src/wrapped-iterable.ts"),
+        // R3-2 — wrapped entry tuple must not flag Map values.
+        wrappedTupleDetected: flaggedFiles.has("packages/adapter-y/src/wrapped-tuple.ts"),
+        // R3-3 — wrapped Map keys must be detected at exact 1-based lines.
+        wrappedMapKeyLine1: flagged.has("packages/adapter-y/src/wrapped-map-key.ts:1"),
+        wrappedMapKeyLine2: flagged.has("packages/adapter-y/src/wrapped-map-key.ts:2"),
+        // R3-4 — wrapped .set() keys must be detected at exact 1-based lines.
+        wrappedSetKeyLine2: flagged.has("packages/adapter-y/src/wrapped-set-key.ts:2"),
+        wrappedSetKeyLine3: flagged.has("packages/adapter-y/src/wrapped-set-key.ts:3"),
+      }).toEqual({
+        wrappedIterableDetected: false,
+        wrappedTupleDetected: false,
+        wrappedMapKeyLine1: true,
+        wrappedMapKeyLine2: true,
+        wrappedSetKeyLine2: true,
+        wrappedSetKeyLine3: true,
+      });
+
+      expect(flaggedFiles.has("packages/adapter-y/src/wrapped-set-iterable.ts")).toBe(true);
+      expect(flaggedFiles.has("packages/adapter-y/src/wrapped-nested-set.ts")).toBe(true);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

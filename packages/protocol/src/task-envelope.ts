@@ -20,7 +20,6 @@ export type ArtifactCategory = "code" | "diff" | "document" | "report" | "test-r
 export type Effort = "low" | "medium" | "high";
 
 export const KNOWN_ROLES: readonly ExecutionRole[] = ["builder", "independent-reviewer", "observer"];
-export const KNOWN_SURFACES: readonly CliSurface[] = ["claude-code", "antigravity"];
 export const KNOWN_DATA_CLASSES: readonly DataClass[] = ["public", "internal", "confidential", "restricted"];
 export const KNOWN_COMMAND_CATEGORIES: readonly CommandCategory[] = ["read", "write", "build", "test", "git", "shell", "network"];
 
