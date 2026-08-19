@@ -389,23 +389,74 @@ function collectionInitializerElements(node: ts.Node): readonly ts.Expression[] 
 }
 
 /**
+ * Peel transparent TypeScript expression wrappers — parentheses, `as` /
+ * `as const`, angle-bracket assertions, `satisfies`, and non-null `!` — so
+ * Map-shape recognition and StringLiteralLike key checks see the underlying
+ * node. Pure; does not unwrap identifiers, calls, spreads, or `await`.
+ */
+function unwrapTransparentExpression(node: ts.Node): ts.Node {
+  let current = node;
+  while (
+    ts.isParenthesizedExpression(current) ||
+    ts.isAsExpression(current) ||
+    ts.isTypeAssertionExpression(current) ||
+    ts.isSatisfiesExpression(current) ||
+    ts.isNonNullExpression(current)
+  ) {
+    current = current.expression;
+  }
+  return current;
+}
+
+/**
  * True when `node` is a direct entry tuple of `new Map([[k, v], ...])` — an
  * array-literal element of the Map constructor's array-literal argument.
  * Suppressing generic array treatment for these tuples prevents Map values
  * from being flagged while still allowing recursive visitation of nested
- * independent admission collections inside those values.
+ * independent admission collections inside those values. Transparent wrappers
+ * around the tuple or the Map iterable are peeled via
+ * `unwrapTransparentExpression` on the constructor argument and by climbing
+ * wrapper parents whose `.expression` is the wrapped child.
  */
 function isDirectMapEntryTuple(node: ts.ArrayLiteralExpression): boolean {
-  const parent = node.parent;
+  let child: ts.Node = node;
+  let parent: ts.Node | undefined = node.parent;
+  while (
+    parent &&
+    (ts.isParenthesizedExpression(parent) ||
+      ts.isAsExpression(parent) ||
+      ts.isTypeAssertionExpression(parent) ||
+      ts.isSatisfiesExpression(parent) ||
+      ts.isNonNullExpression(parent)) &&
+    parent.expression === child
+  ) {
+    child = parent;
+    parent = parent.parent;
+  }
   if (!parent || !ts.isArrayLiteralExpression(parent)) return false;
-  const grand = parent.parent;
+
+  let iterableChild: ts.Node = parent;
+  let grand: ts.Node | undefined = parent.parent;
+  while (
+    grand &&
+    (ts.isParenthesizedExpression(grand) ||
+      ts.isAsExpression(grand) ||
+      ts.isTypeAssertionExpression(grand) ||
+      ts.isSatisfiesExpression(grand) ||
+      ts.isNonNullExpression(grand)) &&
+    grand.expression === iterableChild
+  ) {
+    iterableChild = grand;
+    grand = grand.parent;
+  }
   return (
     !!grand &&
     ts.isNewExpression(grand) &&
     ts.isIdentifier(grand.expression) &&
     grand.expression.text === "Map" &&
     !!grand.arguments &&
-    grand.arguments[0] === parent
+    grand.arguments.length > 0 &&
+    unwrapTransparentExpression(grand.arguments[0]!) === parent
   );
 }
 
@@ -422,15 +473,19 @@ function mapInitializerKeyElements(node: ts.Node): readonly ts.Expression[] | nu
       node.expression.text === "Map" &&
       node.arguments &&
       node.arguments.length > 0 &&
-      ts.isArrayLiteralExpression(node.arguments[0]!)
+      ts.isArrayLiteralExpression(unwrapTransparentExpression(node.arguments[0]!))
     )
   ) {
     return null;
   }
+  const iterable = unwrapTransparentExpression(
+    node.arguments[0]!,
+  ) as ts.ArrayLiteralExpression;
   const keys: ts.Expression[] = [];
-  for (const entry of (node.arguments[0] as ts.ArrayLiteralExpression).elements) {
-    if (ts.isArrayLiteralExpression(entry) && entry.elements.length > 0) {
-      keys.push(entry.elements[0]!);
+  for (const entry of iterable.elements) {
+    const unwrappedEntry = unwrapTransparentExpression(entry);
+    if (ts.isArrayLiteralExpression(unwrappedEntry) && unwrappedEntry.elements.length > 0) {
+      keys.push(unwrappedEntry.elements[0]!);
     }
   }
   return keys;
@@ -499,9 +554,13 @@ function findRegisteredSurfaceCollectionsInSource(sourceText: string, fileName: 
       collectionInitializerElements(node) ??
       mutableCollectionWriteArguments(node);
     if (elements) {
-      const carriesRegisteredSurface = elements.some(
-        (el) => ts.isStringLiteralLike(el) && REGISTERED_SURFACE_IDS.has(el.text),
-      );
+      const carriesRegisteredSurface = elements.some((el) => {
+        const unwrapped = unwrapTransparentExpression(el);
+        return (
+          ts.isStringLiteralLike(unwrapped) &&
+          REGISTERED_SURFACE_IDS.has((unwrapped as ts.StringLiteralLike).text)
+        );
+      });
       if (carriesRegisteredSurface) {
         const start = node.getStart(sourceFile);
         lineNumbers.push(sourceFile.getLineAndCharacterOfPosition(start).line + 1);
@@ -789,6 +848,97 @@ describe("Phase 3A admission authority", () => {
       expect(flaggedFiles.has("packages/adapter-y/src/map-unknown-key.ts")).toBe(false);
       expect(flaggedFiles.has("packages/adapter-y/src/unrelated-args.ts")).toBe(false);
       expect(flaggedFiles.has("packages/adapter-y/src/bare-comparison.ts")).toBe(false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("admission-source scanner unwraps transparent AST wrappers around Map structure", () => {
+    const root = makeTempRoot();
+    try {
+      writeTempFile(root, ADAPTER_REGISTRY_PATH, "export const ADAPTER_REGISTRY = new Map();\n");
+      writeTempFile(root, "apps/foo/src/.keep.ts", "export {};\n");
+
+      // R3-1 — false positive: Map iterable wrapped (W1–W6).
+      writeTempFile(
+        root,
+        "packages/adapter-y/src/wrapped-iterable.ts",
+        [
+          'const a = new Map(([["alias", "claude-code"]]));',
+          'const b = new Map([["alias", "claude-code"]] as const);',
+          'const c = new Map([["alias", "claude-code"]] as Array<[string, string]>);',
+          'const d = new Map(<Array<[string, string]>>[["alias", "claude-code"]]);',
+          'const e = new Map([["alias", "claude-code"]] satisfies Array<[string, string]>);',
+          'const f = new Map(([["alias", "claude-code"]])!);',
+          "",
+        ].join("\n"),
+      );
+      // R3-2 — false positive: one wrapped tuple inside a bare iterable (W7).
+      writeTempFile(
+        root,
+        "packages/adapter-y/src/wrapped-tuple.ts",
+        'const a = new Map([["alias", "claude-code"] as const]);\n',
+      );
+      // R3-3 — false negative: wrapped Map keys (W8/W9).
+      writeTempFile(
+        root,
+        "packages/adapter-y/src/wrapped-map-key.ts",
+        [
+          'const a = new Map([[("claude-code"), true]]);',
+          'const b = new Map([["claude-code" as const, true]]);',
+          "",
+        ].join("\n"),
+      );
+      // R3-4 — false negative: wrapped .set() keys (W10).
+      writeTempFile(
+        root,
+        "packages/adapter-y/src/wrapped-set-key.ts",
+        [
+          "const m = new Map<string, boolean>();",
+          'm.set(("claude-code"), true);',
+          'm.set("antigravity" as const, true);',
+          "",
+        ].join("\n"),
+      );
+      // W11 — preservation: wrapped Set iterable must remain detected.
+      writeTempFile(
+        root,
+        "packages/adapter-y/src/wrapped-set-iterable.ts",
+        'const s = new Set((["claude-code"]));\n',
+      );
+      // Nested independent Set inside a wrapped Map value must remain detected.
+      writeTempFile(
+        root,
+        "packages/adapter-y/src/wrapped-nested-set.ts",
+        'const nested = new Map([["alias", new Set(["claude-code"])] as const]);\n',
+      );
+
+      const violations = scanAdmissionSources(root);
+      const flagged = new Set(violations.map((v) => `${v.file}:${v.line}`));
+      const flaggedFiles = new Set(violations.map((v) => v.file));
+
+      expect({
+        // R3-1 — wrapped Map iterables must not flag Map values.
+        wrappedIterableDetected: flaggedFiles.has("packages/adapter-y/src/wrapped-iterable.ts"),
+        // R3-2 — wrapped entry tuple must not flag Map values.
+        wrappedTupleDetected: flaggedFiles.has("packages/adapter-y/src/wrapped-tuple.ts"),
+        // R3-3 — wrapped Map keys must be detected at exact 1-based lines.
+        wrappedMapKeyLine1: flagged.has("packages/adapter-y/src/wrapped-map-key.ts:1"),
+        wrappedMapKeyLine2: flagged.has("packages/adapter-y/src/wrapped-map-key.ts:2"),
+        // R3-4 — wrapped .set() keys must be detected at exact 1-based lines.
+        wrappedSetKeyLine2: flagged.has("packages/adapter-y/src/wrapped-set-key.ts:2"),
+        wrappedSetKeyLine3: flagged.has("packages/adapter-y/src/wrapped-set-key.ts:3"),
+      }).toEqual({
+        wrappedIterableDetected: false,
+        wrappedTupleDetected: false,
+        wrappedMapKeyLine1: true,
+        wrappedMapKeyLine2: true,
+        wrappedSetKeyLine2: true,
+        wrappedSetKeyLine3: true,
+      });
+
+      expect(flaggedFiles.has("packages/adapter-y/src/wrapped-set-iterable.ts")).toBe(true);
+      expect(flaggedFiles.has("packages/adapter-y/src/wrapped-nested-set.ts")).toBe(true);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
