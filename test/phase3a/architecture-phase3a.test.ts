@@ -12,6 +12,7 @@ import { join, dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import * as ts from "typescript";
+import { ADAPTER_REGISTRY } from "../../packages/protocol/src/adapter-registry";
 
 /**
  * Phase 3A baseline floor.
@@ -321,6 +322,15 @@ describe("Phase 3A baseline floor", () => {
 const ADMISSION_LIST_PATTERN = /KNOWN_SURFACES|allowedSurfaces|SUPPORTED_SURFACES/;
 const ADAPTER_REGISTRY_PATH = "packages/protocol/src/adapter-registry.ts";
 
+// The invariant is about admission by value, not by identifier name: any
+// production collection initializer carrying a currently registered
+// SurfaceId is an admission list, whatever it is called. Values are read
+// from the real registry so this check cannot drift from the actual
+// admission source.
+const REGISTERED_SURFACE_IDS: ReadonlySet<string> = new Set(
+  [...ADAPTER_REGISTRY.keys()].map(String),
+);
+
 interface AdmissionViolation {
   file: string;
   line: number;
@@ -331,12 +341,23 @@ function reportAdmission(v: AdmissionViolation): string {
   return `${v.file}:${v.line} [admission-list] ${v.text}`;
 }
 
+/**
+ * Convert a filesystem path to forward-slash form so exclusion and equality
+ * checks behave identically whether the host produced POSIX or Windows-style
+ * separators. Used only for string comparison — the original path (returned
+ * separately, untouched) is what filesystem calls must keep using.
+ */
+function toPortablePath(p: string): string {
+  return p.replace(/\\/g, "/");
+}
+
 /** Recursively list .ts/.tsx production files under packages/ and apps/, excluding /test/ and /node_modules/. */
 function enumerateProductionFiles(root: string): string[] {
   const files = new Set<string>();
   for (const area of ["packages", "apps"]) {
     for (const f of listSourceFiles(join(root, area))) {
-      if (f.includes("/node_modules/") || f.includes("/test/")) continue;
+      const portablePath = toPortablePath(f);
+      if (portablePath.includes("/node_modules/") || portablePath.includes("/test/")) continue;
       files.add(f);
     }
   }
@@ -344,9 +365,68 @@ function enumerateProductionFiles(root: string): string[] {
 }
 
 /**
- * Scan production source under a repository root for surface-admission-list
- * tokens outside the sanctioned adapter registry, excluding the untouched
- * packages/policy/ package. Fails closed if packages/ or apps/ is absent.
+ * Elements of a collection initializer — an array literal, or the array
+ * literal argument of `new Set([...])` — or null if the node is neither.
+ */
+function collectionInitializerElements(node: ts.Node): readonly ts.Expression[] | null {
+  if (ts.isArrayLiteralExpression(node)) return node.elements;
+  if (
+    ts.isNewExpression(node) &&
+    ts.isIdentifier(node.expression) &&
+    node.expression.text === "Set" &&
+    node.arguments &&
+    node.arguments.length > 0 &&
+    ts.isArrayLiteralExpression(node.arguments[0]!)
+  ) {
+    return (node.arguments[0] as ts.ArrayLiteralExpression).elements;
+  }
+  return null;
+}
+
+/**
+ * Syntax-aware detection of collection initializers (array literals, or
+ * `new Set([...])`) whose elements include a currently registered SurfaceId
+ * value. This is what closes the identifier-name gap: an admission list
+ * under any name is still a collection literally built from ratified
+ * SurfaceId strings. A bare SurfaceId string used outside a collection
+ * initializer (a comparison, a single call argument, a type literal) is
+ * never flagged — only the collection literal itself is a candidate.
+ */
+function findRegisteredSurfaceCollectionsInSource(sourceText: string, fileName: string): number[] {
+  const sourceFile = ts.createSourceFile(
+    fileName,
+    sourceText,
+    ts.ScriptTarget.Latest,
+    /* setParentNodes */ true,
+    scriptKindFor(fileName),
+  );
+  const lineNumbers: number[] = [];
+
+  const visit = (node: ts.Node): void => {
+    const elements = collectionInitializerElements(node);
+    if (elements) {
+      const carriesRegisteredSurface = elements.some(
+        (el) => ts.isStringLiteralLike(el) && REGISTERED_SURFACE_IDS.has(el.text),
+      );
+      if (carriesRegisteredSurface) {
+        const start = node.getStart(sourceFile);
+        lineNumbers.push(sourceFile.getLineAndCharacterOfPosition(start).line + 1);
+      }
+    }
+    node.forEachChild(visit);
+  };
+  visit(sourceFile);
+  return lineNumbers;
+}
+
+/**
+ * Scan production source under a repository root for surface-admission
+ * collections outside the sanctioned adapter registry, excluding the
+ * untouched packages/policy/ package. Detection is the union of two
+ * strategies: the legacy identifier-name pattern (KNOWN_SURFACES,
+ * allowedSurfaces, SUPPORTED_SURFACES) and syntax-aware detection of any
+ * collection initializer carrying a registered SurfaceId value, whatever its
+ * name. Fails closed if packages/ or apps/ is absent.
  */
 function scanAdmissionSources(root: string): AdmissionViolation[] {
   if (!existsSync(join(root, "packages")) || !existsSync(join(root, "apps"))) {
@@ -356,15 +436,25 @@ function scanAdmissionSources(root: string): AdmissionViolation[] {
   }
   const violations: AdmissionViolation[] = [];
   for (const file of enumerateProductionFiles(root)) {
-    const rel = relative(root, file);
+    const rel = toPortablePath(relative(root, file));
     if (rel === ADAPTER_REGISTRY_PATH) continue;
     if (rel.startsWith("packages/policy/")) continue;
-    const lines = readFileSync(file, "utf8").split(/\r?\n/);
+
+    const sourceText = readFileSync(file, "utf8");
+    const lines = sourceText.split(/\r?\n/);
+    const flaggedLines = new Set<number>();
     lines.forEach((lineText, idx) => {
       if (ADMISSION_LIST_PATTERN.test(lineText)) {
-        violations.push({ file: rel, line: idx + 1, text: lineText.trim() });
+        flaggedLines.add(idx + 1);
       }
     });
+    for (const lineNumber of findRegisteredSurfaceCollectionsInSource(sourceText, rel)) {
+      flaggedLines.add(lineNumber);
+    }
+
+    for (const lineNumber of [...flaggedLines].sort((a, b) => a - b)) {
+      violations.push({ file: rel, line: lineNumber, text: lines[lineNumber - 1]!.trim() });
+    }
   }
   return violations.sort((a, b) =>
     a.file === b.file ? a.line - b.line : a.file < b.file ? -1 : 1,
@@ -401,6 +491,11 @@ describe("Phase 3A admission authority", () => {
         ADAPTER_REGISTRY_PATH,
         "// KNOWN_SURFACES referenced here only as prose; this is the authority file\nexport const ADAPTER_REGISTRY = new Map();\n",
       );
+      writeTempFile(
+        root,
+        "packages/adapter-y/src/shadow-admission.ts",
+        'const ratifiedAdapters = new Set(["claude-code", "antigravity"]);\n',
+      );
 
       const violations = scanAdmissionSources(root);
       const flaggedFiles = new Set(violations.map((v) => v.file));
@@ -410,7 +505,10 @@ describe("Phase 3A admission authority", () => {
       expect(flaggedFiles.has("apps/foo/src/b.ts")).toBe(true);
       expect(flaggedFiles.has("packages/policy/src/engine.ts")).toBe(false);
       expect(flaggedFiles.has(ADAPTER_REGISTRY_PATH)).toBe(false);
-      expect(violations).toHaveLength(3);
+      // Differently named collection carrying registered SurfaceId values must
+      // still be caught — detection is by value, not only by legacy identifier.
+      expect(flaggedFiles.has("packages/adapter-y/src/shadow-admission.ts")).toBe(true);
+      expect(violations).toHaveLength(4);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -421,5 +519,29 @@ describe("Phase 3A admission authority", () => {
     } finally {
       rmSync(emptyRoot, { recursive: true, force: true });
     }
+  });
+
+  test("path exclusions normalize Windows-style backslash separators identically to POSIX", () => {
+    const windowsTestFile = String.raw`C:\repo\packages\adapter-x\test\fixture.ts`;
+    expect(toPortablePath(windowsTestFile).includes("/test/")).toBe(true);
+
+    const windowsNodeModulesFile = String.raw`C:\repo\packages\adapter-x\node_modules\dep\index.ts`;
+    expect(toPortablePath(windowsNodeModulesFile).includes("/node_modules/")).toBe(true);
+
+    const windowsRegistryRelPath = String.raw`packages\protocol\src\adapter-registry.ts`;
+    expect(toPortablePath(windowsRegistryRelPath)).toBe(ADAPTER_REGISTRY_PATH);
+
+    const windowsPolicyRelPath = String.raw`packages\policy\src\engine.ts`;
+    expect(toPortablePath(windowsPolicyRelPath).startsWith("packages/policy/")).toBe(true);
+
+    // POSIX paths are unaffected by normalization (idempotent — no backslashes to convert).
+    const posixTestFile = "packages/adapter-x/test/fixture.ts";
+    expect(toPortablePath(posixTestFile)).toBe(posixTestFile);
+    const posixNodeModulesFile = "packages/adapter-x/node_modules/dep/index.ts";
+    expect(toPortablePath(posixNodeModulesFile)).toBe(posixNodeModulesFile);
+    expect(toPortablePath(ADAPTER_REGISTRY_PATH)).toBe(ADAPTER_REGISTRY_PATH);
+    expect(toPortablePath("packages/policy/src/engine.ts").startsWith("packages/policy/")).toBe(
+      true,
+    );
   });
 });
