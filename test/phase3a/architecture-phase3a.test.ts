@@ -383,14 +383,40 @@ function collectionInitializerElements(node: ts.Node): readonly ts.Expression[] 
   return null;
 }
 
+// Mutable collection writes that can populate a collection created empty:
+// Set.add and Array.push/unshift. A collection is an admission source whether
+// its registered SurfaceIds arrive in the initializer or are written in
+// afterwards, so both forms are inspected identically.
+const MUTABLE_COLLECTION_WRITE_MEMBERS: ReadonlySet<string> = new Set(["add", "push", "unshift"]);
+
 /**
- * Syntax-aware detection of collection initializers (array literals, or
- * `new Set([...])`) whose elements include a currently registered SurfaceId
- * value. This is what closes the identifier-name gap: an admission list
- * under any name is still a collection literally built from ratified
- * SurfaceId strings. A bare SurfaceId string used outside a collection
- * initializer (a comparison, a single call argument, a type literal) is
- * never flagged — only the collection literal itself is a candidate.
+ * Arguments of a mutable collection write — `x.add(...)`, `x.push(...)`, or
+ * `x.unshift(...)` — or null if the node is not such a call. This closes the
+ * empty-initializer gap: `new Set<SurfaceId>()` followed by `.add("claude-code")`
+ * carries exactly the admission authority that `new Set(["claude-code"])` does.
+ */
+function mutableCollectionWriteArguments(node: ts.Node): readonly ts.Expression[] | null {
+  if (
+    ts.isCallExpression(node) &&
+    ts.isPropertyAccessExpression(node.expression) &&
+    MUTABLE_COLLECTION_WRITE_MEMBERS.has(node.expression.name.text)
+  ) {
+    return node.arguments;
+  }
+  return null;
+}
+
+/**
+ * Syntax-aware detection of surface-admission collections whose contents
+ * include a currently registered SurfaceId value, in either of the two forms
+ * a collection can acquire them: a collection initializer (an array literal,
+ * or `new Set([...])`), or a mutable collection write (`.add`, `.push`,
+ * `.unshift`) into a collection that may have been created empty. This is
+ * what closes the identifier-name gap: an admission list under any name is
+ * still a collection built from ratified SurfaceId strings, whenever those
+ * strings are put into it. A bare SurfaceId string used outside a collection
+ * initializer or a mutable collection write (a comparison, an ordinary call
+ * argument, a type literal) is never flagged.
  */
 function findRegisteredSurfaceCollectionsInSource(sourceText: string, fileName: string): number[] {
   const sourceFile = ts.createSourceFile(
@@ -403,7 +429,7 @@ function findRegisteredSurfaceCollectionsInSource(sourceText: string, fileName: 
   const lineNumbers: number[] = [];
 
   const visit = (node: ts.Node): void => {
-    const elements = collectionInitializerElements(node);
+    const elements = collectionInitializerElements(node) ?? mutableCollectionWriteArguments(node);
     if (elements) {
       const carriesRegisteredSurface = elements.some(
         (el) => ts.isStringLiteralLike(el) && REGISTERED_SURFACE_IDS.has(el.text),
@@ -425,8 +451,9 @@ function findRegisteredSurfaceCollectionsInSource(sourceText: string, fileName: 
  * untouched packages/policy/ package. Detection is the union of two
  * strategies: the legacy identifier-name pattern (KNOWN_SURFACES,
  * allowedSurfaces, SUPPORTED_SURFACES) and syntax-aware detection of any
- * collection initializer carrying a registered SurfaceId value, whatever its
- * name. Fails closed if packages/ or apps/ is absent.
+ * collection carrying a registered SurfaceId value — by initializer or by
+ * mutable write — whatever its name. Fails closed if packages/ or apps/ is
+ * absent.
  */
 function scanAdmissionSources(root: string): AdmissionViolation[] {
   if (!existsSync(join(root, "packages")) || !existsSync(join(root, "apps"))) {
@@ -543,5 +570,51 @@ describe("Phase 3A admission authority", () => {
     expect(toPortablePath("packages/policy/src/engine.ts").startsWith("packages/policy/")).toBe(
       true,
     );
+  });
+
+  test("admission-source scanner detects registered SurfaceIds written into mutable collections", () => {
+    const root = makeTempRoot();
+    try {
+      // The authority file itself is always excluded; it only has to exist so
+      // the temp root is a well-formed scan target.
+      writeTempFile(root, ADAPTER_REGISTRY_PATH, "export const ADAPTER_REGISTRY = new Map();\n");
+      // Bypass 1: a Set created empty, then populated by .add().
+      writeTempFile(
+        root,
+        "packages/adapter-y/src/set-write.ts",
+        'const ratifiedAdapters = new Set<string>();\nratifiedAdapters.add("claude-code");\n',
+      );
+      // Bypass 2: an array created empty, then populated by .push().
+      writeTempFile(
+        root,
+        "apps/foo/src/array-write.ts",
+        'const ratifiedAdapters: string[] = [];\nratifiedAdapters.push("antigravity");\n',
+      );
+      // Unregistered values are not admission authorities and must stay unflagged.
+      writeTempFile(
+        root,
+        "packages/adapter-y/src/unregistered-write.ts",
+        'const other = new Set<string>();\nother.add("grok");\nconst more: string[] = [];\nmore.push("codex");\n',
+      );
+      // A bare registered ID outside any collection is still never flagged.
+      writeTempFile(
+        root,
+        "packages/adapter-y/src/bare-usage.ts",
+        'export function isClaude(s: string): boolean {\n  return s === "claude-code";\n}\n',
+      );
+
+      const violations = scanAdmissionSources(root);
+      const flagged = new Set(violations.map((v) => `${v.file}:${v.line}`));
+
+      expect(flagged.has("packages/adapter-y/src/set-write.ts:2")).toBe(true);
+      expect(flagged.has("apps/foo/src/array-write.ts:2")).toBe(true);
+      expect(violations.some((v) => v.file === "packages/adapter-y/src/unregistered-write.ts")).toBe(
+        false,
+      );
+      expect(violations.some((v) => v.file === "packages/adapter-y/src/bare-usage.ts")).toBe(false);
+      expect(violations).toHaveLength(2);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
