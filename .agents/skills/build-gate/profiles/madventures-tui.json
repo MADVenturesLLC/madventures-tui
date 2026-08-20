@@ -1,0 +1,37 @@
+{
+  "profile": "madventures-tui",
+  "target": {
+    "origin_identity": "MADVenturesLLC/madventures-tui"
+  },
+  "gates": [
+    {
+      "id": "MTUI-CLEAN-TREE",
+      "command": "test -z \"$(git status --porcelain)\"",
+      "description": "Working tree must be clean (no uncommitted/untracked changes) before freeze.",
+      "severity": "major",
+      "blocking": true
+    },
+    {
+      "id": "MTUI-TYPECHECK",
+      "command": "bunx tsc --noEmit",
+      "description": "TypeScript typecheck across the workspace (tsc --noEmit).",
+      "severity": "critical",
+      "blocking": true
+    },
+    {
+      "id": "MTUI-TEST",
+      "command": "bun test",
+      "description": "Run the bun test suite. Only runs if typecheck passed (conditional_on).",
+      "severity": "critical",
+      "blocking": true,
+      "conditional_on": "MTUI-TYPECHECK"
+    },
+    {
+      "id": "MTUI-ORIGIN",
+      "command": "python3 -c \"import subprocess; url=subprocess.check_output(['git','config','--get','remote.origin.url']).decode().strip(); h,p=(url[4:].split(':',1) if url.startswith('git@') else url.split('://',1)[1].split('/',1)); ident='/'.join(x for x in p.split('/') if x).removesuffix('.git').lower(); assert ident=='madventuresllc/madventures-tui', ident; print(ident)\"",
+      "description": "Assert the git origin identity is the canonical MADVenturesLLC/madventures-tui (HTTPS or SSH).",
+      "severity": "critical",
+      "blocking": true
+    }
+  ]
+}

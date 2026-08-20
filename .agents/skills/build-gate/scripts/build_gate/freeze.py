@@ -1,0 +1,107 @@
+"""Exact-SHA freeze + origin identity capture.
+
+This is the anti-drift lock: it records the full 40-char commit SHA, the git
+origin identity, and the SHA-256 of the profile the gates came from. Any later
+review record that does not match these values fails validation.
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import subprocess
+from datetime import datetime, timezone
+from pathlib import Path
+
+from .types import FreezeManifest
+
+
+def _git(cwd: str | Path, args: str) -> str:
+    proc = subprocess.run(
+        f"git {args}",
+        shell=True,
+        cwd=str(cwd),
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(f"git {args} failed: {proc.stderr.strip()}")
+    return proc.stdout.strip()
+
+
+def normalize_origin(origin_url: str) -> tuple[str, str]:
+    """Return (host, identity) for an https or ssh git remote URL.
+
+    Examples:
+      https://github.com/MADVenturesLLC/madventures-tui.git -> ('github.com', 'MADVenturesLLC/madventures-tui')
+      git@github.com:MADVenturesLLC/madventures-tui.git     -> ('github.com', 'MADVenturesLLC/madventures-tui')
+    """
+    url = origin_url.strip()
+    if url.startswith("git@"):
+        url = url[4:]
+        host, _, path = url.partition(":")
+    elif "://" in url:
+        _, _, rest = url.partition("://")
+        host, _, path = rest.partition("/")
+    else:
+        host, _, path = url.partition(":")
+    # Strip a trailing .git suffix case-insensitively (SSH URLs may be .GIT).
+    lowered = path.lower()
+    if lowered.endswith(".git"):
+        path = path[: -len(".git")]
+    identity = "/".join(p for p in path.split("/") if p).lower()
+    return host.lower(), identity
+
+
+def freeze_target(
+    profile_path: str | Path,
+    cwd: str | Path,
+    *,
+    actor: str,
+    model: str,
+    provider: str,
+    session_id: str,
+    surface: str,
+    out_path: str | Path | None = None,
+) -> FreezeManifest:
+    profile_path = Path(profile_path)
+    profile = json.loads(profile_path.read_text(encoding="utf-8"))
+    profile_sha256 = hashlib.sha256(
+        profile_path.read_bytes()
+    ).hexdigest()
+
+    target_ref = _git(cwd, "rev-parse HEAD")
+    if len(target_ref) != 40:
+        raise RuntimeError(f"rev-parse HEAD did not return a 40-char SHA: {target_ref!r}")
+
+    origin_url = _git(cwd, "config --get remote.origin.url")
+    host, identity = normalize_origin(origin_url)
+
+    # If the profile declares an allowed origin, enforce identity match now.
+    allowed = profile.get("target", {}).get("origin_identity")
+    if allowed and identity.lower() != allowed.lower():
+        raise RuntimeError(
+            f"origin identity {identity!r} does not match profile allowed {allowed!r}"
+        )
+
+    manifest = FreezeManifest(
+        profile=profile.get("profile", profile_path.stem),
+        target_ref=target_ref,
+        target_ref_short=target_ref[:7],
+        origin_url=origin_url,
+        origin_host=host,
+        origin_identity=identity,
+        actor=actor,
+        model=model,
+        provider=provider,
+        session_id=session_id,
+        surface=surface,
+        frozen_at=datetime.now(timezone.utc).isoformat(),
+        gates=[g["id"] for g in profile.get("gates", [])],
+        profile_sha256=profile_sha256,
+    )
+
+    if out_path is not None:
+        Path(out_path).write_text(
+            json.dumps(manifest.to_dict(), indent=2) + "\n", encoding="utf-8"
+        )
+    return manifest
