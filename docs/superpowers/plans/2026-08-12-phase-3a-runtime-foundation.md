@@ -302,7 +302,7 @@ Twenty-six milestones. The ordering is derived from the actual dependency graph 
 | 4 | Branded `SurfaceId` | M2 | 3 | after Task 3 commits |
 | 5 | `ExecutionIdentity` migration | M2 | 3 | after Task 4 commits |
 | 38 | `Bun.Terminal` spike primitive | M17 | 2 | after M1 is reviewed |
-| 39 | Two signed dual-host spike reports | M17 | 2 | after Task 38 commits **and** the same candidate has run on both Founder Macs |
+| 39 | Two checksummed dual-host spike reports | M17 | 2 | after Task 38 commits **and** the same candidate has run on both Founder Macs |
 
 Tasks 38–39 depend on M1 — they are early, not dependency-free. Only Task 60 has no technical precondition at all.
 
@@ -1786,7 +1786,7 @@ block remains a valid Bash code block.
 - [ ] Step 7: Commit the listed files with message: `test(phase3a): add the dual-host Bun.Terminal capability spike`
 - [ ] Step 8: Stop for the M17 review checkpoint.
 
-#### Task 39: Publish the two signed spike reports
+#### Task 39: Publish the two checksummed spike reports
 
 **Requirement coverage:**
 - §3.6 (the same reviewed spike commit must pass on both hosts; reports record observed values)
@@ -1852,8 +1852,16 @@ block remains a valid Bash code block.
 > may verify and commit both, but must not rewrite either: a checksum
 > recomputed by someone who did not run the host establishes nothing about the
 > run. Note that a `Report SHA-256:` line proves **byte integrity only** — it
-> carries no evidence of operator identity, so this task's title word "signed"
-> overstates what the lane produces unless a signing mechanism is introduced.
+> carries no evidence of operator identity, so "signed" overstates what the
+> lane produces unless a signing mechanism is introduced.
+>
+> **Renamed accordingly (Founder direction, 2026-08-21).** This task and its §4
+> row now read "checksummed", not "signed". Quotations of spec §§3.6 and 6.5
+> elsewhere in this plan still read "signed-off" and are deliberately left
+> verbatim: the specification's wording is not this plan's to edit, and
+> silently restating an approved document in different words would be the
+> larger error. Where the two differ, the specification governs and this plan
+> describes only what the lane actually produces.
 - [ ] Step 4: Run the same command — expected GREEN: 1 pass. Invariant established: **cross-host certification is evidenced by two independent reports at one SHA, never inferred from one machine.**
 - [ ] Step 5: Run `bun test test/phase3a` and `bunx tsc --noEmit`.
 - [ ] Step 6: Inspect the diff; confirm only the two reports and the spike test file changed. *(Amended 2026-08-21, Founder ruling — Option A. Previously "only the two documents changed", which Step 1 makes impossible.)*
