@@ -16,16 +16,15 @@ from urllib.parse import urlparse
 from .types import FreezeManifest
 
 
-def _git(cwd: str | Path, args: str) -> str:
+def _git(cwd: str | Path, args: list[str]) -> str:
     proc = subprocess.run(
-        f"git {args}",
-        shell=True,
+        ["git", *args],
         cwd=str(cwd),
         capture_output=True,
         text=True,
     )
     if proc.returncode != 0:
-        raise RuntimeError(f"git {args} failed: {proc.stderr.strip()}")
+        raise RuntimeError(f"git {' '.join(args)} failed: {proc.stderr.strip()}")
     return proc.stdout.strip()
 
 
@@ -70,11 +69,11 @@ def freeze_target(
         profile_path.read_bytes()
     ).hexdigest()
 
-    target_ref = _git(cwd, "rev-parse HEAD")
+    target_ref = _git(cwd, ["rev-parse", "HEAD"])
     if len(target_ref) != 40:
         raise RuntimeError(f"rev-parse HEAD did not return a 40-char SHA: {target_ref!r}")
 
-    origin_url = _git(cwd, "config --get remote.origin.url")
+    origin_url = _git(cwd, ["config", "--get", "remote.origin.url"])
     host, identity = normalize_origin(origin_url)
 
     # If the profile declares an allowed origin, enforce identity match now.

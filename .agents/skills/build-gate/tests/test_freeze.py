@@ -12,8 +12,8 @@ sys.path.insert(0, str(HERE.parent / "scripts"))
 from build_gate.freeze import freeze_target  # noqa: E402
 
 
-def _git(cwd: Path, args: str):
-    subprocess.run(f"git {args}", shell=True, cwd=str(cwd), check=True,
+def _git(cwd: Path, args: list[str]):
+    subprocess.run(["git", *args], cwd=str(cwd), check=True,
                    capture_output=True, text=True)
 
 
@@ -21,14 +21,14 @@ class TestFreezeTarget(unittest.TestCase):
     def test_freeze_in_real_repo(self):
         with tempfile.TemporaryDirectory() as d:
             repo = Path(d)
-            _git(repo, "init -q")
-            _git(repo, "config user.email t@t.t")
-            _git(repo, "config user.name t")
-            _git(repo, "config commit.gpgsign false")
-            _git(repo, "remote add origin git@github.com:MADVenturesLLC/madventures-tui.git")
+            _git(repo, ["init", "-q"])
+            _git(repo, ["config", "user.email", "t@t.t"])
+            _git(repo, ["config", "user.name", "t"])
+            _git(repo, ["config", "commit.gpgsign", "false"])
+            _git(repo, ["remote", "add", "origin", "git@github.com:MADVenturesLLC/madventures-tui.git"])
             (repo / "f.txt").write_text("x")
-            _git(repo, "add f.txt")
-            _git(repo, "commit -q -m init")
+            _git(repo, ["add", "f.txt"])
+            _git(repo, ["commit", "-q", "-m", "init"])
 
             profile = {"profile": "madventures-tui",
                        "target": {"origin_identity": "MADVenturesLLC/madventures-tui"},
@@ -46,14 +46,14 @@ class TestFreezeTarget(unittest.TestCase):
     def test_origin_mismatch_raises(self):
         with tempfile.TemporaryDirectory() as d:
             repo = Path(d)
-            _git(repo, "init -q")
-            _git(repo, "config user.email t@t.t")
-            _git(repo, "config user.name t")
-            _git(repo, "config commit.gpgsign false")
-            _git(repo, "remote add origin git@github.com:SomeoneElse/other.git")
+            _git(repo, ["init", "-q"])
+            _git(repo, ["config", "user.email", "t@t.t"])
+            _git(repo, ["config", "user.name", "t"])
+            _git(repo, ["config", "commit.gpgsign", "false"])
+            _git(repo, ["remote", "add", "origin", "git@github.com:SomeoneElse/other.git"])
             (repo / "f.txt").write_text("x")
-            _git(repo, "add f.txt")
-            _git(repo, "commit -q -m init")
+            _git(repo, ["add", "f.txt"])
+            _git(repo, ["commit", "-q", "-m", "init"])
             profile = {"profile": "madventures-tui",
                        "target": {"origin_identity": "MADVenturesLLC/madventures-tui"},
                        "gates": []}
@@ -66,17 +66,17 @@ class TestFreezeTarget(unittest.TestCase):
     def test_ssh_uri_origin_is_accepted(self):
         with tempfile.TemporaryDirectory() as d:
             repo = Path(d)
-            _git(repo, "init -q")
-            _git(repo, "config user.email t@t.t")
-            _git(repo, "config user.name t")
-            _git(repo, "config commit.gpgsign false")
+            _git(repo, ["init", "-q"])
+            _git(repo, ["config", "user.email", "t@t.t"])
+            _git(repo, ["config", "user.name", "t"])
+            _git(repo, ["config", "commit.gpgsign", "false"])
             _git(
                 repo,
-                "remote add origin ssh://git@github.com/MADVenturesLLC/madventures-tui.git",
+                ["remote", "add", "origin", "ssh://git@github.com/MADVenturesLLC/madventures-tui.git"],
             )
             (repo / "f.txt").write_text("x")
-            _git(repo, "add f.txt")
-            _git(repo, "commit -q -m init")
+            _git(repo, ["add", "f.txt"])
+            _git(repo, ["commit", "-q", "-m", "init"])
             profile = {
                 "profile": "madventures-tui",
                 "target": {"origin_identity": "MADVenturesLLC/madventures-tui"},
