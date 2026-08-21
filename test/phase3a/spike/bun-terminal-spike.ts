@@ -215,12 +215,44 @@ function pgidOf(pid: number): number {
 }
 
 /** Registry-scoped group member list (ps -o pid= -g). */
-function groupMembers(pgid: number): number[] {
+/**
+ * One `ps` snapshot, filtered on the process-group column.
+ *
+ * (correction 10) Both group readers previously asked `ps -o … -g <pgid>`,
+ * which does NOT select by process group. `-g` selects by SESSION — verified
+ * live on Linux: for a process with `pgid=3676`, `sid=3318`, `ps -g 3676`
+ * returns nothing while filtering `ps -eo pid=,pgid=` on the same value
+ * returns it. `groupGone()` would therefore report a LIVE group as gone, which
+ * is a false pass on the one thing this spike exists to demonstrate.
+ *
+ * It did not show up because every fixture here is spawned `detached: true`,
+ * which calls `setsid()` and makes `pgid === sid` — so the wrong question got
+ * the right answer by coincidence, on this host, for these fixtures. Neither
+ * that coincidence nor `-g`'s meaning is guaranteed on the macOS hosts this
+ * spike is written to run on, and a control that can silently invert is worse
+ * than no control.
+ *
+ * `stat` is included so both callers share one snapshot and one parse.
+ */
+function groupSnapshot(pgid: number): { readonly pid: number; readonly stat: string }[] {
   if (pgid <= 0) return [];
-  return runObserve("ps", ["-o", "pid=", "-g", String(pgid)])
-    .split(/\s+/)
-    .map((t) => Number.parseInt(t, 10))
-    .filter((n) => Number.isFinite(n) && n > 0);
+  const rows: { pid: number; stat: string }[] = [];
+  for (const line of runObserve("ps", ["-eo", "pid=,pgid=,stat="]).split("\n")) {
+    const parts = line.trim().split(/\s+/);
+    if (parts.length < 3) continue;
+    const pid = Number.parseInt(parts[0] ?? "", 10);
+    const rowPgid = Number.parseInt(parts[1] ?? "", 10);
+    const stat = parts[2] ?? "";
+    if (!Number.isFinite(pid) || pid <= 0) continue;
+    if (!Number.isFinite(rowPgid) || rowPgid !== pgid) continue;
+    if (stat.length === 0) continue;
+    rows.push({ pid, stat });
+  }
+  return rows;
+}
+
+function groupMembers(pgid: number): number[] {
+  return groupSnapshot(pgid).map((r) => r.pid);
 }
 
 /** Process state via ps; empty when the pid is gone. A zombie is dead: its
@@ -234,17 +266,9 @@ function statOf(pid: number): string {
 
 /** Members of a recorded group that can still receive a signal. */
 function signalableMembers(pgid: number): number[] {
-  if (pgid <= 0) return [];
-  const members: number[] = [];
-  for (const line of runObserve("ps", ["-o", "pid=,stat=", "-g", String(pgid)]).split("\n")) {
-    const parts = line.trim().split(/\s+/);
-    const pid = Number.parseInt(parts[0] ?? "", 10);
-    const stat = parts[1] ?? "";
-    if (Number.isFinite(pid) && pid > 0 && stat.length > 0 && !stat.startsWith("Z")) {
-      members.push(pid);
-    }
-  }
-  return members;
+  return groupSnapshot(pgid)
+    .filter((r) => !r.stat.startsWith("Z"))
+    .map((r) => r.pid);
 }
 
 /** Registry-scoped group-absence check: true when no signalable member
@@ -814,32 +838,62 @@ async function launchFixture(scenario: FixtureScenario): Promise<FixtureHandle> 
   const hub = makeLineHub();
   startLineReader(proc.stdout, (text, at) => hub.push(text, at));
   startLineReader(proc.stderr, (text) => hub.pushStderr(text));
-  const factsEvent = await hub.wait(
-    (t) => t.startsWith("{") && t.includes("runId"),
-    FIXTURE_STARTUP_MS,
-    `facts(${scenario})`,
-  );
-  const parsed = JSON.parse(factsEvent.text) as Partial<FixtureFacts>;
-  const facts: FixtureFacts = {
-    runId: parsed.runId ?? "",
-    hostPid: parsed.hostPid ?? 0,
-    childPid: parsed.childPid ?? 0,
-    childPgid: parsed.childPgid ?? 0,
-    readyMs: parsed.readyMs ?? 0,
+
+  /*
+   * (correction 10) The host is registered BEFORE the handshake is awaited.
+   *
+   * The record used to be created only after `hub.wait` resolved and the runId
+   * and facts validations passed. Every one of those can throw — a timeout, a
+   * malformed line, a foreign runId — and the fixture host is already spawned
+   * `detached` by then. With no registry record, `signalOwned` cannot target
+   * it afterwards, because the registry is the only signalling authority (Q9):
+   * the process survived precisely because the failure happened before it was
+   * ownable. Registering first inverts that.
+   */
+  const hostRecord: OwnedRecord = {
+    runId: RUN_ID,
+    role: "fixture-host",
+    pid: proc.pid,
+    pgid: pgidOf(proc.pid),
   };
-  if (facts.runId !== RUN_ID) {
-    throw new Error(
-      `facts runId ${facts.runId} rejected (expected ${RUN_ID}): foreign or stale execution refused (Q9.2)`,
+  register(hostRecord);
+
+  let facts: FixtureFacts;
+  try {
+    const factsEvent = await hub.wait(
+      (t) => t.startsWith("{") && t.includes("runId"),
+      FIXTURE_STARTUP_MS,
+      `facts(${scenario})`,
     );
+    const parsed = JSON.parse(factsEvent.text) as Partial<FixtureFacts>;
+    facts = {
+      runId: parsed.runId ?? "",
+      hostPid: parsed.hostPid ?? 0,
+      childPid: parsed.childPid ?? 0,
+      childPgid: parsed.childPgid ?? 0,
+      readyMs: parsed.readyMs ?? 0,
+    };
+    if (facts.runId !== RUN_ID) {
+      throw new Error(
+        `facts runId ${facts.runId} rejected (expected ${RUN_ID}): foreign or stale execution refused (Q9.2)`,
+      );
+    }
+    if (facts.hostPid !== proc.pid || facts.childPid <= 0 || facts.childPgid <= 0) {
+      throw new Error(`malformed facts line from ${scenario}: ${factsEvent.text}`);
+    }
+  } catch (error) {
+    // Sweep what we own, then re-throw the ORIGINAL failure: a cleanup problem
+    // must never replace the diagnosis of why the handshake failed.
+    await sweepRecords([hostRecord]).catch(() => undefined);
+    throw error;
   }
-  if (facts.hostPid !== proc.pid || facts.childPid <= 0 || facts.childPgid <= 0) {
-    throw new Error(`malformed facts line from ${scenario}: ${factsEvent.text}`);
-  }
+
   const records: OwnedRecord[] = [
-    { runId: RUN_ID, role: "fixture-host", pid: proc.pid, pgid: pgidOf(proc.pid) },
+    hostRecord,
     { runId: RUN_ID, role: "governed-group", pid: facts.childPid, pgid: facts.childPgid },
   ];
-  for (const r of records) register(r);
+  // The host is already registered; only the governed group is new here.
+  register(records[1] as OwnedRecord);
   // Fixed settle after facts: the fixture's signal handlers and the child's
   // startup (e.g. trap setup) must be in place before any govern-ending
   // action. Measurement zeros are all taken after this point.
