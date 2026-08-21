@@ -1706,6 +1706,28 @@ block remains a valid Bash code block.
 
 #### Task 38: Build the spike primitive covering every §3.6 criterion
 
+> **Completion lane AUTHORIZED 2026-08-21 (Founder).** Steps 1–4 landed at
+> `df8c920`. Steps 5 and 8 were open; the Founder authorized completing them on
+> both Macs, scoped exactly as follows and no wider:
+>
+> - **A dedicated detached worktree per host** at the candidate SHA. The
+>   existing checkout is not detached, stashed, or cleaned — an earlier draft of
+>   the lane said to stash untracked `.claude*` files and move the working
+>   checkout, which risked user files the lane has no business handling.
+> - **`bun install --frozen-lockfile`, and the network access it requires**,
+>   named explicitly because a fresh worktree carries no `node_modules` and an
+>   unnamed automatic install would resolve versions nobody authorized. Both
+>   `git status --porcelain` and `git diff -- bun.lock package.json` must come
+>   back empty afterwards; a change to either means the tested tree is no longer
+>   the candidate.
+> - Dual-host spike run, full suite, and `bunx tsc --noEmit` on both hosts.
+> - **A hard stop at the Step 8 M17 checkpoint. Nothing from Task 39.**
+>
+> `bun --version` must match across hosts. The Bun executable **hash** must not
+> be compared across hosts — the Intel and Apple Silicon binaries are different
+> builds and hash differently at the same version, so each host records its own
+> as an identity field rather than as an equality check.
+
 **Requirement coverage:**
 - §3.6 (the thirteen spike demonstrations; timing measured against the §9.8 table; reports record observed values rather than merely saying “pass”)
 - §9.7 (the pre-written candidate is `Bun.Terminal`; FFI `posix_openpt`, `node-pty`, another native dependency, or a pipe fallback is not an implementation choice)
@@ -1773,6 +1795,16 @@ block remains a valid Bash code block.
 **Files:**
 - Create: `docs/verification/2026-08-12-bun-terminal-spike-imac.md`
 - Create: `docs/verification/2026-08-12-bun-terminal-spike-macbook.md`
+- Test: `test/phase3a/spike/bun-terminal-spike.test.ts`
+
+> **Amended 2026-08-21 (Founder ruling, Option A).** Step 1 has always written
+> the report-existence test into `bun-terminal-spike.test.ts`, but this list did
+> not permit that file and Step 6 required a documents-only diff. The task was
+> therefore impossible to satisfy as written: any commit containing Step 1's
+> test would fail Step 6, and an operator reaching that step had to choose which
+> ratified step to disobey. Three places are amended together — this list, Step
+> 6, and Step 7's commit message. Amending Step 6 alone would have left the
+> contradiction alive in the other two.
 
 **Interfaces:**
 - Consumes: the `SpikeResult[]` output of Task 38.
@@ -1780,14 +1812,52 @@ block remains a valid Bash code block.
 
 **Preconditions:**
 - Task 38 committed and run on both hosts at the same SHA.
+- Task 38 has passed its M17 review checkpoint (Step 8) with Founder sign-off.
+
+> **Aggregation base, ruled 2026-08-21 (Founder).** The host worktrees are
+> detached at the candidate SHA and cannot host this commit — a commit made
+> there would not descend from merged `main`. The aggregator therefore fetches
+> and branches from **`origin/main` as freshly verified at commit time**, and
+> confirms the base descends from the merge commit that landed the candidate
+> before committing anything:
+>
+> ```bash
+> git fetch origin
+> git worktree add ~/m17-task39 -b <task-39-branch> origin/main
+> cd ~/m17-task39 && git merge-base --is-ancestor 138463b HEAD
+> ```
+>
+> Fresh `origin/main` rather than a pinned base, so the branch picks up anything
+> merged in the meantime and does not need a catch-up merge before it can land.
+> The exact base SHA is recorded in the resulting PR rather than fixed here.
+>
+> **The reports still cite the candidate SHA as the tested commit**, and that is
+> not a contradiction: `Candidate SHA:` records what was *executed*, the branch
+> base records where the evidence is *filed*. Conflating the two is what forced
+> the reports toward a detached worktree in the first place.
 
 - [ ] Step 1: Write the named failing test — in `test/phase3a/spike/bun-terminal-spike.test.ts` add `test("both dual-host spike reports exist, name the same SHA, and carry a checksum")` reading both files, asserting each contains `Candidate SHA:` with the same value and a `Report SHA-256:` line, and that the two `Architecture:` values are `x86_64` and `arm64`.
 - [ ] Step 2: Run `bun test test/phase3a/spike/bun-terminal-spike.test.ts -t "both dual-host spike reports exist, name the same SHA, and carry a checksum"` — expected RED: neither report file exists (`ENOENT`).
 - [ ] Step 3: Implement the minimum authorized behavior — run the spike on each host and write the two reports with the §6.5 fields and observed timings. Do not write a report for a host you did not run.
+
+> **Disposition 2026-08-21 (Founder ruling): Step 3 requires its own host runs.**
+> The question raised was whether the Task 38 runs could satisfy this step,
+> which would have saved two spike runs. Ruled: they do not. Task 39 runs the
+> spike on each host and reports **those** observations, so each report carries
+> its own observed values rather than restating Task 38's. This is the literal
+> reading of the step, and the cost — two additional runs — is accepted.
+>
+> **Authorship, and what a checksum establishes.** Each host-bound operator
+> authors and checksums its own report on the host it ran. A later aggregator
+> may verify and commit both, but must not rewrite either: a checksum
+> recomputed by someone who did not run the host establishes nothing about the
+> run. Note that a `Report SHA-256:` line proves **byte integrity only** — it
+> carries no evidence of operator identity, so this task's title word "signed"
+> overstates what the lane produces unless a signing mechanism is introduced.
 - [ ] Step 4: Run the same command — expected GREEN: 1 pass. Invariant established: **cross-host certification is evidenced by two independent reports at one SHA, never inferred from one machine.**
 - [ ] Step 5: Run `bun test test/phase3a` and `bunx tsc --noEmit`.
-- [ ] Step 6: Inspect the diff; confirm only the two documents changed.
-- [ ] Step 7: Commit the two reports with message: `docs(verification): publish dual-host Bun.Terminal spike reports`
+- [ ] Step 6: Inspect the diff; confirm only the two reports and the spike test file changed. *(Amended 2026-08-21, Founder ruling — Option A. Previously "only the two documents changed", which Step 1 makes impossible.)*
+- [ ] Step 7: Commit the two reports and the test with message: `test(phase3a): assert dual-host spike reports, and publish them` *(Amended 2026-08-21, Founder ruling — Option A. Previously `docs(verification): publish dual-host Bun.Terminal spike reports`, which described a documents-only commit this task does not produce.)*
 - [ ] Step 8: Stop for the M17 gate review. **If either report fails any criterion, M18–M19, M21, and M23 do not begin.**
 
 ---
