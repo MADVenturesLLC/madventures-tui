@@ -64,10 +64,9 @@ def freeze_target(
     out_path: str | Path | None = None,
 ) -> FreezeManifest:
     profile_path = Path(profile_path)
-    profile = json.loads(profile_path.read_text(encoding="utf-8"))
-    profile_sha256 = hashlib.sha256(
-        profile_path.read_bytes()
-    ).hexdigest()
+    profile_bytes = profile_path.read_bytes()
+    profile = json.loads(profile_bytes.decode("utf-8"))
+    profile_sha256 = hashlib.sha256(profile_bytes).hexdigest()
 
     target_ref = _git(cwd, ["rev-parse", "HEAD"])
     if len(target_ref) != 40:

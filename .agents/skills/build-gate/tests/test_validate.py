@@ -116,6 +116,12 @@ class TestValidator(unittest.TestCase):
         self.assertFalse(r.valid)
         self.assertTrue(any("approved_by" in e for e in r.errors), r.errors)
 
+    def test_padded_approved_by_cannot_self_approve(self):
+        rec = base_record(approved_by=" hermes ")
+        r = validate_record(rec, base_freeze())
+        self.assertFalse(r.valid)
+        self.assertTrue(any("self-approval" in e for e in r.errors), r.errors)
+
     def test_failed_gate_without_finding_blocks_approval(self):
         rec = base_record(
             gate_results={

@@ -16,8 +16,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
-from build_gate.types import ReviewRecord  # noqa: E402
-from build_gate.validate import load_and_validate  # noqa: E402
+from build_gate.types import FreezeManifest, ReviewRecord  # noqa: E402
+from build_gate.validate import validate_record  # noqa: E402
 
 
 def main() -> int:
@@ -26,10 +26,13 @@ def main() -> int:
     ap.add_argument("--freeze", required=True)
     args = ap.parse_args()
 
-    result = load_and_validate(args.record, args.freeze)
     record = ReviewRecord.from_dict(
         json.loads(Path(args.record).read_text(encoding="utf-8"))
     )
+    freeze = FreezeManifest.from_dict(
+        json.loads(Path(args.freeze).read_text(encoding="utf-8"))
+    )
+    result = validate_record(record, freeze)
     print(json.dumps({"valid": result.valid, "errors": result.errors}, indent=2))
     if result.valid and record.verdict == "approved":
         return 0

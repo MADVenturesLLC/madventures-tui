@@ -68,21 +68,24 @@ def validate_record(
             result.add(f"missing authoritative field: {field_name}")
         if not fv:
             result.add(f"missing freeze field: {field_name}")
-        if rv and fv and rv.lower() != fv.lower():
+        if rv and fv and rv.casefold() != fv.casefold():
             result.add(f"{field_name} mismatch: record={rv} freeze={fv}")
 
     # 5. Self-review rejection is bound to freeze.actor, not the
     #    caller-controlled record.actor. Applies when the record claims approval.
     if _is_approved(record):
-        if not record.approved_by.strip():
+        approved_by = record.approved_by.strip()
+        freeze_actor = freeze.actor.strip()
+        record_actor = record.actor.strip()
+        if not approved_by:
             result.add("approved verdict requires non-empty approved_by")
         else:
-            if record.approved_by.lower() == freeze.actor.lower():
+            if approved_by.casefold() == freeze_actor.casefold():
                 result.add(
                     f"self-approval rejected: freeze.actor={freeze.actor} "
                     f"approved_by={record.approved_by}"
                 )
-            if record.approved_by.lower() == record.actor.lower():
+            if approved_by.casefold() == record_actor.casefold():
                 result.add(
                     f"self-approval rejected: actor={record.actor} "
                     f"approved_by={record.approved_by}"
