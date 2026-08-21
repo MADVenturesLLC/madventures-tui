@@ -81,6 +81,40 @@ const KILLING: readonly SpikeCriterion[] = [
 
 const results: readonly SpikeResult[] = await runSpike();
 
+/*
+ * Print every observed value before asserting on any of it.
+ *
+ * The assertions below compare booleans and numbers, so a failure alone says
+ * "expected true, received false" and names neither the criterion nor the
+ * measurement that produced it — which is unreadable on a host you cannot
+ * attach to, and this spike exists precisely to be run on hosts other than the
+ * one it was written on. Plan Task 38 requires reports that "record observed
+ * values rather than merely saying 'pass'"; that obligation is worth just as
+ * much when the run fails.
+ *
+ * Unconditional, not failure-only: the assertions throw on first mismatch, so
+ * anything printed from inside them would stop at the first bad criterion and
+ * hide the rest.
+ */
+console.log(
+  `[spike] host=${process.platform}/${process.arch} bun=${Bun.version}\n[spike] ` +
+    results
+      .map((r) => `${r.criterion}=${r.observedMs.toFixed(0)}ms(${r.pass ? "pass" : "FAIL"})`)
+      .join(" "),
+);
+for (const r of results) {
+  if (!r.pass) {
+    const failed = Object.entries(r.subAssertions)
+      .filter(([, v]) => !v)
+      .map(([k]) => k);
+    console.log(
+      `[spike] FAIL ${r.criterion}` +
+        (failed.length > 0 ? ` failing_sub_assertions=[${failed.join(", ")}]` : "") +
+        `\n[spike]   detail: ${r.detail}`,
+    );
+  }
+}
+
 function resultFor(criterion: SpikeCriterion): SpikeResult {
   const found = results.find((r) => r.criterion === criterion);
   if (!found) throw new Error(`runSpike() returned no result for ${criterion}`);
