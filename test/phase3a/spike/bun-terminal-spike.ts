@@ -121,13 +121,25 @@ const T2_ECHO_TOKEN = "madspike-t2";
  * the control reported `decoy_survived_cleanup=false` on a host where nothing
  * had killed it.
  *
- * §9.8 already bounds each criterion at `outerBound`, so the run's worst case
- * is that bound times the number of criteria. Doubling it leaves room for
- * fixture startup and teardown between criteria and keeps the decoy alive on
- * any host slow enough to matter. It is still bounded: if this process dies
- * before `teardownDecoy` runs, the decoy self-reaps instead of leaking.
+ * §9.8 bounds each criterion at `outerBound`, but that is NOT the whole run:
+ * `runSpike()` also starts a fixture host per scenario, and each
+ * `launchFixture()` separately permits `FIXTURE_STARTUP_MS` for its facts
+ * handshake. Those waits sit outside `outerBound`, so a bound derived from the
+ * criteria alone understates the worst case by more than it covers — a first
+ * revision of this constant made exactly that mistake and budgeted 130 s
+ * against a permitted worst case over twice that. The derivation below counts
+ * both, then doubles.
+ *
+ * It stays bounded rather than infinite so a decoy self-reaps if this process
+ * dies outright. Within a normal run the lifetime is not what reclaims it:
+ * `runSpike()` tears the decoy down in a `finally`, so a rejecting criterion
+ * cannot leak it either.
  */
-const DECOY_LIFETIME_S = Math.ceil((13 * 5000 * 2) / 1000); // 130 s
+const SPIKE_CRITERION_COUNT = 13; // §3.6 demonstrations
+const FIXTURE_LAUNCHES = 16; // launchFixture() call sites reachable from runSpike()
+const DECOY_LIFETIME_S = Math.ceil(
+  ((SPIKE_CRITERION_COUNT * 5000 + FIXTURE_LAUNCHES * FIXTURE_STARTUP_MS) * 2) / 1000,
+);
 
 // ── Ownership registry (Q9): the only signaling authority ─────────────────
 const registry: OwnedRecord[] = [];
@@ -1536,21 +1548,45 @@ export async function runSpike(): Promise<readonly SpikeResult[]> {
   };
   const decoy = spawnDecoy(); // Q9.3: before the criteria run, never referenced again
   const outcomes: CriterionOutcome[] = [];
-  outcomes.push(await runAllocation());
-  outcomes.push(await runBinary());
-  outcomes.push(await runResize());
-  outcomes.push(await runGroupSignals());
-  outcomes.push(await runFamilyTermination());
-  outcomes.push(await runDualPtyAdapter());
-  outcomes.push(await runSupervisorModes(ev));
-  outcomes.push(await runLifelineEof(ev));
-  outcomes.push(await runPtyHostDeath());
-  outcomes.push(await runWedge(ev));
-  outcomes.push(await runTermIgnorer());
-  outcomes.push(buildCleanExitReporting(ev));
-  // §11: registry-tracked cleanup verification before the decoy is touched.
-  const registryLiveAfterCleanup = await postRunVerification();
-  const decoyOutcome = await teardownDecoy(decoy);
+  let decoyTornDown = false;
+  let registryLiveAfterCleanup: number;
+  let decoyOutcome: { readonly survived: boolean; readonly reason: string };
+  /*
+   * The decoy is reclaimed on EVERY exit from this block, not only the happy
+   * one. A rejecting criterion used to skip both `postRunVerification()` and
+   * `teardownDecoy()` and leave a detached process behind for the whole of
+   * `DECOY_LIFETIME_S` — a leak that got worse, not better, when that lifetime
+   * was lengthened to stop the decoy expiring mid-run. The `finally` is what
+   * makes a long lifetime safe: it is the backstop, never the reclaim path.
+   */
+  try {
+    outcomes.push(await runAllocation());
+    outcomes.push(await runBinary());
+    outcomes.push(await runResize());
+    outcomes.push(await runGroupSignals());
+    outcomes.push(await runFamilyTermination());
+    outcomes.push(await runDualPtyAdapter());
+    outcomes.push(await runSupervisorModes(ev));
+    outcomes.push(await runLifelineEof(ev));
+    outcomes.push(await runPtyHostDeath());
+    outcomes.push(await runWedge(ev));
+    outcomes.push(await runTermIgnorer());
+    outcomes.push(buildCleanExitReporting(ev));
+    // §11: registry-tracked cleanup verification before the decoy is touched.
+    registryLiveAfterCleanup = await postRunVerification();
+    decoyOutcome = await teardownDecoy(decoy);
+    decoyTornDown = true;
+  } finally {
+    if (!decoyTornDown) {
+      // Best effort, and deliberately silent: this path runs while another
+      // error is already propagating and must not replace it.
+      try {
+        await teardownDecoy(decoy);
+      } catch {
+        /* the original failure is the one worth surfacing */
+      }
+    }
+  }
   outcomes.push(
     buildMeasuredTiming(
       outcomes,
