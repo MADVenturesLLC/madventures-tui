@@ -416,6 +416,27 @@ function childExitLabel(child: {
   return child.signalCode ? `signal:${child.signalCode}` : `code:${String(child.exitCode)}`;
 }
 
+/**
+ * A `childExitLabel` value that proves the process actually reached a terminal
+ * status — any exit code, or any signal. The one label this deliberately does
+ * NOT match is `code:null`, which is what a child that never exited produces
+ * (both `exitCode` and `signalCode` still null when the wait timed out). So the
+ * check stays fail-closed: a reader that survives its terminal closing fails.
+ *
+ * Why a shape test and not `code:0`: what a PTY reader's exit *status* is when
+ * its master closes is host-dependent, and the specification's requirement here
+ * is descriptor hygiene — "two PTYs plus an adapter without write-end leakage"
+ * (design §3.2) — not a particular exit code. Observed with `/bin/cat`:
+ * macOS reports `code:0` (EOF), Linux reports `code:1` (EIO on the slave read).
+ * Neither is more correct; both mean the reader died with its terminal. Pinning
+ * one of them made the criterion assert the host it was written on. The exact
+ * observed label is reported in the criterion's `detail` so the difference stays
+ * visible in the dual-host reports rather than being normalized away — plan
+ * Task 38 requires reports that "record observed values rather than merely
+ * saying 'pass'".
+ */
+const TERMINATED_LABEL_RE = /^(?:code:\d+|signal:[A-Z][A-Z0-9]*)$/;
+
 // ── Fixture-host role (Q6): one terminal lifecycle per invocation ─────────
 
 /** Register a PTY child as governed; pgid read back from ps, never assumed. */
@@ -1023,6 +1044,7 @@ async function runDualPtyAdapter(): Promise<CriterionOutcome> {
   let reader2Pid = 0;
   let adapterPid = 0;
   let c1ExitMs = Number.NaN;
+  let c1Label = "";
   let observedMs = 0;
   const h = await launchFixture("dual_pty_adapter");
   try {
@@ -1044,8 +1066,9 @@ async function runDualPtyAdapter(): Promise<CriterionOutcome> {
     send(h, "close_t1\n");
     const c1 = await h.hub.wait((t) => t.startsWith("c1_exit"), LINE_WAIT_MS, "c1_exit");
     c1ExitMs = numField(c1.text, "ms");
+    c1Label = textField(c1.text, "label");
     sub.closing_terminal_a_kills_only_its_reader =
-      textField(c1.text, "label") === "code:0" &&
+      TERMINATED_LABEL_RE.test(c1Label) && // reader A actually terminated, however it ended
       Number.isFinite(c1ExitMs) &&
       pidAlive(reader2Pid); // reader B lives while reader A died (F9)
     observedMs = Number.isFinite(c1ExitMs) ? c1ExitMs : 0;
@@ -1064,7 +1087,9 @@ async function runDualPtyAdapter(): Promise<CriterionOutcome> {
     observedMs,
     detail:
       `adapter_pty_fds=${fdInventory(adapterPid).length} (lsof inventory on recorded adapter pid, F12) ` +
-      `t1_close_to_c1_exit_ms=${c1ExitMs} t2_echo_ok=${String(sub.terminal_b_independent_after_a_close ?? false)} ` +
+      `t1_close_to_c1_exit_ms=${c1ExitMs} reader_a_exit_label=${c1Label || "(none)"} (host-dependent; ` +
+      `any code or signal proves termination, F9) ` +
+      `t2_echo_ok=${String(sub.terminal_b_independent_after_a_close ?? false)} ` +
       `adapter_alive_before_cleanup=${String(sub.adapter_unaffected_by_terminal_closures ?? false)} ` +
       `readers_and_adapter_gone_after_cleanup=${String(sub.no_pty_descriptor_survives_cleanup ?? false)}`,
     subAssertions: sub,
