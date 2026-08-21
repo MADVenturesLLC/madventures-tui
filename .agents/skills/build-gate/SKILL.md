@@ -26,8 +26,8 @@ would.
    Any later review record whose `target_ref` differs is rejected (drift).
 2. **Origin identity match** — HTTPS and SSH remotes normalize to
    `owner/repo` and must match the frozen identity.
-3. **No self-approval** — the actor that froze the target cannot also be the
-   approver (independence required by OS governance).
+3. **No self-approval** — the freeze actor cannot also be the approver.
+   Independence is bound to `freeze.actor`, not a caller-supplied `record.actor`.
 4. **Fail-closed** — a record is `valid` only when every check passes. There is
    no soft "warn but allow" path.
 5. **Skipped-gate + unresolved-finding guards** — missing gate coverage or an
@@ -38,9 +38,9 @@ would.
 - `scripts/freeze_target.py` — lock the target SHA, origin identity, profile
   hash. Emits a freeze manifest JSON.
 - `scripts/run_gates.py` — execute every gate in a profile against the working
-  tree; emits results, exits 1 on any failed gate.
+  tree; emits results, exits 1 on any failed or skipped gate.
 - `scripts/validate_record.py` — fail-closed validation of a review record
-  against a freeze manifest; exits 0 only when valid.
+  against a freeze manifest; exits 0 only when valid and `verdict=approved`.
 
 ## Library (`scripts/build_gate/`)
 
@@ -58,19 +58,23 @@ would.
 ## Usage (inside the build loop)
 
 ```bash
-# 1. Freeze the target (records the locked SHA + origin identity)
-python3 scripts/freeze_target.py \
-  --profile profiles/madventures-tui.json --cwd . \
-  --actor hermes --model hy3 --provider nous --session-id S1 --surface cv5 \
-  --out freeze.json
+# Write gate artifacts outside the repository so MTUI-CLEAN-TREE stays honest.
+OUT="$(mktemp -d)"
+SKILL=".agents/skills/build-gate"
 
-# 2. Run the gates (fail-closed: non-zero exit if any gate fails)
-python3 scripts/run_gates.py \
-  --profile profiles/madventures-tui.json --cwd . --out results.json
+# 1. Freeze the target (records the locked SHA + origin identity)
+python3 "$SKILL/scripts/freeze_target.py" \
+  --profile "$SKILL/profiles/madventures-tui.json" --cwd . \
+  --actor hermes --model hy3 --provider nous --session-id S1 --surface cv5 \
+  --out "$OUT/freeze.json"
+
+# 2. Run the gates (fail-closed: non-zero exit if any gate fails or is skipped)
+python3 "$SKILL/scripts/run_gates.py" \
+  --profile "$SKILL/profiles/madventures-tui.json" --cwd . --out "$OUT/results.json"
 
 # 3. Assemble a review record from the gate results, then validate it.
-#    A record marked 'approved' with failing gates is REJECTED (exit 1).
-python3 scripts/validate_record.py --record record.json --freeze freeze.json
+#    Exit 0 only when the record is valid and verdict=approved.
+python3 "$SKILL/scripts/validate_record.py" --record "$OUT/record.json" --freeze "$OUT/freeze.json"
 ```
 
 ## Promotion gate (Candidate → Controlling)

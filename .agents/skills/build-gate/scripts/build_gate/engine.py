@@ -77,7 +77,8 @@ def run_all_gates(
 
     for spec in specs:
         # required_env: if the controlling env var is absent, the gate cannot
-        # run deterministically, so it is skipped (advisory) rather than passed.
+        # run deterministically. It is recorded as skipped (passed=False);
+        # any_failed treats that as a command-boundary failure.
         if spec.required_env:
             missing = [v for v in spec.required_env if not env.get(v)]
             if missing:
@@ -111,4 +112,6 @@ def run_all_gates(
 
 
 def any_failed(results: dict[str, GateResult]) -> bool:
-    return any(r.passed is False and not r.skipped for r in results.values())
+    # Skipped required gates are failures at the command boundary. Optional
+    # gates are not modeled; every declared gate is blocking.
+    return any(r.passed is False for r in results.values())

@@ -20,6 +20,10 @@ def _norm_identity(identity: str) -> str:
     return "/".join(p for p in identity.split("/") if p).lower()
 
 
+def _is_approved(record: ReviewRecord) -> bool:
+    return record.verdict == "approved"
+
+
 def validate_record(
     record: ReviewRecord, freeze: FreezeManifest
 ) -> ValidationResult:
@@ -42,42 +46,82 @@ def validate_record(
             f"origin host mismatch: record={record.origin_host} freeze={freeze.origin_host}"
         )
 
-    # 3. Self-review rejection. The actor that froze the target may not also
-    #    be the approver. Independence is required by the OS governance model.
-    if record.self_approved or record.approved_by.lower() == record.actor.lower():
+    # 3. Profile identity: name and hash must match the freeze.
+    if record.profile != freeze.profile:
         result.add(
-            f"self-approval rejected: actor={record.actor} approved_by={record.approved_by}"
+            f"profile name mismatch: record={record.profile} freeze={freeze.profile}"
+        )
+    rec_hash = (record.profile_sha256 or "").strip()
+    if not rec_hash:
+        result.add("missing profile_sha256 on review record")
+    elif rec_hash != freeze.profile_sha256:
+        result.add(
+            f"profile_sha256 mismatch: record={rec_hash} freeze={freeze.profile_sha256}"
         )
 
-    # 4. Authoritative identity fields present and case-insensitive independent.
+    # 4. Authoritative identity must match the freeze. A caller-supplied
+    #    record.actor cannot be forged independent of freeze.actor.
     for field_name in ("actor", "model", "provider", "session_id", "surface"):
         rv = getattr(record, field_name, "").strip()
         fv = getattr(freeze, field_name, "").strip()
         if not rv:
             result.add(f"missing authoritative field: {field_name}")
+        if not fv:
+            result.add(f"missing freeze field: {field_name}")
         if rv and fv and rv.lower() != fv.lower():
-            # actor/model/provider/session/surface must be identical to freeze.
-            # (We do not force surface/actor equality to be identical in all
-            # workflows, but they must each be non-empty and consistent with the
-            # frozen session's controlling identifiers.)
-            pass
+            result.add(f"{field_name} mismatch: record={rv} freeze={fv}")
 
-    # 5. Required gate coverage: every gate in the freeze must have a result.
+    # 5. Self-review rejection is bound to freeze.actor, not the
+    #    caller-controlled record.actor. Applies when the record claims approval.
+    if _is_approved(record):
+        if not record.approved_by.strip():
+            result.add("approved verdict requires non-empty approved_by")
+        else:
+            if record.approved_by.lower() == freeze.actor.lower():
+                result.add(
+                    f"self-approval rejected: freeze.actor={freeze.actor} "
+                    f"approved_by={record.approved_by}"
+                )
+            if record.approved_by.lower() == record.actor.lower():
+                result.add(
+                    f"self-approval rejected: actor={record.actor} "
+                    f"approved_by={record.approved_by}"
+                )
+        if record.self_approved:
+            result.add(
+                f"self-approval rejected: actor={record.actor} "
+                f"approved_by={record.approved_by}"
+            )
+
+    # 6. Required gate coverage: every freeze gate must have a result.
     for gate_id in freeze.gates:
         if gate_id not in record.gate_results:
             result.add(f"missing gate result for required gate: {gate_id}")
             continue
         gr = record.gate_results[gate_id]
+        skipped = bool(gr.get("skipped"))
         passed = bool(gr.get("passed"))
         exit_code = int(gr.get("exit_code", -1))
-        # Evidence must exist for non-skipped gates.
-        if not gr.get("evidence") and passed is False:
-            result.add(f"gate {gate_id}: no evidence for a failing gate")
-        # Exit-code consistency: a passing gate must report exit 0.
+        evidence = gr.get("evidence") or ""
+
+        if skipped and _is_approved(record):
+            result.add(f"gate {gate_id}: skipped gates block approval")
+            continue
+        if passed is False and not skipped and _is_approved(record):
+            finding = record.findings.get(gate_id) or {}
+            resolution = record.resolved_findings.get(gate_id, "")
+            if not finding:
+                result.add(f"gate {gate_id}: failed required gate has no finding")
+            if not str(resolution).strip():
+                result.add(
+                    f"gate {gate_id}: failed required gate unresolved (no resolution text)"
+                )
+            if not evidence:
+                result.add(f"gate {gate_id}: no evidence for a failing gate")
         if passed and exit_code != 0:
             result.add(f"gate {gate_id}: passed=true but exit_code={exit_code}")
 
-    # 6. Findings consistency: every recorded finding maps to a gate.
+    # 7. Findings consistency: every recorded finding maps to a gate.
     for gate_id, finding in record.findings.items():
         if gate_id not in freeze.gates:
             result.add(f"finding references unknown gate: {gate_id}")
@@ -87,7 +131,8 @@ def validate_record(
         except ValueError:
             result.add(f"gate {gate_id}: invalid severity {finding.get('severity')!r}")
 
-        # Blocking gate with a non-pass => must be resolved and approved.
+        if not _is_approved(record):
+            continue
         gr = record.gate_results.get(gate_id, {})
         if finding.get("blocking", True) and not gr.get("passed", False):
             resolution = record.resolved_findings.get(gate_id, "")
@@ -96,22 +141,22 @@ def validate_record(
                     f"gate {gate_id}: blocking finding unresolved (no resolution text)"
                 )
 
-    # 7. Unresolved Critical/Major findings block approval.
-    for gate_id, finding in record.findings.items():
-        sev = (finding.get("severity") or "critical").lower()
-        if sev in ("critical", "major"):
-            gr = record.gate_results.get(gate_id, {})
-            if not gr.get("passed", False):
-                if not record.resolved_findings.get(gate_id, "").strip():
-                    result.add(
-                        f"gate {gate_id}: unresolved {sev} finding blocks approval"
-                    )
+    # 8. Unresolved Critical/Major findings block approval.
+    if _is_approved(record):
+        for gate_id, finding in record.findings.items():
+            sev = (finding.get("severity") or "critical").lower()
+            if sev in ("critical", "major"):
+                gr = record.gate_results.get(gate_id, {})
+                if not gr.get("passed", False):
+                    if not record.resolved_findings.get(gate_id, "").strip():
+                        result.add(
+                            f"gate {gate_id}: unresolved {sev} finding blocks approval"
+                        )
 
-    # 8. Verdict discipline.
+    # 9. Verdict discipline.
     if record.verdict not in ("approved", "rejected", "needs_changes"):
         result.add(f"invalid verdict: {record.verdict!r}")
     if record.verdict == "approved" and not result.valid:
-        # Double-check: a record cannot be APPROVED while invalid.
         result.add("verdict=approved but validation found blocking errors")
 
     return result

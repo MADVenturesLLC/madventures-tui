@@ -41,6 +41,7 @@ def base_record(**overrides):
         findings={}, resolved_findings={}, verdict="approved",
         approved_by="founder", self_approved=False,
         reviewed_at="2026-08-20T15:03:01Z",
+        profile_sha256="deadbeef",
     )
     d.update(overrides)
     return ReviewRecord(**d)
@@ -95,6 +96,75 @@ class TestValidator(unittest.TestCase):
                           "MTUI-TEST": {"passed": True, "evidence": "ok", "exit_code": 0}},
             findings={"MTUI-TYPECHECK": {"severity": "major", "blocking": True}},
             resolved_findings={"MTUI-TYPECHECK": "Founder waived: type error is pre-existing lint noise."},
+        )
+        r = validate_record(rec, base_freeze())
+        self.assertTrue(r.valid, r.errors)
+
+    def test_spoofed_actor_cannot_self_approve(self):
+        # freeze.actor is hermes; record.actor is forged independent, approved_by is hermes.
+        rec = base_record(actor="other-reviewer", approved_by="hermes", self_approved=False)
+        r = validate_record(rec, base_freeze())
+        self.assertFalse(r.valid)
+        self.assertTrue(
+            any("self-approval" in e or "actor mismatch" in e for e in r.errors),
+            r.errors,
+        )
+
+    def test_empty_approved_by_blocks_approval(self):
+        rec = base_record(approved_by="")
+        r = validate_record(rec, base_freeze())
+        self.assertFalse(r.valid)
+        self.assertTrue(any("approved_by" in e for e in r.errors), r.errors)
+
+    def test_failed_gate_without_finding_blocks_approval(self):
+        rec = base_record(
+            gate_results={
+                "MTUI-TYPECHECK": {"passed": False, "evidence": "tsc err", "exit_code": 2},
+                "MTUI-TEST": {"passed": True, "evidence": "ok", "exit_code": 0},
+            },
+            findings={},
+        )
+        r = validate_record(rec, base_freeze())
+        self.assertFalse(r.valid)
+        self.assertTrue(any("no finding" in e or "unresolved" in e for e in r.errors), r.errors)
+
+    def test_skipped_result_present_blocks_approval(self):
+        rec = base_record(
+            gate_results={
+                "MTUI-TYPECHECK": {
+                    "passed": False,
+                    "evidence": "",
+                    "exit_code": -1,
+                    "skipped": True,
+                    "skip_reason": "missing required env: CI",
+                },
+                "MTUI-TEST": {"passed": True, "evidence": "ok", "exit_code": 0},
+            }
+        )
+        r = validate_record(rec, base_freeze())
+        self.assertFalse(r.valid)
+        self.assertTrue(any("skipped" in e for e in r.errors), r.errors)
+
+    def test_identity_mismatch_with_freeze_is_invalid(self):
+        rec = base_record(session_id="S-FORGED")
+        r = validate_record(rec, base_freeze())
+        self.assertFalse(r.valid)
+        self.assertTrue(any("session_id mismatch" in e for e in r.errors), r.errors)
+
+    def test_profile_hash_mismatch_is_invalid(self):
+        rec = base_record(profile_sha256="cafebabe")
+        r = validate_record(rec, base_freeze())
+        self.assertFalse(r.valid)
+        self.assertTrue(any("profile_sha256" in e for e in r.errors), r.errors)
+
+    def test_needs_changes_with_failed_gate_is_valid(self):
+        rec = base_record(
+            verdict="needs_changes",
+            approved_by="",
+            gate_results={
+                "MTUI-TYPECHECK": {"passed": False, "evidence": "tsc err", "exit_code": 2},
+                "MTUI-TEST": {"passed": True, "evidence": "ok", "exit_code": 0},
+            },
         )
         r = validate_record(rec, base_freeze())
         self.assertTrue(r.valid, r.errors)

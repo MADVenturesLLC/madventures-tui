@@ -63,6 +63,34 @@ class TestFreezeTarget(unittest.TestCase):
                 freeze_target(pf, repo, actor="a", model="m", provider="p",
                               session_id="S", surface="s")
 
+    def test_ssh_uri_origin_is_accepted(self):
+        with tempfile.TemporaryDirectory() as d:
+            repo = Path(d)
+            _git(repo, "init -q")
+            _git(repo, "config user.email t@t.t")
+            _git(repo, "config user.name t")
+            _git(repo, "config commit.gpgsign false")
+            _git(
+                repo,
+                "remote add origin ssh://git@github.com/MADVenturesLLC/madventures-tui.git",
+            )
+            (repo / "f.txt").write_text("x")
+            _git(repo, "add f.txt")
+            _git(repo, "commit -q -m init")
+            profile = {
+                "profile": "madventures-tui",
+                "target": {"origin_identity": "MADVenturesLLC/madventures-tui"},
+                "gates": [],
+            }
+            pf = repo / "profile.json"
+            pf.write_text(json.dumps(profile))
+            m = freeze_target(
+                pf, repo, actor="hermes", model="hy3",
+                provider="nous", session_id="S1", surface="cv5",
+            )
+            self.assertEqual(m.origin_host, "github.com")
+            self.assertEqual(m.origin_identity, "madventuresllc/madventures-tui")
+
 
 if __name__ == "__main__":
     unittest.main()

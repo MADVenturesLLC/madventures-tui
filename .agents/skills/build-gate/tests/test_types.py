@@ -36,6 +36,13 @@ class TestNormalizeOrigin(unittest.TestCase):
         self.assertEqual(host, "github.com")
         self.assertEqual(ident, "madventuresllc/madventures-tui")
 
+    def test_ssh_uri_with_userinfo(self):
+        host, ident = normalize_origin(
+            "ssh://git@github.com/MADVenturesLLC/madventures-tui.git"
+        )
+        self.assertEqual(host, "github.com")
+        self.assertEqual(ident, "madventuresllc/madventures-tui")
+
     def test_case_insensitive_identity(self):
         _, a = normalize_origin("git@github.com:MADVENTURESLLC/MADVENTURES-TUI.GIT")
         _, b = normalize_origin("https://github.com/madventuresllc/madventures-tui.git")

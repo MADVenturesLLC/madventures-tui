@@ -134,6 +134,7 @@ class ReviewRecord:
     approved_by: str
     self_approved: bool
     reviewed_at: str
+    profile_sha256: str = ""
 
     def to_dict(self) -> dict:
         return {
@@ -155,6 +156,7 @@ class ReviewRecord:
             "approved_by": self.approved_by,
             "self_approved": self.self_approved,
             "reviewed_at": self.reviewed_at,
+            "profile_sha256": self.profile_sha256,
         }
 
     @classmethod
@@ -178,6 +180,7 @@ class ReviewRecord:
             approved_by=d["approved_by"],
             self_approved=bool(d["self_approved"]),
             reviewed_at=d["reviewed_at"],
+            profile_sha256=d.get("profile_sha256", ""),
         )
 
 

@@ -20,8 +20,8 @@ A "forbidden approval" is any of:
    `resolved_findings` entry. Expected: invalid.
 4. **Origin mismatch** — freeze on `github.com`, record claims `gitlab.com`.
    Expected: invalid (`origin host mismatch`).
-5. **Skipped gate + approval** — a required gate is skipped (missing env) and
-   the record is still approved. Expected: invalid (missing gate result).
+5. **Skipped gate + approval** — a required gate is skipped (missing env) or
+   reports `skipped: true`, and the record is still approved. Expected: invalid.
 6. **Clean pass** — all gates pass, independent approver, matching SHA.
    Expected: valid.
 

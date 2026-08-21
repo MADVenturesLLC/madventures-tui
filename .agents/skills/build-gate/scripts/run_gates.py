@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Run every gate declared in a profile against the working tree, deterministically.
 
-Emits a JSON map gate_id -> result. Exit code is 1 if any non-skipped gate
-failed (fail-closed); 0 only when all applicable gates pass.
+Emits a JSON map gate_id -> result. Exit code is 1 if any gate failed or was
+skipped (fail-closed); 0 only when every declared gate ran and passed.
 
 Usage:
   python3 run_gates.py --profile profiles/madventures-tui.json [--cwd .] [--out results.json]

@@ -21,5 +21,6 @@
   "verdict": "approved",
   "approved_by": "founder",
   "self_approved": false,
-  "reviewed_at": "2026-08-20T15:03:01Z"
+  "reviewed_at": "2026-08-20T15:03:01Z",
+  "profile_sha256": "REPLACE_WITH_SHA256_OF_profiles/madventures-tui.json"
 }

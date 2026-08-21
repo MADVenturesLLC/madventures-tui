@@ -6,7 +6,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent / "scripts"))
 
-from build_gate.engine import discover_gates, run_all_gates  # noqa: E402
+from build_gate.engine import any_failed, discover_gates, run_all_gates  # noqa: E402
 
 
 class TestEngine(unittest.TestCase):
@@ -51,6 +51,12 @@ class TestEngine(unittest.TestCase):
         results = run_all_gates(profile, ".", env={"REQUIRED_VAR": "1"})
         self.assertFalse(results["G3"].passed)
         self.assertEqual(results["G3"].exit_code, 1)
+
+    def test_required_env_skip_fails_command_decision(self):
+        profile = self._profile()
+        results = run_all_gates(profile, ".", env={})
+        self.assertTrue(results["G1"].skipped)
+        self.assertTrue(any_failed(results))
 
 
 if __name__ == "__main__":

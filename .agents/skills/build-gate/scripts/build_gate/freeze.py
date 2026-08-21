@@ -11,6 +11,7 @@ import json
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlparse
 
 from .types import FreezeManifest
 
@@ -36,14 +37,14 @@ def normalize_origin(origin_url: str) -> tuple[str, str]:
       git@github.com:MADVenturesLLC/madventures-tui.git     -> ('github.com', 'MADVenturesLLC/madventures-tui')
     """
     url = origin_url.strip()
-    if url.startswith("git@"):
-        url = url[4:]
-        host, _, path = url.partition(":")
-    elif "://" in url:
-        _, _, rest = url.partition("://")
-        host, _, path = rest.partition("/")
+    if url.startswith("git@") and "://" not in url:
+        # SCP-style: git@host:owner/repo.git
+        rest = url[4:]
+        host, _, path = rest.partition(":")
     else:
-        host, _, path = url.partition(":")
+        parsed = urlparse(url if "://" in url else f"ssh://{url}")
+        host = parsed.hostname or ""
+        path = (parsed.path or "").lstrip("/")
     # Strip a trailing .git suffix case-insensitively (SSH URLs may be .GIT).
     lowered = path.lower()
     if lowered.endswith(".git"):

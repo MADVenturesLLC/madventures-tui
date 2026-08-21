@@ -28,7 +28,7 @@
     },
     {
       "id": "MTUI-ORIGIN",
-      "command": "python3 -c \"import subprocess; url=subprocess.check_output(['git','config','--get','remote.origin.url']).decode().strip(); h,p=(url[4:].split(':',1) if url.startswith('git@') else url.split('://',1)[1].split('/',1)); ident='/'.join(x for x in p.split('/') if x).removesuffix('.git').lower(); assert ident=='madventuresllc/madventures-tui', ident; print(ident)\"",
+      "command": "python3 .agents/skills/build-gate/scripts/assert_origin.py",
       "description": "Assert the git origin identity is the canonical MADVenturesLLC/madventures-tui (HTTPS or SSH).",
       "severity": "critical",
       "blocking": true
