@@ -109,6 +109,26 @@ const CHILD_EXIT_WAIT_MS = 3000; // bounded child-exit wait (not a §9.8 bound)
 const SWEEP_WAIT_MS = 3000; // bounded post-sweep wait (not a §9.8 bound)
 const T2_ECHO_TOKEN = "madspike-t2";
 
+/**
+ * Decoy lifetime, derived from this spike's own worst case rather than picked.
+ *
+ * The decoy is spawned before the first criterion and asserted alive after the
+ * last one, so its lifetime has to cover the WHOLE run — unlike every other
+ * fixture here, which lives inside one criterion. A fixed 12 s did not: the run
+ * takes about 8 s on the machine the spike was written on but about 13 s on a
+ * two-core CI runner (`supervisor_exit_modes` alone measured 4514 ms there
+ * against 2020 ms locally), so `/bin/sleep 12` reached its own end first and
+ * the control reported `decoy_survived_cleanup=false` on a host where nothing
+ * had killed it.
+ *
+ * §9.8 already bounds each criterion at `outerBound`, so the run's worst case
+ * is that bound times the number of criteria. Doubling it leaves room for
+ * fixture startup and teardown between criteria and keeps the decoy alive on
+ * any host slow enough to matter. It is still bounded: if this process dies
+ * before `teardownDecoy` runs, the decoy self-reaps instead of leaking.
+ */
+const DECOY_LIFETIME_S = Math.ceil((13 * 5000 * 2) / 1000); // 130 s
+
 // ── Ownership registry (Q9): the only signaling authority ─────────────────
 const registry: OwnedRecord[] = [];
 let selfPgid = 0; // this process's own process group (captured at role start)
@@ -1405,7 +1425,7 @@ async function postRunVerification(): Promise<number> {
  *  referenced again, asserted alive after all cleanup, then torn down by
  *  exact recorded pid through the choke point's final-decoy path. */
 function spawnDecoy(): Bun.Subprocess<"ignore", "ignore", "ignore"> {
-  const decoy = Bun.spawn(["/bin/sleep", "12"], {
+  const decoy = Bun.spawn(["/bin/sleep", String(DECOY_LIFETIME_S)], {
     stdin: "ignore",
     stdout: "ignore",
     stderr: "ignore",
@@ -1416,13 +1436,32 @@ function spawnDecoy(): Bun.Subprocess<"ignore", "ignore", "ignore"> {
   return decoy;
 }
 
-async function teardownDecoy(decoy: Bun.Subprocess<"ignore", "ignore", "ignore">): Promise<boolean> {
+async function teardownDecoy(
+  decoy: Bun.Subprocess<"ignore", "ignore", "ignore">,
+): Promise<{ readonly survived: boolean; readonly reason: string }> {
   const survived = pidAlive(decoy.pid);
   if (survived) {
     signalOwned("pid", decoy.pid, "SIGKILL", { finalDecoyTeardown: true });
     await Promise.race([decoy.exited, sleep(CHILD_EXIT_WAIT_MS)]);
+    return { survived: true, reason: "alive" };
   }
-  return survived;
+  /*
+   * A dead decoy is reported with the reason, because the two ways it can
+   * happen mean opposite things and `false` alone cannot tell them apart:
+   *
+   *   signal:*  — something signalled a process the registry does not own.
+   *               That is the defect this negative control exists to catch.
+   *   code:0    — `/bin/sleep` reached its own end. Nothing killed it; the run
+   *               simply outlived `DECOY_LIFETIME_S`, so the control never
+   *               actually ran. A harness artifact, not a sweep failure.
+   *
+   * Both still fail the criterion — an expired decoy proves nothing, so it must
+   * not pass quietly — but the reason says which one to go fix.
+   */
+  return {
+    survived: false,
+    reason: decoy.signalCode ? `signal:${decoy.signalCode}` : `code:${String(decoy.exitCode)}`,
+  };
 }
 
 const KILLING_CRITERIA: readonly SpikeCriterion[] = [
@@ -1443,6 +1482,7 @@ function buildMeasuredTiming(
   registryLiveAfterCleanup: number,
   decoySpawned: boolean,
   decoySurvived: boolean,
+  decoyReason: string,
 ): CriterionOutcome {
   const find = (c: SpikeCriterion): CriterionOutcome => {
     const o = outcomes.find((x) => x.criterion === c);
@@ -1466,7 +1506,8 @@ function buildMeasuredTiming(
   const table = others.map((o) => `${o.criterion}=${o.observedMs.toFixed(1)}ms`).join(" ");
   const detail =
     `SWEEP registry_live_after_cleanup=${registryLiveAfterCleanup} ` +
-    `decoy_spawned=${String(decoySpawned)} decoy_survived_cleanup=${String(decoySurvived)} | ` +
+    `decoy_spawned=${String(decoySpawned)} decoy_survived_cleanup=${String(decoySurvived)} ` +
+    `decoy_state=${decoyReason} | ` +
     `ack_first_byte_ms=${find("exact_binary_io").observedMs.toFixed(1)} (bound ${DEADLINES_MS.ack}) ` +
     `escalation_start_ms=${ev.wedgeEscalationMs.toFixed(1)} (bound ${DEADLINES_MS.escalation}) ` +
     `responsive_grace_given_ms=${graceGivenMs.toFixed(1)} (bound ${DEADLINES_MS.responsiveChildGrace}) ` +
@@ -1509,9 +1550,16 @@ export async function runSpike(): Promise<readonly SpikeResult[]> {
   outcomes.push(buildCleanExitReporting(ev));
   // §11: registry-tracked cleanup verification before the decoy is touched.
   const registryLiveAfterCleanup = await postRunVerification();
-  const decoySurvived = await teardownDecoy(decoy);
+  const decoyOutcome = await teardownDecoy(decoy);
   outcomes.push(
-    buildMeasuredTiming(outcomes, ev, registryLiveAfterCleanup, true, decoySurvived),
+    buildMeasuredTiming(
+      outcomes,
+      ev,
+      registryLiveAfterCleanup,
+      true,
+      decoyOutcome.survived,
+      decoyOutcome.reason,
+    ),
   );
   return SPIKE_CRITERIA.map((c) => {
     const o = outcomes.find((x) => x.criterion === c);
