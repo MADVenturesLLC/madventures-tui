@@ -1836,6 +1836,31 @@ block remains a valid Bash code block.
 > base records where the evidence is *filed*. Conflating the two is what forced
 > the reports toward a detached worktree in the first place.
 
+> **Aggregation admission gate, ruled 2026-08-21 (Founder). Fail-closed.**
+> Before either host report may be filed as valid evidence, the aggregator must
+> **independently** verify all four:
+>
+> 1. **`Candidate SHA:` exactly matches the authorized candidate revision.**
+>    (Recorded for this lane at Task 38's completion-lane authorization above.)
+> 2. **The report checksum recomputes to its declared SHA-256.**
+> 3. **Every required §6.5 report field group is present and conforms to the
+>    report contract.**
+> 4. **The report is host-originated.** The aggregator may validate and file it,
+>    but **must not edit, complete, normalize, or substitute it.**
+>
+> A report failing any check is **`NOT_FILEABLE`**. Preserve it unchanged as
+> rejected evidence with the failed condition recorded. It **does not satisfy
+> Task 39** and **cannot be repaired by inference or aggregation**. See stop
+> condition 18.
+>
+> **Scope of this ruling, as issued:** it adds no new host run, changes no
+> candidate, and grants no implementation or merge authority.
+>
+> This closes the gap a review raised against the previous revision: the earlier
+> text said the aggregator must not rewrite a host report, but never said what
+> the aggregator must *check* before filing one. "Must not rewrite" alone
+> protects the integrity of a report nobody validated.
+
 - [ ] Step 1: Write the named failing test — in `test/phase3a/spike/bun-terminal-spike.test.ts` add `test("both dual-host spike reports exist, name the same SHA, and carry a checksum")` reading both files, asserting each contains `Candidate SHA:` with the same value and a `Report SHA-256:` line, and that the two `Architecture:` values are `x86_64` and `arm64`.
 - [ ] Step 2: Run `bun test test/phase3a/spike/bun-terminal-spike.test.ts -t "both dual-host spike reports exist, name the same SHA, and carry a checksum"` — expected RED: neither report file exists (`ENOENT`).
 - [ ] Step 3: Implement the minimum authorized behavior — run the spike on each host and write the two reports with the §6.5 fields and observed timings. Do not write a report for a host you did not run.
@@ -1864,7 +1889,7 @@ block remains a valid Bash code block.
 > describes only what the lane actually produces.
 - [ ] Step 4: Run the same command — expected GREEN: 1 pass. Invariant established: **cross-host certification is evidenced by two independent reports at one SHA, never inferred from one machine.**
 - [ ] Step 5: Run `bun test test/phase3a` and `bunx tsc --noEmit`.
-- [ ] Step 6: Inspect the diff; confirm only the two reports and the spike test file changed. *(Amended 2026-08-21, Founder ruling — Option A. Previously "only the two documents changed", which Step 1 makes impossible.)*
+- [ ] Step 6: Run the **aggregation admission gate** above against each host report — candidate SHA, checksum recomputation, §6.5 field-group conformance, host origination — and record the outcome per report. Any `NOT_FILEABLE` report halts the task under stop condition 18; do not proceed to Step 7. Then inspect the diff; confirm only the two reports and the spike test file changed. *(Admission gate added 2026-08-21, Founder ruling. File list amended 2026-08-21, Founder ruling — Option A; previously "only the two documents changed", which Step 1 makes impossible.)*
 - [ ] Step 7: Commit the two reports and the test with message: `test(phase3a): assert dual-host spike reports, and publish them` *(Amended 2026-08-21, Founder ruling — Option A. Previously `docs(verification): publish dual-host Bun.Terminal spike reports`, which described a documents-only commit this task does not produce.)*
 - [ ] Step 8: Stop for the M17 gate review. **If either report fails any criterion, M18–M19, M21, and M23 do not begin.**
 
@@ -2899,6 +2924,7 @@ Implementing first and disclosing afterward is a qualification failure under §7
 | 15 | Any need to **alter the approved specification or `DEC-20260812-01`** | Halt. Neither document is editable by the implementer. |
 | 16 | A **`PLAN-OPEN-*` value is needed and no Founder ruling exists** | Halt at that task's precondition. §1A. |
 | 17 | A reviewer verdict would require **changing an authority boundary** rather than fixing an implementation defect | Halt. Route to the Founder as a design question, not a correction round. |
+| 18 | A host report is **`NOT_FILEABLE`** — it fails the Task 39 aggregation admission gate on candidate SHA, checksum recomputation, §6.5 field-group conformance, or host origination | Halt Task 39. Preserve the report **unchanged** as rejected evidence and record which condition failed. Do not edit, complete, normalize, or substitute it, and do not repair it by inference or aggregation. Founder ruling 2026-08-21. |
 
 **Escalation format.** Every stop produces: the exact task and step; the specification citations; the live-repository `file:line` evidence; the observed command output verbatim; the two or more readings if it is an ambiguity; and an explicit statement that no code was written to resolve it.
 
