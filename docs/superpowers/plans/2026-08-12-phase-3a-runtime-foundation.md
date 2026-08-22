@@ -1742,12 +1742,19 @@ block remains a valid Bash code block.
 > evidence records, each carrying its source-transcript filename and
 > SHA-256: `docs/verification/2026-08-22-m17-step8-dualhost-macbook.md`
 > and `docs/verification/2026-08-22-m17-step8-dualhost-imac.md`.
-> Task 39's dual-host unlock precondition ("the same candidate has run
-> on both Founder Macs") is satisfied at this candidate. Task 39's own
-> steps remain unexecuted — its Step 3 requires its own host runs per
-> the 2026-08-21 ruling. This mark records evidence verification and
-> filing only: no production adapter, merge, Bun upgrade, unrelated
-> correction, or later milestone is authorized by it.
+> Status, in the Founder's 2026-08-22 status-language correction
+> vocabulary:
+>
+> - M17 Step 8 validation: **PASS**
+> - Task 39 unlock precondition: **SATISFIED** ("the same candidate has
+>   run on both Founder Macs", at this candidate)
+> - Task 39 execution: **NOT STARTED**
+> - Task 39 §6.5 host reports: **NOT FILED**
+>
+> Task 39's Step 3 requires its own host runs per the 2026-08-21
+> ruling. This mark records evidence verification and filing only: no
+> production adapter, merge, Bun upgrade, unrelated correction, or
+> later milestone is authorized by it.
 
 **Requirement coverage:**
 - §3.6 (the thirteen spike demonstrations; timing measured against the §9.8 table; reports record observed values rather than merely saying “pass”)
