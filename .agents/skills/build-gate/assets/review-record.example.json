@@ -1,0 +1,26 @@
+{
+  "profile": "madventures-tui",
+  "target_ref": "1e11393e15aecb5c1fd75db15505a59b7a963604",
+  "target_ref_short": "1e11393",
+  "origin_url": "git@github.com:MADVenturesLLC/madventures-tui.git",
+  "origin_host": "github.com",
+  "origin_identity": "madventuresllc/madventures-tui",
+  "actor": "hermes",
+  "model": "hy3",
+  "provider": "nous",
+  "session_id": "S1",
+  "surface": "cv5",
+  "gate_results": {
+    "MTUI-CLEAN-TREE": {"passed": true, "evidence": "", "exit_code": 0},
+    "MTUI-TYPECHECK": {"passed": true, "evidence": "", "exit_code": 0},
+    "MTUI-TEST": {"passed": true, "evidence": "38 pass", "exit_code": 0},
+    "MTUI-ORIGIN": {"passed": true, "evidence": "madventuresllc/madventures-tui", "exit_code": 0}
+  },
+  "findings": {},
+  "resolved_findings": {},
+  "verdict": "approved",
+  "approved_by": "founder",
+  "self_approved": false,
+  "reviewed_at": "2026-08-20T15:03:01Z",
+  "profile_sha256": "REPLACE_WITH_SHA256_OF_profiles/madventures-tui.json"
+}

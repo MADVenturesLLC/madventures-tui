@@ -97,7 +97,7 @@ interface OwnedRecord {
 const RUN_ID = `madspike-${process.pid}`;
 const SELF_PATH = import.meta.path;
 
-const PAYLOAD_BYTES = 4096; // fixed-seed LCG payload length (Q7)
+export const PAYLOAD_BYTES = 4096; // fixed-seed LCG payload length (Q7)
 const POLL_MS = 5; // group/pid liveness poll interval
 const SPAWN_SETTLE_MS = 100; // child settle before PTY I/O
 const EOF_SETTLE_MS = 30; // ladder settle when no grace is due (§3.4 EOF path)
@@ -638,7 +638,22 @@ async function setupFixture(scenario: FixtureScenario, runId: string): Promise<F
     await sleep(SPAWN_SETTLE_MS);
     const payload = lcgPayload();
     writeAt = performance.now();
-    const written = terminal.write(payload);
+    // M17 Step 8 ruling (2026-08-22): the write invocation outcome and the
+    // synchronous-flush count are recorded independently. Bun 1.3.14's
+    // write() returns bytes synchronously flushed while buffering the
+    // remainder for later delivery (Bun 1.4 changed the return to bytes
+    // accepted), so a short return is acceptable buffering — never a resend
+    // trigger: the runtime already accepted the complete input. The POSIX
+    // drain callback is neither required nor relied upon under 1.3.14.
+    let written = -1;
+    let writeOk = false;
+    let writeErr = "";
+    try {
+      written = terminal.write(payload);
+      writeOk = true;
+    } catch (e) {
+      writeErr = String(e).replace(/\s+/g, "_").slice(0, 120);
+    }
     const deadline = performance.now() + CHILD_EXIT_WAIT_MS;
     let got = 0;
     while (performance.now() < deadline) {
@@ -653,10 +668,23 @@ async function setupFixture(scenario: FixtureScenario, runId: string): Promise<F
       flat.set(c.subarray(0, Math.min(c.byteLength, got - off)), off);
       off += c.byteLength;
     }
-    const exact =
-      got === PAYLOAD_BYTES && written === PAYLOAD_BYTES && flat.every((b, i) => b === payload[i]);
+    // Byte-for-byte equality always executes — never behind the flush count.
+    // Every received byte must match the payload at its offset; bytes beyond
+    // the payload length fail the comparison, and zero delivery is not
+    // equality.
+    let byteExact = got > 0;
+    for (let i = 0; i < got; i += 1) {
+      if (flat[i] !== payload[i]) {
+        byteExact = false;
+        break;
+      }
+    }
+    const lengthExact = got === PAYLOAD_BYTES;
     publish(
-      `binary_result wrote=${written} got=${got} exact=${String(exact)} first_byte_ms=${firstByteMs.toFixed(1)} flags_before=${flagsBefore} flags_after=${flagsAfter}`,
+      `binary_result write_ok=${String(writeOk)} wrote=${written} got=${got} ` +
+        `length_exact=${String(lengthExact)} byte_exact=${String(byteExact)} ` +
+        `first_byte_ms=${firstByteMs.toFixed(1)} flags_before=${flagsBefore} flags_after=${flagsAfter}` +
+        (writeErr ? ` write_err=${writeErr}` : ""),
     );
     return { facts: { runId, hostPid: process.pid, childPid, childPgid, readyMs }, governed, terminals, children };
   }
@@ -983,28 +1011,51 @@ async function runAllocation(): Promise<CriterionOutcome> {
 }
 
 // 7.2 exact_binary_io
+/** M17 Step 8 corrected criterion (Founder ruling, 2026-08-22). Pass/fail
+ *  depends on successful write invocation, exact eventual length, and exact
+ *  eventual bytes — never on the synchronous-flush count, which is recorded
+ *  as diagnostic telemetry only (Bun 1.3.14 returns bytes synchronously
+ *  flushed while buffering the remainder; Bun 1.4 changed the return to
+ *  bytes accepted). The POSIX drain callback is neither required nor relied
+ *  upon under the pinned runtime — its absence is a known 1.3.14 limitation,
+ *  not an M17 failure. Pure so the synthetic coverage can drive it. */
+export function evaluateExactBinaryIo(rec: {
+  writeOk: boolean;
+  /** synchronous-flush count — diagnostic telemetry only, never pass/fail */
+  wrote: number;
+  got: number;
+  byteExact: boolean;
+  firstByteMs: number;
+}): { pass: boolean; lengthExact: boolean } {
+  const lengthExact = rec.got === PAYLOAD_BYTES;
+  const pass =
+    rec.writeOk &&
+    lengthExact &&
+    rec.byteExact &&
+    Number.isFinite(rec.firstByteMs) &&
+    rec.firstByteMs >= 0 &&
+    rec.firstByteMs <= DEADLINES_MS.ack; // §9.8 host-acknowledgement bound, unchanged
+  return { pass, lengthExact };
+}
+
 async function runBinary(): Promise<CriterionOutcome> {
   const h = await launchFixture("binary");
   try {
     const line = await h.hub.wait((t) => t.startsWith("binary_result"), LINE_WAIT_MS, "binary_result");
+    const writeOk = textField(line.text, "write_ok") === "true";
     const wrote = numField(line.text, "wrote");
     const got = numField(line.text, "got");
     const firstByteMs = numField(line.text, "first_byte_ms");
-    const exact = textField(line.text, "exact") === "true";
-    const pass =
-      wrote === PAYLOAD_BYTES &&
-      got === PAYLOAD_BYTES &&
-      exact &&
-      Number.isFinite(firstByteMs) &&
-      firstByteMs >= 0 &&
-      firstByteMs <= DEADLINES_MS.ack; // §9.8 host-acknowledgement bound
+    const byteExact = textField(line.text, "byte_exact") === "true";
+    const { pass, lengthExact } = evaluateExactBinaryIo({ writeOk, wrote, got, byteExact, firstByteMs });
     return {
       criterion: "exact_binary_io",
       pass,
       observedMs: Number.isFinite(firstByteMs) ? firstByteMs : 0,
       detail:
         `first_byte_ms=${firstByteMs} (ack bound ${DEADLINES_MS.ack}) ` +
-        `wrote=${wrote} got=${got} byte_exact=${String(exact)} ` +
+        `write_ok=${String(writeOk)} wrote=${wrote} (flush telemetry only) got=${got} ` +
+        `length_exact=${String(lengthExact)} byte_exact=${String(byteExact)} ` +
         `flags_before=${textField(line.text, "flags_before")} flags_after=${textField(line.text, "flags_after")}`,
       subAssertions: {},
     };

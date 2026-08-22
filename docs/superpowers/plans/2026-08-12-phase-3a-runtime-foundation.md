@@ -1728,6 +1728,69 @@ block remains a valid Bash code block.
 > builds and hash differently at the same version, so each host records its own
 > as an identity field rather than as an equality check.
 
+> **M17 Step-8 checkpoint evidence verified PASS — 2026-08-22** (Founder-
+> submitted dual-host evidence; verification and filing per the Founder's
+> 2026-08-22 direction). Corrected candidate
+> `56435bfe61978abed2cbcdb9b6c4e52550dc222d` ran three consecutive
+> full-suite runs on each Founder Mac — Apple Silicon MacBook (arm64,
+> macOS 26.6.1) and Intel iMac (x86_64, macOS 13.7.8), Bun 1.3.14 on
+> both — with all thirteen §3.6 criteria passing in all six runs,
+> `761 pass / 0 fail` each, and the corrected `exact_binary_io`
+> evaluator passing under the Step-8 ruling (write-return short counts
+> are telemetry only; eventual length and byte equality exact; the
+> drain callback neither required nor relied upon on Bun 1.3.14). Host
+> evidence records, each carrying its source-transcript filename and
+> SHA-256: `docs/verification/2026-08-22-m17-step8-dualhost-macbook.md`
+> and `docs/verification/2026-08-22-m17-step8-dualhost-imac.md`.
+> Status, in the Founder's 2026-08-22 status-language correction
+> vocabulary:
+>
+> - M17 Step 8 validation: **PASS**
+> - Task 39 unlock precondition: **SATISFIED** ("the same candidate has
+>   run on both Founder Macs", at this candidate)
+> - Task 39 execution: **COMPLETE** (2026-08-22, executed Steps 1–8 in
+>   plan order under the Founder's same-day authorization)
+> - Task 39 §6.5 host reports: **FILED** — host-authored, filed
+>   byte-identically at their reserved paths (commit
+>   `test(phase3a): assert dual-host spike reports, and publish them`)
+> - **M17: PASSED on both hosts** at candidate
+>   `56435bfe61978abed2cbcdb9b6c4e52550dc222d`
+>
+> **Task 39 execution record (2026-08-22).** Step 1 test written; Step 2
+> RED observed (ENOENT, no spike output). Step 3 ran on each Founder Mac
+> in a fresh detached worktree at the candidate: three consecutive
+> passing `bun test test/phase3a` runs per host — 29 pass / 0 fail /
+> 161 expect() each, all thirteen §3.6 criteria passing in every run —
+> with `bunx tsc --noEmit` silent and every `git status --porcelain`
+> and `git diff -- bun.lock package.json` capture empty (pinned by the
+> empty-input SHA-256 in each report's evidence list). Reports were
+> generated and checksummed on their own hosts from that host's retained
+> evidence. Step 4 GREEN (1 pass); Step 5 green on the aggregator
+> (30 pass / 0 fail incl. the report test; tsc clean; the spike also
+> passed 13/13 on the aggregator's linux/x64 container — an
+> environmental observation, not host evidence). Step 6 admission gate,
+> per report, all four conditions PASS: exact authorized candidate SHA;
+> internal checksum recomputed (`macbook`
+> `5f22615409a0c878c077360502effbcce59904cdef376e894a14085de344bb04`,
+> `imac`
+> `480b0f96f7bddf4b2a8272774a44a23e3bb11f97521d16f72fa21744836d10de`);
+> §6.5 field groups present and conforming; host origination verified —
+> each transcript's on-host generator output prints the whole-file
+> SHA-256 that the filed bytes still hash to (`macbook`
+> `7722932a9d158ef25293dbac89da3c3aa039a571be100fe938a682c149182916`,
+> `imac`
+> `7d09d3dbd35f4a55ec74702c63a6258fca079c75bb4fa93b4c5e55c56e449e95`),
+> and every report criteria line appears verbatim in its transcript.
+> Source transcripts retained as submitted evidence, not committed:
+> `MACBOOKTASK39.txt` SHA-256
+> `c35aba184759386534a5594293345595cfb6e5d0cbef9c19eb8466398f56c31b`,
+> `IMACTASK39.txt` SHA-256
+> `f177151a1b20fda3befa4b5e72b6454112f34b33a13d692a8581f9ff872653c7`.
+> Aggregation base check run plan-verbatim: PASS, base contains
+> `138463b`. This record authorizes nothing further: no production
+> adapter, PR, merge, release, Bun upgrade, unrelated correction, or
+> later milestone.
+
 **Requirement coverage:**
 - §3.6 (the thirteen spike demonstrations; timing measured against the §9.8 table; reports record observed values rather than merely saying “pass”)
 - §9.7 (the pre-written candidate is `Bun.Terminal`; FFI `posix_openpt`, `node-pty`, another native dependency, or a pipe fallback is not an implementation choice)
