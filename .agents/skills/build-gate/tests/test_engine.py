@@ -81,6 +81,23 @@ class TestEngine(unittest.TestCase):
         self.assertIn("timed out", result.evidence)
         self.assertLess(time.monotonic() - started, 0.5)
 
+    def test_command_receives_supplied_environment(self):
+        profile = self._profile(
+            gates=[
+                {
+                    "id": "ENV",
+                    "command": (
+                        f"{shlex.quote(sys.executable)} -c "
+                        "'import os, sys; sys.exit(os.getenv(\"GATE_ENV\") != \"set\")'"
+                    ),
+                }
+            ]
+        )
+
+        result = run_all_gates(profile, ".", env={"GATE_ENV": "set"})["ENV"]
+
+        self.assertTrue(result.passed, result.evidence)
+
 
 if __name__ == "__main__":
     unittest.main()

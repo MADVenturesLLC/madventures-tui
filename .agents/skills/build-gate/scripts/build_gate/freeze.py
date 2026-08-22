@@ -36,10 +36,12 @@ def normalize_origin(origin_url: str) -> tuple[str, str]:
       git@github.com:MADVenturesLLC/madventures-tui.git     -> ('github.com', 'madventuresllc/madventures-tui')
     """
     url = origin_url.strip()
-    if url.startswith("git@") and "://" not in url:
-        # SCP-style: git@host:owner/repo.git
-        rest = url[4:]
-        host, _, path = rest.partition(":")
+    if "://" not in url and "@" in url:
+        # SCP-style: user@host:owner/repo.git
+        user_host, separator, path = url.partition(":")
+        if not separator:
+            raise ValueError(f"invalid SCP-style git remote: {origin_url!r}")
+        host = user_host.rsplit("@", 1)[1]
     else:
         parsed = urlparse(url if "://" in url else f"ssh://{url}")
         host = parsed.hostname or ""

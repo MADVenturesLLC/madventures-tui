@@ -60,7 +60,9 @@ def _text(value: str | bytes | None) -> str:
     return value or ""
 
 
-def _run_command(command: str, cwd: str | Path, timeout_seconds: float) -> tuple[int, str]:
+def _run_command(
+    command: str, cwd: str | Path, timeout_seconds: float, env: dict[str, str]
+) -> tuple[int, str]:
     proc = subprocess.Popen(
         command,
         shell=True,
@@ -69,6 +71,7 @@ def _run_command(command: str, cwd: str | Path, timeout_seconds: float) -> tuple
         stderr=subprocess.PIPE,
         text=True,
         start_new_session=True,
+        env=env,
     )
     try:
         stdout, stderr = proc.communicate(timeout=timeout_seconds)
@@ -87,8 +90,8 @@ def _run_command(command: str, cwd: str | Path, timeout_seconds: float) -> tuple
     return proc.returncode, out.strip()
 
 
-def run_gate(spec: GateSpec, cwd: str | Path) -> GateResult:
-    code, out = _run_command(spec.command, cwd, spec.timeout_seconds)
+def run_gate(spec: GateSpec, cwd: str | Path, env: dict[str, str]) -> GateResult:
+    code, out = _run_command(spec.command, cwd, spec.timeout_seconds, env)
     passed = code in spec.pass_exit_codes
     return GateResult(
         gate_id=spec.id,
@@ -108,7 +111,6 @@ def run_all_gates(
     """
     env = env or {}
     specs = discover_gates(profile)
-    by_id = {s.id: s for s in specs}
     results: dict[str, GateResult] = {}
 
     for spec in specs:
@@ -142,7 +144,7 @@ def run_all_gates(
                 )
                 continue
 
-        results[spec.id] = run_gate(spec, cwd)
+        results[spec.id] = run_gate(spec, cwd, env)
 
     return results
 

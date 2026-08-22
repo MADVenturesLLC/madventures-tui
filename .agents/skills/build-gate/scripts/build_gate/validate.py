@@ -117,7 +117,10 @@ def validate_record(
         if isinstance(exit_code, bool) or not isinstance(exit_code, int):
             result.add(f"gate {gate_id}: exit_code must be a JSON integer")
             continue
-        evidence = gr.get("evidence") or ""
+        evidence = gr.get("evidence")
+        if not isinstance(evidence, str):
+            result.add(f"gate {gate_id}: evidence must be a JSON string")
+            continue
 
         if skipped and _is_approved(record):
             result.add(f"gate {gate_id}: skipped gates block approval")

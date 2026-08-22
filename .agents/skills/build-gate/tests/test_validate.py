@@ -184,6 +184,25 @@ class TestValidator(unittest.TestCase):
                     any(f"{field} must be" in error for error in r.errors), r.errors
                 )
 
+    def test_gate_evidence_must_be_a_json_string(self):
+        rec = base_record(
+            gate_results={
+                "MTUI-TYPECHECK": {
+                    "passed": False,
+                    "evidence": {"message": "type error"},
+                    "exit_code": 2,
+                },
+                "MTUI-TEST": {"passed": True, "evidence": "ok", "exit_code": 0},
+            },
+            findings={"MTUI-TYPECHECK": {"severity": "major", "blocking": True}},
+            resolved_findings={"MTUI-TYPECHECK": "Founder waiver."},
+        )
+
+        r = validate_record(rec, base_freeze())
+
+        self.assertFalse(r.valid)
+        self.assertTrue(any("evidence must be" in error for error in r.errors), r.errors)
+
     def test_needs_changes_with_failed_gate_is_valid(self):
         rec = base_record(
             verdict="needs_changes",

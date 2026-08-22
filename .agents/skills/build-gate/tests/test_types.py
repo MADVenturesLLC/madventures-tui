@@ -36,6 +36,13 @@ class TestNormalizeOrigin(unittest.TestCase):
         self.assertEqual(host, "github.com")
         self.assertEqual(ident, "madventuresllc/madventures-tui")
 
+    def test_ssh_with_non_git_user(self):
+        host, ident = normalize_origin(
+            "deploy@github.com:MADVenturesLLC/madventures-tui.git"
+        )
+        self.assertEqual(host, "github.com")
+        self.assertEqual(ident, "madventuresllc/madventures-tui")
+
     def test_ssh_uri_with_userinfo(self):
         host, ident = normalize_origin(
             "ssh://git@github.com/MADVenturesLLC/madventures-tui.git"
