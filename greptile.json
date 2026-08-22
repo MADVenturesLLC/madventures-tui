@@ -21,7 +21,7 @@
         "scope": ["test/**", "packages/**"]
       },
       {
-        "rule": "A short return from a write call is backpressure, not data loss. Do not resend the apparent unwritten remainder; respect drain before subsequent writes and assert on eventual delivered bytes.",
+        "rule": "Establish which write-return contract applies before judging short-write handling; the two are not interchangeable. Node's Writable.write() returns a boolean, where false means the chunk was buffered in full and the caller must await 'drain' before writing again — resending any part of it is a duplication bug. Bun.Terminal.write() returns a byte count that may be less than the input length; treating that short count as proof of full delivery, without a measurement establishing the runtime delivered the remainder, is a data-loss bug. In neither case is the return value alone evidence of delivery: require the test to assert eventual delivered length and eventual delivered bytes against the input, independently.",
         "scope": ["packages/**", "test/**"]
       },
       {
