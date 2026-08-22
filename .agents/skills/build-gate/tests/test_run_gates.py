@@ -147,6 +147,71 @@ class TestRunGatesCli(unittest.TestCase):
                 payload,
             )
 
+    def test_gates_run_against_frozen_worktree_not_operator_cwd(self):
+        with tempfile.TemporaryDirectory() as d:
+            directory = Path(d)
+            repo, profile, freeze = self._make_repo(directory)
+            mutate = repo / "tracked.txt"
+            profile.write_text(
+                json.dumps(
+                    {
+                        "profile": "test-profile",
+                        "target": {"origin_identity": "MADVenturesLLC/madventures-tui"},
+                        "gates": [
+                            {
+                                "id": "PASS",
+                                "command": (
+                                    f"sh -c 'echo mutated > {mutate}; "
+                                    "test \"$(cat tracked.txt)\" = tracked'"
+                                ),
+                                "timeout_seconds": 1,
+                            }
+                        ],
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            freeze_target(
+                profile,
+                repo,
+                actor="tester",
+                model="test-model",
+                provider="test-provider",
+                session_id="session",
+                surface="test",
+                out_path=freeze,
+            )
+
+            proc = self._run(repo, profile, freeze)
+
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            self.assertTrue(json.loads(proc.stdout)["PASS"]["passed"])
+            self.assertEqual(mutate.read_text(encoding="utf-8"), "mutated\n")
+            leftover = subprocess.run(
+                ["git", "worktree", "list", "--porcelain"],
+                cwd=str(repo),
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            self.assertNotIn("build-gate-", leftover.stdout)
+
+    def test_invalid_target_ref_fails_closed(self):
+        with tempfile.TemporaryDirectory() as d:
+            repo, profile, freeze = self._make_repo(Path(d))
+            payload = json.loads(freeze.read_text(encoding="utf-8"))
+            payload["target_ref"] = "not-a-sha"
+            payload["target_ref_short"] = "not-a-s"
+            freeze.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+
+            proc = self._run(repo, profile, freeze)
+
+            self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+            body = json.loads(proc.stdout)
+            self.assertFalse(body["valid"], body)
+            self.assertTrue(body["errors"], body)
+
 
 if __name__ == "__main__":
     unittest.main()

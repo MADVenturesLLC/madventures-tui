@@ -10,7 +10,11 @@ HERE = Path(__file__).resolve().parent
 SCRIPTS = HERE.parent / "scripts"
 sys.path.insert(0, str(HERE.parent / "scripts"))
 
-from build_gate.freeze import freeze_target  # noqa: E402
+from build_gate.freeze import (  # noqa: E402
+    freeze_target,
+    materialize_frozen_worktree,
+    remove_frozen_worktree,
+)
 
 
 def _git(cwd: Path, args: list[str]):
@@ -139,6 +143,45 @@ class TestFreezeTarget(unittest.TestCase):
             payload = json.loads(proc.stdout)
             self.assertFalse(payload["valid"], payload)
             self.assertTrue(payload["errors"], payload)
+
+    def test_materialized_worktree_ignores_later_operator_mutation(self):
+        with tempfile.TemporaryDirectory() as d:
+            repo = Path(d)
+            _git(repo, ["init", "-q"])
+            _git(repo, ["config", "user.email", "t@t.t"])
+            _git(repo, ["config", "user.name", "t"])
+            _git(repo, ["config", "commit.gpgsign", "false"])
+            (repo / "f.txt").write_text("original\n", encoding="utf-8")
+            _git(repo, ["add", "f.txt"])
+            _git(repo, ["commit", "-q", "-m", "init"])
+            sha = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=str(repo),
+                capture_output=True,
+                text=True,
+                check=True,
+            ).stdout.strip()
+
+            worktree = materialize_frozen_worktree(repo, sha)
+            try:
+                (repo / "f.txt").write_text("mutated\n", encoding="utf-8")
+                self.assertEqual(
+                    (worktree / "f.txt").read_text(encoding="utf-8"),
+                    "original\n",
+                )
+                self.assertEqual(
+                    subprocess.run(
+                        ["git", "rev-parse", "HEAD"],
+                        cwd=str(worktree),
+                        capture_output=True,
+                        text=True,
+                        check=True,
+                    ).stdout.strip(),
+                    sha,
+                )
+            finally:
+                remove_frozen_worktree(repo, worktree)
+            self.assertFalse(worktree.exists())
 
 
 if __name__ == "__main__":

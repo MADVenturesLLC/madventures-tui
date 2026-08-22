@@ -39,7 +39,8 @@ would.
   hash. Emits a freeze manifest JSON with origin URL userinfo, queries, and
   fragments removed.
 - `scripts/run_gates.py` — verify the current clean checkout still matches the
-  freeze, then execute every gate; exits 1 on execution-context drift or any
+  freeze, then execute every gate in a detached worktree pinned to
+  `freeze.target_ref`; exits 1 on execution-context drift or any
   failed/skipped gate.
 - `scripts/validate_record.py` — fail-closed validation of a review record
   against a freeze manifest; exits 0 only when valid and `verdict=approved`.
@@ -49,7 +50,8 @@ would.
 - `types.py` — dataclasses + `Severity`/`Verdict` enums.
 - `engine.py` — `load_profile`, `discover_gates`, `run_all_gates`
   (honors `required_env` and `conditional_on` skips).
-- `freeze.py` — `freeze_target`, `normalize_origin` (HTTPS + SSH).
+- `freeze.py` — `freeze_target`, `normalize_origin` (HTTPS + SSH),
+  `materialize_frozen_worktree`, `remove_frozen_worktree`.
 - `validate.py` — `validate_record`, `load_and_validate`.
 
 ## Profiles (`profiles/`)
@@ -70,7 +72,7 @@ python3 "$SKILL/scripts/freeze_target.py" \
   --actor hermes --model hy3 --provider nous --session-id S1 --surface cv5 \
   --out "$OUT/freeze.json"
 
-# 2. Run the gates (fail-closed: requires the exact clean frozen checkout)
+# 2. Run the gates (fail-closed: exact clean checkout, executed at frozen SHA)
 python3 "$SKILL/scripts/run_gates.py" \
   --profile "$SKILL/profiles/madventures-tui.json" --freeze "$OUT/freeze.json" \
   --cwd . --out "$OUT/results.json"

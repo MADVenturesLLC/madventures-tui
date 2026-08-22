@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import subprocess
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse, urlsplit, urlunsplit
@@ -163,3 +165,59 @@ def verify_frozen_execution(
     except (RuntimeError, ValueError, TypeError, AttributeError) as exc:
         errors.append(f"unable to verify frozen execution context: {exc}")
     return errors
+
+
+def _is_full_sha(value: str) -> bool:
+    return len(value) == 40 and all(c in "0123456789abcdef" for c in value)
+
+
+def materialize_frozen_worktree(cwd: str | Path, target_ref: str) -> Path:
+    """Create a detached worktree pinned to the frozen commit.
+
+    Gate commands run inside this checkout so later mutations of the operator
+    working tree cannot change the content under test.
+    """
+    repo = Path(cwd).resolve()
+    ref = target_ref.strip().lower()
+    if not _is_full_sha(ref):
+        raise RuntimeError(f"invalid target_ref: {target_ref!r}")
+
+    parent = Path(tempfile.mkdtemp(prefix="build-gate-"))
+    dest = parent / "frozen"
+    try:
+        _git(repo, ["worktree", "add", "--detach", str(dest), ref])
+        realized = _git(dest, ["rev-parse", "HEAD"])
+        if realized != ref:
+            raise RuntimeError(
+                f"worktree HEAD mismatch: current={realized} freeze={ref}"
+            )
+    except Exception:
+        if dest.exists():
+            try:
+                _git(repo, ["worktree", "remove", "--force", str(dest)])
+            except RuntimeError:
+                shutil.rmtree(dest, ignore_errors=True)
+                try:
+                    _git(repo, ["worktree", "prune"])
+                except RuntimeError:
+                    pass
+        shutil.rmtree(parent, ignore_errors=True)
+        raise
+    return dest
+
+
+def remove_frozen_worktree(repo_cwd: str | Path, worktree: str | Path) -> None:
+    """Remove a worktree created by materialize_frozen_worktree."""
+    repo = Path(repo_cwd).resolve()
+    dest = Path(worktree)
+    parent = dest.parent
+    try:
+        _git(repo, ["worktree", "remove", "--force", str(dest)])
+    except RuntimeError:
+        shutil.rmtree(dest, ignore_errors=True)
+        try:
+            _git(repo, ["worktree", "prune"])
+        except RuntimeError:
+            pass
+    if parent.name.startswith("build-gate-"):
+        shutil.rmtree(parent, ignore_errors=True)
