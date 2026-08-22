@@ -1728,6 +1728,27 @@ block remains a valid Bash code block.
 > builds and hash differently at the same version, so each host records its own
 > as an identity field rather than as an equality check.
 
+> **M17 Step-8 checkpoint evidence verified PASS — 2026-08-22** (Founder-
+> submitted dual-host evidence; verification and filing per the Founder's
+> 2026-08-22 direction). Corrected candidate
+> `56435bfe61978abed2cbcdb9b6c4e52550dc222d` ran three consecutive
+> full-suite runs on each Founder Mac — Apple Silicon MacBook (arm64,
+> macOS 26.6.1) and Intel iMac (x86_64, macOS 13.7.8), Bun 1.3.14 on
+> both — with all thirteen §3.6 criteria passing in all six runs,
+> `761 pass / 0 fail` each, and the corrected `exact_binary_io`
+> evaluator passing under the Step-8 ruling (write-return short counts
+> are telemetry only; eventual length and byte equality exact; the
+> drain callback neither required nor relied upon on Bun 1.3.14). Host
+> evidence records, each carrying its source-transcript filename and
+> SHA-256: `docs/verification/2026-08-22-m17-step8-dualhost-macbook.md`
+> and `docs/verification/2026-08-22-m17-step8-dualhost-imac.md`.
+> Task 39's dual-host unlock precondition ("the same candidate has run
+> on both Founder Macs") is satisfied at this candidate. Task 39's own
+> steps remain unexecuted — its Step 3 requires its own host runs per
+> the 2026-08-21 ruling. This mark records evidence verification and
+> filing only: no production adapter, merge, Bun upgrade, unrelated
+> correction, or later milestone is authorized by it.
+
 **Requirement coverage:**
 - §3.6 (the thirteen spike demonstrations; timing measured against the §9.8 table; reports record observed values rather than merely saying “pass”)
 - §9.7 (the pre-written candidate is `Bun.Terminal`; FFI `posix_openpt`, `node-pty`, another native dependency, or a pipe fallback is not an implementation choice)
