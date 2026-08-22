@@ -1,0 +1,41 @@
+{
+  "profile": "madventures-tui",
+  "target": {
+    "origin_identity": "MADVenturesLLC/madventures-tui"
+  },
+  "gates": [
+    {
+      "id": "MTUI-CLEAN-TREE",
+      "command": "test -z \"$(git status --porcelain)\"",
+      "description": "Working tree must be clean (no uncommitted/untracked changes) before freeze.",
+      "severity": "major",
+      "blocking": true,
+      "timeout_seconds": 30
+    },
+    {
+      "id": "MTUI-TYPECHECK",
+      "command": "bunx tsc --noEmit",
+      "description": "TypeScript typecheck across the workspace (tsc --noEmit).",
+      "severity": "critical",
+      "blocking": true,
+      "timeout_seconds": 300
+    },
+    {
+      "id": "MTUI-TEST",
+      "command": "bun test",
+      "description": "Run the bun test suite. Only runs if typecheck passed (conditional_on).",
+      "severity": "critical",
+      "blocking": true,
+      "conditional_on": "MTUI-TYPECHECK",
+      "timeout_seconds": 900
+    },
+    {
+      "id": "MTUI-ORIGIN",
+      "command": "python3 .agents/skills/build-gate/scripts/assert_origin.py",
+      "description": "Assert the git origin identity is the canonical MADVenturesLLC/madventures-tui (HTTPS or SSH).",
+      "severity": "critical",
+      "blocking": true,
+      "timeout_seconds": 30
+    }
+  ]
+}
