@@ -98,6 +98,14 @@ class TestEngine(unittest.TestCase):
 
         self.assertTrue(result.passed, result.evidence)
 
+    def test_nonzero_success_exit_codes_are_rejected(self):
+        profile = self._profile(
+            gates=[{"id": "CUSTOM", "command": "false", "pass_exit_codes": [1]}]
+        )
+
+        with self.assertRaisesRegex(ValueError, "pass_exit_codes"):
+            discover_gates(profile)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -25,7 +25,15 @@ class TestFreezeTarget(unittest.TestCase):
             _git(repo, ["config", "user.email", "t@t.t"])
             _git(repo, ["config", "user.name", "t"])
             _git(repo, ["config", "commit.gpgsign", "false"])
-            _git(repo, ["remote", "add", "origin", "git@github.com:MADVenturesLLC/madventures-tui.git"])
+            _git(
+                repo,
+                [
+                    "remote",
+                    "add",
+                    "origin",
+                    "https://x-access-token:example-token@github.com/MADVenturesLLC/madventures-tui.git?access_token=example-token#example-fragment",
+                ],
+            )
             (repo / "f.txt").write_text("x")
             _git(repo, ["add", "f.txt"])
             _git(repo, ["commit", "-q", "-m", "init"])
@@ -40,6 +48,12 @@ class TestFreezeTarget(unittest.TestCase):
                               provider="nous", session_id="S1", surface="cv5")
             self.assertEqual(len(m.target_ref), 40)
             self.assertEqual(m.origin_identity, "madventuresllc/madventures-tui")
+            self.assertEqual(
+                m.origin_url,
+                "https://github.com/MADVenturesLLC/madventures-tui.git",
+            )
+            self.assertNotIn("example-token", m.origin_url)
+            self.assertNotIn("example-fragment", m.origin_url)
             self.assertEqual(m.profile_sha256,
                              __import__("hashlib").sha256(pf.read_bytes()).hexdigest())
 

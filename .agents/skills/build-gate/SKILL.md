@@ -36,7 +36,8 @@ would.
 ## Scripts (stdlib-only Python 3.11+, no dependencies)
 
 - `scripts/freeze_target.py` — lock the target SHA, origin identity, profile
-  hash. Emits a freeze manifest JSON.
+  hash. Emits a freeze manifest JSON with origin URL userinfo, queries, and
+  fragments removed.
 - `scripts/run_gates.py` — verify the current clean checkout still matches the
   freeze, then execute every gate; exits 1 on execution-context drift or any
   failed/skipped gate.

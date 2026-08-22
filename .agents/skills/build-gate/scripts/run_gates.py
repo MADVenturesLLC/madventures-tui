@@ -60,11 +60,17 @@ def main() -> int:
     # Make build_gate importable for any gate that uses it.
     os.environ["PYTHONPATH"] = str(HERE) + os.pathsep + os.environ.get("PYTHONPATH", "")
 
-    results = run_all_gates(profile, args.cwd, env=dict(os.environ))
-    out = {rid: r.__dict__ for rid, r in results.items()}
+    try:
+        results = run_all_gates(profile, args.cwd, env=dict(os.environ))
+        out = {rid: r.__dict__ for rid, r in results.items()}
+        if args.out:
+            Path(args.out).write_text(
+                json.dumps(out, indent=2, default=str) + "\n", encoding="utf-8"
+            )
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+        return _failure([f"gate execution failed: {type(exc).__name__}: {exc}"])
+
     print(json.dumps(out, indent=2, default=str))
-    if args.out:
-        Path(args.out).write_text(json.dumps(out, indent=2, default=str) + "\n", encoding="utf-8")
 
     if any_failed(results):
         return 1

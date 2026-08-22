@@ -11,7 +11,7 @@ import json
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlsplit, urlunsplit
 
 from .types import FreezeManifest
 
@@ -28,6 +28,20 @@ def _git(cwd: str | Path, args: list[str]) -> str:
     return proc.stdout.strip()
 
 
+def redact_origin_url(origin_url: str) -> str:
+    """Remove secrets-bearing URL components before an origin is persisted."""
+    url = origin_url.strip()
+    if "://" in url:
+        parsed = urlsplit(url)
+        netloc = parsed.netloc.rsplit("@", 1)[-1]
+        return urlunsplit((parsed.scheme, netloc, parsed.path, "", ""))
+
+    host, separator, path = url.partition(":")
+    if separator and "@" in host:
+        return f"{host.rsplit('@', 1)[-1]}:{path}"
+    return url
+
+
 def normalize_origin(origin_url: str) -> tuple[str, str]:
     """Return (host, identity) for an https or ssh git remote URL.
 
@@ -36,14 +50,14 @@ def normalize_origin(origin_url: str) -> tuple[str, str]:
       git@github.com:MADVenturesLLC/madventures-tui.git     -> ('github.com', 'madventuresllc/madventures-tui')
     """
     url = origin_url.strip()
-    if "://" not in url and "@" in url:
-        # SCP-style: user@host:owner/repo.git
+    if "://" not in url:
+        # SCP-style: [user@]host:owner/repo.git
         user_host, separator, path = url.partition(":")
         if not separator:
-            raise ValueError(f"invalid SCP-style git remote: {origin_url!r}")
-        host = user_host.rsplit("@", 1)[1]
+            raise ValueError("invalid SCP-style git remote")
+        host = user_host.rsplit("@", 1)[-1]
     else:
-        parsed = urlparse(url if "://" in url else f"ssh://{url}")
+        parsed = urlparse(url)
         host = parsed.hostname or ""
         path = (parsed.path or "").lstrip("/")
     # Strip a trailing .git suffix case-insensitively (SSH URLs may be .GIT).
@@ -88,7 +102,7 @@ def freeze_target(
         profile=profile.get("profile", profile_path.stem),
         target_ref=target_ref,
         target_ref_short=target_ref[:7],
-        origin_url=origin_url,
+        origin_url=redact_origin_url(origin_url),
         origin_host=host,
         origin_identity=identity,
         actor=actor,
@@ -146,6 +160,6 @@ def verify_frozen_execution(
 
         if _git(cwd, ["status", "--porcelain"]):
             errors.append("working tree is not clean for frozen execution")
-    except RuntimeError as exc:
+    except (RuntimeError, ValueError, TypeError, AttributeError) as exc:
         errors.append(f"unable to verify frozen execution context: {exc}")
     return errors

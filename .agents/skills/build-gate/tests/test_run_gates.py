@@ -97,6 +97,56 @@ class TestRunGatesCli(unittest.TestCase):
             self.assertFalse(payload["valid"], payload)
             self.assertTrue(any("target_ref" in error for error in payload["errors"]), payload)
 
+    def test_bad_gate_definition_emits_structured_failure(self):
+        with tempfile.TemporaryDirectory() as d:
+            repo, profile, freeze = self._make_repo(Path(d))
+            profile.write_text(
+                json.dumps(
+                    {
+                        "profile": "test-profile",
+                        "target": {"origin_identity": "MADVenturesLLC/madventures-tui"},
+                        "gates": [{"id": "BAD", "command": None}],
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            freeze_target(
+                profile,
+                repo,
+                actor="tester",
+                model="test-model",
+                provider="test-provider",
+                session_id="session",
+                surface="test",
+                out_path=freeze,
+            )
+
+            proc = self._run(repo, profile, freeze)
+
+            self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+            payload = json.loads(proc.stdout)
+            self.assertFalse(payload["valid"], payload)
+            self.assertTrue(
+                any("gate execution failed" in error for error in payload["errors"]),
+                payload,
+            )
+
+    def test_invalid_origin_emits_structured_failure(self):
+        with tempfile.TemporaryDirectory() as d:
+            repo, profile, freeze = self._make_repo(Path(d))
+            _git(repo, ["remote", "set-url", "origin", "github.com"])
+
+            proc = self._run(repo, profile, freeze)
+
+            self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+            payload = json.loads(proc.stdout)
+            self.assertFalse(payload["valid"], payload)
+            self.assertTrue(
+                any("unable to verify frozen execution context" in error for error in payload["errors"]),
+                payload,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

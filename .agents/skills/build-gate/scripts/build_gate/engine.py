@@ -29,6 +29,10 @@ def load_profile(profile_path: str | Path) -> dict:
 def discover_gates(profile: dict) -> list[GateSpec]:
     specs: list[GateSpec] = []
     for entry in profile["gates"]:
+        if "pass_exit_codes" in entry:
+            raise ValueError(
+                f"gate {entry.get('id', '<unknown>')}: pass_exit_codes is not supported"
+            )
         timeout_seconds = entry.get("timeout_seconds", 600)
         if (
             isinstance(timeout_seconds, bool)
@@ -46,7 +50,6 @@ def discover_gates(profile: dict) -> list[GateSpec]:
             required_env=entry.get("required_env"),
             conditional_on=entry.get("conditional_on"),
             blocking=entry.get("blocking", True),
-            pass_exit_codes=tuple(entry.get("pass_exit_codes", [0])),
             timeout_seconds=float(timeout_seconds),
             expect_origin_host=entry.get("expect_origin_host"),
         )
@@ -92,7 +95,7 @@ def _run_command(
 
 def run_gate(spec: GateSpec, cwd: str | Path, env: dict[str, str]) -> GateResult:
     code, out = _run_command(spec.command, cwd, spec.timeout_seconds, env)
-    passed = code in spec.pass_exit_codes
+    passed = code == 0
     return GateResult(
         gate_id=spec.id,
         passed=passed,
