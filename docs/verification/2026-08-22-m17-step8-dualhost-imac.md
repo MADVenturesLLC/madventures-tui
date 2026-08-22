@@ -138,6 +138,6 @@ ruling — including on the host whose short synchronous write counts
 failed the prior, superseded criterion.
 
 This record grants nothing: no production adapter, no merge, no Bun
-upgrade, no later milestone. Plan-Task-39's host-authored §6.5 reports
-and report-validation test are filed and validated; any additional Task 39
-execution still requires explicit authorization per the 2026-08-21 ruling.
+upgrade, no later milestone. Plan-Task-39's own steps (its host-authored
+§6.5 reports and report-validation test) remain unexecuted and require
+their own host runs per the 2026-08-21 ruling.
