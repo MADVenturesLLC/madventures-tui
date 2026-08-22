@@ -1,7 +1,9 @@
 import { expect, test } from "bun:test";
 import {
   DEADLINES_MS,
+  PAYLOAD_BYTES,
   SPIKE_CRITERIA,
+  evaluateExactBinaryIo,
   runSpike,
   type SpikeCriterion,
   type SpikeResult,
@@ -190,4 +192,60 @@ test("two PTYs plus an adapter leak no write end", () => {
   expect(sub["terminal_b_independent_after_a_close"]).toBe(true);
   expect(sub["adapter_unaffected_by_terminal_closures"]).toBe(true);
   expect(sub["no_pty_descriptor_survives_cleanup"]).toBe(true);
+});
+
+/**
+ * M17 Step 8 synthetic coverage (Founder ruling, 2026-08-22): the corrected
+ * exact_binary_io evaluator driven directly with synthetic records — no PTY.
+ * These prove pass/fail never depends on the synchronous-flush count, that
+ * byte equality is always in effect, and that a failed write invocation
+ * fails regardless of what was later observed.
+ */
+const SYNTH_ACK_MS = 5; // any value inside the §9.8 ack bound
+
+test("step-8 synthetic: short flush count with exact eventual delivery passes", () => {
+  const r = evaluateExactBinaryIo({
+    writeOk: true,
+    wrote: 3066, // the Intel/macOS 13 observation — telemetry only
+    got: PAYLOAD_BYTES,
+    byteExact: true,
+    firstByteMs: SYNTH_ACK_MS,
+  });
+  expect(r.pass).toBe(true);
+  expect(r.lengthExact).toBe(true);
+});
+
+test("step-8 synthetic: eventual length mismatch fails", () => {
+  const r = evaluateExactBinaryIo({
+    writeOk: true,
+    wrote: PAYLOAD_BYTES,
+    got: PAYLOAD_BYTES - 96,
+    byteExact: true,
+    firstByteMs: SYNTH_ACK_MS,
+  });
+  expect(r.pass).toBe(false);
+  expect(r.lengthExact).toBe(false);
+});
+
+test("step-8 synthetic: equal length with byte mismatch fails", () => {
+  const r = evaluateExactBinaryIo({
+    writeOk: true,
+    wrote: PAYLOAD_BYTES,
+    got: PAYLOAD_BYTES,
+    byteExact: false,
+    firstByteMs: SYNTH_ACK_MS,
+  });
+  expect(r.pass).toBe(false);
+  expect(r.lengthExact).toBe(true);
+});
+
+test("step-8 synthetic: write failure/exception fails regardless of later observations", () => {
+  const r = evaluateExactBinaryIo({
+    writeOk: false,
+    wrote: -1,
+    got: PAYLOAD_BYTES,
+    byteExact: true,
+    firstByteMs: SYNTH_ACK_MS,
+  });
+  expect(r.pass).toBe(false);
 });
