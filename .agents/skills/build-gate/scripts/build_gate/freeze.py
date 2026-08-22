@@ -32,8 +32,8 @@ def normalize_origin(origin_url: str) -> tuple[str, str]:
     """Return (host, identity) for an https or ssh git remote URL.
 
     Examples:
-      https://github.com/MADVenturesLLC/madventures-tui.git -> ('github.com', 'MADVenturesLLC/madventures-tui')
-      git@github.com:MADVenturesLLC/madventures-tui.git     -> ('github.com', 'MADVenturesLLC/madventures-tui')
+      https://github.com/MADVenturesLLC/madventures-tui.git -> ('github.com', 'madventuresllc/madventures-tui')
+      git@github.com:MADVenturesLLC/madventures-tui.git     -> ('github.com', 'madventuresllc/madventures-tui')
     """
     url = origin_url.strip()
     if url.startswith("git@") and "://" not in url:

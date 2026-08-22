@@ -162,6 +162,9 @@ class ReviewRecord:
 
     @classmethod
     def from_dict(cls, d: dict) -> "ReviewRecord":
+        self_approved = d["self_approved"]
+        if not isinstance(self_approved, bool):
+            raise ValueError("self_approved must be a JSON boolean")
         return cls(
             profile=d["profile"],
             target_ref=d["target_ref"],
@@ -179,7 +182,7 @@ class ReviewRecord:
             resolved_findings=d.get("resolved_findings", {}),
             verdict=d["verdict"],
             approved_by=d["approved_by"],
-            self_approved=bool(d["self_approved"]),
+            self_approved=self_approved,
             reviewed_at=d["reviewed_at"],
             profile_sha256=d.get("profile_sha256", ""),
         )

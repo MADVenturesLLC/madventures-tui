@@ -61,5 +61,22 @@ class TestFreezeRoundTrip(unittest.TestCase):
         self.assertEqual(FreezeManifest.from_dict(m.to_dict()).target_ref, "a" * 40)
 
 
+class TestReviewRecord(unittest.TestCase):
+    def test_from_dict_rejects_non_boolean_self_approved(self):
+        record = ReviewRecord(
+            profile="p", target_ref="a" * 40, target_ref_short="aaaaaaa",
+            origin_url="u", origin_host="h", origin_identity="o/r",
+            actor="hermes", model="hy3", provider="nous", session_id="S",
+            surface="cv5", gate_results={}, findings={}, resolved_findings={},
+            verdict="approved", approved_by="founder", self_approved=False,
+            reviewed_at="2026-08-20T00:00:00Z", profile_sha256="deadbeef",
+        )
+        raw = record.to_dict()
+        raw["self_approved"] = "false"
+
+        with self.assertRaisesRegex(ValueError, "self_approved"):
+            ReviewRecord.from_dict(raw)
+
+
 if __name__ == "__main__":
     unittest.main()

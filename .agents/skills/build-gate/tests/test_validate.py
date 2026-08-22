@@ -1,4 +1,4 @@
-"""Fail-closed validator tests — the 6 pressure scenarios as deterministic units."""
+"""Fail-closed validator pressure scenarios as deterministic units."""
 import unittest
 import sys
 from pathlib import Path
