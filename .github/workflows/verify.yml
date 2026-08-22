@@ -36,3 +36,53 @@ jobs:
 
       - name: Test
         run: bun test
+
+  # A SECOND JOB, not a matrix on `verify`. A matrix would rename the existing
+  # check to `Verify (ubuntu-24.04)` and the required check named `Verify` would
+  # silently stop existing — branch protection would then pass with nothing
+  # enforcing it. Duplicating five steps is the cheaper mistake.
+  #
+  # Why macOS at all: on 2026-08-21 a control script shipped a defect that no
+  # amount of reading caught — three LLM reviewers read the diff clean. In a BSD
+  # `strptime` format `Z` is a literal to match, not a UTC designator, so
+  # `date -j -f '...%SZ'` parsed a UTC timestamp as local time and the script
+  # failed on any Mac not set to UTC. Only running it on macOS surfaced that.
+  # Linux CI cannot find this class of bug by construction.
+  #
+  # ARM64 ONLY. macos-14 is Apple Silicon. This lane therefore covers one half
+  # of what M17 certifies — the dual-host gate is Intel AND Apple Silicon, and a
+  # green run here says nothing about the Intel half. Adding the Intel lane
+  # (`macos-15-intel`) is deliberately NOT done here: it is the next Founder
+  # decision, not a builder's to make. Until it is made, read this job as
+  # partial macOS coverage rather than macOS coverage.
+  verify-macos:
+    name: Verify (macOS)
+    runs-on: macos-14
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@ecf28ddc73e819eb6fa29df6b34ef8921c743461
+        with:
+          bun-version: 1.3.14
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Test
+        run: bun test
+
+      # A timezone-dependent bug is invisible when the runner is UTC, which
+      # GitHub runners are. This is the exact condition that hid the defect
+      # above from every check that ran.
+      - name: Test (non-UTC timezone)
+        env:
+          TZ: America/New_York
+        run: bun test
