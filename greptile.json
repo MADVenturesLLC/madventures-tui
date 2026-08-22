@@ -1,0 +1,35 @@
+{
+  "strictness": 2,
+  "commentTypes": ["logic", "syntax"],
+  "triggerOnUpdates": true,
+  "triggerOnDrafts": false,
+  "excludeAuthors": ["dependabot[bot]"],
+  "ignorePatterns": "node_modules/**\ndist/**\nout/**\ncoverage/**\nbun.lock\n*.tgz\n*.lcov",
+  "instructions": "This repository is MadBridge (madv-tui), a governed multi-agent orchestration layer targeting macOS. Two review priorities matter more here than style.\n\nFirst: environment-dependent behaviour. Code is authored in Linux containers and CI has historically run only on Linux, but the product targets macOS on both arm64 and x86_64. Flag anything whose correctness depends on the host and is not proven on the host it targets — BSD versus GNU tool differences, shell builtins, date/time parsing, path and case sensitivity, sandbox and process-group behaviour, and any assumption that a passing test proves platform support. A real defect shipped this way: a BSD strptime format treated 'Z' as a literal character to match rather than a UTC designator, so a timestamp parsed in local time. Three reviewers read the diff and passed it; it surfaced only when someone ran it on real hardware.\n\nSecond: assertions that check shape rather than meaning. Flag tests and gates that would pass for the wrong reason — a conjunction that short-circuits before the assertion that matters, a check whose success depends on a tool being absent from the environment, a count or format validated without validating the value it stands for, and any place a passing result would be indistinguishable from an unexercised one.\n\nPrefer few high-confidence findings over breadth. State the failing input or condition concretely rather than describing a category of risk.",
+  "customContext": {
+    "rules": [
+      {
+        "rule": "Any assertion about the host platform, architecture, or OS version must read the value it asserts from the running host, not infer it from a sibling value. process.arch reports 'x64' where uname -m reports 'x86_64'; these are not interchangeable in an assertion.",
+        "scope": ["test/**", "scripts/**", "**/*.test.ts"]
+      },
+      {
+        "rule": "A test that can pass because a dependency, binary, or environment variable is absent is a defect. Flag any assertion whose success path includes the tool under test being unavailable.",
+        "scope": ["test/**", "scripts/**"]
+      },
+      {
+        "rule": "Byte-level or length-level equality must be evaluated independently, never placed after another condition in a conjunction that can short-circuit before it runs.",
+        "scope": ["test/**", "packages/**"]
+      },
+      {
+        "rule": "A short return from a write call is backpressure, not data loss. Do not resend the apparent unwritten remainder; respect drain before subsequent writes and assert on eventual delivered bytes.",
+        "scope": ["packages/**", "test/**"]
+      },
+      {
+        "rule": "Changing a CI job into a matrix renames its check and silently breaks any branch-protection rule requiring the old name. Flag matrix conversions on jobs whose names may be required checks.",
+        "scope": [".github/workflows/**"]
+      }
+    ]
+  },
+  "statusCheck": false,
+  "hideFooter": false
+}
