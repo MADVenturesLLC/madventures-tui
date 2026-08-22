@@ -20,7 +20,7 @@ const REPORT_PATHS = [
 ] as const;
 
 /** `Report SHA-256:` is the report's final line, computed over the body excluding that line. */
-const CHECKSUM_TAIL = /^([\s\S]*\n)Report SHA-256: ([0-9a-f]{64})\n?$/;
+const CHECKSUM_TAIL = /^([\s\S]*\r?\n)Report SHA-256: ([0-9a-f]{64})\r?\n?$/;
 
 test("both dual-host spike reports exist, name the same SHA, and carry a checksum", () => {
   const reports = REPORT_PATHS.map((url) => {
