@@ -35,6 +35,7 @@ jobs:
     outputs:
       typecheck: ${{ steps.typecheck.outcome }}
       test: ${{ steps.test.outcome }}
+      head_sha: ${{ steps.freeze.outputs.head_sha }}
     steps:
       - name: Checkout frozen PR head
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -42,6 +43,10 @@ jobs:
           repository: ${{ github.event_name == 'workflow_dispatch' && github.repository || github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/pull/{0}/head', inputs.pr_number) || github.event.pull_request.head.sha }}
           persist-credentials: false
+
+      - name: Record frozen PR head
+        id: freeze
+        run: echo "head_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@ecf28ddc73e819eb6fa29df6b34ef8921c743461
@@ -64,7 +69,7 @@ jobs:
   code-review:
     name: code-review
     needs: validate
-    if: always()
+    if: ${{ always() && !cancelled() }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -76,12 +81,14 @@ jobs:
         env:
           TYPECHECK_OUTCOME: ${{ needs.validate.outputs.typecheck }}
           TEST_OUTCOME: ${{ needs.validate.outputs.test }}
+          VALIDATED_HEAD_SHA: ${{ needs.validate.outputs.head_sha }}
+          PR_NUMBER: ${{ inputs.pr_number }}
         with:
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const eventPr = context.payload.pull_request;
-            const prNumber = eventPr?.number || Number(core.getInput("pr_number"));
+            const prNumber = eventPr?.number || Number(process.env.PR_NUMBER);
             if (!Number.isSafeInteger(prNumber) || prNumber <= 0) {
               core.setFailed("a pull request number is required");
               return;
@@ -92,6 +99,13 @@ jobs:
               owner, repo, pull_number: prNumber,
             });
             const pr = prData.data;
+            const validatedHeadSha = process.env.VALIDATED_HEAD_SHA || "";
+            if (validatedHeadSha !== pr.head.sha) {
+              core.setFailed(
+                `validated head ${validatedHeadSha || "missing"} does not match current head ${pr.head.sha}`
+              );
+              return;
+            }
             const {
               commits,
               additions,
@@ -140,7 +154,7 @@ jobs:
 
             const summary = [
               "freeze-and-quote: code-review check (os-bridge)",
-              `head=${pr.head.sha} base=${pr.base.sha} commits=${commits}`,
+              `head=${validatedHeadSha} base=${pr.base.sha} commits=${commits}`,
               `diff: +${additions}/-${deletions} files_changed=${filesChanged}`,
               `gates: typecheck=${typecheck} test=${test}`,
               `reviews: coderabbit=${codeRabbitReviews} unresolved_threads=${unresolvedThreads}`,
@@ -150,6 +164,8 @@ jobs:
             // PR-numbered marker instead of creating a duplicate evidence comment.
             const marker = `<!-- os-bridge:code-review quote -->`;
             const legacyMarker = `<!-- os-bridge:code-review quote pr=${prNumber} -->`;
+            const legacyHeadMarker =
+              `<!-- os-bridge:code-review quote pr=${prNumber} head=`;
             const body = `${marker}\n\`\`\`\n${summary}\n\`\`\``;
             const comments = await github.paginate(
               github.rest.issues.listComments,
@@ -157,7 +173,8 @@ jobs:
             );
             const existing = comments.find((comment) =>
               (comment.body || "").startsWith(marker) ||
-              (comment.body || "").startsWith(legacyMarker)
+              (comment.body || "").startsWith(legacyMarker) ||
+              (comment.body || "").startsWith(legacyHeadMarker)
             );
             if (existing) {
               await github.rest.issues.updateComment({
@@ -178,7 +195,7 @@ jobs:
             await github.rest.repos.createCommitStatus({
               owner,
               repo,
-              sha: pr.head.sha,
+              sha: validatedHeadSha,
               state: statusState,
               context: "code-review",
               description: statusDescription,
