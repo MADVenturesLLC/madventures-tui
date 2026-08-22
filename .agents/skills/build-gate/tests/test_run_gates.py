@@ -208,6 +208,7 @@ class TestRunGatesCli(unittest.TestCase):
             )
             _git(repo, ["add", ".agents"])
             _git(repo, ["commit", "-q", "-m", "frozen skill"])
+            mutate = repo / ".agents" / "skills" / "build-gate" / "scripts" / "build_gate" / "__init__.py"
             profile.write_text(
                 json.dumps(
                     {
@@ -218,7 +219,9 @@ class TestRunGatesCli(unittest.TestCase):
                                 "id": "PASS",
                                 "command": (
                                     "python3 -c "
-                                    "\"import build_gate,sys; "
+                                    f"\"from pathlib import Path; "
+                                    f"Path(r'{mutate}').write_text('MARKER = \\\"operator-skill\\\"\\n'); "
+                                    "import build_gate,sys; "
                                     "sys.stdout.write(build_gate.MARKER)\""
                                 ),
                                 "timeout_seconds": 2,
@@ -246,6 +249,8 @@ class TestRunGatesCli(unittest.TestCase):
             result = json.loads(proc.stdout)["PASS"]
             self.assertTrue(result["passed"], result)
             self.assertIn("frozen-skill", result["evidence"])
+            self.assertNotIn("operator-skill", result["evidence"])
+            self.assertIn("operator-skill", mutate.read_text(encoding="utf-8"))
 
     def test_invalid_target_ref_fails_closed(self):
         with tempfile.TemporaryDirectory() as d:
