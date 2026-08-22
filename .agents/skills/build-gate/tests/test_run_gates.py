@@ -197,6 +197,56 @@ class TestRunGatesCli(unittest.TestCase):
             )
             self.assertNotIn("build-gate-", leftover.stdout)
 
+    def test_gate_imports_use_frozen_skill_not_operator_path(self):
+        with tempfile.TemporaryDirectory() as d:
+            directory = Path(d)
+            repo, profile, freeze = self._make_repo(directory)
+            scripts = repo / ".agents" / "skills" / "build-gate" / "scripts" / "build_gate"
+            scripts.mkdir(parents=True)
+            (scripts / "__init__.py").write_text(
+                'MARKER = "frozen-skill"\n', encoding="utf-8"
+            )
+            _git(repo, ["add", ".agents"])
+            _git(repo, ["commit", "-q", "-m", "frozen skill"])
+            profile.write_text(
+                json.dumps(
+                    {
+                        "profile": "test-profile",
+                        "target": {"origin_identity": "MADVenturesLLC/madventures-tui"},
+                        "gates": [
+                            {
+                                "id": "PASS",
+                                "command": (
+                                    "python3 -c "
+                                    "\"import build_gate,sys; "
+                                    "sys.stdout.write(build_gate.MARKER)\""
+                                ),
+                                "timeout_seconds": 2,
+                            }
+                        ],
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            freeze_target(
+                profile,
+                repo,
+                actor="tester",
+                model="test-model",
+                provider="test-provider",
+                session_id="session",
+                surface="test",
+                out_path=freeze,
+            )
+
+            proc = self._run(repo, profile, freeze)
+
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            result = json.loads(proc.stdout)["PASS"]
+            self.assertTrue(result["passed"], result)
+            self.assertIn("frozen-skill", result["evidence"])
+
     def test_invalid_target_ref_fails_closed(self):
         with tempfile.TemporaryDirectory() as d:
             repo, profile, freeze = self._make_repo(Path(d))

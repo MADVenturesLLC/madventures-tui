@@ -65,9 +65,6 @@ def main() -> int:
     if errors:
         return _failure(errors)
 
-    # Make build_gate importable for any gate that uses it.
-    os.environ["PYTHONPATH"] = str(HERE) + os.pathsep + os.environ.get("PYTHONPATH", "")
-
     worktree = None
     try:
         worktree = materialize_frozen_worktree(args.cwd, freeze.target_ref)
@@ -79,7 +76,14 @@ def main() -> int:
         )
         if post:
             return _failure(post)
-        results = run_all_gates(profile, worktree, env=dict(os.environ))
+        gate_env = dict(os.environ)
+        gate_env["PYTHONDONTWRITEBYTECODE"] = "1"
+        frozen_scripts = Path(worktree) / ".agents" / "skills" / "build-gate" / "scripts"
+        if frozen_scripts.is_dir():
+            gate_env["PYTHONPATH"] = str(frozen_scripts)
+        else:
+            gate_env.pop("PYTHONPATH", None)
+        results = run_all_gates(profile, worktree, env=gate_env)
         drifted = verify_frozen_execution(
             freeze,
             worktree,
