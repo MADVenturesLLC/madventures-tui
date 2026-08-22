@@ -5,8 +5,8 @@ identity match (HTTPS and SSH), self-review rejection, authority/role/finding
 consistency, blocking of approval when drift, skipped gates, or unresolved
 Critical/Major findings exist.
 
-A record is ONLY valid (APPROVED) when every check passes. Any failure makes
-valid=False. There is no soft "warn but allow" path.
+An approved record is valid only when every check passes. Non-approved records
+may be internally valid, but never produce an approval exit code.
 """
 from __future__ import annotations
 

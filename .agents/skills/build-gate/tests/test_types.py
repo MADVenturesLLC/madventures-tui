@@ -101,6 +101,27 @@ class TestReviewRecord(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "self_approved"):
             ReviewRecord.from_dict(raw)
 
+    def test_from_dict_rejects_malformed_field_types(self):
+        record = ReviewRecord(
+            profile="p", target_ref="a" * 40, target_ref_short="aaaaaaa",
+            origin_url="u", origin_host="h", origin_identity="o/r",
+            actor="hermes", model="hy3", provider="nous", session_id="S",
+            surface="cv5", gate_results={}, findings={}, resolved_findings={},
+            verdict="approved", approved_by="founder", self_approved=False,
+            reviewed_at="2026-08-20T00:00:00Z", profile_sha256="deadbeef",
+        )
+        for field_name, value in (
+            ("actor", None),
+            ("findings", []),
+            ("resolved_findings", {"G": 1}),
+            ("resolved_findings", {"G": ""}),
+        ):
+            with self.subTest(field_name=field_name):
+                raw = record.to_dict()
+                raw[field_name] = value
+                with self.assertRaisesRegex(ValueError, field_name):
+                    ReviewRecord.from_dict(raw)
+
 
 if __name__ == "__main__":
     unittest.main()

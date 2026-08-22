@@ -161,6 +161,42 @@ class ReviewRecord:
 
     @classmethod
     def from_dict(cls, d: dict) -> "ReviewRecord":
+        if not isinstance(d, dict):
+            raise ValueError("review record must be a JSON object")
+        for field_name in (
+            "profile",
+            "target_ref",
+            "target_ref_short",
+            "origin_url",
+            "origin_host",
+            "actor",
+            "model",
+            "provider",
+            "session_id",
+            "surface",
+            "verdict",
+            "approved_by",
+            "reviewed_at",
+        ):
+            if not isinstance(d[field_name], str):
+                raise ValueError(f"{field_name} must be a JSON string")
+        origin_identity = d.get("origin_identity", "")
+        if not isinstance(origin_identity, str):
+            raise ValueError("origin_identity must be a JSON string")
+        profile_sha256 = d.get("profile_sha256", "")
+        if not isinstance(profile_sha256, str):
+            raise ValueError("profile_sha256 must be a JSON string")
+        for field_name in ("gate_results", "findings"):
+            if not isinstance(d[field_name], dict):
+                raise ValueError(f"{field_name} must be a JSON object")
+        resolved_findings = d.get("resolved_findings", {})
+        if not isinstance(resolved_findings, dict):
+            raise ValueError("resolved_findings must be a JSON object")
+        for gate_id, resolution in resolved_findings.items():
+            if not isinstance(gate_id, str) or not gate_id.strip():
+                raise ValueError("resolved_findings keys must be non-empty strings")
+            if not isinstance(resolution, str) or not resolution.strip():
+                raise ValueError("resolved_findings values must be non-empty strings")
         self_approved = d["self_approved"]
         if not isinstance(self_approved, bool):
             raise ValueError("self_approved must be a JSON boolean")
@@ -170,7 +206,7 @@ class ReviewRecord:
             target_ref_short=d["target_ref_short"],
             origin_url=d["origin_url"],
             origin_host=d["origin_host"],
-            origin_identity=d.get("origin_identity", ""),
+            origin_identity=origin_identity,
             actor=d["actor"],
             model=d["model"],
             provider=d["provider"],
@@ -178,12 +214,12 @@ class ReviewRecord:
             surface=d["surface"],
             gate_results=d["gate_results"],
             findings=d["findings"],
-            resolved_findings=d.get("resolved_findings", {}),
+            resolved_findings=resolved_findings,
             verdict=d["verdict"],
             approved_by=d["approved_by"],
             self_approved=self_approved,
             reviewed_at=d["reviewed_at"],
-            profile_sha256=d.get("profile_sha256", ""),
+            profile_sha256=profile_sha256,
         )
 
 

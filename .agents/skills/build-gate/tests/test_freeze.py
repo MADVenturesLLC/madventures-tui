@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+SCRIPTS = HERE.parent / "scripts"
 sys.path.insert(0, str(HERE.parent / "scripts"))
 
 from build_gate.freeze import freeze_target  # noqa: E402
@@ -104,6 +105,40 @@ class TestFreezeTarget(unittest.TestCase):
             )
             self.assertEqual(m.origin_host, "github.com")
             self.assertEqual(m.origin_identity, "madventuresllc/madventures-tui")
+
+    def test_freeze_cli_malformed_profile_emits_structured_failure(self):
+        with tempfile.TemporaryDirectory() as d:
+            directory = Path(d)
+            profile = directory / "profile.json"
+            profile.write_text("{not-json\n", encoding="utf-8")
+            proc = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPTS / "freeze_target.py"),
+                    "--profile",
+                    str(profile),
+                    "--cwd",
+                    str(directory),
+                    "--actor",
+                    "tester",
+                    "--model",
+                    "model",
+                    "--provider",
+                    "provider",
+                    "--session-id",
+                    "session",
+                    "--surface",
+                    "test",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+            self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+            payload = json.loads(proc.stdout)
+            self.assertFalse(payload["valid"], payload)
+            self.assertTrue(payload["errors"], payload)
 
 
 if __name__ == "__main__":

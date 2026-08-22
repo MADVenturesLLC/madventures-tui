@@ -20,6 +20,11 @@ sys.path.insert(0, str(HERE))
 from build_gate.freeze import freeze_target as _freeze  # noqa: E402
 
 
+def _failure(error: str) -> int:
+    print(json.dumps({"valid": False, "errors": [error]}, indent=2))
+    return 1
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--profile", required=True)
@@ -32,16 +37,29 @@ def main() -> int:
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
-    manifest = _freeze(
-        args.profile,
-        args.cwd,
-        actor=args.actor,
-        model=args.model,
-        provider=args.provider,
-        session_id=args.session_id,
-        surface=args.surface,
-        out_path=args.out,
-    )
+    try:
+        manifest = _freeze(
+            args.profile,
+            args.cwd,
+            actor=args.actor,
+            model=args.model,
+            provider=args.provider,
+            session_id=args.session_id,
+            surface=args.surface,
+            out_path=args.out,
+        )
+    except (
+        OSError,
+        UnicodeDecodeError,
+        json.JSONDecodeError,
+        KeyError,
+        TypeError,
+        ValueError,
+        RuntimeError,
+        AttributeError,
+    ) as exc:
+        return _failure(f"freeze failed: {type(exc).__name__}: {exc}")
+
     print(json.dumps(manifest.to_dict(), indent=2))
     return 0
 

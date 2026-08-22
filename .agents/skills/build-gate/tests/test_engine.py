@@ -106,6 +106,26 @@ class TestEngine(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "pass_exit_codes"):
             discover_gates(profile)
 
+    def test_gate_id_and_command_must_be_non_empty_strings(self):
+        for gate in (
+            {"id": "", "command": "true"},
+            {"id": "BAD", "command": None},
+        ):
+            with self.subTest(gate=gate):
+                with self.assertRaisesRegex(ValueError, "non-empty string"):
+                    discover_gates(self._profile(gates=[gate]))
+
+    def test_duplicate_gate_ids_are_rejected(self):
+        profile = self._profile(
+            gates=[
+                {"id": "DUP", "command": "false"},
+                {"id": "DUP", "command": "true"},
+            ]
+        )
+
+        with self.assertRaisesRegex(ValueError, "duplicate gate id"):
+            discover_gates(profile)
+
 
 if __name__ == "__main__":
     unittest.main()

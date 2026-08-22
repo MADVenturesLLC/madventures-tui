@@ -28,10 +28,22 @@ def load_profile(profile_path: str | Path) -> dict:
 
 def discover_gates(profile: dict) -> list[GateSpec]:
     specs: list[GateSpec] = []
+    seen_ids: set[str] = set()
     for entry in profile["gates"]:
+        if not isinstance(entry, dict):
+            raise ValueError("gate entry must be an object")
+        gate_id = entry.get("id")
+        command = entry.get("command")
+        if not isinstance(gate_id, str) or not gate_id.strip():
+            raise ValueError("gate id must be a non-empty string")
+        if not isinstance(command, str) or not command.strip():
+            raise ValueError(f"gate {gate_id}: command must be a non-empty string")
+        if gate_id in seen_ids:
+            raise ValueError(f"duplicate gate id: {gate_id}")
+        seen_ids.add(gate_id)
         if "pass_exit_codes" in entry:
             raise ValueError(
-                f"gate {entry.get('id', '<unknown>')}: pass_exit_codes is not supported"
+                f"gate {gate_id}: pass_exit_codes is not supported"
             )
         timeout_seconds = entry.get("timeout_seconds", 600)
         if (
@@ -40,11 +52,11 @@ def discover_gates(profile: dict) -> list[GateSpec]:
             or timeout_seconds <= 0
         ):
             raise ValueError(
-                f"gate {entry.get('id', '<unknown>')}: timeout_seconds must be a positive number"
+                f"gate {gate_id}: timeout_seconds must be a positive number"
             )
         spec = GateSpec(
-            id=entry["id"],
-            command=entry["command"],
+            id=gate_id,
+            command=command,
             description=entry.get("description", ""),
             severity=Severity.from_str(entry.get("severity", "critical")),
             required_env=entry.get("required_env"),
