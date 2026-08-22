@@ -14,6 +14,12 @@ on:
       - created
       - edited
       - deleted
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number whose frozen head should be rechecked.
+        required: true
+        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
@@ -33,7 +39,8 @@ jobs:
       - name: Checkout frozen PR head
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          repository: ${{ github.event_name == 'workflow_dispatch' && github.repository || github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/pull/{0}/head', inputs.pr_number) || github.event.pull_request.head.sha }}
           persist-credentials: false
 
       - name: Setup Bun
@@ -73,13 +80,18 @@ jobs:
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            const pr = context.payload.pull_request;
-            const prNumber = pr.number;
+            const eventPr = context.payload.pull_request;
+            const prNumber = eventPr?.number || Number(core.getInput("pr_number"));
+            if (!Number.isSafeInteger(prNumber) || prNumber <= 0) {
+              core.setFailed("a pull request number is required");
+              return;
+            }
 
             // Pull request aggregate totals remain complete for large diffs.
             const prData = await github.rest.pulls.get({
               owner, repo, pull_number: prNumber,
             });
+            const pr = prData.data;
             const {
               commits,
               additions,
@@ -134,16 +146,18 @@ jobs:
               `reviews: coderabbit=${codeRabbitReviews} unresolved_threads=${unresolvedThreads}`,
             ].join("\n");
 
-            // One stable marker means a new head updates, rather than duplicates,
-            // this PR's evidence comment.
-            const marker = `<!-- os-bridge:code-review quote pr=${prNumber} -->`;
+            // The contract marker is stable across heads; migrate the prior,
+            // PR-numbered marker instead of creating a duplicate evidence comment.
+            const marker = `<!-- os-bridge:code-review quote -->`;
+            const legacyMarker = `<!-- os-bridge:code-review quote pr=${prNumber} -->`;
             const body = `${marker}\n\`\`\`\n${summary}\n\`\`\``;
             const comments = await github.paginate(
               github.rest.issues.listComments,
               { owner, repo, issue_number: prNumber, per_page: 100 }
             );
             const existing = comments.find((comment) =>
-              (comment.body || "").startsWith(marker)
+              (comment.body || "").startsWith(marker) ||
+              (comment.body || "").startsWith(legacyMarker)
             );
             if (existing) {
               await github.rest.issues.updateComment({
