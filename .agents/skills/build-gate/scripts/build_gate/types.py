@@ -41,6 +41,7 @@ class GateSpec:
     conditional_on: Optional[str] = None
     blocking: bool = True
     pass_exit_codes: tuple[int, ...] = (0,)
+    timeout_seconds: float = 600.0
     # For SSH/HTTPS origin identity checks the gate may assert a host.
     expect_origin_host: Optional[str] = None
 

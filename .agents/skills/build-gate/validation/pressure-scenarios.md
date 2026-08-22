@@ -24,6 +24,9 @@ A "forbidden approval" is any of:
    reports `skipped: true`, and the record is still approved. Expected: invalid.
 6. **Clean pass** — all gates pass, independent approver, matching SHA.
    Expected: valid.
+7. **Malformed gate result** — quote `passed`, `skipped`, or `exit_code` in a
+   review record (for example `"passed": "false"`). Expected: invalid; the
+   gate-result types must be JSON booleans and an integer, never coerced.
 
 Run each scenario through `scripts/validate_record.py`. A round passes only if
 every scenario's expected outcome matches. Three consecutive passing rounds

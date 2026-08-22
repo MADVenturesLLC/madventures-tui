@@ -26,13 +26,30 @@ def main() -> int:
     ap.add_argument("--freeze", required=True)
     args = ap.parse_args()
 
-    record = ReviewRecord.from_dict(
-        json.loads(Path(args.record).read_text(encoding="utf-8"))
-    )
-    freeze = FreezeManifest.from_dict(
-        json.loads(Path(args.freeze).read_text(encoding="utf-8"))
-    )
-    result = validate_record(record, freeze)
+    try:
+        record = ReviewRecord.from_dict(
+            json.loads(Path(args.record).read_text(encoding="utf-8"))
+        )
+        freeze = FreezeManifest.from_dict(
+            json.loads(Path(args.freeze).read_text(encoding="utf-8"))
+        )
+        result = validate_record(record, freeze)
+    except (
+        OSError,
+        UnicodeDecodeError,
+        json.JSONDecodeError,
+        KeyError,
+        TypeError,
+        ValueError,
+        AttributeError,
+    ) as exc:
+        print(
+            json.dumps(
+                {"valid": False, "errors": [f"invalid review input: {type(exc).__name__}: {exc}"]},
+                indent=2,
+            )
+        )
+        return 1
     print(json.dumps({"valid": result.valid, "errors": result.errors}, indent=2))
     if result.valid and record.verdict == "approved":
         return 0

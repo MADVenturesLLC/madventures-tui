@@ -104,3 +104,46 @@ def freeze_target(
             json.dumps(manifest.to_dict(), indent=2) + "\n", encoding="utf-8"
         )
     return manifest
+
+
+def verify_frozen_execution(
+    freeze: FreezeManifest,
+    cwd: str | Path,
+    *,
+    profile_name: str,
+    profile_sha256: str,
+) -> list[str]:
+    """Return any execution-context drift before running profile commands."""
+    errors: list[str] = []
+    if profile_name != freeze.profile:
+        errors.append(
+            f"profile name mismatch: current={profile_name} freeze={freeze.profile}"
+        )
+    if profile_sha256 != freeze.profile_sha256:
+        errors.append(
+            "profile_sha256 mismatch: current profile does not match the freeze"
+        )
+
+    try:
+        current_ref = _git(cwd, ["rev-parse", "HEAD"])
+        if current_ref != freeze.target_ref:
+            errors.append(
+                f"target_ref mismatch: current={current_ref} freeze={freeze.target_ref}"
+            )
+
+        origin_url = _git(cwd, ["config", "--get", "remote.origin.url"])
+        origin_host, origin_identity = normalize_origin(origin_url)
+        if origin_host != freeze.origin_host.lower():
+            errors.append(
+                f"origin host mismatch: current={origin_host} freeze={freeze.origin_host}"
+            )
+        if origin_identity != freeze.origin_identity.lower():
+            errors.append(
+                "origin identity mismatch: current execution repo does not match the freeze"
+            )
+
+        if _git(cwd, ["status", "--porcelain"]):
+            errors.append("working tree is not clean for frozen execution")
+    except RuntimeError as exc:
+        errors.append(f"unable to verify frozen execution context: {exc}")
+    return errors

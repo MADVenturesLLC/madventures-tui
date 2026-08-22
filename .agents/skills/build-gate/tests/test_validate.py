@@ -163,6 +163,27 @@ class TestValidator(unittest.TestCase):
         self.assertFalse(r.valid)
         self.assertTrue(any("profile_sha256" in e for e in r.errors), r.errors)
 
+    def test_gate_result_wire_types_are_strict(self):
+        for field, value in (
+            ("passed", "false"),
+            ("skipped", "false"),
+            ("exit_code", "0"),
+        ):
+            with self.subTest(field=field):
+                typecheck = {"passed": True, "evidence": "ok", "exit_code": 0}
+                typecheck[field] = value
+                rec = base_record(
+                    gate_results={
+                        "MTUI-TYPECHECK": typecheck,
+                        "MTUI-TEST": {"passed": True, "evidence": "ok", "exit_code": 0},
+                    }
+                )
+                r = validate_record(rec, base_freeze())
+                self.assertFalse(r.valid)
+                self.assertTrue(
+                    any(f"{field} must be" in error for error in r.errors), r.errors
+                )
+
     def test_needs_changes_with_failed_gate_is_valid(self):
         rec = base_record(
             verdict="needs_changes",

@@ -102,9 +102,21 @@ def validate_record(
             result.add(f"missing gate result for required gate: {gate_id}")
             continue
         gr = record.gate_results[gate_id]
-        skipped = bool(gr.get("skipped"))
-        passed = bool(gr.get("passed"))
-        exit_code = int(gr.get("exit_code", -1))
+        if not isinstance(gr, dict):
+            result.add(f"gate {gate_id}: result must be an object")
+            continue
+        passed = gr.get("passed")
+        skipped = gr.get("skipped", False)
+        exit_code = gr.get("exit_code")
+        if not isinstance(passed, bool):
+            result.add(f"gate {gate_id}: passed must be a JSON boolean")
+            continue
+        if not isinstance(skipped, bool):
+            result.add(f"gate {gate_id}: skipped must be a JSON boolean")
+            continue
+        if isinstance(exit_code, bool) or not isinstance(exit_code, int):
+            result.add(f"gate {gate_id}: exit_code must be a JSON integer")
+            continue
         evidence = gr.get("evidence") or ""
 
         if skipped and _is_approved(record):

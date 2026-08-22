@@ -37,8 +37,9 @@ would.
 
 - `scripts/freeze_target.py` — lock the target SHA, origin identity, profile
   hash. Emits a freeze manifest JSON.
-- `scripts/run_gates.py` — execute every gate in a profile against the working
-  tree; emits results, exits 1 on any failed or skipped gate.
+- `scripts/run_gates.py` — verify the current clean checkout still matches the
+  freeze, then execute every gate; exits 1 on execution-context drift or any
+  failed/skipped gate.
 - `scripts/validate_record.py` — fail-closed validation of a review record
   against a freeze manifest; exits 0 only when valid and `verdict=approved`.
 
@@ -68,9 +69,10 @@ python3 "$SKILL/scripts/freeze_target.py" \
   --actor hermes --model hy3 --provider nous --session-id S1 --surface cv5 \
   --out "$OUT/freeze.json"
 
-# 2. Run the gates (fail-closed: non-zero exit if any gate fails or is skipped)
+# 2. Run the gates (fail-closed: requires the exact clean frozen checkout)
 python3 "$SKILL/scripts/run_gates.py" \
-  --profile "$SKILL/profiles/madventures-tui.json" --cwd . --out "$OUT/results.json"
+  --profile "$SKILL/profiles/madventures-tui.json" --freeze "$OUT/freeze.json" \
+  --cwd . --out "$OUT/results.json"
 
 # 3. Assemble a review record from the gate results, then validate it.
 #    Exit 0 only when the record is valid and verdict=approved.

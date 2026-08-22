@@ -6,6 +6,8 @@ produces deterministic GateResult objects.
 from __future__ import annotations
 
 import json
+import os
+import signal
 import subprocess
 from pathlib import Path
 from typing import Optional
@@ -13,17 +15,29 @@ from typing import Optional
 from .types import GateResult, GateSpec, Severity
 
 
-def load_profile(profile_path: str | Path) -> dict:
-    raw = Path(profile_path).read_text(encoding="utf-8")
+def parse_profile(raw: str, source: str = "<profile>") -> dict:
     data = json.loads(raw)
     if "gates" not in data or not isinstance(data["gates"], list):
-        raise ValueError(f"profile {profile_path} missing 'gates' list")
+        raise ValueError(f"profile {source} missing 'gates' list")
     return data
+
+
+def load_profile(profile_path: str | Path) -> dict:
+    return parse_profile(Path(profile_path).read_text(encoding="utf-8"), str(profile_path))
 
 
 def discover_gates(profile: dict) -> list[GateSpec]:
     specs: list[GateSpec] = []
     for entry in profile["gates"]:
+        timeout_seconds = entry.get("timeout_seconds", 600)
+        if (
+            isinstance(timeout_seconds, bool)
+            or not isinstance(timeout_seconds, (int, float))
+            or timeout_seconds <= 0
+        ):
+            raise ValueError(
+                f"gate {entry.get('id', '<unknown>')}: timeout_seconds must be a positive number"
+            )
         spec = GateSpec(
             id=entry["id"],
             command=entry["command"],
@@ -33,26 +47,48 @@ def discover_gates(profile: dict) -> list[GateSpec]:
             conditional_on=entry.get("conditional_on"),
             blocking=entry.get("blocking", True),
             pass_exit_codes=tuple(entry.get("pass_exit_codes", [0])),
+            timeout_seconds=float(timeout_seconds),
             expect_origin_host=entry.get("expect_origin_host"),
         )
         specs.append(spec)
     return specs
 
 
-def _run_command(command: str, cwd: str | Path) -> tuple[int, str]:
-    proc = subprocess.run(
+def _text(value: str | bytes | None) -> str:
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return value or ""
+
+
+def _run_command(command: str, cwd: str | Path, timeout_seconds: float) -> tuple[int, str]:
+    proc = subprocess.Popen(
         command,
         shell=True,
         cwd=str(cwd),
-        capture_output=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         text=True,
+        start_new_session=True,
     )
-    out = (proc.stdout or "") + (proc.stderr or "")
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout_seconds)
+    except subprocess.TimeoutExpired:
+        if os.name == "posix":
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        else:
+            proc.kill()
+        stdout, stderr = proc.communicate()
+        out = _text(stdout) + _text(stderr)
+        return -1, f"timed out after {timeout_seconds:g} seconds\n{out}".strip()
+    out = (stdout or "") + (stderr or "")
     return proc.returncode, out.strip()
 
 
 def run_gate(spec: GateSpec, cwd: str | Path) -> GateResult:
-    code, out = _run_command(spec.command, cwd)
+    code, out = _run_command(spec.command, cwd, spec.timeout_seconds)
     passed = code in spec.pass_exit_codes
     return GateResult(
         gate_id=spec.id,

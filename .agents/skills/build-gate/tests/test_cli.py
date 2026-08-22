@@ -58,6 +58,23 @@ class TestValidateRecordCli(unittest.TestCase):
             payload = json.loads(proc.stdout)
             self.assertTrue(payload["valid"], payload)
 
+    def test_malformed_record_emits_structured_failure(self):
+        with tempfile.TemporaryDirectory() as d:
+            directory = Path(d)
+            rec_path = directory / "record.json"
+            freeze_path = directory / "freeze.json"
+            rec_path.write_text("{not-json\n", encoding="utf-8")
+            freeze_path.write_text(
+                json.dumps(base_freeze().to_dict()) + "\n", encoding="utf-8"
+            )
+
+            proc = self._run(rec_path, freeze_path)
+
+            self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+            payload = json.loads(proc.stdout)
+            self.assertFalse(payload["valid"], payload)
+            self.assertTrue(payload["errors"], payload)
+
 
 if __name__ == "__main__":
     unittest.main()

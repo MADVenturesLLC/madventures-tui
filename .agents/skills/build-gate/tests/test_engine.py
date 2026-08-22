@@ -1,6 +1,8 @@
 """Tests for the gate execution engine (required_env skip + conditional_on)."""
-import unittest
+import shlex
 import sys
+import time
+import unittest
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -57,6 +59,27 @@ class TestEngine(unittest.TestCase):
         results = run_all_gates(profile, ".", env={})
         self.assertTrue(results["G1"].skipped)
         self.assertTrue(any_failed(results))
+
+    def test_timeout_is_a_failed_gate(self):
+        started = time.monotonic()
+        profile = self._profile(
+            gates=[
+                {
+                    "id": "SLOW",
+                    "command": (
+                        f"{shlex.quote(sys.executable)} -c 'import time; time.sleep(1)' & wait"
+                    ),
+                    "timeout_seconds": 0.01,
+                }
+            ]
+        )
+
+        result = run_all_gates(profile, ".")["SLOW"]
+
+        self.assertFalse(result.passed)
+        self.assertEqual(result.exit_code, -1)
+        self.assertIn("timed out", result.evidence)
+        self.assertLess(time.monotonic() - started, 0.5)
 
 
 if __name__ == "__main__":
