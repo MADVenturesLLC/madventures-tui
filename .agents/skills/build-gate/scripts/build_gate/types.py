@@ -94,6 +94,14 @@ class FreezeManifest:
 
     @classmethod
     def from_dict(cls, d: dict) -> "FreezeManifest":
+        gates = d["gates"]
+        if not isinstance(gates, list):
+            raise ValueError("gates must be a JSON array of strings")
+        parsed_gates: list[str] = []
+        for gate_id in gates:
+            if not isinstance(gate_id, str) or not gate_id.strip():
+                raise ValueError("gates must be a JSON array of non-empty strings")
+            parsed_gates.append(gate_id)
         return cls(
             profile=d["profile"],
             target_ref=d["target_ref"],
@@ -107,7 +115,7 @@ class FreezeManifest:
             session_id=d["session_id"],
             surface=d["surface"],
             frozen_at=d["frozen_at"],
-            gates=list(d["gates"]),
+            gates=parsed_gates,
             profile_sha256=d["profile_sha256"],
         )
 

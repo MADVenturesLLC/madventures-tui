@@ -84,6 +84,19 @@ class TestFreezeRoundTrip(unittest.TestCase):
         )
         self.assertEqual(FreezeManifest.from_dict(m.to_dict()).target_ref, "a" * 40)
 
+    def test_from_dict_rejects_string_gates(self):
+        m = FreezeManifest(
+            profile="p", target_ref="a" * 40, target_ref_short="aaaaaaa",
+            origin_url="u", origin_host="h", origin_identity="o/r",
+            actor="hermes", model="hy3", provider="nous", session_id="S",
+            surface="cv5", frozen_at="2026-08-20T00:00:00+00:00",
+            gates=["g1"], profile_sha256="deadbeef",
+        )
+        raw = m.to_dict()
+        raw["gates"] = "g1"
+        with self.assertRaisesRegex(ValueError, "gates"):
+            FreezeManifest.from_dict(raw)
+
 
 class TestReviewRecord(unittest.TestCase):
     def test_from_dict_rejects_non_boolean_self_approved(self):
