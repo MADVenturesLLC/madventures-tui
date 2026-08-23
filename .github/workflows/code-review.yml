@@ -1,5 +1,13 @@
 name: code-review
 
+# Trigger scope: only events that can change a publication input re-run this
+# workflow. The publication inputs are the frozen head SHA and the unresolved
+# review-thread count. Editing a review body or a review comment changes
+# neither, so the `edited` types are deliberately absent — they would re-run a
+# full install/typecheck/test against an unchanged head. Creating or deleting a
+# review comment, and submitting or dismissing a review, can change the thread
+# count and are therefore kept.
+#
 # Automatic status/comment publication is same-repository only.
 # Fork PRs still run the read-only validate job, but do not auto-publish
 # a code-review status or evidence comment. Maintainers refresh any PR
@@ -12,12 +20,10 @@ on:
   pull_request_review:
     types:
       - submitted
-      - edited
       - dismissed
   pull_request_review_comment:
     types:
       - created
-      - edited
       - deleted
   workflow_dispatch:
     inputs:
