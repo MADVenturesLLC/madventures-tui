@@ -944,3 +944,48 @@ describe("Phase 3A admission authority", () => {
     }
   });
 });
+
+/**
+ * Phase 3A pty-host isolation (Task 41).
+ *
+ * Invariant: the private PTY host imports no application-authority module —
+ * broker, ledger, policy, storage, artifact-store, or any adapter. It is
+ * private infrastructure with a closed operation set, not an application.
+ */
+
+const PTY_HOST_FORBIDDEN_IMPORT = /@madventures\/(broker|ledger|policy|storage|artifact-store|adapter-\w+)|packages\/(broker|ledger|policy|storage)/;
+
+describe("Phase 3A pty-host isolation", () => {
+  test("the pty-host package imports no application authority module", () => {
+    const dir = join(REPO_ROOT, "packages", "pty-host", "src");
+    const violations: string[] = [];
+    for (const file of listSourceFiles(dir)) {
+      const rel = relative(REPO_ROOT, file);
+      const source = readFileSync(file, "utf8");
+      if (PTY_HOST_FORBIDDEN_IMPORT.test(source)) {
+        violations.push(rel);
+      }
+    }
+    expect(violations).toEqual([]);
+  });
+
+  test("the isolation scan detects a planted forbidden import", () => {
+    const root = makeTempRoot();
+    try {
+      writeTempFile(
+        root,
+        "packages/pty-host/src/planted.ts",
+        'import { thing } from "@madventures/broker";\nexport { thing };\n',
+      );
+      const dir = join(root, "packages", "pty-host", "src");
+      const violations: string[] = [];
+      for (const file of listSourceFiles(dir)) {
+        const source = readFileSync(file, "utf8");
+        if (PTY_HOST_FORBIDDEN_IMPORT.test(source)) violations.push(file);
+      }
+      expect(violations).toHaveLength(1);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
