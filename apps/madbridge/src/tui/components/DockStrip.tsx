@@ -25,6 +25,8 @@ import {
   isActiveWriter,
   writerToken,
   countBufferedLines,
+  displayWidth,
+  truncateToWidth,
   livenessWord,
 } from "./agent-identity";
 
@@ -90,7 +92,7 @@ export function buildDockLine(
 
   // Try the full natural line first.
   const natural = fields.join(SEP);
-  if (natural.length <= width) return natural;
+  if (displayWidth(natural) <= width) return natural;
 
   // Progressive truncation: drop the lowest-priority field one at a time
   // (count, then model, then role) until it fits, replacing the dropped
@@ -99,17 +101,14 @@ export function buildDockLine(
   for (let dropCount = 1; dropCount < fields.length - 1; dropCount++) {
     const kept = fields.slice(0, fields.length - dropCount);
     const candidate = kept.join(SEP) + droppedMarker;
-    if (candidate.length <= width) return candidate;
+    if (displayWidth(candidate) <= width) return candidate;
   }
 
   // Hard truncate the leading field(s) — identity is always preserved as a
-  // prefix, but truncated to the remaining width with a marker.
-  const min = label.length + TRUNC_MARKER.length;
-  if (width >= min) {
-    return label.slice(0, width - TRUNC_MARKER.length) + TRUNC_MARKER;
-  }
-  // Extreme narrow: hard truncate without marker.
-  return label.slice(0, Math.max(0, width));
+  // prefix, but truncated to the remaining display width with a marker.
+  // Budgets by terminal display cells (CJK/emoji = 2) and never splits a
+  // grapheme cluster. The marker is forced because fields were dropped.
+  return truncateToWidth(label + TRUNC_MARKER, width);
 }
 
 export function DockStrip({ surface, state, ptyOutput }: DockStripProps) {
