@@ -52,6 +52,10 @@ jobs:
           unzip -q bun-linux-x64.zip -d qrt
           chmod +x qrt/bun-linux-x64/bun
           file qrt/bun-linux-x64/bun | grep -q "x86-64"
+          # REV 02 (Gate F correction): the qualified zip ships only `bun`;
+          # the repo's verify script invokes `bunx`. Create the local symlink
+          # pointing at the exact extracted binary.
+          ln -s bun qrt/bun-linux-x64/bunx
 
       - name: Prepend qualified runtime to PATH (persists for all steps + children)
         run: echo "$PWD/qrt/bun-linux-x64" >> "$GITHUB_PATH"
@@ -66,6 +70,18 @@ jobs:
           REV="$(bun -e 'console.log(Bun.revision)')"
           echo "Bun.version=$VER Bun.revision=$REV"
           [ "$REV" = "69cb78c9097cebd3bdb832d9fff8b7d23abce09e" ]
+
+      - name: Prove bunx symlink (Gate F correction)
+        run: |
+          set -euo pipefail
+          RESOLVED_BUNX="$(command -v bunx)"
+          echo "bunx resolves to: $RESOLVED_BUNX"
+          case "$RESOLVED_BUNX" in */qrt/bun-linux-x64/bunx) ;; *) echo "FATAL: wrong bunx on PATH"; exit 1;; esac
+          [ "$(readlink "$RESOLVED_BUNX")" = "bun" ] || { echo "FATAL: bunx symlink target is not bun"; exit 1; }
+          BUN_VER="$(bun --version)"
+          BUNX_VER="$(bunx --version)"
+          echo "bun --version: $BUN_VER  bunx --version: $BUNX_VER"
+          [ "$BUNX_VER" = "$BUN_VER" ] || { echo "FATAL: bunx version != bun version"; exit 1; }
 
       # Expiry state machine (Path C): anchor = custody tag. NO PR-head check.
       # The artifact's identity is the custody manifest, not the PR head.
