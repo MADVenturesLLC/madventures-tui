@@ -156,7 +156,7 @@ jobs:
               CS="$(api "$API/compare/${ANCHOR}...${TC}" | jq -er '.status // empty')" || { echo "UNDETERMINED:compare($TAG)"; exit 1; }
               case "$CS" in
                 ahead|identical)   echo "EXPIRED:release($TAG)-contains-anchor"; exit 1 ;;
-                behind|divergent)  : ;;
+                behind|diverged)   : ;;
                 *)                 echo "UNDETERMINED:status($CS,$TAG)"; exit 1 ;;
               esac
             done < <(jq -r '.[] | [.tag_name, .published_at, (.draft|tostring)] | @tsv' <<<"$RL")
@@ -198,6 +198,8 @@ jobs:
               if len(recs)!=200:                      fail(f"{path}: {len(recs)} records != 200")
               if any("i" not in r for r in recs):
                   fail(f"{path}: record missing iteration id")
+              if any(r.get("i") is None for r in recs):
+                  fail(f"{path}: iteration id is null")
               if len({r["i"] for r in recs})!=200:
                   fail(f"{path}: iteration ids not unique (200 distinct required)")
               if any("error" in r for r in recs):     fail(f"{path}: error records present")
