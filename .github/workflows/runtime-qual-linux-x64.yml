@@ -196,7 +196,9 @@ jobs:
                             ("r3-control-200.jsonl","control")):
               recs=load(path)
               if len(recs)!=200:                      fail(f"{path}: {len(recs)} records != 200")
-              if len({r.get("i") for r in recs})!=200:
+              if any("i" not in r for r in recs):
+                  fail(f"{path}: record missing iteration id")
+              if len({r["i"] for r in recs})!=200:
                   fail(f"{path}: iteration ids not unique (200 distinct required)")
               if any("error" in r for r in recs):     fail(f"{path}: error records present")
               if any(r.get("mode")!=arm for r in recs): fail(f"{path}: wrong mode field")
