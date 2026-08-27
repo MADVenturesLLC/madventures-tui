@@ -19,7 +19,17 @@ concurrency:
 jobs:
   qualify-linux-x64:
     name: QUALIFY linux-x64 (IMMUTABLE-CUSTODY bun bridge)
+    # REV 03 (CR-1): run ONLY for the Founder-authorized qualification PR #31.
+    # Prevents the custody job + ARTIFACTS_READ_TOKEN from firing on unrelated
+    # PRs targeting main.
+    if: github.event.pull_request.number == 31
     runs-on: ubuntu-24.04
+    env:
+      CUSTODY_TAG: intake/bun-pr40304-69cb78c9097cebd3bdb832d9fff8b7d23abce09e/v1
+      # REV 03 (CR-2): the immutable intake commit behind the tag. Asserted
+      # before any custody content is used, so tag retargeting cannot swap
+      # the archive or manifest while passing the checksum checks.
+      CUSTODY_COMMIT: 3b5775a57da95ad6446e68036746b6308a0d5904
     timeout-minutes: 20
     steps:
       - name: Checkout product HEAD (frozen)
@@ -31,15 +41,16 @@ jobs:
       - name: Fetch frozen custody tag (read-only)
         env:
           ARTIFACTS_READ_TOKEN: ${{ secrets.ARTIFACTS_READ_TOKEN }}
-          CUSTODY_TAG: intake/bun-pr40304-69cb78c9097cebd3bdb832d9fff8b7d23abce09e/v1
         run: |
           set -euo pipefail
           git clone --depth 1 --branch "$CUSTODY_TAG" \
             "https://x-access-token:${ARTIFACTS_READ_TOKEN}@github.com/MADVenturesLLC/os-governed-artifacts.git" custody
+          [ "$(git -C custody rev-parse HEAD)" = "$CUSTODY_COMMIT" ] || { echo "FATAL: custody HEAD != pinned commit"; exit 1; }
           git -C custody ls-tree -r --name-only HEAD > custody-tree.txt
           [ "$(wc -l < custody-tree.txt)" -eq 8 ]
-          (cd custody && shasum -a 256 -c MANIFEST.sha256)
+          (cd custody && shasum -a 256 -c MANIFEST.sha256) 2>&1 | tee manifest-check.txt
           cp custody/bun-linux-x64.zip custody/bun-terminal-exit-repro.mjs .
+          sha256sum bun-linux-x64.zip > archive-digest.txt
 
       - name: Double-pin R3 identity
         run: |
@@ -82,6 +93,21 @@ jobs:
           BUNX_VER="$(bunx --version)"
           echo "bun --version: $BUN_VER  bunx --version: $BUNX_VER"
           [ "$BUNX_VER" = "$BUN_VER" ] || { echo "FATAL: bunx version != bun version"; exit 1; }
+
+      - name: Write runtime and custody attestation (REV 03 CR-3)
+        run: |
+          set -euo pipefail
+          {
+            echo "custody_tag=$CUSTODY_TAG"
+            echo "custody_commit=$(git -C custody rev-parse HEAD)"
+            echo "manifest_check=$(tr '\n' '|' < manifest-check.txt)"
+            echo "archive_digest=$(cat archive-digest.txt)"
+            echo "bun_path=$(command -v bun)"
+            echo "bunx_path=$(command -v bunx)"
+            echo "bun_version=$(bun --version)"
+            echo "bun_revision=$(bun -e 'console.log(Bun.revision)')"
+          } > attestation.txt
+          cat attestation.txt
 
       # Expiry state machine (Path C): anchor = custody tag. NO PR-head check.
       # The artifact's identity is the custody manifest, not the PR head.
@@ -170,6 +196,8 @@ jobs:
                             ("r3-control-200.jsonl","control")):
               recs=load(path)
               if len(recs)!=200:                      fail(f"{path}: {len(recs)} records != 200")
+              if len({r.get("i") for r in recs})!=200:
+                  fail(f"{path}: iteration ids not unique (200 distinct required)")
               if any("error" in r for r in recs):     fail(f"{path}: error records present")
               if any(r.get("mode")!=arm for r in recs): fail(f"{path}: wrong mode field")
               if any(r.get("childExitCodeObserved")!=7 for r in recs):
@@ -224,4 +252,7 @@ jobs:
             gate-e-tsc.log
             gate-f-verify.log
             custody-tree.txt
+            manifest-check.txt
+            archive-digest.txt
+            attestation.txt
           if-no-files-found: error
