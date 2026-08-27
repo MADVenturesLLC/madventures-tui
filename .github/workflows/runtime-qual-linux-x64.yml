@@ -1,0 +1,211 @@
+name: runtime-qual-linux-x64
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - synchronize
+      - reopened
+
+permissions:
+  contents: read
+
+concurrency:
+  group: runtime-qual-linux-x64-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  qualify-linux-x64:
+    name: QUALIFY linux-x64 (IMMUTABLE-CUSTODY bun bridge)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout product HEAD (frozen)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: 16b5720d1667a97515320d504844b2605abf28c8
+          persist-credentials: false
+
+      - name: Fetch frozen custody tag (read-only)
+        env:
+          ARTIFACTS_READ_TOKEN: ${{ secrets.ARTIFACTS_READ_TOKEN }}
+          CUSTODY_TAG: intake/bun-pr40304-69cb78c9097cebd3bdb832d9fff8b7d23abce09e/v1
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch "$CUSTODY_TAG" \
+            "https://x-access-token:${ARTIFACTS_READ_TOKEN}@github.com/MADVenturesLLC/os-governed-artifacts.git" custody
+          git -C custody ls-tree -r --name-only HEAD > custody-tree.txt
+          [ "$(wc -l < custody-tree.txt)" -eq 8 ]
+          (cd custody && shasum -a 256 -c MANIFEST.sha256)
+          cp custody/bun-linux-x64.zip custody/bun-terminal-exit-repro.mjs .
+
+      - name: Double-pin R3 identity
+        run: |
+          set -euo pipefail
+          echo "97715c849dcee2c1f7793df5acff9ed70489fc0fc96af2e55a34ec9807763409  bun-terminal-exit-repro.mjs" | shasum -a 256 -c -
+
+      - name: Extract qualified runtime
+        run: |
+          set -euo pipefail
+          unzip -q bun-linux-x64.zip -d qrt
+          chmod +x qrt/bun-linux-x64/bun
+          file qrt/bun-linux-x64/bun | grep -q "x86-64"
+
+      - name: Prepend qualified runtime to PATH (persists for all steps + children)
+        run: echo "$PWD/qrt/bun-linux-x64" >> "$GITHUB_PATH"
+
+      - name: PROVE runtime identity before install or tests
+        run: |
+          set -euo pipefail
+          RESOLVED="$(command -v bun)"
+          echo "bun resolves to: $RESOLVED"
+          case "$RESOLVED" in */qrt/bun-linux-x64/bun) ;; *) echo "FATAL: wrong bun on PATH"; exit 1;; esac
+          VER="$(bun --version)"
+          REV="$(bun -e 'console.log(Bun.revision)')"
+          echo "Bun.version=$VER Bun.revision=$REV"
+          [ "$REV" = "69cb78c9097cebd3bdb832d9fff8b7d23abce09e" ]
+
+      # Expiry state machine (Path C): anchor = custody tag. NO PR-head check.
+      # The artifact's identity is the custody manifest, not the PR head.
+      # Expiry = an official Bun release containing the fix (S4 containment).
+      - name: Expiry state machine (immutable-custody containment)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          API_VERSION: "2022-11-28"
+        run: |
+          set -euo pipefail
+          API=https://api.github.com/repos/oven-sh/bun
+          api() { curl -sfS \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: ${API_VERSION}" "$1"; }
+          ANCHOR="69cb78c9097cebd3bdb832d9fff8b7d23abce09e"
+          peel() {
+            local TAGENC="$1" PAIR TYPE SHA N=0
+            PAIR="$(api "$API/git/ref/tags/$TAGENC" | jq -er '.object.type+"|"+.object.sha')" || return 1
+            while :; do
+              N=$((N+1)); [ "$N" -le 10 ] || return 1
+              TYPE="${PAIR%%|*}"; SHA="${PAIR##*|}"
+              [ -n "$TYPE" ] && [ -n "$SHA" ] || return 1
+              case "$TYPE" in
+                commit) printf '%s' "$SHA"; return 0 ;;
+                tag)    PAIR="$(api "$API/git/tags/$SHA" | jq -er '.object.type+"|"+.object.sha')" || return 1 ;;
+                *)      return 1 ;;
+              esac
+            done
+          }
+
+          PAGE=1
+          while :; do
+            RL="$(api "$API/releases?per_page=100&page=$PAGE")" || { echo "FAIL_CLOSED:releases-page-$PAGE"; exit 1; }
+            jq -e 'type=="array"' <<<"$RL" >/dev/null || { echo "FAIL_CLOSED:releases-not-array-$PAGE"; exit 1; }
+            BAD="$(jq '[.[] | select((.tag_name|type)!="string" or (.published_at|type)!="string" or (.draft|type)!="boolean")] | length' <<<"$RL")" \
+              || { echo "FAIL_CLOSED:releases-shape-$PAGE"; exit 1; }
+            [ "$BAD" -eq 0 ] || { echo "FAIL_CLOSED:malformed-release-entry(page-$PAGE,count-$BAD)"; exit 1; }
+            N="$(jq 'length' <<<"$RL")"
+            [ "$N" -gt 0 ] || break
+            while IFS=$'\t' read -r TAG PUB DRAFT; do
+              [ "$DRAFT" = "false" ] || continue
+              [[ "$PUB" > "2026-08-22T23:59:59Z" ]] || continue
+              TAGENC="$(jq -rn --arg t "$TAG" '$t|@uri')"
+              TC="$(peel "$TAGENC")" || { echo "UNDETERMINED:peel($TAG)"; exit 1; }
+              CS="$(api "$API/compare/${ANCHOR}...${TC}" | jq -er '.status // empty')" || { echo "UNDETERMINED:compare($TAG)"; exit 1; }
+              case "$CS" in
+                ahead|identical)   echo "EXPIRED:release($TAG)-contains-anchor"; exit 1 ;;
+                behind|divergent)  : ;;
+                *)                 echo "UNDETERMINED:status($CS,$TAG)"; exit 1 ;;
+              esac
+            done < <(jq -r '.[] | [.tag_name, .published_at, (.draft|tostring)] | @tsv' <<<"$RL")
+            [ "$N" -eq 100 ] || break
+            PAGE=$((PAGE+1))
+          done
+          echo "STATE MACHINE: PROCEED (anchor=$ANCHOR, custody-immutable)"
+
+      - name: Install dependencies (NODE_ENV must be ABSENT, frozen lockfile)
+        run: |
+          set -euo pipefail
+          [ "${NODE_ENV+x}" = "" ] || { echo "FATAL: NODE_ENV present (value='${NODE_ENV-}')"; exit 1; }
+          bun install --frozen-lockfile
+          git diff --exit-code -- bun.lock
+
+      - name: Gate A — R3 reproduction (qualified runtime, custody copy)
+        run: |
+          set -euo pipefail
+          bun bun-terminal-exit-repro.mjs --arm voluntary --iterations 200 --out r3-voluntary-200.jsonl 2>&1 | tee r3-voluntary.console.log
+          bun bun-terminal-exit-repro.mjs --arm control   --iterations 200 --out r3-control-200.jsonl   2>&1 | tee r3-control.console.log
+
+      - name: Verdict A — independent JSONL adjudication of BOTH R3 arms
+        run: |
+          set -euo pipefail
+          python3 - <<'PYEOF'
+          import json, sys
+          def load(p):
+              recs=[]
+              with open(p) as f:
+                  for line in f:
+                      line=line.strip()
+                      if line: recs.append(json.loads(line))
+              return recs
+          def fail(msg):
+              print("VERDICT A: FAIL —", msg); sys.exit(1)
+          for path, arm in (("r3-voluntary-200.jsonl","voluntary"),
+                            ("r3-control-200.jsonl","control")):
+              recs=load(path)
+              if len(recs)!=200:                      fail(f"{path}: {len(recs)} records != 200")
+              if any("error" in r for r in recs):     fail(f"{path}: error records present")
+              if any(r.get("mode")!=arm for r in recs): fail(f"{path}: wrong mode field")
+              if any(r.get("childExitCodeObserved")!=7 for r in recs):
+                  fail(f"{path}: child exit code != 7 somewhere")
+              if any(r.get("childExitCodeMatches") is not True for r in recs):
+                  fail(f"{path}: childExitCodeMatches false somewhere")
+              if any(r.get("markerSeen") is not True for r in recs):
+                  fail(f"{path}: missing marker somewhere")
+              if any(r.get("markerPhase")!="before_child_exit" for r in recs):
+                  fail(f"{path}: marker not before child exit somewhere")
+              if any(r.get("bytesAfterClose",1)!=0 for r in recs):
+                  fail(f"{path}: bytes delivered after close somewhere")
+              if any(r.get("closeError") is not None for r in recs):
+                  fail(f"{path}: close error recorded somewhere")
+              spont=sum(1 for r in recs if r.get("spontaneousCbFired"))
+              pre=sum(1 for r in recs if r.get("preCloseCbFired"))
+              if arm=="voluntary":
+                  if spont!=200: fail(f"{path}: voluntary spontaneous callbacks {spont}/200")
+                  if any(r.get("spontaneousCbCode")!=0 for r in recs if r.get("spontaneousCbFired")):
+                      fail(f"{path}: spontaneous lifecycle code != 0 somewhere")
+                  if pre!=0: fail(f"{path}: unexpected pre-close callbacks in voluntary arm")
+              else:
+                  if pre!=200: fail(f"{path}: control pre-close callbacks {pre}/200")
+                  if spont!=0: fail(f"{path}: unexpected spontaneous callbacks in control arm")
+              print(f"VERDICT A: {path} ({arm}) PASS — 200 records, exits 7x200, markers before_child_exit x200, bytesAfterClose 0")
+          print("VERDICT A: BOTH ARMS PASS")
+          PYEOF
+
+      - name: Gates B-F — product suites (same runtime on PATH, logs captured)
+        run: |
+          set -euo pipefail
+          [ "${NODE_ENV+x}" = "" ] || { echo "FATAL: NODE_ENV present"; exit 1; }
+          { bun test packages/pty-host/test/main-guard.test.ts ; } 2>&1 | tee gate-b-main-guard.log
+          { bun test packages/pty-host test/phase3a ; }            2>&1 | tee gate-c-pty-phase3a.log
+          { bun test packages/broker ; }                           2>&1 | tee gate-d-broker.log
+          { bun x tsc --noEmit ; }                                 2>&1 | tee gate-e-tsc.log
+          { bun run verify ; }                                     2>&1 | tee gate-f-verify.log
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: qual-evidence-linux-x64
+          path: |
+            r3-voluntary-200.jsonl
+            r3-control-200.jsonl
+            r3-voluntary.console.log
+            r3-control.console.log
+            gate-b-main-guard.log
+            gate-c-pty-phase3a.log
+            gate-d-broker.log
+            gate-e-tsc.log
+            gate-f-verify.log
+            custody-tree.txt
+          if-no-files-found: error
