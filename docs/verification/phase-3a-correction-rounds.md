@@ -129,3 +129,21 @@ Task 42's plan file list (plan §5, lines 2070–2077) omits `packages/pty-host/
 - **Added to Task 42 test scope:** `packages/pty-host/test/main-guard.test.ts` (modify — real executable + computed SHA-256 for successful-launch fixtures; negative mismatch tests preserved).
 - **Unchanged:** Task 42 production files (`launch.ts`, `main.ts`, `pty-host-supervisor.ts`, broker `index.ts`), new test files (`launch.test.ts`, `pty-host-supervisor.test.ts`), Task 43/44 scope, adapter `launch()` deferral to M20, and all non-authorizations in the Founder's M19 authorization.
 - **No test is skipped, disabled, or weakened.** Production hash verification is not weakened.
+
+## 2026-08-28 — M19 Task 42, independent review round 1 (REQUEST CHANGES → remediation)
+
+**Review verdict:** REQUEST CHANGES on PR #35 head `eb7a02d96be5dfd8239d776285eb33a914242386`. Two blocking findings, one major.
+
+**Accepted findings (validated against spec):**
+1. BLOCKING — lifeline descriptor contract not implemented: `spawnPtyHost` used ordinary `stdin: "pipe"` with no explicit close-on-exec write-end ownership marking, no duplicate-descriptor closure, and no EOF-as-death observability proof. §3.2 (sole write-end ownership, close-on-exec) and §3.3 step 2–3 require the descriptor-level lifeline.
+2. BLOCKING — `test("the child is created after the lifeline is established")` was synthetic: the ordering signal was inserted by the test itself, not observed from a real supervisor→host→child pipe. Tautology confirmed.
+3. MAJOR — `env: { ...process.env }` violates §3.2/§5.4 host passes only the allowlisted environment; ambient inheritance is prohibited.
+
+**Remediation probes (both via real process experiments):**
+- Parent-death test (layered harness): child with plain stdin pipe observed `STDIN-EOF at 780 ms` after supervisor SIGKILL — stdin-pipe-as-lifeline EOF detection works at the descriptor level.
+- Bun `ipc` channel also detects parent death but is NOT the spec mechanism; not used.
+- Extra-fd `stdio` arrays in `Bun.spawn` proved unreliable (`EBADF` via posix_spawn); lifeline stays on stdin as §3.2 mandates.
+
+**Remediation scope (same Task 42, new commit on the same branch):**
+- `spawnPtyHost` implements the §3.2 descriptor contract explicitly: the supervisor holds the sole write end of the host's inherited stdin pipe (a `FileSink` owned only by the supervisor), never leaks that fd to any other process (close-on-exec hygiene by construction — no duplicate references exist), closes unintended duplicates, and passes ONLY `descriptor.env` as the host's environment (§3.2/§5.4 allowlisted environment; no ambient inheritance).
+- Ordering test rewritten to observe the REAL pipeline: supervisor spawns host; host script records `lifeline_checked` after its first stdin readiness observation and before child spawn; test asserts `lifeline_established` < `hash` < `exec` from real stream events.

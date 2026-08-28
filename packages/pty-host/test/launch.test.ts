@@ -108,22 +108,38 @@ test("launch facts report host pid, child pid, and child pgid", () => {
   expect(result.pgid).toBe(result.childPid);
 });
 
-test("the child is created after the lifeline is established", () => {
-  const trace: string[] = [];
-  const deps: LaunchDeps = {
-    hashFile: () => "a".repeat(64),
-    spawn: () => fakeSession(),
-    trace: (step) => trace.push(step),
-  };
-  // The launch frame is delivered over the lifeline (the inherited control
-  // channel) before verifyAndLaunch runs — the host observes the channel
-  // before spawning.
-  trace.push("frame_received");
-  verifyAndLaunch(launchFrame("/bin/sh", "a".repeat(64)), deps);
-  const frameIdx = trace.indexOf("frame_received");
-  const hashIdx = trace.indexOf("hash");
-  const execIdx = trace.indexOf("exec");
-  expect(frameIdx).toBeGreaterThanOrEqual(0);
-  expect(hashIdx).toBeGreaterThan(frameIdx);
-  expect(execIdx).toBeGreaterThan(hashIdx);
+test("the child is created after the lifeline is established", async () => {
+  // Real-pipeline proof (delegates to the supervisor integration test in
+  // packages/broker/test/pty-host-supervisor.test.ts): the supervisor
+  // writes the launch frame as the FIRST bytes of the real lifeline pipe
+  // and the host, which can only have read that frame over a working
+  // stdin, verifies the hash and creates the child afterwards. The
+  // `launched` fact — asserted there end-to-end against a real
+  // supervisor→host pipe — IS the ordering observable. The synthetic-trace
+  // version could pass with no lifeline at all; this delegation cannot.
+  const { spawnPtyHost } = await import("../../broker/src/pty-host-supervisor");
+  const handle = spawnPtyHost({
+    path: "/bin/cat",
+    sha256: sha256File("/bin/cat"),
+    argv: [],
+    env: {},
+    executionId: "exec-ordering",
+  });
+  try {
+    const iterator = handle.facts()[Symbol.asyncIterator]();
+    const first = await iterator.next();
+    // Ordering proven by construction of the real pipeline: the child was
+    // created only after the launch frame traveled the established
+    // lifeline. The frame carries the child's own launch facts.
+    expect(first.done).toBe(false);
+    expect(first.value).toMatchObject({
+      kind: "launched",
+      hostPid: handle.hostPid,
+      executionId: "exec-ordering",
+    });
+    expect(typeof (first.value as { childPid: number }).childPid).toBe("number");
+    expect(typeof (first.value as { pgid: number }).pgid).toBe("number");
+  } finally {
+    process.kill(handle.hostPid, "SIGKILL");
+  }
 });
