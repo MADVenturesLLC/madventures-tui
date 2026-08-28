@@ -59,7 +59,9 @@ runs:
     - name: Prove runtime identity (bun + bunx)
       run: |
         set -euo pipefail
-        BUN_DIR="$GITHUB_WORKSPACE/custody/qrt"
+        # The qualified zip extracts to a platform subdirectory
+        # (qrt/bun-linux-x64/bun, qrt/bun-darwin-aarch64/bun).
+        BUN_DIR="$(dirname "$(find "$GITHUB_WORKSPACE/custody/qrt" -type f -name bun -perm -u+x | head -1)")"
         # The qualified zip ships only `bun`; `bunx` is required by
         # `bun run verify` and `bunx tsc --noEmit` (Commission 03 REV 02
         # Gate F fix, proven on ubuntu-24.04 x64).
