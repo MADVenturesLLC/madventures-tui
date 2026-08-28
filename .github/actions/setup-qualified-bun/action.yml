@@ -37,11 +37,13 @@ runs:
     - name: Select platform archive
       id: select
       run: |
-        case "${{ runner.os }}-${{ runner.arch }}" in
-          Linux-X64)   ZIP=bun-linux-x64.zip ;;
-          macOS-ARM64) ZIP=bun-darwin-aarch64.zip ;;
+        OS="$(uname -s)"
+        ARCH="$(uname -m)"
+        case "$OS-$ARCH" in
+          Linux-x86_64)  ZIP=bun-linux-x64.zip ;;
+          Darwin-arm64)  ZIP=bun-darwin-aarch64.zip ;;
           *)
-            echo "::error::unsupported runner ${{ runner.os }}-${{ runner.arch }}"
+            echo "::error::unsupported runner $OS-$ARCH"
             exit 1
             ;;
         esac
