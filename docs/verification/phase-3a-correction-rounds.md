@@ -147,3 +147,13 @@ Task 42's plan file list (plan §5, lines 2070–2077) omits `packages/pty-host/
 **Remediation scope (same Task 42, new commit on the same branch):**
 - `spawnPtyHost` implements the §3.2 descriptor contract explicitly: the supervisor holds the sole write end of the host's inherited stdin pipe (a `FileSink` owned only by the supervisor), never leaks that fd to any other process (close-on-exec hygiene by construction — no duplicate references exist), closes unintended duplicates, and passes ONLY `descriptor.env` as the host's environment (§3.2/§5.4 allowlisted environment; no ambient inheritance).
 - Ordering test rewritten to observe the REAL pipeline: supervisor spawns host; host script records `lifeline_checked` after its first stdin readiness observation and before child spawn; test asserts `lifeline_established` < `hash` < `exec` from real stream events.
+
+## 2026-08-28 — M19 Task 42, Founder approval at exact head (advisory accepted)
+
+**Founder disposition:** Task 42 APPROVED at exact head `6dc79e6d9d872e4f52fa28b81794b924c09fcbd2`, subject to the recorded Tier-2 verdict (`PASS-WITH-ADVISORIES`, artifact `tier2-m19-t42-remediation-6dc79e6.txt`, SHA-256 `9cc67b95d2c2d6d1cbe76f93a82eb96f03e02a341ac7ad60457426035edcf901`) and the advisory disposition below.
+
+**Advisory disposition (Founder-ruled):** the round-2 advisory (redundant `stdinSink.flush()` after `stdinSink.end()` in `closeStdin`, `packages/broker/src/pty-host-supervisor.ts`) is ACCEPTED for Task 42. Recorded as theoretical redundancy under `FileSink` semantics; no failure was observed. No new head was created; the reviewed commit is unmodified. The advisory is not re-proposed for Task 42.
+
+**Explicit non-authorizations (Founder, verbatim scope):** this approval does not authorize Task 43, Task 44, PR merge, or any Phase 4 work.
+
+**Task 42 gate state:** implementation approved; PR #35 remains draft and unmerged; per-task Step 8 checkpoint for Task 43 awaits separate Founder authorization.
