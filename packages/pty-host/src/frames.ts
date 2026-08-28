@@ -73,6 +73,16 @@ function isNumber(v: unknown): v is number {
   return typeof v === "number" && Number.isFinite(v);
 }
 
+/**
+ * A valid terminal dimension: a safe integer strictly greater than zero.
+ * `isNumber` alone accepts 0, negatives, and fractions, which would decode
+ * as valid and reach `session.terminal.resize` — rejected here so both
+ * codec mirrors fail closed on the same malformed payloads.
+ */
+function isDimension(v: unknown): v is number {
+  return typeof v === "number" && Number.isSafeInteger(v) && v > 0;
+}
+
 function isStringArray(v: unknown): v is string[] {
   return Array.isArray(v) && v.every(isString);
 }
@@ -133,7 +143,7 @@ function decodeCommandPayload(kind: HostCommandFrame["kind"], payload: Uint8Arra
       return { kind: "input", bytes: payload.slice() };
     case "resize": {
       const v = parseJson(payload) as Record<string, unknown>;
-      if (typeof v !== "object" || v === null || !isNumber(v.cols) || !isNumber(v.rows)) {
+      if (typeof v !== "object" || v === null || !isDimension(v.cols) || !isDimension(v.rows)) {
         throw new MalformedFrameError("malformed resize payload");
       }
       return { kind: "resize", cols: v.cols, rows: v.rows };

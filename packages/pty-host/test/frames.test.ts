@@ -38,3 +38,26 @@ test("an oversized frame is rejected", () => {
   new DataView(buf.buffer).setUint32(0, 2 * 1024 * 1024, false); // 2 MiB > 1 MiB cap
   expect(() => decodeCommand(buf)).toThrow(MalformedFrameError);
 });
+
+test("resize dimensions must be safe integers greater than zero", () => {
+  // isNumber alone accepts 0, negatives, and fractions; the decoder must
+  // reject all of them so an invalid dimension never reaches
+  // session.terminal.resize.
+  for (const bad of [
+    { cols: 0, rows: 40 },
+    { cols: -1, rows: 40 },
+    { cols: 120, rows: 0 },
+    { cols: 120, rows: -1 },
+    { cols: 0.5, rows: 40 },
+    { cols: 120, rows: 0.5 },
+    { cols: Number.NaN, rows: 40 },
+    { cols: Number.POSITIVE_INFINITY, rows: 40 },
+  ]) {
+    const frame: HostCommandFrame = { kind: "resize", ...bad };
+    expect(() => decodeCommand(encodeCommand(frame))).toThrow(MalformedFrameError);
+  }
+  // Valid dimensions still round-trip.
+  const good: HostCommandFrame = { kind: "resize", cols: 120, rows: 40 };
+  const decoded = decodeCommand(encodeCommand(good));
+  expect(decoded?.frame).toEqual(good);
+});

@@ -564,12 +564,24 @@ export async function runSteadyState(
       process.exitCode = 1;
       await close({ announce: false, signal: true });
       return;
-    } else if (frame.kind === "input") {
-      session.terminal.write(frame.bytes);
-      emit({ kind: "ack", ofKind: "input" });
-    } else if (frame.kind === "resize") {
-      session.terminal.resize(frame.cols, frame.rows);
-      emit({ kind: "ack", ofKind: "resize" });
+    } else if (frame.kind === "input" || frame.kind === "resize") {
+      // A terminal write/resize failure must not escape the steady-state
+      // loop: an unguarded throw would propagate out of runSteadyState and
+      // out of main, skipping close() — no drained, no exited, and no
+      // containment SIGTERM, so the child process group could survive.
+      // Fail closed instead: diagnose, mark the exit code, contain the
+      // child, and complete the session shutdown exactly once.
+      try {
+        if (frame.kind === "input") session.terminal.write(frame.bytes);
+        else session.terminal.resize(frame.cols, frame.rows);
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        process.stderr.write(`pty-host: terminal ${frame.kind} failed: ${detail}; containing the child\n`);
+        process.exitCode = 1;
+        await close({ announce: false, signal: true });
+        return;
+      }
+      emit({ kind: "ack", ofKind: frame.kind });
     } else if (frame.kind === "terminate") {
       await close({ announce: true, signal: true });
       return;

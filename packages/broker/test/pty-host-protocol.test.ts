@@ -61,3 +61,26 @@ test("broker and host codecs agree on every frame kind", () => {
     expect(host.encodeFact(frame)).toEqual(broker.encodeFact(frame));
   }
 });
+
+test("broker and host codecs reject the same malformed resize dimensions", () => {
+  // Both mirrors must fail closed on identical payloads: 0, negatives,
+  // fractions, NaN, and infinities are all invalid terminal dimensions.
+  for (const bad of [
+    { cols: 0, rows: 40 },
+    { cols: -1, rows: 40 },
+    { cols: 120, rows: 0 },
+    { cols: 120, rows: -1 },
+    { cols: 0.5, rows: 40 },
+    { cols: 120, rows: 0.5 },
+    { cols: Number.NaN, rows: 40 },
+    { cols: Number.POSITIVE_INFINITY, rows: 40 },
+  ]) {
+    const frame: HostCommandFrame = { kind: "resize", ...bad };
+    expect(() => host.decodeCommand(host.encodeCommand(frame))).toThrow();
+    expect(() => broker.decodeCommand(broker.encodeCommand(frame))).toThrow();
+  }
+  // Valid dimensions still round-trip identically on both mirrors.
+  const good: HostCommandFrame = { kind: "resize", cols: 120, rows: 40 };
+  expect(host.decodeCommand(host.encodeCommand(good))?.frame).toEqual(good);
+  expect(broker.decodeCommand(broker.encodeCommand(good))?.frame).toEqual(good);
+});

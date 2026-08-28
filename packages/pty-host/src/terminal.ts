@@ -7,6 +7,19 @@
  * subprocess exit code: `exitCode === 0` is a clean EOF, `exitCode === 1` is
  * a PTY read error. A read error is not a successful closure and must not
  * be treated as one.
+ *
+ * Authoritative contract (bun-types 1.3.14, bun.d.ts:7789): "Callback invoked
+ * when the PTY stream closes (EOF or read error). Note: exitCode is a PTY
+ * lifecycle status (0=clean EOF, 1=error), NOT the subprocess exit code. Use
+ * Subprocess.exited or onExit callback for actual process exit information."
+ *
+ * Corroborating spike evidence (test/phase3a/spike/bun-terminal-spike.ts,
+ * descriptor-hygiene criterion): the same child (`/bin/cat`, which exits 0)
+ * reports `code:0` (EOF) on macOS and `code:1` (EIO on the slave read) on
+ * Linux — the reported value tracks the PTY's read representation, not the
+ * child's exit code. The child's authoritative exit code is read from
+ * `Bun.Subprocess.exitCode`/`signalCode` after reaping, never from this
+ * callback.
  */
 export class PtyReadError extends Error {
   constructor(exitCode: number, signal: string | null) {
