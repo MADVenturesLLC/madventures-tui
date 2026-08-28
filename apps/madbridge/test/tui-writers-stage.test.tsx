@@ -16,6 +16,7 @@ import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { App } from "../src/tui/App";
 import { DockStrip, countBufferedLines, buildDockLine } from "../src/tui/components/DockStrip";
+import { displayWidth } from "../src/tui/components/agent-identity";
 import { PaneTabs } from "../src/tui/components/PaneTabs";
 import type { BrokerSnapshot, FocusTarget, ApprovalRequestEvent } from "../src/tui/types";
 import { parseSurfaceId, type TaskEnvelopeV1, type ExecutionIdentity, type RepositoryFingerprint } from "@madventures/protocol";
@@ -679,11 +680,57 @@ describe("Finding 2: DockStrip is one physical row at widths >= 80", () => {
     }
   });
 
-  test("buildDockLine never exceeds the provided width", () => {
+  test("buildDockLine never exceeds the provided width (display columns, not UTF-16 units)", () => {
     for (const w of [80, 81, 100, 120]) {
       const line = buildDockLine("antigravity", makeSnapshot({ activeWriter: "exec-claude-code", fencingToken: 3 }), "alpha\nbeta\n", w);
-      expect(line.length).toBeLessThanOrEqual(w);
+      expect(displayWidth(line)).toBeLessThanOrEqual(w);
     }
+  });
+
+  test("buildDockLine fits one 80-column row when the model is CJK (width-2 per char)", () => {
+    // A CJK model name occupies 2 display columns per character; the old
+    // `.length` budgeting would let this overflow the 80-column single-row
+    // guarantee. The row must never exceed 80 display columns, the identity
+    // must survive, and no grapheme cluster may be split.
+    const cjkModel = "glm-4.6-中文深度思考模型-超长名称-实验版";
+    const line = buildDockLine(
+      "antigravity",
+      makeSnapshot({
+        executions: [
+          { ...makeExecution("claude-code"), model: "claude-sonnet-4" },
+          { ...makeExecution("antigravity"), model: cjkModel },
+        ],
+      }),
+      "x\n",
+      80,
+    );
+    expect(displayWidth(line)).toBeLessThanOrEqual(80);
+    expect(line).toContain("ANTIGRAVITY");
+    // Truncation must be grapheme-safe: the CJK model fragment is either
+    // absent (dropped) or a clean prefix — never a split cluster.
+    const modelIdx = line.indexOf(cjkModel);
+    if (modelIdx !== -1) {
+      expect(line.slice(modelIdx)).not.toMatch(/[\u4e00-\u9fff]$/); // no dangling half
+    }
+  });
+
+  test("buildDockLine fits one 80-column row when the model carries emoji (width-2 per glyph)", () => {
+    // The role field is a controlled union, but model names are free strings —
+    // a provider model id can legitimately contain emoji/CJK. The row must
+    // stay within 80 display columns.
+    const line = buildDockLine(
+      "claude-code",
+      makeSnapshot({
+        executions: [
+          { ...makeExecution("claude-code"), model: "claude-🤖-sonnet-4-5" },
+          { ...makeExecution("antigravity"), model: "gemini-2.5-pro" },
+        ],
+      }),
+      "x\n",
+      80,
+    );
+    expect(displayWidth(line)).toBeLessThanOrEqual(80);
+    expect(line).toContain("CLAUDE CODE");
   });
 
   test("buildDockLine preserves identity and never fabricates a model when truncating", () => {
