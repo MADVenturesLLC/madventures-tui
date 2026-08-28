@@ -60,7 +60,7 @@ jobs:
         run: echo "head_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Setup Bun
-        uses: ./.github/actions/setup-qualified-bun
+        uses: MADVenturesLLC/madventures-tui/.github/actions/setup-qualified-bun@d057994a6663a7b56f5603f109b33d79bef333ef
         with:
           custody-token: ${{ secrets.ARTIFACTS_READ_TOKEN }}
 
