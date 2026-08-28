@@ -27,7 +27,8 @@
       "@madventures/artifact-store": ["./packages/artifact-store/src/index.ts"],
       "@madventures/broker": ["./packages/broker/src/index.ts"],
       "@madventures/adapter-claude-code": ["./packages/adapter-claude-code/src/index.ts"],
-      "@madventures/adapter-antigravity": ["./packages/adapter-antigravity/src/index.ts"]
+      "@madventures/adapter-antigravity": ["./packages/adapter-antigravity/src/index.ts"],
+      "@madventures/pty-host": ["./packages/pty-host/src/index.ts"]
     }
   }
 }
