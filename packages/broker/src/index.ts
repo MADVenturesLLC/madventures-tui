@@ -22,3 +22,5 @@ export type {
 } from "./reconciliation";
 export { transitionSession, InvalidTransitionError } from "./session-machine";
 export type { SessionState, SessionEvent } from "./session-machine";
+export { spawnPtyHost } from "./pty-host-supervisor";
+export type { PtyHostHandle, HostLaunchDescriptor } from "./pty-host-supervisor";

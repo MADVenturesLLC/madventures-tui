@@ -12,6 +12,7 @@ import { decodeCommand, encodeFact, MalformedFrameError } from "./frames";
 import type { HostCommandFrame, HostFactFrame } from "./frames";
 import { PtyReadError, spawnGoverned } from "./terminal";
 import type { GovernedSession } from "./terminal";
+import { ArtifactHashMismatch, verifyAndLaunch } from "./launch";
 
 function failNoControlChannel(reason: string): never {
   process.stderr.write(`no_control_channel: ${reason}\n`);
@@ -614,13 +615,32 @@ async function main(): Promise<void> {
   // may produce data the instant the child is spawned), and output must not
   // continue after PTY closure is confirmed. The pipeline gates both ends.
   const outputPipeline = makeOutputPipeline();
-  const session = spawnGoverned(launch.path, launch.argv, launch.env, outputPipeline.onOutput);
+
+  // Gap-free launch (Task 42): the artifact is re-hashed immediately before
+  // exec, with no storage, broker, or lifeline step between the final
+  // verification and the child's exec. A mismatch fails closed before any
+  // child exists.
+  let launchFacts: { hostPid: number; childPid: number; pgid: number; session: GovernedSession };
+  try {
+    launchFacts = verifyAndLaunch(launch, {
+      spawn: (path, argv, env) => spawnGoverned(path, argv, env, outputPipeline.onOutput),
+    });
+  } catch (err) {
+    if (err instanceof ArtifactHashMismatch) {
+      process.stderr.write(`pty-host: ${err.message}; refusing to launch\n`);
+      process.exitCode = 1;
+      await frameReader.close();
+      return;
+    }
+    throw err;
+  }
+  const session = launchFacts.session;
 
   emit({
     kind: "launched",
-    hostPid: process.pid,
-    childPid: session.child.pid,
-    pgid: session.pgid,
+    hostPid: launchFacts.hostPid,
+    childPid: launchFacts.childPid,
+    pgid: launchFacts.pgid,
     executionId: launch.executionId,
   });
   emit({ kind: "ready" });

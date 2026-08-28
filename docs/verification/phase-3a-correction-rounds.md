@@ -109,3 +109,23 @@ authority-boundary ruling under plan §10 item 17 and does not count as a correc
 - **Current Task 5 count:** 2 of 2
 - **No reassignment trigger yet; plan requires reassignment only at more than two rounds**
 - **Task 6 remains unauthorized.**
+
+# Phase 3A M19 Task 42 — Bounded Scope Clarification Record
+
+**Date:** 2026-08-28
+**Founder ruling:** Michael Daley (Founder implementation authorization for M19 Tasks 42–44, bound to M19 section SHA-256 `411500a3fad1b8107c52f7c8591381d7d825ee9379194c7edc14484d7d39f61b`; pre-implementation Tier-2 verdict `PASS-WITH-ADVISORIES`, artifact SHA-256 `1b22f3fb1a4927b2d9a1ba65f6b305ca2451dba5e713254f260d6cc070deba5a`; approved implementation base `7001409894c3757b2c77b307c2758ca15b3a064d`).
+**Implementation branch:** `build/m19-tasks42-44-r1` @ `7001409894c3757b2c77b307c2758ca15b3a064d`
+
+## Conflict recorded
+
+Task 42's plan file list (plan §5, lines 2070–2077) omits `packages/pty-host/test/main-guard.test.ts`, but Task 42 Step 3 wires `verifyAndLaunch` hash verification into `packages/pty-host/src/main.ts` (in the list), and Step 5 requires `bun test packages/pty-host packages/broker` green. The M18 `main-guard.test.ts` launches real children (`/bin/cat`, `/bin/sh`) with fake `sha256` values (`"a".repeat(64)` … `"f".repeat(64)`, `"0".repeat(64)` at lines 260, 315, 353, 365, 394, 428, 787). With verification live, those fixtures fail with `ArtifactHashMismatch` before `ready`, breaking the lifecycle tests. Plan rule 24 forbids skipping or disabling required tests.
+
+## Founder ruling (verbatim direction)
+
+> Stop Task 42 before modifying the tests. The plan's Task 42 production integration and full-suite-green requirement conflict with the omission of main-guard.test.ts from the file list. Treat this as a bounded scope clarification: add packages/pty-host/test/main-guard.test.ts to Task 42's test scope. Keep verifyAndLaunch wired into main.ts; do not defer integration. Update successful launch fixtures to use a real executable and computed matching SHA-256. Preserve negative mismatch tests and assert fail-closed behavior with no child created. Do not skip tests or weaken production hash verification. Record the clarification before editing, then rerun Task 42 RED→GREEN, the full pty-host suite, broker suite, and typecheck. Stop at the Task 42 checkpoint.
+
+## Scope effect
+
+- **Added to Task 42 test scope:** `packages/pty-host/test/main-guard.test.ts` (modify — real executable + computed SHA-256 for successful-launch fixtures; negative mismatch tests preserved).
+- **Unchanged:** Task 42 production files (`launch.ts`, `main.ts`, `pty-host-supervisor.ts`, broker `index.ts`), new test files (`launch.test.ts`, `pty-host-supervisor.test.ts`), Task 43/44 scope, adapter `launch()` deferral to M20, and all non-authorizations in the Founder's M19 authorization.
+- **No test is skipped, disabled, or weakened.** Production hash verification is not weakened.

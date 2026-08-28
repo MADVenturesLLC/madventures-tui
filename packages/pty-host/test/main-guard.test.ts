@@ -12,7 +12,7 @@ import { expect, test } from "bun:test";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
-import { mkdtempSync, writeFileSync, rmSync, existsSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync, existsSync, readFileSync } from "node:fs";
 import { encodeCommand, decodeFact } from "../src/frames";
 import type { HostCommandFrame, HostFactFrame } from "../src/frames";
 import {
@@ -33,6 +33,17 @@ import type { GovernedSession } from "../src/terminal";
 const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(MODULE_DIR, "..", "..", "..");
 const MAIN_ENTRY = "packages/pty-host/src/main.ts";
+
+/**
+ * Computes the real SHA-256 of an executable. Task 42 wires adjacent-to-`exec`
+ * hash verification into the host's launch path, so every successful-launch
+ * fixture must carry the actual hash of the binary it launches (Founder
+ * scope clarification 2026-08-28). Negative mismatch tests deliberately use
+ * a wrong hash and assert fail-closed behavior with no child created.
+ */
+function sha256File(path: string): string {
+  return new Bun.CryptoHasher("sha256").update(readFileSync(path)).digest("hex");
+}
 
 /**
  * A shell script that, if actually executed, records its own PID to a
@@ -251,13 +262,41 @@ test("the first frame must be a launch frame", async () => {
   }
 });
 
+test("an artifact hash mismatch fails closed with no child created", async () => {
+  // Task 42: the host re-hashes the absolute path directly before exec. A
+  // launch frame carrying a wrong hash must be refused before any child
+  // exists — the sentinel executable is never run, and no fact frame is
+  // written (no `launched`, no `ready`).
+  const sentinel = makeSentinel();
+  try {
+    const wrongHash = "0".repeat(64);
+    const result = await runHost([], {
+      stdinBytes: encodeCommand({
+        kind: "launch",
+        path: sentinel.scriptPath,
+        sha256: wrongHash,
+        argv: [],
+        env: {},
+        executionId: "exec-mismatch",
+      }),
+    });
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain("refusing to launch");
+    expect(result.stdout.byteLength).toBe(0);
+    // Deterministic proof: the sentinel executable was never run.
+    expect(existsSync(sentinel.markerPath)).toBe(false);
+  } finally {
+    sentinel.cleanup();
+  }
+});
+
 test("a valid session lifecycle emits every fact in order exactly once, with no truncation", async () => {
   const host = spawnLiveHost();
   host.write(
     encodeCommand({
       kind: "launch",
       path: "/bin/cat",
-      sha256: "a".repeat(64),
+      sha256: sha256File("/bin/cat"),
       argv: [],
       env: {},
       executionId: "exec-lifecycle",
@@ -312,7 +351,7 @@ test("natural child exit without a terminate command publishes an exact marker, 
     encodeCommand({
       kind: "launch",
       path: "/bin/sh",
-      sha256: "b".repeat(64),
+      sha256: sha256File("/bin/sh"),
       argv: ["-c", `echo ${marker}; exit 7`],
       env: {},
       executionId: "exec-natural",
@@ -350,7 +389,7 @@ test("a second launch frame is rejected, not ignored, and never creates another 
     encodeCommand({
       kind: "launch",
       path: "/bin/cat",
-      sha256: "c".repeat(64),
+      sha256: sha256File("/bin/cat"),
       argv: [],
       env: {},
       executionId: "exec-first",
@@ -362,7 +401,7 @@ test("a second launch frame is rejected, not ignored, and never creates another 
     encodeCommand({
       kind: "launch",
       path: "/bin/sh",
-      sha256: "d".repeat(64),
+      sha256: sha256File("/bin/sh"),
       argv: [],
       env: {},
       executionId: "exec-second",
@@ -391,7 +430,7 @@ test("a malformed steady-state frame is diagnosed, fails non-zero, and closes th
     encodeCommand({
       kind: "launch",
       path: "/bin/cat",
-      sha256: "e".repeat(64),
+      sha256: sha256File("/bin/cat"),
       argv: [],
       env: {},
       executionId: "exec-malformed",
@@ -425,7 +464,7 @@ test("early child output cannot precede launched and ready, and is required, not
     encodeCommand({
       kind: "launch",
       path: "/bin/sh",
-      sha256: "f".repeat(64),
+      sha256: sha256File("/bin/sh"),
       argv: ["-c", `echo ${marker}`],
       env: {},
       executionId: "exec-early",
@@ -784,7 +823,7 @@ test("drain correctness: a large, spaced-out shutdown tail fully arrives before 
     encodeCommand({
       kind: "launch",
       path: "/bin/sh",
-      sha256: "0".repeat(64),
+      sha256: sha256File("/bin/sh"),
       argv: ["-c", `trap "${trapBody}" TERM; echo ${readyMarker}; while true; do sleep 1; done`],
       env: {},
       executionId: "exec-drain",
