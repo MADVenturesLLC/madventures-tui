@@ -13,6 +13,7 @@ import type { HostCommandFrame, HostFactFrame } from "./frames";
 import { PtyReadError, spawnGoverned } from "./terminal";
 import type { GovernedSession } from "./terminal";
 import { ArtifactHashMismatch, verifyAndLaunch } from "./launch";
+import { onLifelineEof, terminateChildGroup } from "./signals";
 
 function failNoControlChannel(reason: string): never {
   process.stderr.write(`no_control_channel: ${reason}\n`);
@@ -331,12 +332,39 @@ export function makeSessionCloser(
     if (finished) return;
     finished = true;
     const ptyPath: SessionClosePtyPath = opts.ptyPath ?? "await_pty";
-    if (opts.announce) {
-      emit({ kind: "termination_started" });
-      emit({ kind: "ack", ofKind: "terminate" });
-    }
     if (opts.signal) {
-      signalProcessGroup(session.pgid);
+      // Task 43 §3.4 ladder (Founder scope ruling 2026-08-28): SIGTERM to
+      // the negative PGID, §9.8 responsive-host grace, then SIGKILL to any
+      // survivor — routed through the injected signalProcessGroup seam so
+      // deterministic tests and fail-closed EPERM semantics hold.
+      // `termination_started` publishes ONLY when this closer is handling
+      // the explicit terminate command (`announce: true`): containment
+      // paths (malformed frame, PTY loss, write failure) signal the group
+      // identically but never publish a commanded-termination fact. Emit
+      // order on the terminate path is termination_started THEN ack (the
+      // §9.8 500 ms clock starts at the command).
+      // The timing evidence flows through the typed return (observedMs in
+      // the ladder); the seam interactions are asserted by the synthetic
+      // tests, and no unsolicited stderr line is emitted.
+      await terminateChildGroup(session.pgid, emit, {
+        emitStarted: opts.announce,
+        ...(signalProcessGroup
+          ? {
+              seams: {
+                signalProcessGroup: (pgid: number, signal: "SIGTERM" | "SIGKILL") => {
+                  if (signal === "SIGTERM") {
+                    signalProcessGroup(pgid);
+                  } else {
+                    process.kill(-pgid, "SIGKILL");
+                  }
+                },
+              },
+            }
+          : {}),
+      });
+      if (opts.announce) {
+        emit({ kind: "ack", ofKind: "terminate" });
+      }
     }
     await session.child.exited;
 
@@ -549,9 +577,31 @@ export async function runSteadyState(
       return;
     }
     if (r === null) {
-      // Command stream ended (stdin EOF): the same lifeline loss §3.2/§3.4
-      // document. Close the session; no grace or escalation ladder.
-      await close({ announce: false, signal: true });
+      // Command stream ended (stdin EOF): the §3.2/§3.4 lifeline loss and
+      // the SECOND per-child kill switch. EOF requires the host to
+      // terminate its child process group — via onLifelineEof, which
+      // signals the negative PGID immediately and completes the bounded
+      // ladder (grace, then SIGKILL) without publishing
+      // `termination_started`: no terminate command was ever sent.
+      onLifelineEof(session.pgid, emit);
+      // Wait for the group (and therefore the child) to actually die before
+      // closing the session, so the exited fact reflects a real reap, not a
+      // forced PTY teardown racing an unfinished termination. The ptyPath
+      // depends on whether the PTY already settled on its own during the
+      // ladder (the EOF rung's SIGKILL closes the slave): if ptyClosed has
+      // already resolved, "pty_already_settled_success"; otherwise the
+      // default "await_pty" join.
+      await session.child.exited;
+      let ptySettled = false;
+      try {
+        await Promise.race([session.ptyClosed, Promise.resolve()]).then(
+          () => { ptySettled = true; },
+          () => { ptySettled = true; },
+        );
+      } catch {
+        ptySettled = true;
+      }
+      await close({ announce: false, signal: false, ptyPath: ptySettled ? "pty_already_settled_success" : "await_pty" });
       return;
     }
 
