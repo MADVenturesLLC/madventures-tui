@@ -61,18 +61,21 @@ runs:
         set -euo pipefail
         # The qualified zip extracts to a platform subdirectory
         # (qrt/bun-linux-x64/bun, qrt/bun-darwin-aarch64/bun).
-        BUN_DIR="$(dirname "$(find "$GITHUB_WORKSPACE/custody/qrt" -type f -name bun -perm -u+x | head -1)")"
+        BUN_BIN="$(find "$GITHUB_WORKSPACE/custody/qrt" -type f -name bun | head -1)"
+        test -n "$BUN_BIN"
+        chmod +x "$BUN_BIN"
+        BUN_DIR="$(dirname "$BUN_BIN")"
         # The qualified zip ships only `bun`; `bunx` is required by
         # `bun run verify` and `bunx tsc --noEmit` (Commission 03 REV 02
         # Gate F fix, proven on ubuntu-24.04 x64).
         ln -s bun "$BUN_DIR/bunx"
         echo "$BUN_DIR" >> "$GITHUB_PATH"
-        command -v bun
-        command -v bunx
-        bun --version
-        REV="$(bun -e 'process.stdout.write(Bun.revision)')"
+        # GITHUB_PATH applies to SUBSEQUENT steps; use absolute paths here.
+        "$BUN_DIR/bun" --version
+        REV="$("$BUN_DIR/bun" -e 'process.stdout.write(Bun.revision)')"
         echo "Bun.revision=$REV"
         test "$REV" = "69cb78c9097cebd3bdb832d9fff8b7d23abce09e"
+        echo "bun=$BUN_DIR/bun" >> "$GITHUB_OUTPUT"
       shell: bash
 
     - name: Expiry guard (REV 06 state machine)
