@@ -96,7 +96,11 @@ test("lifeline is established before child creation (real pipe)", async () => {
     // CodeRabbit CR-6 (PR #35 round): clean up the governed child's group
     // via the supervisor's own containment primitive — killing only the
     // host pid would orphan the child's process group.
-    process.kill(handle.hostPid, "SIGKILL");
+    //
+    // CodeRabbit CR-10 (PR #35 round-8): the host may have already exited
+    // before this finally runs (e.g. natural EOF containment). A bare kill
+    // throws ESRCH and replaces the real test result; guard it.
+    try { process.kill(handle.hostPid, "SIGKILL"); } catch { /* host may have exited */ }
     handle.killPgid();
   }
 }, 15000); // explicit timeout: EOF kill-switch path runs the 2 s grace before termination
@@ -118,7 +122,10 @@ test("host exit interrupts the whole session", async () => {
   expect(first.done).toBe(false);
   expect(first.value).toMatchObject({ kind: "launched" });
 
-  process.kill(handle.hostPid, "SIGKILL");
+  // CodeRabbit CR-10 (PR #35 round-8): the host may have already exited
+  // before this finally block runs (e.g. natural EOF containment). A
+  // bare kill throws ESRCH and replaces the test result; guard it.
+  try { process.kill(handle.hostPid, "SIGKILL"); } catch { /* host may have exited */ }
   // Drain the fact stream: buffered facts (e.g. `ready`) may still be in
   // the pipe, but the stream must terminate — the observable the
   // supervisor uses to treat host exit as governed-child death.
@@ -176,7 +183,10 @@ test("host environment is exactly the allowlisted environment", async () => {
     delete process.env[ambientPoison];
     // CodeRabbit CR-6 (PR #35 round): use the supervisor's containment
     // primitive so the governed child's group does not leak.
-    process.kill(handle.hostPid, "SIGKILL");
+    //
+    // CodeRabbit CR-10 (PR #35 round-8): guard the kill — the host may have
+    // already exited before the finally block runs.
+    try { process.kill(handle.hostPid, "SIGKILL"); } catch { /* host may have exited */ }
     handle.killPgid();
   }
 });
@@ -212,7 +222,9 @@ test("a late facts() subscriber replays history and receives the launched fact",
     expect(late.value).toMatchObject({ kind: "launched" });
     expect(typeof (late.value as { pgid: number }).pgid).toBe("number");
   } finally {
-    process.kill(handle.hostPid, "SIGKILL");
+    // CodeRabbit CR-10 (PR #35 round-8): the host may have already exited;
+    // guard the kill.
+    try { process.kill(handle.hostPid, "SIGKILL"); } catch { /* host may have exited */ }
     handle.killPgid();
   }
 }, 15000);
@@ -234,7 +246,10 @@ test("a facts() subscriber created after pump settlement terminates immediately"
     const preIterator = handle.facts()[Symbol.asyncIterator]();
     await preIterator.next(); // launched
     // SIGKILL the host: the pump sees stdout close and settles.
-    process.kill(handle.hostPid, "SIGKILL");
+    // CodeRabbit CR-10 (PR #35 round-8): guard the kill — if the host
+    // already exited, a bare ESRCH throw would land in `lateErrored` and
+    // masquerade as the pump's own stream error.
+    try { process.kill(handle.hostPid, "SIGKILL"); } catch { /* host may have exited */ }
     // Drain the first subscription to settlement (the death-watch path).
     for (;;) {
       const next = (await Promise.race([
@@ -268,6 +283,20 @@ test("a facts() subscriber created after pump settlement terminates immediately"
       }
     }
   } catch (err) {
+    // T11 (round-8): the late-subscriber pump path legitimately surfaces
+    // stream errors after a mid-stream host SIGKILL — those are recorded
+    // and judged by the final assertion below. Everything else (a
+    // self-thrown hang detector, or any unexpected real failure) must NOT
+    // be swallowed: re-throw so the test fails with its true cause.
+    const msg = err instanceof Error ? err.message : String(err);
+    const recognizablePumpError =
+      err instanceof Error &&
+      (msg.includes("kill") ||
+        msg.includes("stream") ||
+        msg.includes("EPIPE") ||
+        msg.includes("terminated") ||
+        msg.includes("End of file"));
+    if (!recognizablePumpError) throw err;
     lateErrored = err;
   } finally {
     handle.killPgid();
@@ -277,6 +306,54 @@ test("a facts() subscriber created after pump settlement terminates immediately"
   // error (host SIGKILLed mid-stream), never a timeout-hang.
   expect(lateErrored === null || (lateErrored as Error).message.includes("kill")).toBe(true);
 }, 15000);
+
+test("history is bounded by the cap regardless of how many facts the pump emits", async () => {
+  // CodeRabbit CR-7 (PR #35 round-8) regression: the prior pin design
+  // reset `start` to the pinned index whenever a trim would evict it, so
+  // `history` grew WITHOUT BOUND whenever the first fact was `launched`
+  // (which is every session). Drive 1024 facts through the pump (one ack
+  // per resize command — deterministic, no child-output coalescing) and
+  // assert a late subscriber replays only the bounded tail plus the
+  // pinned `launched` fact, never the full stream.
+  const handle = spawnPtyHost({
+    path: "/bin/cat",
+    sha256: sha256File("/bin/cat"),
+    argv: [],
+    env: {},
+    executionId: "exec-bounded-tail",
+  });
+  try {
+    for (let i = 0; i < 1024; i++) {
+      handle.send({ kind: "resize", cols: 80, rows: 24 });
+    }
+    await Bun.sleep(750); // let the pump record the ack storm
+    const iterator = handle.facts()[Symbol.asyncIterator]();
+    let count = 0;
+    let sawLaunched = false;
+    const deadline = performance.now() + 4000;
+    for (;;) {
+      const next = await Promise.race([
+        iterator.next().then((r) => ({ tag: "value" as const, r })),
+        new Promise<{ tag: "timeout" }>((res) => setTimeout(() => res({ tag: "timeout" }), 500)),
+      ]);
+      if (next.tag === "timeout") break;
+      if (next.r.done) break;
+      count += 1;
+      if (next.r.value.kind === "launched") sawLaunched = true;
+      if (performance.now() > deadline) break;
+    }
+    // The pin survived the trims (replayed first), and the replay is the
+    // bounded tail — with the CR-7 bug this would be > 1024 facts.
+    expect(sawLaunched).toBe(true);
+    expect(count).toBeGreaterThan(0);
+    expect(count).toBeLessThanOrEqual(400);
+  } finally {
+    // CodeRabbit CR-10 (PR #35 round-8): the host may have already exited;
+    // guard the kill.
+    try { process.kill(handle.hostPid, "SIGKILL"); } catch { /* host may have exited */ }
+    handle.killPgid();
+  }
+}, 20000);
 
 test("the launched history fact feeds killPgid even when facts() is never consumed", async () => {
   // Tier-2 FAIL round-4, finding 2 (killPgid half): reportedPgid must be
@@ -367,7 +444,10 @@ test("pump settlement during backlog replay reaches the subscriber without hangi
     expect(terminated).toBe(true);
     expect(collected).not.toContain("termination_started"); // EOF, not terminate-cmd
   } finally {
-    process.kill(handle.hostPid, "SIGKILL");
+    // CodeRabbit CR-10 (PR #35 round-8): the host may have already exited
+    // before this finally runs; a bare kill throws ESRCH and replaces the
+    // real test result.
+    try { process.kill(handle.hostPid, "SIGKILL"); } catch { /* host may have exited */ }
     handle.killPgid();
   }
 }, 15000);
@@ -416,7 +496,9 @@ test("facts enqueued during backlog replay are not lost", async () => {
     }
     expect(acks.length).toBe(10); // none of the 10 acks lost during replay
   } finally {
-    process.kill(handle.hostPid, "SIGKILL");
+    // CodeRabbit CR-10 (PR #35 round-8): the host may have already exited;
+    // guard the kill.
+    try { process.kill(handle.hostPid, "SIGKILL"); } catch { /* host may have exited */ }
     handle.killPgid();
   }
 }, 15000);
@@ -460,7 +542,9 @@ test("the launched fact survives history pressure and is replayed to late subscr
     expect(sawLaunched).toBe(true);
     expect(typeof sawPgid).toBe("number");
   } finally {
-    process.kill(handle.hostPid, "SIGKILL");
+    // CodeRabbit CR-10 (PR #35 round-8): the host may have already exited;
+    // guard the kill.
+    try { process.kill(handle.hostPid, "SIGKILL"); } catch { /* host may have exited */ }
     handle.killPgid();
   }
 }, 15000);

@@ -326,12 +326,23 @@ export function makeSessionCloser(
   readonly announce: boolean;
   readonly signal: boolean;
   readonly ptyPath?: SessionClosePtyPath;
+  /**
+   * Whether to `await session.child.exited` before the join phase. The
+   * default is `true` (existing behavior). The fail-closed EOF timeout
+   * path passes `false` because the §9.8 outer bound has already elapsed
+   * and the reaper may never resolve (exotic zombie / kernel reaper
+   * stall); the closer still completes the join by other observables
+   * (PTY settlement + markOutputClosed + frameReader.close + drained
+   * + exited from already-known `child.exitCode`/`signalCode`).
+   */
+  readonly awaitChildExit?: boolean;
 }) => Promise<void> {
   let finished = false;
   return async (opts) => {
     if (finished) return;
     finished = true;
     const ptyPath: SessionClosePtyPath = opts.ptyPath ?? "await_pty";
+    const awaitChildExit = opts.awaitChildExit ?? true;
     if (opts.signal) {
       // Task 43 §3.4 ladder (Founder scope ruling 2026-08-28): SIGTERM to
       // the negative PGID, §9.8 responsive-host grace, then SIGKILL to any
@@ -386,7 +397,12 @@ export function makeSessionCloser(
         emit({ kind: "ack", ofKind: "terminate" });
       }
     }
-    await session.child.exited;
+    // Bounded: skip the reaper wait on the EOF fail-closed timeout path
+    // (the §9.8 outer bound has already elapsed and the reaper may never
+    // resolve). All other paths still await reaping.
+    if (awaitChildExit) {
+      await session.child.exited;
+    }
 
     if (ptyPath === "pty_already_settled_failure") {
       // ptyClosed already rejected before this call was reached (see
@@ -660,7 +676,12 @@ export async function runSteadyState(
         const detail = err instanceof Error ? err.message : String(err);
         process.stderr.write(`pty-host: lifeline-EOF containment incomplete: ${detail}; failing closed\n`);
         process.exitCode = 1;
-        await close({ announce: false, signal: false, ptyPath: "pty_already_settled_failure" });
+        await close({
+          announce: false,
+          signal: false,
+          ptyPath: "pty_already_settled_failure",
+          awaitChildExit: false,
+        });
         return;
       }
       // CodeRabbit CR-3b (PR #35 round): the previous

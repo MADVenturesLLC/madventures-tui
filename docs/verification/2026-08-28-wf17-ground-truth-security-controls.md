@@ -1,4 +1,4 @@
-# WF-17 Ground-Truth Check — Security Controls (2026-08-28)
+# WF-17 Ground-Truth Check — Security Controls (recorded 2026-08-28; Founder check run 2026-08-29T02:15:58Z)
 
 **Context:** Pre-authorization ground-truth check for `HO-20260822-01` (WF-17
 run against `madventures-tui`), ahead of the Founder's WF-17 authorization.
@@ -11,7 +11,7 @@ a personal terminal session. Both results are preserved below, unedited.
 Run 2026-08-29T02:15:58Z, environment: personal terminal (non-governed).
 Command block and output as captured by the Founder:
 
-```
+```sh
 {
   echo "# WF-17 Authorization Pre-Check Evidence"
   echo ""
@@ -42,7 +42,7 @@ Command block and output as captured by the Founder:
 
 Captured output (`security-analysis-precheck.md`):
 
-```
+````text
 # WF-17 Authorization Pre-Check Evidence
 
 Date: 2026-08-29T02:15:58Z
@@ -72,7 +72,7 @@ main head SHA:
 ```
 {"code_security":{"status":"disabled"},"dependabot_security_updates":{"status":"disabled"},"secret_scanning":{"status":"disabled"},"secret_scanning_non_provider_patterns":{"status":"disabled"},"secret_scanning_push_protection":{"status":"disabled"},"secret_scanning_validity_checks":{"status":"disabled"}}
 ```
-```
+````
 
 **Findings, this run:**
 
@@ -97,7 +97,7 @@ The same underlying command, run under this session's active credential
 (`GH_TOKEN`, a fine-grained PAT), before the Founder's personal-terminal
 check existed:
 
-```
+```sh
 $ gh api repos/MADVenturesLLC/madventures-tui --jq '{private, visibility, security_and_analysis}'
 {"private":true,"security_and_analysis":null,"visibility":"private"}
 

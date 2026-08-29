@@ -822,16 +822,27 @@ test("drain correctness: a large, spaced-out shutdown tail fully arrives before 
   // runner). The spacing now lives INSIDE one shell process (a real
   // per-line delay without a process spawn per line), preserving every
   // line, the real-delay property, and all assertions below unchanged.
-  // The trap handler also defers behind the foreground `sleep 1` in the
-  // loop, which under the ladder's SIGTERM gives the handler a bounded,
-  // spec-compliant window to stream the tail before the grace elapses.
+  //
+  // Round-8 OPEN-1 hardening: the round-6 OPEN-1 fix used `sleep 0.015`
+  // per line × 50 lines = ~750 ms ideal runtime. On a heavily loaded
+  // macOS CI runner each `echo` + `sleep 0.015` round-trip can take
+  // ~50 ms (echo) + 0 ms (sleep was the budget) → 50 × 50 ms = 2.5 s,
+  // which races the §9.8 2 s SIGTERM grace and produces the observed
+  // intermittent `TAIL_LINE_21` truncation (only ~21 lines arrive before
+  // the trap is interrupted by the shell's own "Terminated: 15"
+  // banner). Round-8 sets per-line sleep to 3 ms (`sleep 0.003`) so the
+  // ideal runtime is 150 ms and even at 10× CI slowdown (1500 ms total)
+  // the tail finishes with a 500 ms margin inside the grace. The
+  // foreground `sleep 1` is also reduced to `sleep 0.3` so the trap
+  // entry is prompt. The drain predicate (every line arrived before
+  // `drained`/`exited`) remains the assertion under test.
   const readyMarker = "DRAIN_TRAP_READY_2c14";
   const tailLineCount = 50;
   const tailFinalMarker = "DRAIN_TAIL_FINAL_MARKER_8e05";
   const trapBody =
     `for i in 0 1 2 3 4 5 6 7 8 9 ` +
     Array.from({ length: 40 }, (_, i) => `${10 + i}`).join(" ") +
-    `; do echo "TAIL_LINE_$i"; sleep 0.015; done; echo ${tailFinalMarker}; exit 0`
+    `; do echo "TAIL_LINE_$i"; sleep 0.003; done; echo ${tailFinalMarker}; exit 0`
       .replace(/\$i/g, "\\$i");
   const host = spawnLiveHost();
   host.write(
@@ -839,7 +850,7 @@ test("drain correctness: a large, spaced-out shutdown tail fully arrives before 
       kind: "launch",
       path: "/bin/sh",
       sha256: sha256File("/bin/sh"),
-      argv: ["-c", `trap "${trapBody}" TERM; echo ${readyMarker}; while true; do sleep 1; done`],
+      argv: ["-c", `trap "${trapBody}" TERM; echo ${readyMarker}; while true; do sleep 0.3; done`],
       env: {},
       executionId: "exec-drain",
     }),

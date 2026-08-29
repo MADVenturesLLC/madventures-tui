@@ -238,10 +238,19 @@ export function spawnPtyHost(descriptor: HostLaunchDescriptor): PtyHostHandle {
   // arriving during backlog replay are delivered into the live queue (no
   // loss), and pump settlement reaches the live queue via the normal
   // finally broadcast (no hang). History replay skips facts already handed
-  // to the live queue. The first `launched` fact is PINNED — exempt from
-  // history-cap eviction — because late replay of `launched` is required
-  // for the reportedPgid/killPgid() correctness contract.
+  // to the live queue. The first `launched` fact is replayed to late
+  // subscribers even if the bounded `history` has been trimmed — the pin
+  // lives outside `history` (see `pinnedLaunchedFact` and the backlog
+  // construction below). Late replay of `launched` is required for the
+  // reportedPgid/killPgid() correctness contract.
+  //
+  // CodeRabbit CR-7 (PR #35 round-8): the prior pin design stored the
+  // first `launched` fact inside `history` and reset `start` to 0 when the
+  // trim would have evicted it — `history.slice(0)` returned the full
+  // contents and `history` grew without bound. The fixed design stores
+  // the pinned fact in a SEPARATE variable that is never trimmed.
   let reportedPgid: number | null = null;
+  let pinnedLaunchedFact: HostFactFrame | null = null;
   const HISTORY_CAP = 256; // bounded: launch/ready/ack/live output facts for one child session
   let history: HostFactFrame[] = [];
   const subscribers = new Set<{
@@ -253,20 +262,16 @@ export function spawnPtyHost(descriptor: HostLaunchDescriptor): PtyHostHandle {
   let pumpSettled = false;
 
   const enqueue = (frame: HostFactFrame): void => {
-    if (frame.kind === "launched") reportedPgid = frame.pgid;
-    // Bounded history with a `launched` pin: the first launched fact is
-    // exempt from eviction (Founder correction 4) — late replay of it is
-    // required for the reportedPgid/killPgid correctness contract.
+    if (frame.kind === "launched") {
+      reportedPgid = frame.pgid;
+      if (pinnedLaunchedFact === null) pinnedLaunchedFact = frame;
+    }
     history.push(frame);
     if (history.length > HISTORY_CAP) {
-      const pinnedLaunched =
-        reportedPgid !== null ? history.findIndex((f) => f.kind === "launched") : -1;
-      // Trim the oldest half; re-pin `launched` if the trim would evict it.
-      let start = history.length - Math.floor(HISTORY_CAP / 2);
-      if (pinnedLaunched >= 0 && pinnedLaunched < start) {
-        start = pinnedLaunched; // keep the pinned fact (and everything after)
-      }
-      history = history.slice(start);
+      // Trim the oldest half. The pinned `launched` fact is replayed
+      // separately (see backlog construction below), so eviction here
+      // cannot lose it.
+      history = history.slice(history.length - Math.floor(HISTORY_CAP / 2));
     }
     for (const q of subscribers) {
       q.items.push(frame);
@@ -326,9 +331,16 @@ export function spawnPtyHost(descriptor: HostLaunchDescriptor): PtyHostHandle {
     };
     subscribers.add(queue);
 
-    // Backlog: the history as of synchronous attach. Facts enqueued after
-    // this snapshot arrive via the live queue (enqueue pushes to it).
-    const backlog = history.slice();
+    // Backlog: the history as of synchronous attach, with the pinned
+    // `launched` fact prepended if it is not already present in the live
+    // queue. Facts enqueued after this snapshot arrive via the live queue
+    // (enqueue pushes to it). The pinned `launched` fact is stored outside
+    // `history` (see CodeRabbit CR-7 above) so it survives history-cap
+    // trimming; prepending it here gives a late subscriber the same
+    // `launched` fact an early subscriber would see.
+    const backlog = pinnedLaunchedFact === null || history.includes(pinnedLaunchedFact)
+      ? history.slice()
+      : [pinnedLaunchedFact, ...history];
     const seen = new Set<HostFactFrame>(queue.items);
     for (const frame of backlog) {
       if (queue.closed) break;
