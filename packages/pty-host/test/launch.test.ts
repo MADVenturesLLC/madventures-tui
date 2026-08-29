@@ -19,6 +19,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ArtifactHashMismatch, verifyAndLaunch } from "../src/launch";
+import { MalformedFrameError } from "../src/frames";
 import type { LaunchDeps } from "../src/launch";
 import type { HostCommandFrame } from "../src/frames";
 import type { GovernedSession } from "../src/terminal";
@@ -77,6 +78,37 @@ test("the artifact is re-hashed immediately before exec", () => {
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("a bare or relative artifact path fails closed before hash and spawn (B2 regression)", () => {
+  // Architecture review B2: readFileSync(frame.path) resolves cwd-relative
+  // while Bun.spawn([path, ...]) PATH-resolves a slash-less command — a
+  // bare name can hash one file and execute another. The ratified §2.2
+  // contract is "the same absolute path directly before exec"; a
+  // non-absolute path must fail closed BEFORE any hash or spawn.
+  let hashCalls = 0;
+  let spawnCalls = 0;
+  const deps: LaunchDeps = {
+    hashFile: () => {
+      hashCalls += 1;
+      return "a".repeat(64);
+    },
+    spawn: (path) => {
+      spawnCalls += 1;
+      return fakeSession();
+    },
+  };
+  // Bare name: would PATH-resolve in spawn but cwd-resolve in readFileSync.
+  expect(() => verifyAndLaunch(launchFrame("probecmd", "a".repeat(64)), deps)).toThrow(MalformedFrameError);
+  // Relative path: same divergence class.
+  expect(() => verifyAndLaunch(launchFrame("bin/probecmd", "a".repeat(64)), deps)).toThrow(MalformedFrameError);
+  // Fail-closed BEFORE any hash or spawn: neither dependency ran.
+  expect(hashCalls).toBe(0);
+  expect(spawnCalls).toBe(0);
+  // Absolute paths still pass the guard (hash/spawn proceed as before).
+  verifyAndLaunch(launchFrame("/bin/sh", "a".repeat(64)), deps);
+  expect(hashCalls).toBe(1);
+  expect(spawnCalls).toBe(1);
 });
 
 test("no storage, broker, or lifeline call occurs between verification and exec", () => {

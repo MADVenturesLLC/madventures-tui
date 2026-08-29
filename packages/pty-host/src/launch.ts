@@ -9,6 +9,7 @@
 import { readFileSync } from "node:fs";
 import { spawnGoverned } from "./terminal";
 import type { GovernedSession } from "./terminal";
+import { MalformedFrameError } from "./frames";
 import type { HostCommandFrame } from "./frames";
 
 /** Thrown when the artifact's hash at launch time differs from the authorized hash. */
@@ -58,6 +59,20 @@ export function verifyAndLaunch(
   const hashFile = deps.hashFile ?? defaultDeps.hashFile;
   const spawn = deps.spawn ?? defaultDeps.spawn;
   const trace = deps.trace ?? (() => {});
+
+  // B2 (architecture review): the artifact path must be ABSOLUTE. A bare
+  // or relative name would resolve differently in readFileSync (cwd) vs
+  // Bun.spawn (PATH) — hashing one file and executing another. Fail
+  // closed BEFORE any hash or spawn. The codec mirrors enforce the same
+  // guard at decode time; this is defense in depth for direct callers.
+  // B2 (architecture review): the artifact path must be ABSOLUTE. A bare
+  // or relative name would resolve differently in readFileSync (cwd) vs
+  // Bun.spawn (PATH) — hashing one file and executing another. Fail
+  // closed BEFORE any hash or spawn. The codec mirrors enforce the same
+  // guard at decode time; this is defense in depth for direct callers.
+  if (!frame.path.startsWith("/")) {
+    throw new MalformedFrameError(`launch path must be absolute: ${frame.path}`);
+  }
 
   // Adjacent-to-exec re-hash: the artifact is hashed immediately before
   // spawn, with no intervening storage, broker, or lifeline call.

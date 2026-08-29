@@ -77,13 +77,19 @@ export interface PtyHostHandle {
   facts(): AsyncIterable<HostFactFrame>;
   closeStdin(): void;
   killPgid(): void;
-  /**
-   * Read-only diagnostic: the number of live `facts()` subscriber queues.
-   * Test-observability seam for the T7-CR retention guarantee — an
-   * abandoned iterator must remove its queue, so this returns to the
-   * pre-subscription count.
-   */
-  subscriberCount(): number;
+}
+
+/**
+ * Test-only observability: the number of live `facts()` subscriber queues
+ * for a handle. Kept OFF the public `PtyHostHandle` contract (the ratified
+ * interface has exactly five members) — the T7-CR cleanup regression
+ * needs to observe retention, so the count is registered here at
+ * construction and read through this module-level accessor.
+ */
+const subscriberCounts = new WeakMap<PtyHostHandle, () => number>();
+
+export function subscriberCountForTest(handle: PtyHostHandle): number {
+  return subscriberCounts.get(handle)?.() ?? 0;
 }
 
 function concatBytes(a: Uint8Array<ArrayBuffer>, b: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
@@ -131,7 +137,13 @@ async function* factStream(proc: Bun.Subprocess): AsyncGenerator<HostFactFrame> 
  * minimal environment cannot break spawning; the governed child inside the
  * host then receives the descriptor's allowlisted environment verbatim.
  */
-export function spawnPtyHost(descriptor: HostLaunchDescriptor): PtyHostHandle {
+export function spawnPtyHost(
+  descriptor: HostLaunchDescriptor,
+  opts: { readonly hangNetMs?: number } = {},
+): PtyHostHandle {
+  // The live-wait net period. Injectable so the B1 regression can
+  // accelerate the 5-minute horizon; production default unchanged.
+  const hangNetMs = opts.hangNetMs ?? 300000;
   // §3.3 step 2: the lifeline read end is inherited at birth via the
   // spawned process's fd 0; the write end (below) exists only here.
   const proc = Bun.spawn([BUN_EXECUTABLE, HOST_ENTRY], {
@@ -386,16 +398,21 @@ export function spawnPtyHost(descriptor: HostLaunchDescriptor): PtyHostHandle {
         if (pumpError !== null) throw pumpError;
         return;
       }
-      // Wait for the next fact or for pump settlement. The 5-minute net is
-      // a hang guard only; normal exit paths are the waiters.
-      const settled = await new Promise<boolean>((resolve) => {
-        const timer = setTimeout(() => resolve(true), 300000);
+      // Wait for the next fact or for pump settlement. The net timer is a
+      // hang guard only: on expiry it wakes the wait to RE-ENTER — it must
+      // never present as end-of-stream. Real settlement is signalled
+      // exclusively by the waiter callback (receivedDone=true). B1
+      // (architecture review): the prior net resolved `true`, the same
+      // value as settlement, so 5 idle minutes ended a live subscription
+      // as a clean stream end while the host and pump were alive.
+      const wake = await new Promise<boolean>((resolve) => {
+        const timer = setTimeout(() => resolve(false), hangNetMs);
         queue.waiters.add((receivedDone) => {
           clearTimeout(timer);
           resolve(receivedDone);
         });
       });
-      if (settled && queue.items.length === 0) {
+      if (wake && queue.items.length === 0) {
         if (pumpError !== null) throw pumpError;
         return;
       }
@@ -415,12 +432,11 @@ export function spawnPtyHost(descriptor: HostLaunchDescriptor): PtyHostHandle {
     }
   };
 
-  return {
+  const handle: PtyHostHandle = {
     hostPid: proc.pid,
     send,
     facts,
     closeStdin,
-    subscriberCount: () => subscribers.size,
     killPgid: () => {
       if (reportedPgid !== null) {
         try {
@@ -431,4 +447,6 @@ export function spawnPtyHost(descriptor: HostLaunchDescriptor): PtyHostHandle {
       }
     },
   };
+  subscriberCounts.set(handle, () => subscribers.size);
+  return handle;
 }

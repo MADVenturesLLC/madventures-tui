@@ -5,7 +5,7 @@
 // wedged-host escalation tests (expected GREEN: 10 pass once Task 44 lands).
 
 import { expect, test } from "bun:test";
-import { spawnPtyHost } from "../src/pty-host-supervisor";
+import { spawnPtyHost, subscriberCountForTest } from "../src/pty-host-supervisor";
 import type { HostFactFrame } from "../src/pty-host-protocol";
 
 function sha256File(path: string): string {
@@ -388,16 +388,16 @@ test("an abandoned facts() iterator removes its subscriber queue (T7-CR regressi
     executionId: "exec-abandoned-queue",
   });
   try {
-    expect(handle.subscriberCount()).toBe(0);
+    expect(subscriberCountForTest(handle)).toBe(0);
     const iterator = handle.facts()[Symbol.asyncIterator]();
     // Async generators are lazy: the body (queue attach) runs on the
     // first next(), not at facts() call time.
-    expect(handle.subscriberCount()).toBe(0);
+    expect(subscriberCountForTest(handle)).toBe(0);
     const first = await iterator.next();
     expect(first.done).toBe(false);
     expect(first.value).toMatchObject({ kind: "launched" });
     // The queue is now attached (synchronously at generator start).
-    expect(handle.subscriberCount()).toBe(1);
+    expect(subscriberCountForTest(handle)).toBe(1);
     // Abandon the iterator WITHOUT draining to done: for-await would call
     // iterator.return(); a manual break leaves the generator suspended
     // mid-yield, so the finally must run on the next return()/next().
@@ -405,12 +405,67 @@ test("an abandoned facts() iterator removes its subscriber queue (T7-CR regressi
     expect(returned.done).toBe(true);
     // THE regression assertion: the abandoned queue is gone. Under the
     // T7-CR defect this stays 1 and every later fact appends to it.
-    expect(handle.subscriberCount()).toBe(0);
+    expect(subscriberCountForTest(handle)).toBe(0);
     // The host keeps running and emitting; the removed queue must not
     // receive anything (defensive closed-skip in enqueue).
     handle.send({ kind: "resize", cols: 80, rows: 24 });
     await Bun.sleep(150);
-    expect(handle.subscriberCount()).toBe(0);
+    expect(subscriberCountForTest(handle)).toBe(0);
+  } finally {
+    // CodeRabbit CR-10 guard pattern: the host may have already exited.
+    try { process.kill(handle.hostPid, "SIGKILL"); } catch { /* host may have exited */ }
+    handle.killPgid();
+  }
+}, 15000);
+
+test("a parked subscriber on a live silent host survives the hang-net boundary and receives a later fact (B1 regression)", async () => {
+  // Architecture review B1: the 300 s net timer resolved `true` — the same
+  // value as real settlement — so 5 idle minutes ended a live subscription
+  // as a clean end-of-stream while the host and pump were alive, and the
+  // finally then removed the queue, losing all later facts. The net is
+  // accelerated here (300 ms) to make the boundary reachable; the fix
+  // wakes the wait with `false` so the loop RE-ENTERS the wait instead of
+  // returning. The parked subscriber must still receive a later fact.
+  const handle = spawnPtyHost(
+    {
+      path: "/bin/cat",
+      sha256: sha256File("/bin/cat"),
+      argv: [],
+      env: {},
+      executionId: "exec-b1-net",
+    },
+    { hangNetMs: 300 },
+  );
+  try {
+    const iterator = handle.facts()[Symbol.asyncIterator]();
+    const first = await iterator.next();
+    expect(first.done).toBe(false);
+    expect(first.value).toMatchObject({ kind: "launched" });
+    // Consume the rest of the backlog (ready) so the generator reaches the
+    // live-wait: the next next() parks in the wait and arms the net.
+    const second = await iterator.next();
+    expect(second.done).toBe(false);
+    expect(second.value).toMatchObject({ kind: "ready" });
+    // Park: this next() enters the live-wait (empty queue, net armed at
+    // 300 ms). The host is silent and alive — no input, no output, no
+    // acks. Under the B1 defect the net resolves true at ~300 ms and this
+    // next() returns { done: true }; with the fix it re-enters the wait
+    // and stays pending until a fact arrives.
+    const parked = iterator.next();
+    await Bun.sleep(700); // comfortably past the net boundary
+    // A later fact must still arrive: resize produces an ack.
+    handle.send({ kind: "resize", cols: 80, rows: 24 });
+    const result = await Promise.race([
+      parked.then((r) => ({ tag: "v" as const, r })),
+      new Promise<{ tag: "t" }>((res) => setTimeout(() => res({ tag: "t" }), 2000)),
+    ]);
+    if (result.tag === "t") throw new Error("parked subscriber hung after the net boundary");
+    // THE regression assertion: the stream is still live — not done — and
+    // the later fact arrived.
+    expect(result.r.done).toBe(false);
+    expect(result.r.value).toMatchObject({ kind: "ack", ofKind: "resize" });
+    // The queue survived the net boundary (not removed by a false end).
+    expect(subscriberCountForTest(handle)).toBe(1);
   } finally {
     // CodeRabbit CR-10 guard pattern: the host may have already exited.
     try { process.kill(handle.hostPid, "SIGKILL"); } catch { /* host may have exited */ }
