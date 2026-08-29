@@ -157,3 +157,11 @@ Task 42's plan file list (plan §5, lines 2070–2077) omits `packages/pty-host/
 **Explicit non-authorizations (Founder, verbatim scope):** this approval does not authorize Task 43, Task 44, PR merge, or any Phase 4 work.
 
 **Task 42 gate state:** implementation approved; PR #35 remains draft and unmerged; per-task Step 8 checkpoint for Task 43 awaits separate Founder authorization.
+
+## 2026-08-28 — M19 Tasks 42+43 combined Tier-2 review and Founder advisory disposition
+
+**Review verdict:** PASS-WITH-ADVISORIES at head `f157d1369b612bff0ae9721a54d7f817cbd64c1b` (gemini-3.1-pro-high, combined Task 42+43 review; artifact `tier2-m19-t42-t43-f157d136.txt`, SHA-256 `5bf91b7b2541aafb0349fc7641c86174a19508b68452f1ea7de553711d526052`). No blocking or major findings; no required Founder decision points.
+
+**Founder disposition (2026-08-28):**
+1. Advisory 1 (main.ts injected-seam SIGKILL ESRCH race) — FIX in one narrowly scoped follow-up commit, preserving fail-closed semantics and existing tests. Implemented: ESRCH swallowed (group already gone = desired terminal state), all other errno codes propagate.
+2. Advisory 2 (unused `emit` parameter in `onLifelineEof` signature) — ACCEPTED without change. The parameter is retained for interface symmetry with `terminateChildGroup`; recorded here as the disposition of record.

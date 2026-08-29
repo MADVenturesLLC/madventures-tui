@@ -355,7 +355,22 @@ export function makeSessionCloser(
                   if (signal === "SIGTERM") {
                     signalProcessGroup(pgid);
                   } else {
-                    process.kill(-pgid, "SIGKILL");
+                    // Tier-2 advisory fix (PASS-WITH-ADVISORIES at f157d136,
+                    // disposition (a)): the group can exit in the window
+                    // between the liveness check and this SIGKILL — ESRCH
+                    // means it is already gone, which is the desired
+                    // terminal state. Swallow it, mirroring the default
+                    // seam in signals.ts; any other failure propagates.
+                    try {
+                      process.kill(-pgid, "SIGKILL");
+                    } catch (err) {
+                      if (
+                        typeof err === "object" && err !== null && "code" in err &&
+                        (err as { code: unknown }).code !== "ESRCH"
+                      ) {
+                        throw err;
+                      }
+                    }
                   }
                 },
               },
