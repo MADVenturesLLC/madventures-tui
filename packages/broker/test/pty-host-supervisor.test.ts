@@ -373,6 +373,51 @@ test("a post-settlement subscriber replays the pinned launched fact before termi
   }
 }, 20000);
 
+test("an abandoned facts() iterator removes its subscriber queue (T7-CR regression)", async () => {
+  // CodeRabbit Major at 1bd9679: facts() never removed its queue from
+  // `subscribers`, so a consumer that stopped iterating early (after
+  // `launched`) left an unbounded `queue.items` accumulating every later
+  // fact — broker memory growth for a long-running host. The generator
+  // now removes the queue in a finally (on return, iterator.return(), or
+  // throw), settles/clears waiters, and enqueue() skips closed queues.
+  const handle = spawnPtyHost({
+    path: "/bin/cat",
+    sha256: sha256File("/bin/cat"),
+    argv: [],
+    env: {},
+    executionId: "exec-abandoned-queue",
+  });
+  try {
+    expect(handle.subscriberCount()).toBe(0);
+    const iterator = handle.facts()[Symbol.asyncIterator]();
+    // Async generators are lazy: the body (queue attach) runs on the
+    // first next(), not at facts() call time.
+    expect(handle.subscriberCount()).toBe(0);
+    const first = await iterator.next();
+    expect(first.done).toBe(false);
+    expect(first.value).toMatchObject({ kind: "launched" });
+    // The queue is now attached (synchronously at generator start).
+    expect(handle.subscriberCount()).toBe(1);
+    // Abandon the iterator WITHOUT draining to done: for-await would call
+    // iterator.return(); a manual break leaves the generator suspended
+    // mid-yield, so the finally must run on the next return()/next().
+    const returned = await iterator.return!();
+    expect(returned.done).toBe(true);
+    // THE regression assertion: the abandoned queue is gone. Under the
+    // T7-CR defect this stays 1 and every later fact appends to it.
+    expect(handle.subscriberCount()).toBe(0);
+    // The host keeps running and emitting; the removed queue must not
+    // receive anything (defensive closed-skip in enqueue).
+    handle.send({ kind: "resize", cols: 80, rows: 24 });
+    await Bun.sleep(150);
+    expect(handle.subscriberCount()).toBe(0);
+  } finally {
+    // CodeRabbit CR-10 guard pattern: the host may have already exited.
+    try { process.kill(handle.hostPid, "SIGKILL"); } catch { /* host may have exited */ }
+    handle.killPgid();
+  }
+}, 15000);
+
 test("history is bounded by the cap regardless of how many facts the pump emits", async () => {
   // CodeRabbit CR-7 (PR #35 round-8) regression: the prior pin design
   // reset `start` to the pinned index whenever a trim would evict it, so

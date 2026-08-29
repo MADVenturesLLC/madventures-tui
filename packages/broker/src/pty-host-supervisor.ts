@@ -77,6 +77,13 @@ export interface PtyHostHandle {
   facts(): AsyncIterable<HostFactFrame>;
   closeStdin(): void;
   killPgid(): void;
+  /**
+   * Read-only diagnostic: the number of live `facts()` subscriber queues.
+   * Test-observability seam for the T7-CR retention guarantee — an
+   * abandoned iterator must remove its queue, so this returns to the
+   * pre-subscription count.
+   */
+  subscriberCount(): number;
 }
 
 function concatBytes(a: Uint8Array<ArrayBuffer>, b: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
@@ -274,6 +281,10 @@ export function spawnPtyHost(descriptor: HostLaunchDescriptor): PtyHostHandle {
       history = history.slice(history.length - Math.floor(HISTORY_CAP / 2));
     }
     for (const q of subscribers) {
+      // T7-CR: skip closed queues defensively — a queue is closed only by
+      // the iterator's finally (abandoned subscriber) or pump settlement;
+      // it must never receive further facts.
+      if (q.closed) continue;
       q.items.push(frame);
       for (const w of q.waiters) w(false);
       q.waiters.clear();
@@ -331,6 +342,7 @@ export function spawnPtyHost(descriptor: HostLaunchDescriptor): PtyHostHandle {
     };
     subscribers.add(queue);
 
+    try {
     // Backlog: the history as of synchronous attach, with the pinned
     // `launched` fact prepended if it is not already present in the live
     // queue. Facts enqueued after this snapshot arrive via the live queue
@@ -388,6 +400,19 @@ export function spawnPtyHost(descriptor: HostLaunchDescriptor): PtyHostHandle {
         return;
       }
     }
+    } finally {
+      // T7-CR (CodeRabbit Major at 1bd9679): remove the subscriber queue
+      // when the iterator ends — normal return, early termination via
+      // iterator.return(), or a throw. An abandoned queue would otherwise
+      // stay in `subscribers` and accumulate every later fact in
+      // `queue.items`: unbounded broker memory growth for a long-running
+      // host. Settle and clear waiters so no pending 5-minute-net waiter
+      // is left dangling.
+      subscribers.delete(queue);
+      queue.closed = true;
+      for (const w of queue.waiters) w(true);
+      queue.waiters.clear();
+    }
   };
 
   return {
@@ -395,6 +420,7 @@ export function spawnPtyHost(descriptor: HostLaunchDescriptor): PtyHostHandle {
     send,
     facts,
     closeStdin,
+    subscriberCount: () => subscribers.size,
     killPgid: () => {
       if (reportedPgid !== null) {
         try {
