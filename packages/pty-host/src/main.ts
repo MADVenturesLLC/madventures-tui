@@ -639,13 +639,10 @@ export async function runSteadyState(
       let eofTimer: ReturnType<typeof setTimeout> | undefined;
       try {
         await new Promise<void>((resolveExit, rejectExit) => {
-          const settle = (err?: Error) => {
-            if (eofRaceSettled) return;
-            eofRaceSettled = true;
-            if (eofTimer !== undefined) clearTimeout(eofTimer);
-            if (err) rejectExit(err);
-            else resolveExit();
-          };
+          // N2 (CodeRabbit round-8 nitpick, folded per Founder round-9
+          // authorization): the `settle` helper was dead code — all three
+          // sites repeat its body inline. Kept inline (behavior-identical);
+          // removed the unused helper.
           void session.child.exited.then(
             () => {
               if (!eofRaceSettled) {

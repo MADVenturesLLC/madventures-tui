@@ -342,8 +342,15 @@ export function spawnPtyHost(descriptor: HostLaunchDescriptor): PtyHostHandle {
       ? history.slice()
       : [pinnedLaunchedFact, ...history];
     const seen = new Set<HostFactFrame>(queue.items);
+    // T6 (Greptile P1 at 96f2a1a): replay the COMPLETE captured backlog
+    // regardless of `queue.closed`. The backlog is a static snapshot taken
+    // at synchronous attach, so it cannot race the live stream; `closed`
+    // gates only the live-wait phase below. Under the prior per-frame
+    // `if (queue.closed) break`, a post-settlement subscriber (attached
+    // with closed already true) received an EMPTY stream instead of the
+    // documented replay — silently violating the round-4/round-6 replay
+    // contract and leaving killPgid-style consumers blind to `launched`.
     for (const frame of backlog) {
-      if (queue.closed) break;
       // Skip facts the live queue already received during replay.
       if (seen.has(frame)) continue;
       // A fact already handed to this subscriber? The dedupe guard covers

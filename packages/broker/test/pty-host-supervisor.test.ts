@@ -307,6 +307,72 @@ test("a facts() subscriber created after pump settlement terminates immediately"
   expect(lateErrored === null || (lateErrored as Error).message.includes("kill")).toBe(true);
 }, 15000);
 
+test("a post-settlement subscriber replays the pinned launched fact before terminating (T6 regression)", async () => {
+  // Greptile P1 at 96f2a1a: the per-frame `if (queue.closed) break` in the
+  // backlog loop aborted replay for subscribers created AFTER pump
+  // settlement (their queue attaches with closed already true), so they
+  // received an EMPTY stream — violating the round-4/round-6 replay
+  // contract and blinding killPgid-style consumers to `launched`. The
+  // prior post-settlement test accepted either outcome (immediate done OR
+  // replay) and therefore passed vacuously. This test asserts the actual
+  // contract: first value is `launched`, then the stream terminates fast.
+  const handle = spawnPtyHost({
+    path: "/bin/cat",
+    sha256: sha256File("/bin/cat"),
+    argv: [],
+    env: {},
+    executionId: "exec-post-settle-replay",
+  });
+  try {
+    const preIterator = handle.facts()[Symbol.asyncIterator]();
+    const first = await preIterator.next();
+    expect(first.done).toBe(false);
+    expect(first.value).toMatchObject({ kind: "launched" });
+    // Drive the pump to settlement: host death, drain the first
+    // subscription to stream end. History now holds launched (+ ready)
+    // with the pin captured.
+    process.kill(handle.hostPid, "SIGKILL");
+    for (;;) {
+      const next = await Promise.race([
+        preIterator.next().then((r) => ({ tag: "v" as const, r })),
+        new Promise<{ tag: "t" }>((res) => setTimeout(() => res({ tag: "t" }), 5000)),
+      ]);
+      if (next.tag === "t") throw new Error("first subscription never settled after host death");
+      if (next.r.done) break;
+    }
+    // Subscribe AFTER settlement. Contract: complete captured backlog
+    // first, terminate immediately after.
+    const lateIterator = handle.facts()[Symbol.asyncIterator]();
+    const late = await Promise.race([
+      lateIterator.next().then((r) => ({ tag: "v" as const, r })),
+      new Promise<{ tag: "t" }>((res) => setTimeout(() => res({ tag: "t" }), 3000)),
+    ]);
+    if (late.tag === "t") throw new Error("post-settlement subscription hung");
+    // THE regression assertion: replay happened. Under the T6 defect this
+    // is `{ done: true }` immediately, with no frames delivered.
+    expect(late.r.done).toBe(false);
+    expect(late.r.value).toMatchObject({ kind: "launched" });
+    // Drain the rest: bounded, terminates fast (no 5-minute net), no hang.
+    const rest: string[] = [];
+    for (;;) {
+      const next = await Promise.race([
+        lateIterator.next().then((r) => ({ tag: "v" as const, r })),
+        new Promise<{ tag: "t" }>((res) => setTimeout(() => res({ tag: "t" }), 3000)),
+      ]);
+      if (next.tag === "t") throw new Error("post-settlement replay did not terminate after launched");
+      if (next.r.done) break;
+      rest.push(next.r.value.kind);
+    }
+    // No duplicates: launched replayed exactly once across both yields.
+    expect(rest.filter((k) => k === "launched").length).toBe(0);
+  } finally {
+    // CodeRabbit CR-10 guard pattern: the host is already dead here
+    // (SIGKILLed above); a bare kill would throw ESRCH.
+    try { process.kill(handle.hostPid, "SIGKILL"); } catch { /* host may have exited */ }
+    handle.killPgid();
+  }
+}, 20000);
+
 test("history is bounded by the cap regardless of how many facts the pump emits", async () => {
   // CodeRabbit CR-7 (PR #35 round-8) regression: the prior pin design
   // reset `start` to the pinned index whenever a trim would evict it, so
@@ -344,8 +410,14 @@ test("history is bounded by the cap regardless of how many facts the pump emits"
     }
     // The pin survived the trims (replayed first), and the replay is the
     // bounded tail — with the CR-7 bug this would be > 1024 facts.
+    // N1 (CodeRabbit round-8 nitpick, folded per Founder round-9
+    // authorization): the LOWER bound proves the cap was actually
+    // exercised. Empirically the replay lands at ~253 facts (five probe
+    // repetitions, 100% stable); a short replay below 100 would mean the
+    // pump never crossed HISTORY_CAP, letting the test pass vacuously
+    // under the old unbounded-growth behavior.
     expect(sawLaunched).toBe(true);
-    expect(count).toBeGreaterThan(0);
+    expect(count).toBeGreaterThan(100);
     expect(count).toBeLessThanOrEqual(400);
   } finally {
     // CodeRabbit CR-10 (PR #35 round-8): the host may have already exited;
