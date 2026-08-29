@@ -169,25 +169,128 @@ export function spawnPtyHost(descriptor: HostLaunchDescriptor): PtyHostHandle {
   stdinSink.flush();
 
   // §3.3 step 8: normal commands ride the same framed lifeline.
+  // CodeRabbit CR-2 (PR #35 round): after host death the pipe write end is
+  // broken — a bare write/flush throws EPIPE synchronously into the broker
+  // caller (the per-keystroke input path). Fail-closed discipline: a dead
+  // host is a terminal state, so EPIPE is swallowed (the send is a no-op —
+  // there is nothing left to command); any other error propagates.
   const send = (f: HostCommandFrame): void => {
-    stdinSink.write(encodeCommand(f));
-    stdinSink.flush();
+    try {
+      stdinSink.write(encodeCommand(f));
+      stdinSink.flush();
+    } catch (err) {
+      if (
+        typeof err === "object" && err !== null && "code" in err &&
+        (err as { code: unknown }).code === "EPIPE"
+      ) {
+        // Host already dead: terminal state, nothing to command.
+      } else {
+        throw err;
+      }
+    }
   };
 
   // Deliberate lifeline EOF (§3.4 second kill switch): ends the host's
-  // stdin; Task 43 wires the host-side EOF handler that terminates the
-  // child's process group in response.
+  // stdin; the host's EOF handler terminates the child's process group in
+  // response. Same EPIPE guard as `send` — a broken pipe after host death
+  // means the lifeline is already closed.
   const closeStdin = (): void => {
-    stdinSink.end();
-    stdinSink.flush();
+    try {
+      stdinSink.end();
+      stdinSink.flush();
+    } catch (err) {
+      if (
+        typeof err === "object" && err !== null && "code" in err &&
+        (err as { code: unknown }).code === "EPIPE"
+      ) {
+        // Host already dead: lifeline already closed.
+      } else {
+        throw err;
+      }
+    }
   };
 
+  // CodeRabbit CR-3 (PR #35 round): a single pump owns the stdout stream
+  // (a ReadableStream admits one active reader — a second facts() call on
+  // the old per-call generator threw a locked-stream error). The pump:
+  //  - starts at spawn time (independent of consumer behavior);
+  //  - records reportedPgid the moment the launched fact arrives, so
+  //    killPgid() works even if facts() is never iterated;
+  //  - fans every decoded fact out to every active subscriber queue.
   let reportedPgid: number | null = null;
+  const subscribers = new Set<AsyncQueue<HostFactFrame>>();
+  let pumpError: Error | null = null;
+  let pumpSettled = false;
+  const pumpWaiters = new Set<() => void>();
+
+  type AsyncQueue<T> = {
+    readonly items: T[];
+    readonly waiters: Set<(done: boolean) => void>;
+    closed: boolean;
+  };
+
+  const wakePumpWaiters = () => {
+    for (const w of pumpWaiters) w();
+  };
+
+  const enqueue = (frame: HostFactFrame): void => {
+    if (frame.kind === "launched") reportedPgid = frame.pgid;
+    for (const q of subscribers) {
+      q.items.push(frame);
+      for (const w of q.waiters) w(false);
+      q.waiters.clear();
+    }
+  };
+
+  const pump = (async () => {
+    try {
+      for await (const frame of factStream(proc)) {
+        enqueue(frame);
+      }
+    } catch (err) {
+      pumpError = err instanceof Error ? err : new Error(String(err));
+    } finally {
+      pumpSettled = true;
+      for (const q of subscribers) {
+        q.closed = true;
+        for (const w of q.waiters) w(true);
+        q.waiters.clear();
+      }
+      wakePumpWaiters();
+    }
+  })();
+  void pump;
 
   const facts = async function* (): AsyncGenerator<HostFactFrame> {
-    for await (const frame of factStream(proc)) {
-      if (frame.kind === "launched") reportedPgid = frame.pgid;
-      yield frame;
+    const queue: AsyncQueue<HostFactFrame> = { items: [], waiters: new Set(), closed: false };
+    subscribers.add(queue);
+    // Replay any facts the pump already enqueued before this subscription.
+    const backlog = queue.items.splice(0, queue.items.length);
+    for (const frame of backlog) yield frame;
+    if (pumpError !== null && !queue.closed) throw pumpError;
+    for (;;) {
+      const next = queue.items.shift();
+      if (next !== undefined) {
+        yield next;
+        continue;
+      }
+      if (queue.closed) {
+        if (pumpError !== null) throw pumpError;
+        return;
+      }
+      // Wait for the next fact or for pump settlement.
+      const settled = await new Promise<boolean>((resolve) => {
+        const timer = setTimeout(() => resolve(true), 300000); // 5 min safety net
+        queue.waiters.add((receivedDone) => {
+          clearTimeout(timer);
+          resolve(receivedDone);
+        });
+        wakePumpWaiters();
+      });
+      if (settled && queue.items.length === 0) {
+        if (pumpError !== null) throw pumpError;
+        return;
+      }
     }
   };
 

@@ -227,11 +227,14 @@ test("a child ignoring SIGTERM is SIGKILLed after the 2 s grace", async () => {
     await s.waitForFact((f) => f.kind === "termination_started", 2000);
     const exited = await s.waitForFact((f) => f.kind === "exited", 8000);
     const total = performance.now() - t0;
-    // The indicator child trapped TERM and had to be SIGKILLed: an exited
-    // fact carries the authoritative code/signal (narrowed by the fact's
-    // own kind).
+    // CodeRabbit CR-10 (PR #35 round): the test is named for the SIGKILL
+    // rung, so assert it directly. The child traps TERM and cannot exit
+    // voluntarily, so the outcome is deterministic: code null, signal
+    // SIGKILL. (The old disjunction accepted any non-zero code or any
+    // non-null signal, including SIGTERM — it did not prove the rung.)
     if (exited.kind === "exited") {
-      expect(exited.signal === "SIGKILL" || exited.code !== 0 || exited.signal !== null).toBe(true);
+      expect(exited.signal).toBe("SIGKILL");
+      expect(exited.code).toBeNull();
     } else {
       expect.unreachable();
     }
@@ -289,6 +292,13 @@ test("a grandchild in the same process group is terminated", async () => {
   const s = spawnSignalsHost(GRANDCHILD_ARGV);
   try {
     await s.waitForFact((f) => f.kind === "ready");
+    // CodeRabbit CR-11 (PR #35 round): `ready` proves only that the host
+    // launched the child — not that /bin/sh has executed
+    // `/bin/sleep 300 &`. If terminate won that race, the group would hold
+    // no grandchild and the test would pass vacuously. The fixture already
+    // echoes GC_READY after spawning the sleeper: wait for it so
+    // negative-PGID delivery is genuinely exercised.
+    await s.waitForOutputContaining("GC_READY");
     // The grandchild (/bin/sleep 300) shares the child's process group; the
     // negative-PGID signal must reach it. Observed from outside: the whole
     // group is gone after the terminate command completes.

@@ -136,20 +136,27 @@ export async function terminateChildGroup(
   // Rung 1: SIGTERM to the negative PGID — the child AND every grandchild
   // in its group.
   signal(pgid, "SIGTERM");
+  const tSigterm = performance.now();
   if (!alive(pgid)) {
     // Group already gone: nothing to terminate; report immediately.
     const total = performance.now() - t0;
-    return { observedMs: { termination_started: terminationStartedMs, grace_waited: 0, total } };
+    return {
+      observedMs: { termination_started: terminationStartedMs, grace_waited: 0, total },
+    };
   }
 
   // Rung 2: wait the responsive-host child grace (§9.8: 2 s), probing on
   // the monotonic clock. Exit the wait the moment the group is gone.
-  const graceDeadline = t0 + HOST_DEADLINES_MS.responsiveChildGrace;
+  // CodeRabbit CR-8 (PR #35 round): grace_waited measures the grace
+  // actually consumed AFTER the SIGTERM — the clock starts here, not at
+  // function entry (t0 also covers the emit and dispatch, which are not
+  // grace time).
+  const graceDeadline = tSigterm + HOST_DEADLINES_MS.responsiveChildGrace;
   while (performance.now() < graceDeadline) {
     if (!alive(pgid)) break;
     await sleep(10);
   }
-  graceWaited = Math.min(performance.now() - t0, HOST_DEADLINES_MS.responsiveChildGrace);
+  graceWaited = Math.min(performance.now() - tSigterm, HOST_DEADLINES_MS.responsiveChildGrace);
 
   // Rung 3: any survivor gets SIGKILL — bounded by the §9.8 outer bound.
   if (alive(pgid)) {

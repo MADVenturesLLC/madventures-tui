@@ -58,17 +58,48 @@ test("lifeline is established before child creation (real pipe)", async () => {
     });
     expect(typeof first.value.childPid).toBe("number");
     expect(typeof first.value.pgid).toBe("number");
-    // The sole write end is supervisor-owned: closing it is the deliberate
-    // lifeline EOF kill switch, and the fact stream remains independent of
-    // it (the child keeps running, so facts keep flowing — stdin closure
-    // affects only the lifeline, not the output stream).
+    // CodeRabbit CR-5 (PR #35 round): updated for the Task 43 EOF
+    // contract — deliberately closing the lifeline is the second per-child
+    // kill switch, so the host terminates the child's process group in
+    // response. The fact stream therefore does NOT keep flowing
+    // indefinitely; it ends shortly after the child terminates. The
+    // stream-vs-lifeline distinction that remains true: stdin closure acts
+    // through the host's EOF handler (no `termination_started`, no ack),
+    // not by directly breaking the output pipe.
     handle.closeStdin();
-    const second = await iterator.next();
-    expect(second.done).toBe(false); // host alive; stream continues
+    const drain: HostFactFrame[] = [{ ...(first.value as object) } as HostFactFrame];
+    let streamEnded = false;
+    for (;;) {
+      const next = await Promise.race([
+        iterator.next().then((r) => ({ kind: "value" as const, r })),
+        new Promise<{ kind: "timeout" }>((res) => setTimeout(() => res({ kind: "timeout" }), 10000)),
+      ]);
+      if (next.kind === "timeout") { streamEnded = false; break; }
+      if (next.r.done) { streamEnded = true; break; }
+      drain.push(next.r.value);
+      if (next.r.value.kind === "exited") {
+        // The exited fact is in; the stream must now close.
+        const tail = await Promise.race([
+          iterator.next().then((r) => ({ kind: "value" as const, r })),
+          new Promise<{ kind: "timeout" }>((res) => setTimeout(() => res({ kind: "timeout" }), 5000)),
+        ]);
+        streamEnded = tail.kind === "timeout" ? false : !!tail.r.done;
+        break;
+      }
+    }
+    // EOF-contract observable: the child terminated (exited fact present)
+    // and the fact stream then ended — stdin closure is the kill switch.
+    const kinds = drain.map((f) => f.kind);
+    expect(kinds).not.toContain("termination_started"); // no terminate command was sent
+    expect(streamEnded).toBe(true);
   } finally {
+    // CodeRabbit CR-6 (PR #35 round): clean up the governed child's group
+    // via the supervisor's own containment primitive — killing only the
+    // host pid would orphan the child's process group.
     process.kill(handle.hostPid, "SIGKILL");
+    handle.killPgid();
   }
-});
+}, 15000); // explicit timeout: EOF kill-switch path runs the 2 s grace before termination
 
 test("host exit interrupts the whole session", async () => {
   // Supervisor integration: a real PTY host is spawned with a launch frame
@@ -143,6 +174,9 @@ test("host environment is exactly the allowlisted environment", async () => {
     // guarantee is `env: { ...descriptor.env }` in spawnPtyHost.
   } finally {
     delete process.env[ambientPoison];
+    // CodeRabbit CR-6 (PR #35 round): use the supervisor's containment
+    // primitive so the governed child's group does not leak.
     process.kill(handle.hostPid, "SIGKILL");
+    handle.killPgid();
   }
 });

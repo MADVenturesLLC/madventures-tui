@@ -13,7 +13,7 @@ import type { HostCommandFrame, HostFactFrame } from "./frames";
 import { PtyReadError, spawnGoverned } from "./terminal";
 import type { GovernedSession } from "./terminal";
 import { ArtifactHashMismatch, verifyAndLaunch } from "./launch";
-import { onLifelineEof, terminateChildGroup } from "./signals";
+import { HOST_DEADLINES_MS, onLifelineEof, terminateChildGroup } from "./signals";
 
 function failNoControlChannel(reason: string): never {
   process.stderr.write(`no_control_channel: ${reason}\n`);
@@ -604,24 +604,45 @@ export async function runSteadyState(
       // ladder (grace, then SIGKILL) without publishing
       // `termination_started`: no terminate command was ever sent.
       onLifelineEof(session.pgid, emit);
-      // Wait for the group (and therefore the child) to actually die before
-      // closing the session, so the exited fact reflects a real reap, not a
-      // forced PTY teardown racing an unfinished termination. The ptyPath
-      // depends on whether the PTY already settled on its own during the
-      // ladder (the EOF rung's SIGKILL closes the slave): if ptyClosed has
-      // already resolved, "pty_already_settled_success"; otherwise the
-      // default "await_pty" join.
-      await session.child.exited;
-      let ptySettled = false;
+      // CodeRabbit CR-3a (PR #35 round): the child-exit wait MUST be
+      // bounded by the §9.8 outer bound — `onLifelineEof` runs its ladder
+      // detached, and if reaping stalls past the outer bound the host
+      // would hang here forever, violating "all governed processes gone
+      // within five seconds". On expiry, fail closed: non-zero exit, no
+      // success facts.
+      const eofExitDeadline = performance.now() + HOST_DEADLINES_MS.outerBound;
       try {
-        await Promise.race([session.ptyClosed, Promise.resolve()]).then(
-          () => { ptySettled = true; },
-          () => { ptySettled = true; },
-        );
-      } catch {
-        ptySettled = true;
+        await Promise.race([
+          session.child.exited,
+          (async () => {
+            while (performance.now() < eofExitDeadline) await new Promise((res) => setTimeout(res, 10));
+            throw new Error("lifeline-EOF child exit exceeded the §9.8 outer bound");
+          })(),
+        ]);
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        process.stderr.write(`pty-host: lifeline-EOF containment incomplete: ${detail}; failing closed\n`);
+        process.exitCode = 1;
+        await close({ announce: false, signal: false, ptyPath: "pty_already_settled_failure" });
+        return;
       }
-      await close({ announce: false, signal: false, ptyPath: ptySettled ? "pty_already_settled_success" : "await_pty" });
+      // CodeRabbit CR-3b (PR #35 round): the previous
+      // Promise.race([ptyClosed, Promise.resolve()]) settled from the
+      // already-resolved Promise.resolve() at construction — ptySettled was
+      // always true and the await_pty join was dead code. Fix: attach a
+      // settlement flag to the LIVE outer ptyClosed promise, marking
+      // whether it has actually resolved or rejected by now, and select
+      // the ptyPath from that flag.
+      let ptySettledNow = false;
+      session.ptyClosed.then(
+        () => { ptySettledNow = true; },
+        () => { ptySettledNow = true; },
+      );
+      // Give already-queued settlement callbacks one macrotask to run so
+      // the flag reflects the PTY's current state, not just registration
+      // order.
+      await new Promise((res) => setTimeout(res, 0));
+      await close({ announce: false, signal: false, ptyPath: ptySettledNow ? "pty_already_settled_success" : "await_pty" });
       return;
     }
 

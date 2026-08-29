@@ -167,3 +167,25 @@ Task 42's plan file list (plan §5, lines 2070–2077) omits `packages/pty-host/
 2. Advisory 2 (unused `emit` parameter in `onLifelineEof` signature) — ACCEPTED without change. The parameter is retained for interface symmetry with `terminateChildGroup`; recorded here as the disposition of record.
 
 **Correction round 2 (same date):** the first remediation commit `df19365` inverted the filter (positive-match throw swallowed code-less errors). Fresh Tier-2 review returned FAIL with one Major (artifact `tier2-m19-advisory-df19365-FAIL.txt`, SHA-256 `bf400cef666bc965baf408ff79031382d05da758c09b948d5fd13d0aef529074`). Founder correction authorization 2026-08-28: explicit allow-list implemented (swallow ONLY code === "ESRCH"; re-throw EPERM, code-less Errors, null, primitives, other codes). New regression test added: a code-less generic SIGKILL failure must propagate (runSteadyState rejects with the exact error) and containment stays fail-closed (no drained/exited facts). Prior FAIL verdict carried no weight; the new head requires fresh Tier-2 review.
+
+## 2026-08-29 — M19 Tasks 42+43 CodeRabbit round: 13-comment triage and remediation
+
+**CodeRabbit verdict on the Task 42+43 surface:** CHANGES_REQUESTED — 13 actionable comments (1 Critical, 4 Major, 8 Minor) + 6 nitpicks, at PR #35 head `ed85c184` (later docs-only commit `0bf77142` — verified docs-only child, source surface byte-identical — rebind approved by Founder).
+
+**Founder dispositions (2026-08-29):**
+- CR-1 (launch.ts TOCTOU between hashFile and Bun.spawn, Critical): ACCEPTED as the documented §2.2 residual — "a binary that truthfully attests one identity during the probe and lies during the governed session remains a documented residual; the system does not claim to solve malicious-provider misrepresentation." No code change; the plan's adjacent-to-exec re-hash is the ratified mitigation. Descriptor-bound execution would need a PLAN-OPEN amendment.
+- CR-7 (env-allowlist test asserts a tautology, Minor): DEFERRED to Task 44 with explicit scope record — direct host-environment observation stays with the Task 44 fixture harness per the earlier Founder scoping; the tautological assertion and its scope note remain as-is in this round.
+- OPEN-1 (drain correctness vs §9.8 grace SIGKILL, deterministic Verify (macOS) CI failure): FIX the fixture while preserving all 50-line and drained/exited assertions. Root cause verified empirically: one `sleep 0.01` process spawn per tail line takes ~60 ms on CI, so the 50-line tail raced the 2 s SIGKILL and lines 31-49 died in the PTY buffer. Fixture now spaces lines with in-shell sleeps (no process spawn per line), completing well inside the grace; every line, the final marker, and all drain-predicate assertions are unchanged.
+
+**Remediated in this round (Founding-authorized bounded scope):**
+- CR-2: supervisor send/closeStdin EPIPE guard (host-death terminal state; non-EPIPE propagates).
+- CR-3: single stdout pump at spawn time; facts() returns subscriber views of one shared queue; reportedPgid recorded pump-side (killPgid no longer stream-consumption-dependent; repeated facts() calls safe).
+- CR-3a: EOF-path child-exit wait bounded by the §9.8 outer bound; expiry fails closed (diagnostic, non-zero, no success facts).
+- CR-3b: EOF-path ptySettled flag fixed — the prior Promise.race against Promise.resolve() always settled immediately, dead-coding the await_pty join; now a settlement flag on the live ptyClosed promise selects the ptyPath.
+- CR-5: supervisor lifeline test updated to the Task 43 EOF contract (stream ends after child termination; no termination_started on EOF).
+- CR-6: test cleanup uses the supervisor's killPgid containment primitive (no orphaned child groups).
+- CR-8: grace_waited measured from the SIGTERM (grace actually consumed), not function entry.
+- CR-9: realKillCalls counter replaced by a kill recorder asserting every real kill targets a NEGATIVE pid; vacuous >= 0 bound removed.
+- CR-10: SIGKILL rung asserted directly (signal === "SIGKILL", code null) instead of the permissive disjunction.
+- CR-11: grandchild test waits for the GC_READY marker before terminate (no vacuous pass on a missing grandchild).
+- CR-4 (test strictness informational note): no code change required, per Founder.

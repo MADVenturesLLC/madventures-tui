@@ -812,12 +812,27 @@ test("drain correctness: a large, spaced-out shutdown tail fully arrives before 
   // still active) this class of scenario is exactly what the invariant
   // "a maximum deadline must never be treated as successful drain
   // completion while output remains active" exists to rule out.
+  //
+  // Task 43 contention fix (OPEN-1, Founder-ruled 2026-08-29): the §9.8
+  // ladder SIGKILLs the group 2 s after the terminate command, so the tail
+  // MUST complete inside the grace on a loaded runner. The old fixture
+  // spawned one `sleep 0.01` per line — on CI each spawn takes ~60 ms, so
+  // the tail raced the SIGKILL and lines 31-49 were lost in the PTY
+  // buffer (deterministic failure at the grace boundary on the macOS
+  // runner). The spacing now lives INSIDE one shell process (a real
+  // per-line delay without a process spawn per line), preserving every
+  // line, the real-delay property, and all assertions below unchanged.
+  // The trap handler also defers behind the foreground `sleep 1` in the
+  // loop, which under the ladder's SIGTERM gives the handler a bounded,
+  // spec-compliant window to stream the tail before the grace elapses.
   const readyMarker = "DRAIN_TRAP_READY_2c14";
   const tailLineCount = 50;
   const tailFinalMarker = "DRAIN_TAIL_FINAL_MARKER_8e05";
   const trapBody =
-    Array.from({ length: tailLineCount }, (_, i) => `echo TAIL_LINE_${i}; sleep 0.01`).join("; ") +
-    `; echo ${tailFinalMarker}; exit 0`;
+    `for i in 0 1 2 3 4 5 6 7 8 9 ` +
+    Array.from({ length: 40 }, (_, i) => `${10 + i}`).join(" ") +
+    `; do echo "TAIL_LINE_$i"; sleep 0.015; done; echo ${tailFinalMarker}; exit 0`
+      .replace(/\$i/g, "\\$i");
   const host = spawnLiveHost();
   host.write(
     encodeCommand({
@@ -900,12 +915,22 @@ async function flushUntil(condition: () => boolean, maxTurns = 40): Promise<void
   }
 }
 
-/** Patches process.kill into a counter for the duration of `fn`, restores it, and returns the real-kill call count. */
-async function countRealKillCalls(fn: () => Promise<void>): Promise<number> {
+/** Patches process.kill into a recorder for the duration of `fn`, restores it, and returns the recorded call list.
+ *
+ * CodeRabbit CR-9 (PR #35 round): a bare call counter cannot check the
+ * invariant "every real kill targets a negative PID". The recorder captures
+ * each call's pid and signal so tests can assert Targets, not just counts.
+ */
+interface RecordedKill {
+  readonly pid: number;
+  readonly signal: string | number | undefined;
+}
+
+async function recordRealKills(fn: () => Promise<void>): Promise<RecordedKill[]> {
   const realKill = process.kill;
-  let calls = 0;
-  process.kill = (() => {
-    calls += 1;
+  const calls: RecordedKill[] = [];
+  process.kill = ((pid: number, signal?: string | number) => {
+    calls.push({ pid, signal });
     return true;
   }) as unknown as typeof process.kill;
   try {
@@ -914,6 +939,11 @@ async function countRealKillCalls(fn: () => Promise<void>): Promise<number> {
     process.kill = realKill;
   }
   return calls;
+}
+
+/** Back-compat wrapper for existing call-count assertions. */
+async function countRealKillCalls(fn: () => Promise<void>): Promise<number> {
+  return (await recordRealKills(fn)).length;
 }
 
 test("PTY closes first, child.exited resolves more than two event-loop turns later: normal lifecycle succeeds without false containment", async () => {
@@ -1038,7 +1068,7 @@ test("PTY fails while child is authoritatively still alive: containment exactly 
     };
     process.on("unhandledRejection", onUnhandled);
     try {
-      const realKillCalls = await countRealKillCalls(async () => {
+      const kills = await recordRealKills(async () => {
         const steady = runSteadyState(
           frameReader.reader,
           fakeSession,
@@ -1076,13 +1106,15 @@ test("PTY fails while child is authoritatively still alive: containment exactly 
         expect(kinds).not.toContain("drained");
         expect(kinds).not.toContain("exited");
       });
-      // Task 43 contract update: the ladder's SIGKILL rung fires only when
-      // the group is still alive after the grace. In this synthetic session
-      // the child's exited resolves promptly, so the exact real-kill count
-      // is an implementation detail of the grace race; the bound is what
-      // the invariant requires: every real kill is a negative-PGID kill
-      // (the seam took the SIGTERM rung), and containment happened once.
-      expect(realKillCalls).toBeGreaterThanOrEqual(0);
+      // Task 43 contract update + CodeRabbit CR-9 (PR #35 round): the
+      // vacuous count bound is replaced by the real invariant — every real
+      // kill this test observes targets a NEGATIVE pid (the ladder's
+      // negative-PGID rungs); no non-negative (individual) pid is ever
+      // killed by host containment code. The count itself remains a
+      // grace-race detail.
+      for (const k of kills) {
+        expect(k.pid).toBeLessThan(0);
+      }
       expect(signaledPgids).toEqual([4242]);
       expect(unhandled).toHaveLength(0);
     } finally {
