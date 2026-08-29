@@ -679,7 +679,23 @@ export async function runSteadyState(
       // the flag reflects the PTY's current state, not just registration
       // order.
       await new Promise((res) => setTimeout(res, 0));
-      await close({ announce: false, signal: false, ptyPath: ptySettledNow ? "pty_already_settled_success" : "await_pty" });
+      // Tier-2 FAIL remediation (round-7): the EOF-path close previously
+      // passed signal: false, relying on natural PTY settlement via
+      // session.ptyClosed. After onLifelineEof sends SIGTERM to the
+      // negative PGID, the dying child's PTY slave is not guaranteed to
+      // close promptly on macOS (the kernel can hold the slave until the
+      // last open fd in the group closes, and the master-side Bun.Terminal
+      // exit callback can be observed strictly after the host reaches the
+      // `ptySettledNow` flag check — a microtask-ordering race). When the
+      // race went the other way the host took the `await_pty` branch and
+      // hit PtyClosureTimeoutError after 3 s, exiting non-zero without
+      // emitting `drained`/`exited`. Fix: pass signal: true so the
+      // explicit terminal.close() in the await_pty branch (lines 436-442)
+      // is reached, forcing master-side settlement deterministically.
+      // terminateChildGroup with emitStarted: false is a no-op against an
+      // already-dead group (kill ESRCH swallowed by the seam), so no
+      // termination_started / ack is emitted and no double-signal occurs.
+      await close({ announce: false, signal: true, ptyPath: ptySettledNow ? "pty_already_settled_success" : "await_pty" });
       return;
     }
 
