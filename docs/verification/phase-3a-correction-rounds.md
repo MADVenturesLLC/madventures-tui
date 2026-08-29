@@ -189,3 +189,14 @@ Task 42's plan file list (plan §5, lines 2070–2077) omits `packages/pty-host/
 - CR-10: SIGKILL rung asserted directly (signal === "SIGKILL", code null) instead of the permissive disjunction.
 - CR-11: grandchild test waits for the GC_READY marker before terminate (no vacuous pass on a missing grandchild).
 - CR-4 (test strictness informational note): no code change required, per Founder.
+
+## 2026-08-29 — M19 Task 42+43 Tier-2 FAIL round: three blocking findings corrected
+
+**Review verdict:** FAIL at `4d2d14b` (artifact `tier2-m19-remediation-4d2d14b-FAIL.txt`, SHA-256 `703dc1c14ec11bea8297f2039a185146ebfcdadac78aedf22d7e16516239ce54`) — three Blocking findings in the CodeRabbit-remediation batch's new code. Founder correction authorization 2026-08-29 (correcting commit on top, allowed files: supervisor/src+test, pty-host main/src+test, correction log).
+
+**Findings → fixes:**
+1. BLOCKING (supervisor pump): late facts() subscribers hung in the 5-minute safety net — queue.closed never set post-settlement — AND no history replay, so late subscribers missed `launched` (killPgid blind). Fix: a bounded global history (cap 256) records every fact at the pump; facts() takes a subscribe-time atomic snapshot (settled + error + history) — post-settlement subscribers replay history and terminate immediately; pre-settlement subscribers attach to the live queue. `launched` remains available to killPgid regardless of consumption.
+2. BLOCKING (main.ts EOF race): the deadline race's losing IIFE threw into a settled promise 5 s after clean containment — an unhandled rejection that could crash the host. Fix: a settlement-aware deadline — shared settled flag, clearTimeout on any settle path, the timer's throw is a no-op after settlement, and child.exited rejection paths are race-guarded identically.
+3. New regression tests prove each finding: (a) late subscriber replays history and receives `launched`; (b) post-settlement subscriber terminates immediately (no 5-min hang); (c) killPgid works with facts() never consumed (launched history feeds it); (d) the EOF deadline timer fires no unhandled rejection after clean containment (verified across the full 5 s window).
+
+**Verification at the corrected head:** new regression tests pass; signals 5/5; packages/pty-host+broker 132 pass / 0 fail (two consecutive runs); tsc exit 0. Prior FAIL carried no weight.

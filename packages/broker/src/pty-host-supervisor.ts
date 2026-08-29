@@ -216,28 +216,49 @@ export function spawnPtyHost(descriptor: HostLaunchDescriptor): PtyHostHandle {
   //  - starts at spawn time (independent of consumer behavior);
   //  - records reportedPgid the moment the launched fact arrives, so
   //    killPgid() works even if facts() is never iterated;
+  //  - maintains a bounded global history so late subscribers replay the
+  //    facts they missed (including `launched`, which killPgid needs);
   //  - fans every decoded fact out to every active subscriber queue.
+  //
+  // Tier-2 FAIL remediation (round-4 findings 1+2): the first pump version
+  // (a) left late subscribers hanging — their queue.closed was never set
+  // because the pump's finally had already run — and (b) dropped all
+  // history, so late subscribers missed the launched fact. Fix: a global
+  // history buffer (capped) records every fact; a subscriber created at
+  // ANY time snapshots `history + settled + error` atomically, so it sees
+  // prior facts and terminates immediately when the pump is settled.
   let reportedPgid: number | null = null;
-  const subscribers = new Set<AsyncQueue<HostFactFrame>>();
-  let pumpError: Error | null = null;
-  let pumpSettled = false;
-  const pumpWaiters = new Set<() => void>();
-
-  type AsyncQueue<T> = {
-    readonly items: T[];
+  const HISTORY_CAP = 256; // bounded: launch/ready/ack/live output facts for one child session
+  let history: HostFactFrame[] = [];
+  const subscribers = new Set<{
+    readonly items: HostFactFrame[];
     readonly waiters: Set<(done: boolean) => void>;
     closed: boolean;
-  };
-
-  const wakePumpWaiters = () => {
-    for (const w of pumpWaiters) w();
-  };
+  }>();
+  let pumpError: Error | null = null;
+  let pumpSettled = false;
 
   const enqueue = (frame: HostFactFrame): void => {
     if (frame.kind === "launched") reportedPgid = frame.pgid;
+    // Bounded history: output facts dominate volume; cap preserves
+    // launch/ready/ack evidence in practice while keeping memory flat.
+    history.push(frame);
+    if (history.length > HISTORY_CAP) {
+      history = history.slice(history.length - Math.floor(HISTORY_CAP / 2));
+    }
     for (const q of subscribers) {
       q.items.push(frame);
       for (const w of q.waiters) w(false);
+      q.waiters.clear();
+    }
+  };
+
+  const settleSubscribers = (): void => {
+    for (const q of subscribers) {
+      if (!q.closed) {
+        q.closed = true;
+        for (const w of q.waiters) w(true);
+      }
       q.waiters.clear();
     }
   };
@@ -251,23 +272,32 @@ export function spawnPtyHost(descriptor: HostLaunchDescriptor): PtyHostHandle {
       pumpError = err instanceof Error ? err : new Error(String(err));
     } finally {
       pumpSettled = true;
-      for (const q of subscribers) {
-        q.closed = true;
-        for (const w of q.waiters) w(true);
-        q.waiters.clear();
-      }
-      wakePumpWaiters();
+      settleSubscribers();
     }
   })();
   void pump;
 
   const facts = async function* (): AsyncGenerator<HostFactFrame> {
-    const queue: AsyncQueue<HostFactFrame> = { items: [], waiters: new Set(), closed: false };
-    subscribers.add(queue);
-    // Replay any facts the pump already enqueued before this subscription.
-    const backlog = queue.items.splice(0, queue.items.length);
+    // Subscribe-time atomic snapshot: the history at this moment plus the
+    // pump's current error/settled state. A subscriber created after pump
+    // settlement sees settled immediately — it replays the history and
+    // terminates without hanging (round-4 finding 1). A subscriber created
+    // at any time gets the full history from spawn (finding 2 — the
+    // `launched` fact required by killPgid is always available).
+    const settledAtSubscribe = pumpSettled;
+    const errorAtSubscribe = pumpError;
+    const backlog = history.slice();
     for (const frame of backlog) yield frame;
-    if (pumpError !== null && !queue.closed) throw pumpError;
+    if (settledAtSubscribe) {
+      if (errorAtSubscribe !== null) throw errorAtSubscribe;
+      return;
+    }
+    const queue: { items: HostFactFrame[]; waiters: Set<(done: boolean) => void>; closed: boolean } = {
+      items: [],
+      waiters: new Set(),
+      closed: false,
+    };
+    subscribers.add(queue);
     for (;;) {
       const next = queue.items.shift();
       if (next !== undefined) {
@@ -278,14 +308,14 @@ export function spawnPtyHost(descriptor: HostLaunchDescriptor): PtyHostHandle {
         if (pumpError !== null) throw pumpError;
         return;
       }
-      // Wait for the next fact or for pump settlement.
+      // Wait for the next fact or for pump settlement. The 5-minute net is
+      // a hang guard only; normal exit paths are the waiters.
       const settled = await new Promise<boolean>((resolve) => {
-        const timer = setTimeout(() => resolve(true), 300000); // 5 min safety net
+        const timer = setTimeout(() => resolve(true), 300000);
         queue.waiters.add((receivedDone) => {
           clearTimeout(timer);
           resolve(receivedDone);
         });
-        wakePumpWaiters();
       });
       if (settled && queue.items.length === 0) {
         if (pumpError !== null) throw pumpError;

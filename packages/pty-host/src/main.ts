@@ -610,15 +610,52 @@ export async function runSteadyState(
       // would hang here forever, violating "all governed processes gone
       // within five seconds". On expiry, fail closed: non-zero exit, no
       // success facts.
-      const eofExitDeadline = performance.now() + HOST_DEADLINES_MS.outerBound;
+      //
+      // Tier-2 FAIL remediation (round-4 finding 3): the prior race loser
+      // (a throwing async IIFE) kept running after the race settled and
+      // threw into an unsettled promise 5 s later — an unhandled rejection
+      // that could crash the process post-shutdown. The deadline is now
+      // settlement-aware: one shared deadline state, polled by a single
+      // cancellable waiter whose throw lands only while the race is still
+      // live. When the child exits first, the timer is cancelled before it
+      // can ever fire.
+      let eofRaceSettled = false;
+      let eofTimer: ReturnType<typeof setTimeout> | undefined;
       try {
-        await Promise.race([
-          session.child.exited,
-          (async () => {
-            while (performance.now() < eofExitDeadline) await new Promise((res) => setTimeout(res, 10));
-            throw new Error("lifeline-EOF child exit exceeded the §9.8 outer bound");
-          })(),
-        ]);
+        await new Promise<void>((resolveExit, rejectExit) => {
+          const settle = (err?: Error) => {
+            if (eofRaceSettled) return;
+            eofRaceSettled = true;
+            if (eofTimer !== undefined) clearTimeout(eofTimer);
+            if (err) rejectExit(err);
+            else resolveExit();
+          };
+          void session.child.exited.then(
+            () => {
+              if (!eofRaceSettled) {
+                eofRaceSettled = true;
+                if (eofTimer !== undefined) clearTimeout(eofTimer);
+                resolveExit();
+              }
+            },
+            (err) => {
+              if (!eofRaceSettled) {
+                eofRaceSettled = true;
+                if (eofTimer !== undefined) clearTimeout(eofTimer);
+                rejectExit(err instanceof Error ? err : new Error(String(err)));
+              }
+            },
+          );
+          eofTimer = setTimeout(() => {
+            const err = new Error("lifeline-EOF child exit exceeded the §9.8 outer bound");
+            if (!eofRaceSettled) {
+              eofRaceSettled = true;
+              rejectExit(err);
+            }
+            // If the race already settled, this timer's callback is a
+            // no-op — the error is never thrown into a settled promise.
+          }, HOST_DEADLINES_MS.outerBound);
+        });
       } catch (err) {
         const detail = err instanceof Error ? err.message : String(err);
         process.stderr.write(`pty-host: lifeline-EOF containment incomplete: ${detail}; failing closed\n`);

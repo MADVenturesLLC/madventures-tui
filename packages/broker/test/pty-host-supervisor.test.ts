@@ -180,3 +180,141 @@ test("host environment is exactly the allowlisted environment", async () => {
     handle.killPgid();
   }
 });
+// ── Tier-2 round-5 findings 1+2: late/post-settlement facts() subscribers ──
+
+test("a late facts() subscriber replays history and receives the launched fact", async () => {
+  // Tier-2 FAIL round-4, finding 2: a subscriber created after the pump
+  // consumed facts previously saw an empty backlog (facts were only fanned
+  // to then-active subscribers) and silently missed `launched` — leaving
+  // killPgid() blind. The corrected pump keeps a bounded global history and
+  // every new subscription replays it.
+  const handle = spawnPtyHost({
+    path: "/bin/cat",
+    sha256: sha256File("/bin/cat"),
+    argv: [],
+    env: {},
+    executionId: "exec-late-subscribe",
+  });
+  try {
+    // First subscriber consumes normally, driving the pump.
+    const firstIterator = handle.facts()[Symbol.asyncIterator]();
+    const first = await firstIterator.next();
+    expect(first.done).toBe(false);
+    expect(first.value).toMatchObject({ kind: "launched" });
+    // Give the pump a moment to buffer ready as well, then create a LATE
+    // subscriber that must still see the full history from spawn.
+    await new Promise((res) => setTimeout(res, 50));
+    const lateIterator = handle.facts()[Symbol.asyncIterator]();
+    const late = await lateIterator.next();
+    expect(late.done).toBe(false);
+    // The `launched` fact required by killPgid() is present for the late
+    // subscriber, carrying the real pgid.
+    expect(late.value).toMatchObject({ kind: "launched" });
+    expect(typeof (late.value as { pgid: number }).pgid).toBe("number");
+  } finally {
+    process.kill(handle.hostPid, "SIGKILL");
+    handle.killPgid();
+  }
+}, 15000);
+
+test("a facts() subscriber created after pump settlement terminates immediately", async () => {
+  // Tier-2 FAIL round-4, finding 1: subscribing after pump settlement left
+  // the subscriber hanging in the 5-minute safety net (queue.closed never
+  // set). The corrected implementation terminates the subscriber
+  // immediately — replay the history, surface any pump error, end.
+  const handle = spawnPtyHost({
+    path: "/bin/cat",
+    sha256: sha256File("/bin/cat"),
+    argv: [],
+    env: {},
+    executionId: "exec-post-settle",
+  });
+  let lateErrored: unknown = null;
+  try {
+    const preIterator = handle.facts()[Symbol.asyncIterator]();
+    await preIterator.next(); // launched
+    // SIGKILL the host: the pump sees stdout close and settles.
+    process.kill(handle.hostPid, "SIGKILL");
+    // Drain the first subscription to settlement (the death-watch path).
+    for (;;) {
+      const next = (await Promise.race([
+        preIterator.next().then((r) => ({ tag: "value" as const, r })),
+        new Promise<{ tag: "timeout" }>((res) => setTimeout(() => res({ tag: "timeout" }), 10000)),
+      ]));
+      if (next.tag === "timeout") break;
+      if (next.r.done) break;
+    }
+    // NOW subscribe — the pump is settled. This must return promptly (the
+    // entire remaining test cannot exceed a couple of seconds).
+    const lateIterator = handle.facts()[Symbol.asyncIterator]();
+    const late = await Promise.race([
+      lateIterator.next().then((r) => ({ kind: "value" as const, r })),
+      new Promise<{ kind: "timeout" }>((res) => setTimeout(() => res({ kind: "timeout" }), 3000)),
+    ]);
+    // Either it errored immediately, or it replayed history and ended — but
+    // it MUST NOT hang.
+    if (late.kind === "timeout") {
+      throw new Error("late subscriber hung on a settled pump (finding 1 regression)");
+    }
+    if (!late.r.done) {
+      // Replay path: keep draining until done; must still terminate fast.
+      for (;;) {
+        const next = await Promise.race([
+          lateIterator.next().then((r) => ({ kind: "value" as const, r })),
+          new Promise<{ kind: "timeout" }>((res) => setTimeout(() => res({ kind: "timeout" }), 3000)),
+        ]);
+        if (next.kind === "timeout") throw new Error("post-settlement replay did not terminate");
+        if (next.r.done) break;
+      }
+    }
+  } catch (err) {
+    lateErrored = err;
+  } finally {
+    handle.killPgid();
+    try { if (!handle.hostPid || process.kill(handle.hostPid, 0) === undefined) { /* noop */ } } catch { /* gone */ }
+  }
+  // The observable: no hang. Any error surfaced is the pump's own stream
+  // error (host SIGKILLed mid-stream), never a timeout-hang.
+  expect(lateErrored === null || (lateErrored as Error).message.includes("kill")).toBe(true);
+}, 15000);
+
+test("the launched history fact feeds killPgid even when facts() is never consumed", async () => {
+  // Tier-2 FAIL round-4, finding 2 (killPgid half): reportedPgid must be
+  // recorded by the pump at spawn time, independent of any facts()
+  // consumption. Prove it: spawn, never call facts(), then killPgid() —
+  // the /bin/cat group must actually die (a blind killPgid would be a
+  // no-op and the group would survive).
+  const handle = spawnPtyHost({
+    path: "/bin/cat",
+    sha256: sha256File("/bin/cat"),
+    argv: [],
+    env: {},
+    executionId: "exec-killpgid-unconsumed",
+  });
+  try {
+    await new Promise((res) => setTimeout(res, 300)); // pump learns launched
+    // killPgid uses the pump-recorded pgid; the group (/bin/cat) must die.
+    handle.killPgid();
+    // If reportedPgid was never set, killPgid silently does nothing and the
+    // cat process keeps running. Detect via the pump: facts() (any call)
+    // will still stream nothing new, but /bin/cat's liveness is the check —
+    // poll until the host itself dies of EPIPE/exit since its child died.
+    const host = handle.hostPid;
+    const t0 = performance.now();
+    let hostDied = false;
+    while (performance.now() - t0 < 8000) {
+      try {
+        process.kill(handle.hostPid, 0);
+      } catch {
+        hostDied = true;
+        break;
+      }
+      await new Promise((res) => setTimeout(res, 25));
+      // cat's death makes the host finish its session and exit.
+    }
+    expect(hostDied).toBe(true);
+  } finally {
+    try { process.kill(handle.hostPid, "SIGKILL"); } catch { /* gone */ }
+    handle.killPgid();
+  }
+}, 15000);
