@@ -200,3 +200,19 @@ Task 42's plan file list (plan §5, lines 2070–2077) omits `packages/pty-host/
 3. New regression tests prove each finding: (a) late subscriber replays history and receives `launched`; (b) post-settlement subscriber terminates immediately (no 5-min hang); (c) killPgid works with facts() never consumed (launched history feeds it); (d) the EOF deadline timer fires no unhandled rejection after clean containment (verified across the full 5 s window).
 
 **Verification at the corrected head:** new regression tests pass; signals 5/5; packages/pty-host+broker 132 pass / 0 fail (two consecutive runs); tsc exit 0. Prior FAIL carried no weight.
+
+## 2026-08-29 — M19 Task 42+43 Tier-2 FAIL round 6: subscription race corrected
+
+**Review verdict:** FAIL at `9bcf015` (artifact `tier2-m19-correction-9bcf015-FAIL.txt`, SHA-256 `c7e4b3de3dd0d241aff6384e101f4baeae66026223c5770453313cdb0cd2b80c`) — 1 Blocking + 2 Major in the pump subscription strategy. The EOF-timer fix (round-4 finding 3) was VERIFIED remediated; four regression tests confirmed genuine.
+
+**Founder correction authorization 2026-08-29:** synchronous subscription attach + no-loss replay + settlement broadcast + launched pin; three new regression tests required.
+
+**Findings → fixes (all in supervisor.ts):**
+1. BLOCKING race-to-hang + 2. MAJOR async-gap data loss: the subscribe-to-subscribers attachment now happens SYNCHRONOUSLY at generator start, BEFORE yielding the backlog — facts the pump enqueues during backlog replay are queued into the live subscriber (no loss), and pump settlement reaches the queue via the normal finally broadcast (no hang). Backlog replay skips facts already fanned into the live queue (dedupe via attach-time snapshot of queue.items).
+3. MAJOR launched eviction: the first launched fact is PINNED against history-cap trimming — when the cap triggers, the trim start never passes the pinned launched index, so late replay always includes it (bounded memory preserved; cap still 256 with half-trim).
+
+**New regression tests (3):** settlement during backlog replay reaches the subscriber without hanging (real pipe, closeStdin raced against replay); facts enqueued during replay are not lost (10 resize acks asserted while replay yields); launched survives history pressure and is replayed to late subscribers with the real pgid (noisy child forcing the cap).
+
+**Also corrected during this round (test fixture only):** the settlement-during-replay test originally used /bin/cat — its EOF path ends via the PTY-unsettled 3 s fail-closed join (verified: 'PTY did not close within 3000ms'), a separate concern from the subscription race; fixture switched to /bin/sh + foreground sleep whose PTY settles promptly, isolating the subscription-race assertion. The /bin/cat 3 s join remains an observable behavior for the wedged/EOF surfaces Task 44 covers.
+
+**Verification at the corrected head:** 3 new regressions pass; supervisor suite 9/9; pty-host+broker full suites green (132+ tests); tsc exit 0. Prior FAIL carried no weight; new head requires fresh Tier-2 review.

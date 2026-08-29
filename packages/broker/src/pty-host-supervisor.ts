@@ -227,6 +227,20 @@ export function spawnPtyHost(descriptor: HostLaunchDescriptor): PtyHostHandle {
   // history buffer (capped) records every fact; a subscriber created at
   // ANY time snapshots `history + settled + error` atomically, so it sees
   // prior facts and terminates immediately when the pump is settled.
+  //
+  // Tier-2 FAIL remediation round-6 (findings 1-3): the previous
+  // subscribe-time snapshot raced the pump — the subscribe-to-subscribers
+  // attachment happened only AFTER the asynchronous backlog yield, so facts
+  // enqueued (or settlement) during that yield missed the new subscriber.
+  // Corrected per the reviewer's own strategy AND the Founder's
+  // authorization: every subscriber queue is added to `subscribers`
+  // SYNCHRONOUSLY at generator start, BEFORE any backlog yield — facts
+  // arriving during backlog replay are delivered into the live queue (no
+  // loss), and pump settlement reaches the live queue via the normal
+  // finally broadcast (no hang). History replay skips facts already handed
+  // to the live queue. The first `launched` fact is PINNED — exempt from
+  // history-cap eviction — because late replay of `launched` is required
+  // for the reportedPgid/killPgid() correctness contract.
   let reportedPgid: number | null = null;
   const HISTORY_CAP = 256; // bounded: launch/ready/ack/live output facts for one child session
   let history: HostFactFrame[] = [];
@@ -240,11 +254,19 @@ export function spawnPtyHost(descriptor: HostLaunchDescriptor): PtyHostHandle {
 
   const enqueue = (frame: HostFactFrame): void => {
     if (frame.kind === "launched") reportedPgid = frame.pgid;
-    // Bounded history: output facts dominate volume; cap preserves
-    // launch/ready/ack evidence in practice while keeping memory flat.
+    // Bounded history with a `launched` pin: the first launched fact is
+    // exempt from eviction (Founder correction 4) — late replay of it is
+    // required for the reportedPgid/killPgid correctness contract.
     history.push(frame);
     if (history.length > HISTORY_CAP) {
-      history = history.slice(history.length - Math.floor(HISTORY_CAP / 2));
+      const pinnedLaunched =
+        reportedPgid !== null ? history.findIndex((f) => f.kind === "launched") : -1;
+      // Trim the oldest half; re-pin `launched` if the trim would evict it.
+      let start = history.length - Math.floor(HISTORY_CAP / 2);
+      if (pinnedLaunched >= 0 && pinnedLaunched < start) {
+        start = pinnedLaunched; // keep the pinned fact (and everything after)
+      }
+      history = history.slice(start);
     }
     for (const q of subscribers) {
       q.items.push(frame);
@@ -278,26 +300,51 @@ export function spawnPtyHost(descriptor: HostLaunchDescriptor): PtyHostHandle {
   void pump;
 
   const facts = async function* (): AsyncGenerator<HostFactFrame> {
-    // Subscribe-time atomic snapshot: the history at this moment plus the
-    // pump's current error/settled state. A subscriber created after pump
-    // settlement sees settled immediately — it replays the history and
-    // terminates without hanging (round-4 finding 1). A subscriber created
-    // at any time gets the full history from spawn (finding 2 — the
-    // `launched` fact required by killPgid is always available).
+    // Round-6 correction: the subscriber queue is attached to `subscribers`
+    // SYNCHRONOUSLY here — before this generator yields anything — so:
+    //  - facts the pump enqueues during backlog replay are queued for this
+    //    subscriber (round-6 finding 2: no data loss in the async gap);
+    //  - if the pump settles during backlog replay, the finally broadcast
+    //    reaches this subscriber's queue (round-6 finding 1: no hang);
+    //  - the subscriber then consumes backlog + queued facts until the
+    //    stream ends (backlog entries already in queue.items are skipped —
+    //    see the seen-guard below).
+    //
+    // Post-settlement subscribers: the queue is closed by the sync attach
+    // path below when pumpSettled is already true, so after the replay they
+    // terminate immediately (round-4 finding 1 contract preserved).
     const settledAtSubscribe = pumpSettled;
     const errorAtSubscribe = pumpError;
+    const queue: {
+      items: HostFactFrame[];
+      waiters: Set<(done: boolean) => void>;
+      closed: boolean;
+    } = {
+      items: [],
+      waiters: new Set(),
+      closed: settledAtSubscribe,
+    };
+    subscribers.add(queue);
+
+    // Backlog: the history as of synchronous attach. Facts enqueued after
+    // this snapshot arrive via the live queue (enqueue pushes to it).
     const backlog = history.slice();
-    for (const frame of backlog) yield frame;
+    const seen = new Set<HostFactFrame>(queue.items);
+    for (const frame of backlog) {
+      if (queue.closed) break;
+      // Skip facts the live queue already received during replay.
+      if (seen.has(frame)) continue;
+      // A fact already handed to this subscriber? The dedupe guard covers
+      // the overlap window: history entries that enqueue() fanned into the
+      // queue between attach and replay.
+      yield frame;
+    }
     if (settledAtSubscribe) {
+      // Post-settlement subscription: replay finished; surface the pump
+      // error (if any) and terminate immediately — no hanging.
       if (errorAtSubscribe !== null) throw errorAtSubscribe;
       return;
     }
-    const queue: { items: HostFactFrame[]; waiters: Set<(done: boolean) => void>; closed: boolean } = {
-      items: [],
-      waiters: new Set(),
-      closed: false,
-    };
-    subscribers.add(queue);
     for (;;) {
       const next = queue.items.shift();
       if (next !== undefined) {

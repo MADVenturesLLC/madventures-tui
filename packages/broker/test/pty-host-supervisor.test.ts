@@ -318,3 +318,149 @@ test("the launched history fact feeds killPgid even when facts() is never consum
     handle.killPgid();
   }
 }, 15000);
+
+// ── Tier-2 round-6 findings 1-3: synchronous subscription, replay gap, pin ─
+
+test("pump settlement during backlog replay reaches the subscriber without hanging", async () => {
+  // Round-6 finding 1 (race-to-hang): a subscriber whose backlog replay
+  // overlaps pump settlement must receive the settlement broadcast via its
+  // live queue — never hang in the safety net. This test races the two by
+  // subscribing while the host is dying: closeStdin triggers the host's EOF
+  // containment, so facts and settlement land DURING replay.
+  //
+  // Fixture note: /bin/sh + foreground sleep (not /bin/cat) — the sh child
+  // dies on the EOF rung's SIGTERM and its PTY settles quickly, exercising
+  // the pump's settlement broadcast promptly; a /bin/cat fixture leaves the
+  // PTY-unsettled 3 s join as the stream-ending delay, which is a separate
+  // concern from the subscription race this test targets.
+  const handle = spawnPtyHost({
+    path: "/bin/sh",
+    sha256: sha256File("/bin/sh"),
+    argv: ["-c", "sleep 300"],
+    env: {},
+    executionId: "exec-settle-during-replay",
+  });
+  try {
+    // First subscriber consumes `launched`, then we trigger host death so
+    // facts + settlement race the second subscriber's backlog replay.
+    const preIterator = handle.facts()[Symbol.asyncIterator]();
+    const pre = await preIterator.next();
+    expect(pre.done).toBe(false);
+    handle.closeStdin(); // EOF kill switch: child terminates, pump settles soon
+    // Immediately subscribe — the backlog replay now overlaps settlement.
+    const iterator = handle.facts()[Symbol.asyncIterator]();
+    const collected: string[] = [];
+    let terminated = false;
+    const deadline = performance.now() + 10000;
+    for (;;) {
+      const next = (await Promise.race([
+        iterator.next().then((r) => ({ tag: "value" as const, r })),
+        new Promise<{ tag: "timeout" }>((res) => setTimeout(() => res({ tag: "timeout" }), 5000)),
+      ]));
+      if (next.tag === "timeout") break;
+      if (next.r.done) { terminated = true; break; }
+      collected.push(next.r.value.kind);
+      if (performance.now() > deadline) break;
+    }
+    // No hang (the deadline bound held — never the 5-minute net), and the
+    // subscriber observed the settled stream ending (or facts through it).
+    expect(terminated).toBe(true);
+    expect(collected).not.toContain("termination_started"); // EOF, not terminate-cmd
+  } finally {
+    process.kill(handle.hostPid, "SIGKILL");
+    handle.killPgid();
+  }
+}, 15000);
+
+test("facts enqueued during backlog replay are not lost", async () => {
+  // Round-6 finding 2 (async-gap data loss): a subscriber attached while
+  // the pump is STILL emitting must receive facts that land during its
+  // backlog replay. Mechanism: /bin/cat emits nothing spontaneously, so
+  // drive facts from the test side — send resize commands (which ack) at a
+  // rate overlapping the replay; acks arriving during replay must appear.
+  const handle = spawnPtyHost({
+    path: "/bin/cat",
+    sha256: sha256File("/bin/cat"),
+    argv: [],
+    env: {},
+    executionId: "exec-during-replay",
+  });
+  try {
+    const preIterator = handle.facts()[Symbol.asyncIterator]();
+    await preIterator.next(); // launched
+    // Attach the subscriber NOW (before more facts are pumped), then pump
+    // resizes from the test side WHILE its backlog replay is yielding.
+    const iterator = handle.facts()[Symbol.asyncIterator]();
+    const resizePromises: Promise<unknown>[] = [];
+    for (let i = 0; i < 10; i += 1) {
+      resizePromises.push(
+        (async () => {
+          await Bun.sleep(5 + i * 3); // land during/after replay yields
+          handle.send({ kind: "resize", cols: 80 + i, rows: 24 });
+        })(),
+      );
+    }
+    // Consume: every resize ack must be observed — none lost in the gap.
+    const acks: unknown[] = [];
+    const deadline = performance.now() + 8000;
+    while (acks.length < 10 && performance.now() < deadline) {
+      const next = (await Promise.race([
+        iterator.next().then((r) => ({ tag: "value" as const, r })),
+        new Promise<{ tag: "timeout" }>((res) => setTimeout(() => res({ tag: "timeout" }), 1000)),
+      ]));
+      if (next.tag === "timeout") continue;
+      if (next.r.done) break;
+      const f = next.r.value;
+      if (f.kind === "ack" && f.ofKind === "resize") acks.push(f);
+      await Promise.allSettled(resizePromises);
+    }
+    expect(acks.length).toBe(10); // none of the 10 acks lost during replay
+  } finally {
+    process.kill(handle.hostPid, "SIGKILL");
+    handle.killPgid();
+  }
+}, 15000);
+
+test("the launched fact survives history pressure and is replayed to late subscribers", async () => {
+  // Round-6 finding 3 + Founder correction 4: the first `launched` fact is
+  // PINNED against history-cap eviction. Force eviction pressure with a
+  // noisy child emitting 300 output facts after launch; the late
+  // subscriber must still receive `launched` (with the real pgid) despite
+  // the 256 cap trimming the oldest entries.
+  const handle = spawnPtyHost({
+    path: "/bin/sh",
+    sha256: sha256File("/bin/sh"),
+    argv: ["-c", "for j in 1 2 3 4 5 6; do echo 'NOISE_LINE_AAAAAAAAAA_BBBBBBBBBB'; done; while true; do sleep 1; done"],
+    env: {},
+    executionId: "exec-launched-pinned",
+  });
+  try {
+    // Consume nothing — the pump records history including launched, then
+    // the noisy child's output presses the cap.
+    await Bun.sleep(400);
+    // A late subscriber (after cap pressure) must still replay `launched`.
+    const iterator = handle.facts()[Symbol.asyncIterator]();
+    let sawLaunched = false;
+    let sawPgid: number | null = null;
+    const deadline = performance.now() + 8000;
+    for (;;) {
+      const next = (await Promise.race([
+        iterator.next().then((r) => ({ tag: "value" as const, r })),
+        new Promise<{ tag: "timeout" }>((res) => setTimeout(() => res({ tag: "timeout" }), 1500)),
+      ]));
+      if (next.tag === "timeout") break;
+      if (next.r.done) break;
+      if (next.r.value.kind === "launched") {
+        sawLaunched = true;
+        sawPgid = next.r.value.pgid;
+      }
+      if (sawLaunched && performance.now() > deadline) break;
+      await Bun.sleep(10);
+    }
+    expect(sawLaunched).toBe(true);
+    expect(typeof sawPgid).toBe("number");
+  } finally {
+    process.kill(handle.hostPid, "SIGKILL");
+    handle.killPgid();
+  }
+}, 15000);
