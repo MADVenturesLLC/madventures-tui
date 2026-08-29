@@ -1145,6 +1145,104 @@ test("unexpected clean PTY closure while child authoritatively alive: contained 
   });
 }, 15000); // explicit timeout: no runner-initiated abort mid-patch (kill-patch leak guard)
 
+test("a code-less generic SIGKILL failure propagates: fail-closed, no silent success", async () => {
+  // Tier-2 FAIL remediation regression (df19365 logic inversion, corrected
+  // per Founder correction authorization 2026-08-28): the injected seam's
+  // SIGKILL branch must swallow ONLY code === "ESRCH". A generic Error
+  // without a .code property — exactly the class the inverted filter
+  // silently swallowed — must propagate out of the closer instead, keeping
+  // the failure path fail-closed.
+  //
+  // Mechanism: the closer's ladder inner seam routes SIGTERM to the
+  // injected signalProcessGroup (recorded) and the SIGKILL rung to real
+  // process.kill. To drive the catch block under test, the SYNTHETIC
+  // session's liveness seam reports the group alive through the grace, so
+  // the SIGKILL rung executes; the patched process.kill here throws a
+  // code-less error on the negative-PGID SIGKILL call. The corrected
+  // allow-list must re-throw it; the closer surfaces the failure as a
+  // fail-closed contained state (non-zero exit, no drained/exited).
+  await withCapturedHostIO(async (io) => {
+    const { fakeSession, resolveChildExited, resolvePtyClosed } = makeFakeSession();
+    const pipeline = makeOutputPipeline();
+    pipeline.markReady();
+    const frameReader = makePendingFrameReader();
+    const signaledPgids: number[] = [];
+    const isChildRunning = () => true;
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown): void => {
+      unhandled.push(reason);
+    };
+    process.on("unhandledRejection", onUnhandled);
+    const realKill = process.kill;
+    let sawCodeLessFailure = false;
+    try {
+      process.kill = ((pid: number, signal?: number | string) => {
+        // Liveness probe (signal 0) to the negative PGID: report the group
+        // alive so the ladder's grace elapses and the SIGKILL rung executes.
+        if (pid < 0 && (signal === 0 || signal === undefined)) {
+          return true;
+        }
+        if (pid < 0 && signal === "SIGKILL") {
+          // The ladder's survivor rung: throw the exact error class the
+          // inverted filter swallowed.
+          sawCodeLessFailure = true;
+          throw new Error("generic kill failure without a code");
+        }
+        return realKill(pid, signal);
+      }) as typeof process.kill;
+
+      const steady = runSteadyState(
+        frameReader.reader,
+        fakeSession,
+        pipeline.markClosed,
+        (pgid) => {
+          signaledPgids.push(pgid);
+        },
+        isChildRunning,
+      );
+      await flushTurn();
+
+      resolvePtyClosed();
+      await flushUntil(() => signaledPgids.length > 0);
+
+      expect(signaledPgids).toEqual([4242]);
+
+      resolveChildExited();
+      // The corrected allow-list must RE-THROW the code-less error (the
+      // inverted filter would have swallowed it): runSteadyState rejects
+      // with exactly that failure. A swallowed error would instead resolve
+      // `steady` cleanly with success facts — the regression this test
+      // exists to prevent.
+      let propagated: unknown = null;
+      try {
+        await steady;
+      } catch (err) {
+        propagated = err;
+      }
+      expect(propagated).not.toBeNull();
+      expect((propagated as Error).message).toBe("generic kill failure without a code");
+
+      // Fail-closed containment held on the propagated-failure path: no
+      // success facts were published. (The reader-close count is a closer
+      // ordering detail on this path — the re-thrown error unwinds before
+      // the pty_already_settled_success branch's close runs — so the
+      // load-bearing fail-closed assertions are the propagated rejection
+      // itself plus the absent drained/exited facts.)
+      expect(sawCodeLessFailure).toBe(true);
+      const kinds = io.facts.map((f) => f.kind);
+      expect(kinds).not.toContain("drained");
+      expect(kinds).not.toContain("exited");
+      expect(io.stderrText()).toContain("PTY closed while child still running");
+    } finally {
+      process.kill = realKill;
+      process.removeListener("unhandledRejection", onUnhandled);
+      resolveChildExited();
+      resolvePtyClosed();
+      expect(unhandled).toHaveLength(0);
+    }
+  });
+}, 15000);
+
 test("steady-state child-exit-first lifecycle is unchanged: no containment signal, drained only after clean PTY closure, then exited", async () => {
   await withCapturedHostIO(async (io) => {
     const { fakeSession, resolveChildExited, resolvePtyClosed } = makeFakeSession();

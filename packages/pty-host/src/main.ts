@@ -355,19 +355,24 @@ export function makeSessionCloser(
                   if (signal === "SIGTERM") {
                     signalProcessGroup(pgid);
                   } else {
-                    // Tier-2 advisory fix (PASS-WITH-ADVISORIES at f157d136,
-                    // disposition (a)): the group can exit in the window
-                    // between the liveness check and this SIGKILL — ESRCH
-                    // means it is already gone, which is the desired
-                    // terminal state. Swallow it, mirroring the default
-                    // seam in signals.ts; any other failure propagates.
+                    // Tier-2 FAIL remediation (df19365 logic inversion, corrected
+                    // per Founder correction authorization 2026-08-28): the
+                    // prior positive-match filter swallowed errors lacking a
+                    // .code property. Explicit allow-list: ONLY ESRCH is
+                    // swallowed (group already gone = desired terminal state,
+                    // mirroring the default seam in signals.ts). Everything
+                    // else — EPERM, code-less Errors, null, primitives,
+                    // objects with other codes — re-throws, preserving
+                    // fail-closed semantics.
                     try {
                       process.kill(-pgid, "SIGKILL");
                     } catch (err) {
                       if (
                         typeof err === "object" && err !== null && "code" in err &&
-                        (err as { code: unknown }).code !== "ESRCH"
+                        (err as { code: unknown }).code === "ESRCH"
                       ) {
+                        // Group already gone: terminal state, nothing to do.
+                      } else {
                         throw err;
                       }
                     }
