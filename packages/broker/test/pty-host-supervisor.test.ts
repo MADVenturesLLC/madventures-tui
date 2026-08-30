@@ -5,7 +5,7 @@
 // wedged-host escalation tests (expected GREEN: 10 pass once Task 44 lands).
 
 import { expect, test } from "bun:test";
-import { spawnPtyHost, subscriberCountForTest } from "../src/pty-host-supervisor";
+import { spawnPtyHost, subscriberCountForTest, waiterCountForTest } from "../src/pty-host-supervisor";
 import type { HostFactFrame } from "../src/pty-host-protocol";
 
 function sha256File(path: string): string {
@@ -465,6 +465,60 @@ test("a parked subscriber on a live silent host survives the hang-net boundary a
     expect(result.r.done).toBe(false);
     expect(result.r.value).toMatchObject({ kind: "ack", ofKind: "resize" });
     // The queue survived the net boundary (not removed by a false end).
+    expect(subscriberCountForTest(handle)).toBe(1);
+  } finally {
+    // CodeRabbit CR-10 guard pattern: the host may have already exited.
+    try { process.kill(handle.hostPid, "SIGKILL"); } catch { /* host may have exited */ }
+    handle.killPgid();
+  }
+}, 15000);
+
+test("repeated idle hang-net expirations do not accumulate stale waiters (round-12 regression)", async () => {
+  // Round 12: the net path resolved `false` and re-entered the wait WITHOUT
+  // removing its waiter callback from `queue.waiters`, so an idle
+  // subscriber leaked one dead callback per net period — unbounded growth
+  // on a long-lived idle session, and every later fanout walked the dead
+  // set. The fix deletes the callback on BOTH exits (timer and settlement).
+  // The net is accelerated to 120 ms so several expirations fit the test.
+  const handle = spawnPtyHost(
+    {
+      path: "/bin/cat",
+      sha256: sha256File("/bin/cat"),
+      argv: [],
+      env: {},
+      executionId: "exec-r12-waiters",
+    },
+    { hangNetMs: 120 },
+  );
+  try {
+    const iterator = handle.facts()[Symbol.asyncIterator]();
+    // Drain the backlog so the generator reaches the live-wait phase.
+    const first = await iterator.next();
+    expect(first.done).toBe(false);
+    expect(first.value).toMatchObject({ kind: "launched" });
+    const second = await iterator.next();
+    expect(second.done).toBe(false);
+    expect(second.value).toMatchObject({ kind: "ready" });
+    // Park in the live-wait. The host is silent, so the net fires
+    // repeatedly; each expiry must remove its own callback and re-arm
+    // exactly one replacement.
+    const parked = iterator.next();
+    await Bun.sleep(700); // ~5 net periods at 120 ms
+    // THE regression assertion: exactly one live waiter, not one per
+    // expiry. Under the defect this grows with every net period.
+    expect(waiterCountForTest(handle)).toBe(1);
+    // And the stream is still functional: a later fact is delivered.
+    handle.send({ kind: "resize", cols: 80, rows: 24 });
+    const result = await Promise.race([
+      parked.then((r) => ({ tag: "v" as const, r })),
+      new Promise<{ tag: "t" }>((res) => setTimeout(() => res({ tag: "t" }), 2000)),
+    ]);
+    if (result.tag === "t") throw new Error("parked subscriber hung after repeated net expirations");
+    expect(result.r.done).toBe(false);
+    expect(result.r.value).toMatchObject({ kind: "ack", ofKind: "resize" });
+    // The delivering waiter removed itself too: the generator is between
+    // yields here, so no wait is outstanding.
+    expect(waiterCountForTest(handle)).toBe(0);
     expect(subscriberCountForTest(handle)).toBe(1);
   } finally {
     // CodeRabbit CR-10 guard pattern: the host may have already exited.

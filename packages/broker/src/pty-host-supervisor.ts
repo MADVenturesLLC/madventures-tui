@@ -92,6 +92,19 @@ export function subscriberCountForTest(handle: PtyHostHandle): number {
   return subscriberCounts.get(handle)?.() ?? 0;
 }
 
+/**
+ * Test-only observability: the total number of live wait callbacks across
+ * all `facts()` subscriber queues for a handle. Kept OFF the public
+ * `PtyHostHandle` contract and out of the package barrel, exactly like
+ * `subscriberCountForTest`. The round-12 stale-waiter regression needs to
+ * prove that repeated hang-net expirations do not accumulate callbacks.
+ */
+const waiterCounts = new WeakMap<PtyHostHandle, () => number>();
+
+export function waiterCountForTest(handle: PtyHostHandle): number {
+  return waiterCounts.get(handle)?.() ?? 0;
+}
+
 function concatBytes(a: Uint8Array<ArrayBuffer>, b: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
   const out = new Uint8Array(a.byteLength + b.byteLength);
   out.set(a, 0);
@@ -405,12 +418,27 @@ export function spawnPtyHost(
       // (architecture review): the prior net resolved `true`, the same
       // value as settlement, so 5 idle minutes ended a live subscription
       // as a clean stream end while the host and pump were alive.
+      //
+      // Round 12 (stale-waiter retention): the waiter callback must be
+      // removed from `queue.waiters` on BOTH exits. Previously the net
+      // path resolved `false` and re-entered the loop WITHOUT removing
+      // its callback, so every idle expiry left a dead callback behind
+      // and an idle subscriber accumulated one per net period forever.
+      // The timer path now deletes the callback before resolving, and
+      // the settlement path clears the timer and deletes the same
+      // callback — so exactly one live waiter exists per parked wait.
       const wake = await new Promise<boolean>((resolve) => {
-        const timer = setTimeout(() => resolve(false), hangNetMs);
-        queue.waiters.add((receivedDone) => {
-          clearTimeout(timer);
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const waiter = (receivedDone: boolean): void => {
+          if (timer !== undefined) clearTimeout(timer);
+          queue.waiters.delete(waiter);
           resolve(receivedDone);
-        });
+        };
+        timer = setTimeout(() => {
+          queue.waiters.delete(waiter);
+          resolve(false);
+        }, hangNetMs);
+        queue.waiters.add(waiter);
       });
       if (wake && queue.items.length === 0) {
         if (pumpError !== null) throw pumpError;
@@ -448,5 +476,10 @@ export function spawnPtyHost(
     },
   };
   subscriberCounts.set(handle, () => subscribers.size);
+  waiterCounts.set(handle, () => {
+    let total = 0;
+    for (const q of subscribers) total += q.waiters.size;
+    return total;
+  });
   return handle;
 }
