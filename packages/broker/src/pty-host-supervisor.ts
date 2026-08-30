@@ -124,6 +124,30 @@ export function closeStdinCallCountForTest(handle: PtyHostHandle): number {
 }
 
 /**
+ * Test-only acknowledgement seam, keyed by handle.
+ *
+ * `escalateWedgedHost` keeps the exact plan-specified public signature
+ * `(handle, pgid, hostPid)`. Acknowledgement observation is nonetheless
+ * load-bearing under C7 (a timely ack means NO escalation), so tests
+ * register the acknowledgement they are driving through this module-private
+ * WeakMap instead of through a public parameter.
+ *
+ * Kept OFF the public `PtyHostHandle` contract and out of the package
+ * barrel, exactly like `subscriberCountForTest` / `waiterCountForTest`.
+ * Production callers never register a signal; the map lookup then yields
+ * `undefined` and the ack branch simply never wins its race.
+ */
+const ackSignals = new WeakMap<PtyHostHandle, Promise<boolean>>();
+
+export function setAckSignalForTest(handle: PtyHostHandle, signal: Promise<boolean>): void {
+  ackSignals.set(handle, signal);
+}
+
+export function clearAckSignalForTest(handle: PtyHostHandle): void {
+  ackSignals.delete(handle);
+}
+
+/**
  * §9.8 host deadline mirror (broker-local; Task 44 packet C5).
  *
  * The governing plan's Task 44 Interfaces line reads "Consumes:
@@ -670,12 +694,9 @@ export async function escalateWedgedHost(
   handle: PtyHostHandle,
   pgid: number,
   hostPid: number,
-  opts: {
-    /** Observes the acknowledgement. Resolves true if the host acked in time. */
-    readonly ackSignal?: Promise<boolean>;
-  } = {},
 ): Promise<EscalationOutcome> {
   const lifecycle = lifecycles.get(handle);
+  const ackSignal = ackSignals.get(handle);
   const observedMs: Record<string, number> = {};
   const killOrder: ("pgid" | "host")[] = [];
 
@@ -715,10 +736,10 @@ export async function escalateWedgedHost(
     // promises observes whichever genuinely happened FIRST — the faithful
     // reading of C7.3 step 2, whose two bullets describe a race.
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const ackWon: Promise<"ack"> = opts.ackSignal === undefined
+    const ackWon: Promise<"ack"> = ackSignal === undefined
       ? await_never<"ack">()
       : new Promise<"ack">((resolve) => {
-        void opts.ackSignal?.then((v) => {
+        void ackSignal.then((v) => {
           if (v) resolve("ack");
         }, () => {
           // A rejected acknowledgement is not an acknowledgement; let the

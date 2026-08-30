@@ -5,7 +5,7 @@
 // wedged-host escalation tests (expected GREEN: 10 pass once Task 44 lands).
 
 import { expect, test } from "bun:test";
-import { closeStdinCallCountForTest, escalateWedgedHost, spawnPtyHost, subscriberCountForTest, waiterCountForTest } from "../src/pty-host-supervisor";
+import { clearAckSignalForTest, closeStdinCallCountForTest, escalateWedgedHost, setAckSignalForTest, spawnPtyHost, subscriberCountForTest, waiterCountForTest } from "../src/pty-host-supervisor";
 import type { HostFactFrame } from "../src/pty-host-protocol";
 
 // Test-owned §9.8 deadline values. Deliberately re-declared here rather
@@ -900,7 +900,10 @@ test("S1: a responsive host acknowledging within 250 ms causes no escalation (C7
       })();
     });
 
-    const outcome = await escalateWedgedHost(handle, pgid, handle.hostPid, { ackSignal });
+    // Register the acknowledgement through the module-private test seam —
+    // the public signature stays exactly (handle, pgid, hostPid).
+    setAckSignalForTest(handle, ackSignal);
+    const outcome = await escalateWedgedHost(handle, pgid, handle.hostPid);
 
     // The acknowledgement genuinely arrived, and by the 250 ms deadline —
     // measured on the TEST's monotonic clock, not the implementation's.
@@ -935,6 +938,7 @@ test("S1: a responsive host acknowledging within 250 ms causes no escalation (C7
     // escalation would have been signalled while `exited` was still pending.
     expect(outcome.unnecessaryHostExitConfirmed).toBe(false);
   } finally {
+    clearAckSignalForTest(handle);
     cleanupProcesses(handle.hostPid, pgid);
   }
 }, 15000);
@@ -1195,8 +1199,10 @@ test("pty_host_failure remains fixed through a mid-ladder host exit (C7 evidence
     process.kill(handle.hostPid, "SIGSTOP");
 
     // A LATE acknowledgement: resolves well after the 250 ms deadline. It
-    // must not cancel or alter the escalation already under way.
+    // must not cancel or alter the escalation already under way. Registered
+    // through the module-private test seam.
     const lateAck = new Promise<boolean>((resolve) => setTimeout(() => resolve(true), 400));
+    setAckSignalForTest(handle, lateAck);
 
     // Kill the host mid-ladder, after the deadline has passed.
     setTimeout(() => {
@@ -1204,7 +1210,7 @@ test("pty_host_failure remains fixed through a mid-ladder host exit (C7 evidence
       try { process.kill(handle.hostPid, "SIGKILL"); } catch { /* gone */ }
     }, 260);
 
-    const outcome = await escalateWedgedHost(handle, pgid, handle.hostPid, { ackSignal: lateAck });
+    const outcome = await escalateWedgedHost(handle, pgid, handle.hostPid);
 
     // The entry reason survived both the late ack and the mid-ladder exit.
     expect(outcome.reason).toBe("pty_host_failure");
@@ -1215,6 +1221,7 @@ test("pty_host_failure remains fixed through a mid-ladder host exit (C7 evidence
     const groupGone = await waitUntil(() => !groupExternallyAlive(pgid as number), HOST_OUTER_BOUND_MS);
     expect(groupGone).toBe(true);
   } finally {
+    clearAckSignalForTest(handle);
     try { process.kill(handle.hostPid, "SIGCONT"); } catch { /* gone */ }
     cleanupProcesses(handle.hostPid, pgid);
   }
@@ -1234,12 +1241,17 @@ test("the host environment fixture reports normalized key-set equality and exclu
   // Secret-safety: the fixture prints KEY NAMES ONLY, through the existing
   // `output` fact channel. No values are emitted, parsed, printed, or
   // asserted; no new fact kind and no codec change.
-  const fixture = "/tmp/t44-envkeys.sh";
-  require("node:fs").writeFileSync(
-    fixture,
-    '#!/bin/sh\nprintf "@@MADV_ENVKEYS %s@@\\n" "$(env | sed "s/=.*//" | sort | tr "\\n" "," | sed "s/,$//")"\nsleep 2\n',
-  );
-  require("node:fs").chmodSync(fixture, 0o755);
+  // The fixture is /usr/bin/awk itself, driven by argv — no extra file to
+  // author, and decisively NO SHELL. A POSIX shell injects PWD, SHLVL and _
+  // into its own environment (proven: `env -i /bin/sh -c env` yields exactly
+  // those three from an empty environment), which would force the oracle to
+  // subtract interpreter-specific keys. awk's ENVIRON is the raw inherited
+  // environment: `env -i /usr/bin/awk` yields an EMPTY key list, so exact
+  // key-set equality is assertable with no subtraction whatsoever.
+  //
+  // Node/Bun were also rejected as fixture interpreters: Bun auto-loads .env
+  // files, which injects unrelated keys into process.env.
+  const fixture = "/usr/bin/awk";
 
   // Plant an ambient canary in the SUPERVISOR's environment. It is absent
   // from descriptor.env, so its absence downstream proves no ambient
@@ -1255,7 +1267,9 @@ test("the host environment fixture reports normalized key-set equality and exclu
   const handle = spawnPtyHost({
     path: fixture,
     sha256: sha256File(fixture),
-    argv: [],
+    // Key names only: ENVIRON is iterated for keys and never for values, so
+    // no environment value can reach stdout, the fact stream, or this test.
+    argv: ["BEGIN{s=\"\";for(k in ENVIRON) s=s k \",\";print \"@@MADV_ENVKEYS \" s \"@@\";system(\"sleep 2\")}"],
     env: allowlisted,
     executionId: "exec-t44-envkeys",
   });
@@ -1281,32 +1295,23 @@ test("the host environment fixture reports normalized key-set equality and exclu
     }
     expect(markerPayload).not.toBeNull();
 
-    // Normalized key-set equality: dedupe + sort both sides, UTF-8 string
-    // comparison. An empty env fails against a non-empty allowlist by
-    // construction.
-    //
-    // SHELL-INJECTED KEYS: the fixture is a /bin/sh script, and every POSIX
-    // shell sets PWD, SHLVL and _ in its own environment at startup. Proven
-    // independently: `env -i /bin/sh -c 'env'` yields exactly PWD, SHLVL, _
-    // from a completely empty environment. These originate in the fixture's
-    // interpreter DOWNSTREAM of the governed boundary — they are not
-    // supervisor or host leakage — so the oracle subtracts exactly this
-    // closed set and nothing else. Any other unexpected key still fails.
-    const SHELL_INJECTED = new Set(["PWD", "SHLVL", "_"]);
-    const observedAll = [...new Set((markerPayload as string).split(",").filter((k) => k.length > 0))].sort();
-    const observedKeys = observedAll.filter((k) => !SHELL_INJECTED.has(k));
+    // EXACT normalized key-set equality: dedupe + sort both sides, UTF-8
+    // string comparison, NO subtraction of any kind. The awk fixture's
+    // ENVIRON is the raw inherited environment, so every observed key must
+    // come from descriptor.env. An empty env fails against a non-empty
+    // allowlist by construction.
+    const observedKeys = [...new Set((markerPayload as string).split(",").filter((k) => k.length > 0))].sort();
     const expectedKeys = [...new Set(Object.keys(allowlisted))].sort();
     expect(observedKeys).toEqual(expectedKeys);
     expect(observedKeys.length).toBeGreaterThan(0);
 
-    // The ambient canary never crossed the chain — asserted against the
-    // UNFILTERED key set, so the subtraction above cannot hide a leak.
-    expect(observedAll).not.toContain(canary);
+    // The ambient canary never crossed the supervisor -> host -> child chain.
+    expect(observedKeys).not.toContain(canary);
     // …while the supervisor still holds it, proving the canary was live.
     expect(process.env[canary]).toBe("ambient-leak-canary");
 
     // No ambient MADVENTURES_* variable of any kind crossed.
-    expect(observedAll.filter((k) => k.startsWith("MADVENTURES_"))).toEqual([]);
+    expect(observedKeys.filter((k) => k.startsWith("MADVENTURES_"))).toEqual([]);
 
     // Secret-safety self-check: the marker carries no "=" — names only.
     expect(markerPayload as string).not.toContain("=");
