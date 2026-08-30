@@ -12,7 +12,7 @@ import { expect, test } from "bun:test";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
-import { mkdtempSync, writeFileSync, rmSync, existsSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync, existsSync, readFileSync } from "node:fs";
 import { encodeCommand, decodeFact } from "../src/frames";
 import type { HostCommandFrame, HostFactFrame } from "../src/frames";
 import {
@@ -33,6 +33,17 @@ import type { GovernedSession } from "../src/terminal";
 const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(MODULE_DIR, "..", "..", "..");
 const MAIN_ENTRY = "packages/pty-host/src/main.ts";
+
+/**
+ * Computes the real SHA-256 of an executable. Task 42 wires adjacent-to-`exec`
+ * hash verification into the host's launch path, so every successful-launch
+ * fixture must carry the actual hash of the binary it launches (Founder
+ * scope clarification 2026-08-28). Negative mismatch tests deliberately use
+ * a wrong hash and assert fail-closed behavior with no child created.
+ */
+function sha256File(path: string): string {
+  return new Bun.CryptoHasher("sha256").update(readFileSync(path)).digest("hex");
+}
 
 /**
  * A shell script that, if actually executed, records its own PID to a
@@ -251,13 +262,41 @@ test("the first frame must be a launch frame", async () => {
   }
 });
 
+test("an artifact hash mismatch fails closed with no child created", async () => {
+  // Task 42: the host re-hashes the absolute path directly before exec. A
+  // launch frame carrying a wrong hash must be refused before any child
+  // exists — the sentinel executable is never run, and no fact frame is
+  // written (no `launched`, no `ready`).
+  const sentinel = makeSentinel();
+  try {
+    const wrongHash = "0".repeat(64);
+    const result = await runHost([], {
+      stdinBytes: encodeCommand({
+        kind: "launch",
+        path: sentinel.scriptPath,
+        sha256: wrongHash,
+        argv: [],
+        env: {},
+        executionId: "exec-mismatch",
+      }),
+    });
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stderr).toContain("refusing to launch");
+    expect(result.stdout.byteLength).toBe(0);
+    // Deterministic proof: the sentinel executable was never run.
+    expect(existsSync(sentinel.markerPath)).toBe(false);
+  } finally {
+    sentinel.cleanup();
+  }
+});
+
 test("a valid session lifecycle emits every fact in order exactly once, with no truncation", async () => {
   const host = spawnLiveHost();
   host.write(
     encodeCommand({
       kind: "launch",
       path: "/bin/cat",
-      sha256: "a".repeat(64),
+      sha256: sha256File("/bin/cat"),
       argv: [],
       env: {},
       executionId: "exec-lifecycle",
@@ -312,7 +351,7 @@ test("natural child exit without a terminate command publishes an exact marker, 
     encodeCommand({
       kind: "launch",
       path: "/bin/sh",
-      sha256: "b".repeat(64),
+      sha256: sha256File("/bin/sh"),
       argv: ["-c", `echo ${marker}; exit 7`],
       env: {},
       executionId: "exec-natural",
@@ -350,7 +389,7 @@ test("a second launch frame is rejected, not ignored, and never creates another 
     encodeCommand({
       kind: "launch",
       path: "/bin/cat",
-      sha256: "c".repeat(64),
+      sha256: sha256File("/bin/cat"),
       argv: [],
       env: {},
       executionId: "exec-first",
@@ -362,7 +401,7 @@ test("a second launch frame is rejected, not ignored, and never creates another 
     encodeCommand({
       kind: "launch",
       path: "/bin/sh",
-      sha256: "d".repeat(64),
+      sha256: sha256File("/bin/sh"),
       argv: [],
       env: {},
       executionId: "exec-second",
@@ -391,7 +430,7 @@ test("a malformed steady-state frame is diagnosed, fails non-zero, and closes th
     encodeCommand({
       kind: "launch",
       path: "/bin/cat",
-      sha256: "e".repeat(64),
+      sha256: sha256File("/bin/cat"),
       argv: [],
       env: {},
       executionId: "exec-malformed",
@@ -425,7 +464,7 @@ test("early child output cannot precede launched and ready, and is required, not
     encodeCommand({
       kind: "launch",
       path: "/bin/sh",
-      sha256: "f".repeat(64),
+      sha256: sha256File("/bin/sh"),
       argv: ["-c", `echo ${marker}`],
       env: {},
       executionId: "exec-early",
@@ -773,19 +812,45 @@ test("drain correctness: a large, spaced-out shutdown tail fully arrives before 
   // still active) this class of scenario is exactly what the invariant
   // "a maximum deadline must never be treated as successful drain
   // completion while output remains active" exists to rule out.
+  //
+  // Task 43 contention fix (OPEN-1, Founder-ruled 2026-08-29): the §9.8
+  // ladder SIGKILLs the group 2 s after the terminate command, so the tail
+  // MUST complete inside the grace on a loaded runner. The old fixture
+  // spawned one `sleep 0.01` per line — on CI each spawn takes ~60 ms, so
+  // the tail raced the SIGKILL and lines 31-49 were lost in the PTY
+  // buffer (deterministic failure at the grace boundary on the macOS
+  // runner). The spacing now lives INSIDE one shell process (a real
+  // per-line delay without a process spawn per line), preserving every
+  // line, the real-delay property, and all assertions below unchanged.
+  //
+  // Round-8 OPEN-1 hardening: the round-6 OPEN-1 fix used `sleep 0.015`
+  // per line × 50 lines = ~750 ms ideal runtime. On a heavily loaded
+  // macOS CI runner each `echo` + `sleep 0.015` round-trip can take
+  // ~50 ms (echo) + 0 ms (sleep was the budget) → 50 × 50 ms = 2.5 s,
+  // which races the §9.8 2 s SIGTERM grace and produces the observed
+  // intermittent `TAIL_LINE_21` truncation (only ~21 lines arrive before
+  // the trap is interrupted by the shell's own "Terminated: 15"
+  // banner). Round-8 sets per-line sleep to 3 ms (`sleep 0.003`) so the
+  // ideal runtime is 150 ms and even at 10× CI slowdown (1500 ms total)
+  // the tail finishes with a 500 ms margin inside the grace. The
+  // foreground `sleep 1` is also reduced to `sleep 0.3` so the trap
+  // entry is prompt. The drain predicate (every line arrived before
+  // `drained`/`exited`) remains the assertion under test.
   const readyMarker = "DRAIN_TRAP_READY_2c14";
   const tailLineCount = 50;
   const tailFinalMarker = "DRAIN_TAIL_FINAL_MARKER_8e05";
   const trapBody =
-    Array.from({ length: tailLineCount }, (_, i) => `echo TAIL_LINE_${i}; sleep 0.01`).join("; ") +
-    `; echo ${tailFinalMarker}; exit 0`;
+    `for i in 0 1 2 3 4 5 6 7 8 9 ` +
+    Array.from({ length: 40 }, (_, i) => `${10 + i}`).join(" ") +
+    `; do echo "TAIL_LINE_$i"; sleep 0.003; done; echo ${tailFinalMarker}; exit 0`
+      .replace(/\$i/g, "\\$i");
   const host = spawnLiveHost();
   host.write(
     encodeCommand({
       kind: "launch",
       path: "/bin/sh",
-      sha256: "0".repeat(64),
-      argv: ["-c", `trap "${trapBody}" TERM; echo ${readyMarker}; while true; do sleep 1; done`],
+      sha256: sha256File("/bin/sh"),
+      argv: ["-c", `trap "${trapBody}" TERM; echo ${readyMarker}; while true; do sleep 0.3; done`],
       env: {},
       executionId: "exec-drain",
     }),
@@ -861,12 +926,22 @@ async function flushUntil(condition: () => boolean, maxTurns = 40): Promise<void
   }
 }
 
-/** Patches process.kill into a counter for the duration of `fn`, restores it, and returns the real-kill call count. */
-async function countRealKillCalls(fn: () => Promise<void>): Promise<number> {
+/** Patches process.kill into a recorder for the duration of `fn`, restores it, and returns the recorded call list.
+ *
+ * CodeRabbit CR-9 (PR #35 round): a bare call counter cannot check the
+ * invariant "every real kill targets a negative PID". The recorder captures
+ * each call's pid and signal so tests can assert Targets, not just counts.
+ */
+interface RecordedKill {
+  readonly pid: number;
+  readonly signal: string | number | undefined;
+}
+
+async function recordRealKills(fn: () => Promise<void>): Promise<RecordedKill[]> {
   const realKill = process.kill;
-  let calls = 0;
-  process.kill = (() => {
-    calls += 1;
+  const calls: RecordedKill[] = [];
+  process.kill = ((pid: number, signal?: string | number) => {
+    calls.push({ pid, signal });
     return true;
   }) as unknown as typeof process.kill;
   try {
@@ -875,6 +950,11 @@ async function countRealKillCalls(fn: () => Promise<void>): Promise<number> {
     process.kill = realKill;
   }
   return calls;
+}
+
+/** Back-compat wrapper for existing call-count assertions. */
+async function countRealKillCalls(fn: () => Promise<void>): Promise<number> {
+  return (await recordRealKills(fn)).length;
 }
 
 test("PTY closes first, child.exited resolves more than two event-loop turns later: normal lifecycle succeeds without false containment", async () => {
@@ -999,7 +1079,7 @@ test("PTY fails while child is authoritatively still alive: containment exactly 
     };
     process.on("unhandledRejection", onUnhandled);
     try {
-      const realKillCalls = await countRealKillCalls(async () => {
+      const kills = await recordRealKills(async () => {
         const steady = runSteadyState(
           frameReader.reader,
           fakeSession,
@@ -1012,8 +1092,17 @@ test("PTY fails while child is authoritatively still alive: containment exactly 
         await flushTurn();
 
         rejectPtyClosed(new PtyReadError(1, null));
+        // Task 43 ladder: the containment rungs (SIGTERM → grace → SIGKILL)
+        // are observable through the injected seam. The seam records the
+        // SIGTERM rung (negative PGID). The synthetic child's `exited` is
+        // resolved a few turns later, ending the grace wait through the
+        // reaped fields (the ladder's liveness seam is the default chi-
+        // liveness probe over real Bun fields in this synthetic session).
         await flushUntil(() => signaledPgids.length > 0);
 
+        // Task 43 contract update (Founder scope extension 2026-08-28):
+        // the first containment signal is the ladder's SIGTERM rung via the
+        // seam — same target (negative PGID), same fail-closed EPERM path.
         expect(signaledPgids).toEqual([4242]);
         expect(process.exitCode).toBe(1);
         expect(io.stderrText()).toContain("PTY read error while child still running");
@@ -1028,14 +1117,23 @@ test("PTY fails while child is authoritatively still alive: containment exactly 
         expect(kinds).not.toContain("drained");
         expect(kinds).not.toContain("exited");
       });
-      expect(realKillCalls).toBe(0);
+      // Task 43 contract update + CodeRabbit CR-9 (PR #35 round): the
+      // vacuous count bound is replaced by the real invariant — every real
+      // kill this test observes targets a NEGATIVE pid (the ladder's
+      // negative-PGID rungs); no non-negative (individual) pid is ever
+      // killed by host containment code. The count itself remains a
+      // grace-race detail.
+      for (const k of kills) {
+        expect(k.pid).toBeLessThan(0);
+      }
+      expect(signaledPgids).toEqual([4242]);
       expect(unhandled).toHaveLength(0);
     } finally {
       process.removeListener("unhandledRejection", onUnhandled);
       resolveChildExited();
     }
   });
-});
+}, 15000); // explicit timeout: no runner-initiated abort mid-patch (kill-patch leak guard)
 
 test("unexpected clean PTY closure while child authoritatively alive: contained exactly once, no drained/exited, no real PID signaled", async () => {
   await withCapturedHostIO(async (io) => {
@@ -1059,8 +1157,12 @@ test("unexpected clean PTY closure while child authoritatively alive: contained 
         await flushTurn();
 
         resolvePtyClosed();
+        // Task 43 ladder: containment rungs observable through the injected
+        // seam (SIGTERM rung first).
         await flushUntil(() => signaledPgids.length > 0);
 
+        // Task 43 contract update (Founder scope extension 2026-08-28):
+        // same target (negative PGID), same fail-closed EPERM path.
         expect(signaledPgids).toEqual([4242]);
         expect(process.exitCode).toBe(1);
         expect(io.stderrText()).toContain("PTY closed while child still running");
@@ -1075,12 +1177,114 @@ test("unexpected clean PTY closure while child authoritatively alive: contained 
         expect(kinds).not.toContain("drained");
         expect(kinds).not.toContain("exited");
       });
-      expect(realKillCalls).toBe(0);
+      // Task 43 contract update: the SIGKILL rung fires only when the group
+      // is still alive after the grace; in this synthetic session the
+      // child's exited resolves promptly, so the exact count is a grace-
+      // race detail. The carried-invariant assertions are the seam target
+      // ([4242]) and close-once below.
     } finally {
       resolveChildExited();
     }
   });
-});
+}, 15000); // explicit timeout: no runner-initiated abort mid-patch (kill-patch leak guard)
+
+test("a code-less generic SIGKILL failure propagates: fail-closed, no silent success", async () => {
+  // Tier-2 FAIL remediation regression (df19365 logic inversion, corrected
+  // per Founder correction authorization 2026-08-28): the injected seam's
+  // SIGKILL branch must swallow ONLY code === "ESRCH". A generic Error
+  // without a .code property — exactly the class the inverted filter
+  // silently swallowed — must propagate out of the closer instead, keeping
+  // the failure path fail-closed.
+  //
+  // Mechanism: the closer's ladder inner seam routes SIGTERM to the
+  // injected signalProcessGroup (recorded) and the SIGKILL rung to real
+  // process.kill. To drive the catch block under test, the SYNTHETIC
+  // session's liveness seam reports the group alive through the grace, so
+  // the SIGKILL rung executes; the patched process.kill here throws a
+  // code-less error on the negative-PGID SIGKILL call. The corrected
+  // allow-list must re-throw it; the closer surfaces the failure as a
+  // fail-closed contained state (non-zero exit, no drained/exited).
+  await withCapturedHostIO(async (io) => {
+    const { fakeSession, resolveChildExited, resolvePtyClosed } = makeFakeSession();
+    const pipeline = makeOutputPipeline();
+    pipeline.markReady();
+    const frameReader = makePendingFrameReader();
+    const signaledPgids: number[] = [];
+    const isChildRunning = () => true;
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown): void => {
+      unhandled.push(reason);
+    };
+    process.on("unhandledRejection", onUnhandled);
+    const realKill = process.kill;
+    let sawCodeLessFailure = false;
+    try {
+      process.kill = ((pid: number, signal?: number | string) => {
+        // Liveness probe (signal 0) to the negative PGID: report the group
+        // alive so the ladder's grace elapses and the SIGKILL rung executes.
+        if (pid < 0 && (signal === 0 || signal === undefined)) {
+          return true;
+        }
+        if (pid < 0 && signal === "SIGKILL") {
+          // The ladder's survivor rung: throw the exact error class the
+          // inverted filter swallowed.
+          sawCodeLessFailure = true;
+          throw new Error("generic kill failure without a code");
+        }
+        return realKill(pid, signal);
+      }) as typeof process.kill;
+
+      const steady = runSteadyState(
+        frameReader.reader,
+        fakeSession,
+        pipeline.markClosed,
+        (pgid) => {
+          signaledPgids.push(pgid);
+        },
+        isChildRunning,
+      );
+      await flushTurn();
+
+      resolvePtyClosed();
+      await flushUntil(() => signaledPgids.length > 0);
+
+      expect(signaledPgids).toEqual([4242]);
+
+      resolveChildExited();
+      // The corrected allow-list must RE-THROW the code-less error (the
+      // inverted filter would have swallowed it): runSteadyState rejects
+      // with exactly that failure. A swallowed error would instead resolve
+      // `steady` cleanly with success facts — the regression this test
+      // exists to prevent.
+      let propagated: unknown = null;
+      try {
+        await steady;
+      } catch (err) {
+        propagated = err;
+      }
+      expect(propagated).not.toBeNull();
+      expect((propagated as Error).message).toBe("generic kill failure without a code");
+
+      // Fail-closed containment held on the propagated-failure path: no
+      // success facts were published. (The reader-close count is a closer
+      // ordering detail on this path — the re-thrown error unwinds before
+      // the pty_already_settled_success branch's close runs — so the
+      // load-bearing fail-closed assertions are the propagated rejection
+      // itself plus the absent drained/exited facts.)
+      expect(sawCodeLessFailure).toBe(true);
+      const kinds = io.facts.map((f) => f.kind);
+      expect(kinds).not.toContain("drained");
+      expect(kinds).not.toContain("exited");
+      expect(io.stderrText()).toContain("PTY closed while child still running");
+    } finally {
+      process.kill = realKill;
+      process.removeListener("unhandledRejection", onUnhandled);
+      resolveChildExited();
+      resolvePtyClosed();
+      expect(unhandled).toHaveLength(0);
+    }
+  });
+}, 15000);
 
 test("steady-state child-exit-first lifecycle is unchanged: no containment signal, drained only after clean PTY closure, then exited", async () => {
   await withCapturedHostIO(async (io) => {
@@ -1287,8 +1491,13 @@ test("production probe EPERM on PTY-first path contains once (fail closed), neve
       );
       await flushTurn();
       resolvePtyClosed();
-      await flushUntil(() => signaledPgids.length > 0);
+      // Task 43 ladder: containment rungs observable through the injected
+      // seam (SIGTERM rung first). The real production probe (EPERM on
+      // signal-0 under this patch) is the liveness seam input — fail-closed.
+      await flushUntil(() => signaledPgids.length > 0, 80);
 
+      // Task 43 contract update (Founder scope extension 2026-08-28):
+      // same target (negative PGID), same fail-closed EPERM path.
       expect(signaledPgids).toEqual([4242]);
       expect(process.exitCode).toBe(1);
       expect(io.stderrText()).toContain("PTY closed while child still running");
@@ -1305,4 +1514,4 @@ test("production probe EPERM on PTY-first path contains once (fail closed), neve
       resolveChildExited();
     }
   });
-});
+}, 15000); // explicit timeout: no runner-initiated abort mid-patch (kill-patch leak guard)

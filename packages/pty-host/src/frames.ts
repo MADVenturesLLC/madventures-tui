@@ -83,6 +83,18 @@ function isDimension(v: unknown): v is number {
   return typeof v === "number" && Number.isSafeInteger(v) && v > 0;
 }
 
+/**
+ * The launch artifact path must be ABSOLUTE (B2, architecture review):
+ * `readFileSync(frame.path)` resolves cwd-relative while
+ * `Bun.spawn([path, ...])` PATH-resolves a slash-less command — a bare
+ * name can hash one file and execute another. The ratified §2.2 contract
+ * is "the same absolute path directly before exec"; a non-absolute path
+ * fails closed here, in both codec mirrors, before any hash or spawn.
+ */
+function isAbsolutePath(v: unknown): v is string {
+  return typeof v === "string" && v.startsWith("/");
+}
+
 function isStringArray(v: unknown): v is string[] {
   return Array.isArray(v) && v.every(isString);
 }
@@ -129,7 +141,7 @@ function decodeCommandPayload(kind: HostCommandFrame["kind"], payload: Uint8Arra
       if (
         typeof v !== "object" ||
         v === null ||
-        !isString(v.path) ||
+        !isAbsolutePath(v.path) ||
         !isString(v.sha256) ||
         !isStringArray(v.argv) ||
         !isStringRecord(v.env) ||

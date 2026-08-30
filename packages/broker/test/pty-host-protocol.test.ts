@@ -62,6 +62,35 @@ test("broker and host codecs agree on every frame kind", () => {
   }
 });
 
+test("broker and host codecs reject a non-absolute launch path (B2 regression)", () => {
+  // Architecture review B2: the launch artifact path must be absolute —
+  // a bare name would hash one file (cwd-resolved) and execute another
+  // (PATH-resolved). Both codec mirrors reject it at decode.
+  for (const path of ["probecmd", "bin/probecmd", "../probecmd"]) {
+    const frame: HostCommandFrame = {
+      kind: "launch",
+      path,
+      sha256: "a".repeat(64),
+      argv: [],
+      env: {},
+      executionId: "exec-b2",
+    };
+    expect(() => host.decodeCommand(host.encodeCommand(frame))).toThrow();
+    expect(() => broker.decodeCommand(broker.encodeCommand(frame))).toThrow();
+  }
+  // Absolute paths still decode in both mirrors.
+  const good: HostCommandFrame = {
+    kind: "launch",
+    path: "/bin/sh",
+    sha256: "a".repeat(64),
+    argv: [],
+    env: {},
+    executionId: "exec-b2",
+  };
+  expect(host.decodeCommand(host.encodeCommand(good))?.frame).toEqual(good);
+  expect(broker.decodeCommand(broker.encodeCommand(good))?.frame).toEqual(good);
+});
+
 test("broker and host codecs reject the same malformed resize dimensions", () => {
   // Both mirrors must fail closed on identical payloads: 0, negatives,
   // fractions, NaN, and infinities are all invalid terminal dimensions.

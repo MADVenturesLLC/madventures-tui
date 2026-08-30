@@ -5,6 +5,34 @@ import { expect, test } from "bun:test";
 import { encodeCommand, decodeCommand, MalformedFrameError } from "../src/frames";
 import type { HostCommandFrame } from "../src/frames";
 
+test("a non-absolute launch path fails closed at decode (B2 regression)", () => {
+  // Architecture review B2: the launch artifact path must be absolute —
+  // a bare name would hash one file (cwd-resolved) and execute another
+  // (PATH-resolved). Both codec mirrors reject it at decode, matching the
+  // isDimension precedent.
+  for (const path of ["probecmd", "bin/probecmd", "../probecmd"]) {
+    const frame: HostCommandFrame = {
+      kind: "launch",
+      path,
+      sha256: "a".repeat(64),
+      argv: [],
+      env: {},
+      executionId: "exec-b2",
+    };
+    expect(() => decodeCommand(encodeCommand(frame))).toThrow(MalformedFrameError);
+  }
+  // Absolute paths still decode.
+  const good: HostCommandFrame = {
+    kind: "launch",
+    path: "/bin/sh",
+    sha256: "a".repeat(64),
+    argv: [],
+    env: {},
+    executionId: "exec-b2",
+  };
+  expect(decodeCommand(encodeCommand(good))?.frame).toEqual(good);
+});
+
 test("an unknown command tag fails closed with MalformedFrameError", () => {
   // Length=1 (tag only), tag=0xfe (never assigned to a command kind).
   const buf = new Uint8Array([0x00, 0x00, 0x00, 0x01, 0xfe]);

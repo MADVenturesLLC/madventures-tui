@@ -12,6 +12,8 @@ import { decodeCommand, encodeFact, MalformedFrameError } from "./frames";
 import type { HostCommandFrame, HostFactFrame } from "./frames";
 import { PtyReadError, spawnGoverned } from "./terminal";
 import type { GovernedSession } from "./terminal";
+import { ArtifactHashMismatch, verifyAndLaunch } from "./launch";
+import { HOST_DEADLINES_MS, onLifelineEof, terminateChildGroup } from "./signals";
 
 function failNoControlChannel(reason: string): never {
   process.stderr.write(`no_control_channel: ${reason}\n`);
@@ -324,20 +326,83 @@ export function makeSessionCloser(
   readonly announce: boolean;
   readonly signal: boolean;
   readonly ptyPath?: SessionClosePtyPath;
+  /**
+   * Whether to `await session.child.exited` before the join phase. The
+   * default is `true` (existing behavior). The fail-closed EOF timeout
+   * path passes `false` because the §9.8 outer bound has already elapsed
+   * and the reaper may never resolve (exotic zombie / kernel reaper
+   * stall); the closer still completes the join by other observables
+   * (PTY settlement + markOutputClosed + frameReader.close + drained
+   * + exited from already-known `child.exitCode`/`signalCode`).
+   */
+  readonly awaitChildExit?: boolean;
 }) => Promise<void> {
   let finished = false;
   return async (opts) => {
     if (finished) return;
     finished = true;
     const ptyPath: SessionClosePtyPath = opts.ptyPath ?? "await_pty";
-    if (opts.announce) {
-      emit({ kind: "termination_started" });
-      emit({ kind: "ack", ofKind: "terminate" });
-    }
+    const awaitChildExit = opts.awaitChildExit ?? true;
     if (opts.signal) {
-      signalProcessGroup(session.pgid);
+      // Task 43 §3.4 ladder (Founder scope ruling 2026-08-28): SIGTERM to
+      // the negative PGID, §9.8 responsive-host grace, then SIGKILL to any
+      // survivor — routed through the injected signalProcessGroup seam so
+      // deterministic tests and fail-closed EPERM semantics hold.
+      // `termination_started` publishes ONLY when this closer is handling
+      // the explicit terminate command (`announce: true`): containment
+      // paths (malformed frame, PTY loss, write failure) signal the group
+      // identically but never publish a commanded-termination fact. Emit
+      // order on the terminate path is termination_started THEN ack (the
+      // §9.8 500 ms clock starts at the command).
+      // The timing evidence flows through the typed return (observedMs in
+      // the ladder); the seam interactions are asserted by the synthetic
+      // tests, and no unsolicited stderr line is emitted.
+      await terminateChildGroup(session.pgid, emit, {
+        emitStarted: opts.announce,
+        ...(signalProcessGroup
+          ? {
+              seams: {
+                signalProcessGroup: (pgid: number, signal: "SIGTERM" | "SIGKILL") => {
+                  if (signal === "SIGTERM") {
+                    signalProcessGroup(pgid);
+                  } else {
+                    // Tier-2 FAIL remediation (df19365 logic inversion, corrected
+                    // per Founder correction authorization 2026-08-28): the
+                    // prior positive-match filter swallowed errors lacking a
+                    // .code property. Explicit allow-list: ONLY ESRCH is
+                    // swallowed (group already gone = desired terminal state,
+                    // mirroring the default seam in signals.ts). Everything
+                    // else — EPERM, code-less Errors, null, primitives,
+                    // objects with other codes — re-throws, preserving
+                    // fail-closed semantics.
+                    try {
+                      process.kill(-pgid, "SIGKILL");
+                    } catch (err) {
+                      if (
+                        typeof err === "object" && err !== null && "code" in err &&
+                        (err as { code: unknown }).code === "ESRCH"
+                      ) {
+                        // Group already gone: terminal state, nothing to do.
+                      } else {
+                        throw err;
+                      }
+                    }
+                  }
+                },
+              },
+            }
+          : {}),
+      });
+      if (opts.announce) {
+        emit({ kind: "ack", ofKind: "terminate" });
+      }
     }
-    await session.child.exited;
+    // Bounded: skip the reaper wait on the EOF fail-closed timeout path
+    // (the §9.8 outer bound has already elapsed and the reaper may never
+    // resolve). All other paths still await reaping.
+    if (awaitChildExit) {
+      await session.child.exited;
+    }
 
     if (ptyPath === "pty_already_settled_failure") {
       // ptyClosed already rejected before this call was reached (see
@@ -548,9 +613,107 @@ export async function runSteadyState(
       return;
     }
     if (r === null) {
-      // Command stream ended (stdin EOF): the same lifeline loss §3.2/§3.4
-      // document. Close the session; no grace or escalation ladder.
-      await close({ announce: false, signal: true });
+      // Command stream ended (stdin EOF): the §3.2/§3.4 lifeline loss and
+      // the SECOND per-child kill switch. EOF requires the host to
+      // terminate its child process group — via onLifelineEof, which
+      // signals the negative PGID immediately and completes the bounded
+      // ladder (grace, then SIGKILL) without publishing
+      // `termination_started`: no terminate command was ever sent.
+      onLifelineEof(session.pgid, emit);
+      // CodeRabbit CR-3a (PR #35 round): the child-exit wait MUST be
+      // bounded by the §9.8 outer bound — `onLifelineEof` runs its ladder
+      // detached, and if reaping stalls past the outer bound the host
+      // would hang here forever, violating "all governed processes gone
+      // within five seconds". On expiry, fail closed: non-zero exit, no
+      // success facts.
+      //
+      // Tier-2 FAIL remediation (round-4 finding 3): the prior race loser
+      // (a throwing async IIFE) kept running after the race settled and
+      // threw into an unsettled promise 5 s later — an unhandled rejection
+      // that could crash the process post-shutdown. The deadline is now
+      // settlement-aware: one shared deadline state, polled by a single
+      // cancellable waiter whose throw lands only while the race is still
+      // live. When the child exits first, the timer is cancelled before it
+      // can ever fire.
+      let eofRaceSettled = false;
+      let eofTimer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await new Promise<void>((resolveExit, rejectExit) => {
+          // N2 (CodeRabbit round-8 nitpick, folded per Founder round-9
+          // authorization): the `settle` helper was dead code — all three
+          // sites repeat its body inline. Kept inline (behavior-identical);
+          // removed the unused helper.
+          void session.child.exited.then(
+            () => {
+              if (!eofRaceSettled) {
+                eofRaceSettled = true;
+                if (eofTimer !== undefined) clearTimeout(eofTimer);
+                resolveExit();
+              }
+            },
+            (err) => {
+              if (!eofRaceSettled) {
+                eofRaceSettled = true;
+                if (eofTimer !== undefined) clearTimeout(eofTimer);
+                rejectExit(err instanceof Error ? err : new Error(String(err)));
+              }
+            },
+          );
+          eofTimer = setTimeout(() => {
+            const err = new Error("lifeline-EOF child exit exceeded the §9.8 outer bound");
+            if (!eofRaceSettled) {
+              eofRaceSettled = true;
+              rejectExit(err);
+            }
+            // If the race already settled, this timer's callback is a
+            // no-op — the error is never thrown into a settled promise.
+          }, HOST_DEADLINES_MS.outerBound);
+        });
+      } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
+        process.stderr.write(`pty-host: lifeline-EOF containment incomplete: ${detail}; failing closed\n`);
+        process.exitCode = 1;
+        await close({
+          announce: false,
+          signal: false,
+          ptyPath: "pty_already_settled_failure",
+          awaitChildExit: false,
+        });
+        return;
+      }
+      // CodeRabbit CR-3b (PR #35 round): the previous
+      // Promise.race([ptyClosed, Promise.resolve()]) settled from the
+      // already-resolved Promise.resolve() at construction — ptySettled was
+      // always true and the await_pty join was dead code. Fix: attach a
+      // settlement flag to the LIVE outer ptyClosed promise, marking
+      // whether it has actually resolved or rejected by now, and select
+      // the ptyPath from that flag.
+      let ptySettledNow = false;
+      session.ptyClosed.then(
+        () => { ptySettledNow = true; },
+        () => { ptySettledNow = true; },
+      );
+      // Give already-queued settlement callbacks one macrotask to run so
+      // the flag reflects the PTY's current state, not just registration
+      // order.
+      await new Promise((res) => setTimeout(res, 0));
+      // Tier-2 FAIL remediation (round-7): the EOF-path close previously
+      // passed signal: false, relying on natural PTY settlement via
+      // session.ptyClosed. After onLifelineEof sends SIGTERM to the
+      // negative PGID, the dying child's PTY slave is not guaranteed to
+      // close promptly on macOS (the kernel can hold the slave until the
+      // last open fd in the group closes, and the master-side Bun.Terminal
+      // exit callback can be observed strictly after the host reaches the
+      // `ptySettledNow` flag check — a microtask-ordering race). When the
+      // race went the other way the host took the `await_pty` branch and
+      // hit PtyClosureTimeoutError after 3 s, exiting non-zero without
+      // emitting `drained`/`exited`. Fix: pass signal: true so the
+      // explicit terminal.close() in the await_pty branch (lines 436-442)
+      // is reached, forcing master-side settlement deterministically.
+      // terminateChildGroup with emitStarted: false is a no-op against an
+      // already-dead group (kill ESRCH swallowed by the seam), so no
+      // termination_started / ack is emitted and no double-signal occurs.
+      await close({ announce: false, signal: true, ptyPath: ptySettledNow ? "pty_already_settled_success" : "await_pty" });
       return;
     }
 
@@ -614,13 +777,32 @@ async function main(): Promise<void> {
   // may produce data the instant the child is spawned), and output must not
   // continue after PTY closure is confirmed. The pipeline gates both ends.
   const outputPipeline = makeOutputPipeline();
-  const session = spawnGoverned(launch.path, launch.argv, launch.env, outputPipeline.onOutput);
+
+  // Gap-free launch (Task 42): the artifact is re-hashed immediately before
+  // exec, with no storage, broker, or lifeline step between the final
+  // verification and the child's exec. A mismatch fails closed before any
+  // child exists.
+  let launchFacts: { hostPid: number; childPid: number; pgid: number; session: GovernedSession };
+  try {
+    launchFacts = verifyAndLaunch(launch, {
+      spawn: (path, argv, env) => spawnGoverned(path, argv, env, outputPipeline.onOutput),
+    });
+  } catch (err) {
+    if (err instanceof ArtifactHashMismatch) {
+      process.stderr.write(`pty-host: ${err.message}; refusing to launch\n`);
+      process.exitCode = 1;
+      await frameReader.close();
+      return;
+    }
+    throw err;
+  }
+  const session = launchFacts.session;
 
   emit({
     kind: "launched",
-    hostPid: process.pid,
-    childPid: session.child.pid,
-    pgid: session.pgid,
+    hostPid: launchFacts.hostPid,
+    childPid: launchFacts.childPid,
+    pgid: launchFacts.pgid,
     executionId: launch.executionId,
   });
   emit({ kind: "ready" });
