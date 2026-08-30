@@ -1,8 +1,12 @@
 // packages/broker/test/pty-host-supervisor.test.ts
 // Task 42: the broker-side PTY-host supervisor. This file carries the
 // fifth named Task 42 test ("host exit interrupts the whole session") and
-// the real-pipeline lifeline ordering proof, and will carry the five Task 44
-// wedged-host escalation tests (expected GREEN: 10 pass once Task 44 lands).
+// the real-pipeline lifeline ordering proof, plus the Task 44 wedged-host
+// escalation suite (eight C7 evidence tests; 22 tests in this file total).
+//
+// Task 44 environment scope: the C7 evidence-7 test proves GOVERNED-CHILD
+// environment forwarding only. Direct PTY-host process-environment
+// observation is deferred as PLAN-OPEN-T44-ENV-OBS-01 (addendum C8).
 
 import { expect, test } from "bun:test";
 import { clearAckSignalForTest, closeStdinCallCountForTest, escalateWedgedHost, setAckSignalForTest, spawnPtyHost, subscriberCountForTest, waiterCountForTest } from "../src/pty-host-supervisor";
@@ -1227,20 +1231,33 @@ test("pty_host_failure remains fixed through a mid-ladder host exit (C7 evidence
   }
 }, 25000);
 
-test("the host environment fixture reports normalized key-set equality and excludes the ambient canary (C7 evidence 7)", async () => {
-  // Evidence 7 + packet C1: DIRECT observation of the governed child's
-  // environment, replacing the construction-level-only assertion that made
-  // the old env-boundary test vacuous.
+test("governed-child environment forwarding: exact key-set equality with the launch-frame env, ambient canary absent (C7 evidence 7)", async () => {
+  // SCOPE OF THIS TEST — read before extending it.
   //
-  // Transport: the fixture is launched through HostLaunchDescriptor.path —
-  // the real supervisor spawns the real host, which launches the fixture as
-  // the governed child. The observed environment is therefore the
-  // descriptor's allowlist as forwarded BY THE ACTUAL HOST, exercising the
-  // whole supervisor -> host -> child chain.
+  // PROVES: the governed CHILD receives exactly the launch-frame
+  // environment. The fixture is launched through HostLaunchDescriptor.path,
+  // so the real supervisor spawns the real host and the host launches the
+  // fixture as the governed child; the observed key set is the descriptor's
+  // allowlist as forwarded through that chain to the child.
   //
-  // Secret-safety: the fixture prints KEY NAMES ONLY, through the existing
+  // DOES NOT PROVE: anything about the PTY HOST's own process environment.
+  // This test never observes the host process. Direct host-environment
+  // observation is DEFERRED as PLAN-OPEN-T44-ENV-OBS-01 (addendum C8) and
+  // would require a host-side keys-only reporting mechanism plus its own
+  // architecture and scope decision — it is not a test-only change.
+  //
+  // The host's own environment is protected by CONSTRUCTION only:
+  // `env: { ...descriptor.env }` at the Bun.spawn inside spawnPtyHost. That
+  // guarantee is asserted by code inspection, not by this test. Evidence:
+  // a mutation polluting the HOST SPAWN env left this test GREEN, because
+  // the child is spawned from the launch frame's env (terminal.ts:79-83),
+  // not from the host's process.env. Only a mutation of the LAUNCH FRAME
+  // turns this test RED (140 leaked keys detected).
+  //
+  // Secret-safety: the fixture emits KEY NAMES ONLY, through the existing
   // `output` fact channel. No values are emitted, parsed, printed, or
   // asserted; no new fact kind and no codec change.
+  //
   // The fixture is /usr/bin/awk itself, driven by argv — no extra file to
   // author, and decisively NO SHELL. A POSIX shell injects PWD, SHLVL and _
   // into its own environment (proven: `env -i /bin/sh -c env` yields exactly
@@ -1254,8 +1271,8 @@ test("the host environment fixture reports normalized key-set equality and exclu
   const fixture = "/usr/bin/awk";
 
   // Plant an ambient canary in the SUPERVISOR's environment. It is absent
-  // from descriptor.env, so its absence downstream proves no ambient
-  // variable crossed supervisor -> host -> child.
+  // from descriptor.env, so its absence in the CHILD proves no ambient
+  // variable crossed the supervisor -> host -> child forwarding chain.
   const canary = `MADVENTURES_CANARY_${Date.now()}`;
   process.env[canary] = "ambient-leak-canary";
 
