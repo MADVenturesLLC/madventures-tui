@@ -124,6 +124,88 @@ export function closeStdinCallCountForTest(handle: PtyHostHandle): number {
 }
 
 /**
+ * Count of `terminate` command frames actually handed to `handle.send()`,
+ * keyed by handle. Module-private; NOT on the barrel and NOT a handle member.
+ *
+ * T-d correction: the number of `termination_started` facts is NOT valid
+ * proof that only one terminate was sent — the host's closer is idempotent
+ * and can suppress the fact for a duplicate command. This counter observes
+ * the BROKER side of the wire, which no host behavior can mask.
+ */
+const terminateSendCounts = new WeakMap<PtyHostHandle, () => number>();
+
+export function terminateSendCountForTest(handle: PtyHostHandle): number {
+  return terminateSendCounts.get(handle)?.() ?? 0;
+}
+
+/**
+ * Per-handle escalation phase machine (module-private).
+ *
+ * WHY: `escalateWedgedHost` is a primitive that the Task 47-family caller
+ * may invoke more than once for the same handle. Two distinct hazards follow
+ * from that, both raised against the previous head:
+ *
+ *  1. STALE-ACK POISONING. `ackNotify` matches frames by KIND only. If a
+ *     second call registered its own acknowledgement wait, a trailing
+ *     `ack{terminate}` or `termination_started` produced by the FIRST call's
+ *     terminate could settle the SECOND call as S1 — reporting a healthy
+ *     host while the host is in fact wedged, and skipping containment.
+ *
+ *  2. DUPLICATE TERMINATE. Two concurrent initial calls would each send a
+ *     terminate command.
+ *
+ * The phase machine removes both by making acknowledgement observation a
+ * property of the HANDLE's lifecycle rather than of an individual call.
+ *
+ *  none              — no escalation has run for this handle.
+ *  in_flight_initial — an initial escalation is running; concurrent callers
+ *                      JOIN its promise instead of sending a second
+ *                      terminate (requirement 2).
+ *  delegated         — an initial call returned S1: the host acknowledged
+ *                      and the responsive ladder owns containment. S1 is
+ *                      deliberately NOT memoized as terminal, because the
+ *                      acknowledged ladder can still fail afterwards.
+ *  in_flight_bypass  — a delegated re-entry is running the host-bypassing
+ *                      ladder. It sends NO terminate and waits for NO
+ *                      acknowledgement.
+ *  terminal          — a terminal outcome (S0/S2/S3/S4) is recorded and
+ *                      memoized for the handle's lifetime; later calls
+ *                      return it without repeating containment.
+ *
+ * DELEGATED RE-ENTRY IS AUTHORIZED ONLY when the Task 47-family watchdog has
+ * determined that the previously acknowledged host ladder failed its
+ * governing completion bound (§9.8: the 2 s responsive child grace and the
+ * 5 s outer bound). This primitive cannot make that determination itself —
+ * it holds no session state and no timer spanning calls — so re-entry is a
+ * caller obligation, not an inference made here.
+ */
+type EscalationPhase = "none" | "in_flight_initial" | "delegated" | "in_flight_bypass" | "terminal";
+
+interface EscalationRecord {
+  phase: EscalationPhase;
+  /** Shared promise for callers that JOIN an in-flight execution. */
+  inFlight: Promise<EscalationOutcome> | null;
+  /** Memoized terminal outcome (S0/S2/S3/S4 only). */
+  terminalOutcome: EscalationOutcome | null;
+}
+
+const escalationRecords = new WeakMap<PtyHostHandle, EscalationRecord>();
+
+function escalationRecordFor(handle: PtyHostHandle): EscalationRecord {
+  let rec = escalationRecords.get(handle);
+  if (rec === undefined) {
+    rec = { phase: "none", inFlight: null, terminalOutcome: null };
+    escalationRecords.set(handle, rec);
+  }
+  return rec;
+}
+
+/** Test-only observation of the phase. Module-private; not on the barrel. */
+export function escalationPhaseForTest(handle: PtyHostHandle): EscalationPhase {
+  return escalationRecords.get(handle)?.phase ?? "none";
+}
+
+/**
  * Production acknowledgement registry, keyed by handle.
  *
  * Greptile P1 (PR #36, bound to head dda3481): the previous design took the
@@ -325,7 +407,12 @@ export function spawnPtyHost(
   // caller (the per-keystroke input path). Fail-closed discipline: a dead
   // host is a terminal state, so EPIPE is swallowed (the send is a no-op —
   // there is nothing left to command); any other error propagates.
+  let terminateSends = 0;
   const send = (f: HostCommandFrame): void => {
+    // T-d seam: count terminate frames on the BROKER side of the wire. The
+    // host's idempotent closer can suppress a duplicate command's facts, so
+    // fact counts cannot prove how many commands were sent; this can.
+    if (f.kind === "terminate") terminateSends += 1;
     try {
       stdinSink.write(encodeCommand(f));
       stdinSink.flush();
@@ -642,6 +729,7 @@ export function spawnPtyHost(
   });
   lifecycles.set(handle, lifecycle);
   closeStdinCounts.set(handle, () => closeStdinCalls);
+  terminateSendCounts.set(handle, () => terminateSends);
 
   // Production acknowledgement wiring (Greptile P1 remediation).
   //
@@ -684,14 +772,14 @@ export function spawnPtyHost(
 export type EscalationReasonCode = "pty_host_failure";
 
 /** The lifecycle state an escalation resolved through (packet C4). */
-export type EscalationState = "S0" | "S1" | "S2" | "S3" | "S4" | "S5";
+export type EscalationState = "S0" | "S1" | "S2" | "S3" | "S4";
 
 export interface EscalationOutcome {
   /**
    * Bound at escalation ENTRY and never relabelled — §3.4 line 399 ("host
    * unresponsiveness past the deadline is host failure") plus §3.3's rule
    * that the supervisor treats host exit as governed-child death. A late
-   * host exit mid-ladder (S5) does NOT change this value.
+   * a host exit occurring during the ladder does NOT change this value.
    */
   readonly reason: EscalationReasonCode;
   readonly state: EscalationState;
@@ -712,7 +800,7 @@ export interface EscalationOutcome {
    * Whether the CALLER must perform the durable session interruption.
    *
    * `true`  — Task 47/53's caller must perform the durable session
-   *           interruption. Every escalation state (S0, S2, S3, S4, S5)
+   *           interruption. Every escalation state (S0, S2, S3, S4)
    *           requires it.
    * `false` — the responsive S1 path requires no interruption; the normal
    *           ladder owns containment.
@@ -794,6 +882,52 @@ export async function escalateWedgedHost(
   pgid: number,
   hostPid: number,
 ): Promise<EscalationOutcome> {
+  const rec = escalationRecordFor(handle);
+
+  // ---- Phase dispatch (requirements 2, 5, 4) ----
+  // Requirement 5: a recorded terminal outcome is returned verbatim. No
+  // second close, no second signal ladder, no repeated containment.
+  if (rec.phase === "terminal" && rec.terminalOutcome !== null) {
+    return rec.terminalOutcome;
+  }
+  // Requirement 2: a concurrent caller JOINS the running execution rather
+  // than sending a second terminate command.
+  if ((rec.phase === "in_flight_initial" || rec.phase === "in_flight_bypass") && rec.inFlight !== null) {
+    return rec.inFlight;
+  }
+
+  // Requirement 4: delegated re-entry runs the host-bypassing ladder.
+  const bypass = rec.phase === "delegated";
+
+  // Safeguard: install the in-flight phase AND the shared promise BEFORE any
+  // asynchronous suspension, so a concurrent caller arriving in the same
+  // microtask turn cannot observe a stale "none" phase and start a second
+  // execution. `runOwnedEscalation` is invoked (not awaited) here; the first
+  // await inside it happens strictly after this synchronous block completes.
+  rec.phase = bypass ? "in_flight_bypass" : "in_flight_initial";
+  const execution = runOwnedEscalation(handle, pgid, hostPid, bypass, rec);
+  rec.inFlight = execution;
+  return execution;
+}
+
+/**
+ * Owns one escalation execution for a handle.
+ *
+ * `bypass === false` — initial invocation: register the acknowledgement,
+ * send terminate, race ack / `proc.exited` / the 250 ms deadline (C7).
+ *
+ * `bypass === true` — delegated re-entry: the Task 47-family watchdog has
+ * determined that the previously acknowledged host ladder failed its
+ * governing completion bound. Send NO terminate, register and wait for NO
+ * acknowledgement, and go straight to classification and containment.
+ */
+async function runOwnedEscalation(
+  handle: PtyHostHandle,
+  pgid: number,
+  hostPid: number,
+  bypass: boolean,
+  rec: EscalationRecord,
+): Promise<EscalationOutcome> {
   const lifecycle = lifecycles.get(handle);
   const observedMs: Record<string, number> = {};
   const killOrder: ("pgid" | "host")[] = [];
@@ -817,7 +951,11 @@ export async function escalateWedgedHost(
       settleAck(acked);
     },
   };
-  pendingAcks.set(handle, pending);
+  // Requirement 4: the delegated bypass path registers NO acknowledgement.
+  // This is the stale-ack-poisoning fix: with no record registered, a
+  // trailing ack produced by the FIRST call's terminate has nothing to
+  // settle and cannot fabricate an S1 for this attempt.
+  if (!bypass) pendingAcks.set(handle, pending);
 
   // Requirement 3: clear on EVERY terminal path this call owns. Idempotent.
   const clearPendingAck = (): void => {
@@ -826,7 +964,29 @@ export async function escalateWedgedHost(
   };
 
   try {
-    return await runEscalation();
+    const outcome = await runEscalation();
+    // Requirement 3: S1 transitions to `delegated` and is deliberately NOT
+    // memoized as terminal — the acknowledged ladder may still fail, and the
+    // Task 47-family watchdog is entitled to re-enter.
+    // Requirement 5: S0/S2/S3/S4 are terminal and memoized for the handle's
+    // lifetime.
+    if (outcome.state === "S1") {
+      rec.phase = "delegated";
+      rec.terminalOutcome = null;
+    } else {
+      rec.phase = "terminal";
+      rec.terminalOutcome = outcome;
+    }
+    rec.inFlight = null;
+    return outcome;
+  } catch (err) {
+    // Safeguard: no exception path may leave the handle stuck in an
+    // unresolved in-flight phase. Reset to a phase a later caller can act
+    // on: `delegated` if an acknowledged ladder was already delegated to,
+    // otherwise `none`.
+    rec.phase = bypass ? "delegated" : "none";
+    rec.inFlight = null;
+    throw err;
   } finally {
     // Requirement 3/4: escalation completion OR throw — no stale
     // acknowledgement state, waiter, or timer survives this call.
@@ -835,13 +995,22 @@ export async function escalateWedgedHost(
 
   async function runEscalation(): Promise<EscalationOutcome> {
 
-  // ---- t_command: the sole timing anchor (monotonic) ----
-  // C7.3 step 1: send the terminate command and begin observing BOTH the
-  // already-attached spawn-time `proc.exited` watch AND the command-specific
-  // acknowledgement. `closeStdin()` is deliberately NOT called here.
-  const tCommand = performance.now();
-  handle.send({ kind: "terminate" });
-  observedMs.terminateSentMs = performance.now() - tCommand;
+  // ---- Timing anchor (monotonic) ----
+  // INITIAL path: this is genuinely `t_command` — the instant the terminate
+  // command is sent — and it anchors the 250 ms acknowledgement window and
+  // the absolute 500 ms hard-kill budget (C7.3 step 1, §9.8).
+  //
+  // BYPASS path: NO command is sent, so calling this `t_command` would be a
+  // false claim. It is the attempt/bypass START time: the instant the
+  // delegated re-entry began. It anchors this attempt's observed durations
+  // only; the original command's budget was consumed by the initial call.
+  const tAttempt = performance.now();
+  if (!bypass) {
+    handle.send({ kind: "terminate" });
+    observedMs.terminateSentMs = performance.now() - tAttempt;
+  } else {
+    observedMs.bypassStartedMs = 0;
+  }
 
   // ---- Acknowledgement window (C7.3 step 2) ----
   // C7 ordering correction (Founder-ruled, Kimi-confirmed against §9.8):
@@ -857,10 +1026,16 @@ export async function escalateWedgedHost(
   // terminate + EOF and exits in ~26 ms — well inside this 250 ms window —
   // so closing first made S1 UNREACHABLE: every healthy host presented as
   // S0 by classification time.
-  const ackDeadline = tCommand + HOST_DEADLINES_MS.ack;
+  const ackDeadline = tAttempt + HOST_DEADLINES_MS.ack;
   let acked = false;
   let earlyExit = false;
-  if (lifecycle?.exitedResolved === true) {
+  if (bypass) {
+    // Requirement 4: delegated re-entry waits for NO acknowledgement. The
+    // acknowledged ladder already failed its governing completion bound;
+    // waiting again would re-open the exact stale-ack window this phase
+    // machine exists to close. Classification uses the live exit state only.
+    earlyExit = lifecycle?.exitedResolved === true;
+  } else if (lifecycle?.exitedResolved === true) {
     // The host was already gone before escalation began.
     earlyExit = true;
   } else {
@@ -890,7 +1065,7 @@ export async function escalateWedgedHost(
     if (winner === "ack") acked = true;
     else if (winner === "exit") earlyExit = true;
   }
-  observedMs.ackWindowEndedMs = performance.now() - tCommand;
+  observedMs.ackWindowEndedMs = performance.now() - tAttempt;
 
   // ---- S1 (C7.3 step 2): acknowledged in time and still alive ----
   // NO escalation: no `closeStdin()`, no PGID kill, no host kill, and no
@@ -925,18 +1100,21 @@ export async function escalateWedgedHost(
   // S0 exception (C7.3 step 2 / packet C4): when the host has already
   // exited, its enumerated action set is containment-only and the lifeline
   // is moot, so the close is skipped entirely.
+  // Requirement 4 (bypass): close stdin unless `proc.exited` already
+  // resolved. Same rule as the initial path's post-deadline branch — the
+  // close is best-effort and is never liveness evidence.
   let closeStdinCalled = false;
   if (!earlyExit) {
     handle.closeStdin();
     closeStdinCalled = true;
-    observedMs.stdinClosedMs = performance.now() - tCommand;
+    observedMs.stdinClosedMs = performance.now() - tAttempt;
   }
 
   // Classification (packet C4). `proc.exited` is authoritative; signal-0 is
   // corroboration only.
   const exitedAtClassification = lifecycle?.exitedResolved === true;
   const corroboration = exitedAtClassification ? "esrch" : probeSignal0(hostPid);
-  observedMs.classifiedMs = performance.now() - tCommand;
+  observedMs.classifiedMs = performance.now() - tAttempt;
 
   let state: EscalationState;
   if (earlyExit) state = "S0";
@@ -961,7 +1139,7 @@ export async function escalateWedgedHost(
     }
   }
   handle.killPgid();
-  observedMs.pgidKillAttemptedMs = performance.now() - tCommand;
+  observedMs.pgidKillAttemptedMs = performance.now() - tAttempt;
 
   // Invariants 1/2/4: the host PID is signalled ONLY while `exited` is
   // pending AND signal-0 is not ESRCH. After `proc.exited` resolves the PID
@@ -977,10 +1155,10 @@ export async function escalateWedgedHost(
       // Already gone, or not ours to signal.
     }
     hostKillAttempted = true;
-    observedMs.hostKillAttemptedMs = performance.now() - tCommand;
+    observedMs.hostKillAttemptedMs = performance.now() - tAttempt;
   }
 
-  observedMs.escalatedMs = performance.now() - tCommand;
+  observedMs.escalatedMs = performance.now() - tAttempt;
   return {
     reason,
     state,

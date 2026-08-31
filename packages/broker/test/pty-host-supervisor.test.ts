@@ -2,14 +2,15 @@
 // Task 42: the broker-side PTY-host supervisor. This file carries the
 // fifth named Task 42 test ("host exit interrupts the whole session") and
 // the real-pipeline lifeline ordering proof, plus the Task 44 wedged-host
-// escalation suite (eight C7 evidence tests; 22 tests in this file total).
+// escalation suite (eight C7 evidence tests plus the five T-a..T-e
+// delegated-bypass tests; 27 tests in this file total).
 //
 // Task 44 environment scope: the C7 evidence-7 test proves GOVERNED-CHILD
 // environment forwarding only. Direct PTY-host process-environment
 // observation is deferred as PLAN-OPEN-T44-ENV-OBS-01 (addendum C8).
 
 import { expect, test } from "bun:test";
-import { closeStdinCallCountForTest, escalateWedgedHost, pendingAckRegisteredForTest, spawnPtyHost, subscriberCountForTest, waiterCountForTest } from "../src/pty-host-supervisor";
+import { closeStdinCallCountForTest, escalateWedgedHost, escalationPhaseForTest, pendingAckRegisteredForTest, spawnPtyHost, subscriberCountForTest, terminateSendCountForTest, waiterCountForTest } from "../src/pty-host-supervisor";
 import type { HostFactFrame } from "../src/pty-host-protocol";
 
 // Test-owned §9.8 deadline values. Deliberately re-declared here rather
@@ -1195,7 +1196,7 @@ test("ordered kill attempts are paired with real external delivery evidence (C7 
 }, 25000);
 
 test("pty_host_failure remains fixed through a mid-ladder host exit (C7 evidence 6)", async () => {
-  // Evidence 6 + C7.3 step 4 / packet C4 S5: the reason binds at escalation
+  // Evidence 6 + C7.3 step 4: the reason binds at escalation
   // ENTRY. A host that dies DURING the ladder never relabels it, and a late
   // acknowledgement never cancels escalation.
   const handle = spawnPtyHost({
@@ -1223,7 +1224,9 @@ test("pty_host_failure remains fixed through a mid-ladder host exit (C7 evidence
       try { process.kill(handle.hostPid, "SIGCONT"); } catch { /* gone */ }
     }, 300);
 
-    // Kill the host mid-ladder, after the deadline has passed (S5).
+    // Kill the host during the ladder, after the deadline has passed. This
+    // cannot change the already-returned outcome — see T-e, which supersedes
+    // the former "mid-ladder S5" claim. S5 is not a returnable state.
     setTimeout(() => {
       try { process.kill(handle.hostPid, "SIGKILL"); } catch { /* gone */ }
     }, 380);
@@ -1405,11 +1408,276 @@ test("every escalation failure path cleans up real processes (C7 evidence 8)", a
     expect(hostGone).toBe(true);
 
     // Hostile re-entry: escalating again, when every target is already
-    // reaped, must not throw and must still classify as host-dead.
+    // reaped, must not throw. Under the phase machine the first outcome was
+    // TERMINAL (S3), so the re-entry returns that recorded outcome verbatim
+    // instead of re-running the ladder (requirement 5). T-c proves the
+    // no-repeated-containment half of this contract directly.
+    const closesBefore = closeStdinCallCountForTest(handle);
     const second = await escalateWedgedHost(handle, pgid, handle.hostPid);
     expect(second.reason).toBe("pty_host_failure");
-    expect(second.hostKillAttempted).toBe(false);
-    expect(second.unnecessaryHostExitConfirmed).toBe(true);
+    expect(second).toBe(outcome);
+    expect(closeStdinCallCountForTest(handle)).toBe(closesBefore);
+  } finally {
+    try { process.kill(handle.hostPid, "SIGCONT"); } catch { /* gone */ }
+    cleanupProcesses(handle.hostPid, pgid);
+  }
+}, 25000);
+
+// ============================================================================
+// Task 44 round-2 correction: delegated-bypass phase machine (T-a .. T-e)
+// ----------------------------------------------------------------------------
+// These five tests cover the two head-bound findings raised on PR #36 at
+// 6bb03ca: stale-acknowledgement poisoning across overlapping escalation
+// attempts, and the unreachable S5 claim.
+//
+// CONTROLLED-DELAY FIXTURE (T-a): `trap 'sleep 0.12; exit 0' TERM` makes the
+// governed child survive SIGTERM for ~120 ms. Because the host's
+// `terminateChildGroup` waits for the child group to die BEFORE the host
+// emits `ack{terminate}`, that child delay pushes the ack into a measurable
+// trailing window. Measured on this machine (Bun 1.3.14, macOS):
+//   termination_started @ ~1.7 ms   -> settles the FIRST attempt (S1)
+//   ack                 @ ~133.6 ms -> the trailing ack, the poisoning vector
+// A 400 ms settle delay before `terminate` is REQUIRED: without it the
+// command outruns `sh` installing its TERM trap and the child dies at
+// ~12 ms, collapsing the window this test depends on.
+// ============================================================================
+
+test("T-a: a trailing acknowledgement from the first attempt cannot settle a second attempt as S1", async () => {
+  const handle = spawnPtyHost({
+    path: "/bin/sh",
+    sha256: sha256File("/bin/sh"),
+    argv: ["-c", "trap 'sleep 0.12; exit 0' TERM; while :; do sleep 0.05; done"],
+    env: { PATH: "/usr/bin:/bin" },
+    executionId: "exec-t44-stale-ack",
+  });
+  let pgid: number | null = null;
+  try {
+    const iterator = handle.facts()[Symbol.asyncIterator]();
+    const first = await iterator.next();
+    pgid = (first.value as Extract<HostFactFrame, { kind: "launched" }>).pgid;
+
+    // Let `sh` install its TERM trap before commanding termination.
+    await new Promise((r) => setTimeout(r, 400));
+
+    // Attempt A: the real responsive path. `termination_started` arrives in
+    // ~2 ms and settles A as S1; the host's `ack` is still ~130 ms away.
+    const a = await escalateWedgedHost(handle, pgid, handle.hostPid);
+    expect(a.state).toBe("S1");
+    expect(a.escalated).toBe(false);
+    // S1 is NOT terminal: the acknowledged ladder can still fail, so the
+    // handle is delegated rather than memoized.
+    expect(escalationPhaseForTest(handle)).toBe("delegated");
+
+    // Attempt B enters DURING the measured trailing-ack window, standing in
+    // for the Task 47-family watchdog reporting that the acknowledged ladder
+    // failed its governing completion bound.
+    const sendsBeforeB = terminateSendCountForTest(handle);
+    const b = await escalateWedgedHost(handle, pgid, handle.hostPid);
+
+    // Production behavior: B takes the bypass. It sends no second terminate,
+    // registers no acknowledgement, and therefore CANNOT be settled by A's
+    // trailing ack. It classifies live state and contains.
+    expect(terminateSendCountForTest(handle)).toBe(sendsBeforeB);
+    expect(pendingAckRegisteredForTest(handle)).toBe(false);
+    expect(b.state).toBe("S3");
+    expect(b.escalated).toBe(true);
+    expect(b.pgidKillAttempted).toBe(true);
+    expect(b.reason).toBe("pty_host_failure");
+
+    // External proof of containment.
+    const groupGone = await waitUntil(() => !groupExternallyAlive(pgid as number), HOST_OUTER_BOUND_MS);
+    expect(groupGone).toBe(true);
+  } finally {
+    cleanupProcesses(handle.hostPid, pgid);
+  }
+}, 25000);
+
+test("T-b: a host that wedges after acknowledging is still contained through the delegated bypass", async () => {
+  // SIGTERM-immune fixture: the child ignores TERM entirely, so the only
+  // thing that ends it is the SIGKILL rung.
+  const handle = spawnPtyHost({
+    path: "/bin/sh",
+    sha256: sha256File("/bin/sh"),
+    argv: ["-c", 'trap "" TERM; while :; do sleep 0.05; done'],
+    env: { PATH: "/usr/bin:/bin" },
+    executionId: "exec-t44-post-s1-wedge",
+  });
+  let pgid: number | null = null;
+  try {
+    const iterator = handle.facts()[Symbol.asyncIterator]();
+    const first = await iterator.next();
+    pgid = (first.value as Extract<HostFactFrame, { kind: "launched" }>).pgid;
+    await new Promise((r) => setTimeout(r, 400));
+
+    // A: the host acknowledges (termination_started) and A returns S1.
+    const a = await escalateWedgedHost(handle, pgid, handle.hostPid);
+    expect(a.state).toBe("S1");
+    expect(escalationPhaseForTest(handle)).toBe("delegated");
+
+    // The host now WEDGES during its own responsive-host ladder: SIGSTOP
+    // freezes it mid-grace, so its ladder can never complete. This is
+    // precisely the condition the Task 47-family watchdog detects.
+    process.kill(handle.hostPid, "SIGSTOP");
+
+    // B: delegated bypass. No terminate, no acknowledgement wait.
+    const b = await escalateWedgedHost(handle, pgid, handle.hostPid);
+    expect(b.state).toBe("S3");
+    expect(b.escalated).toBe(true);
+    expect(b.pgidKillAttempted).toBe(true);
+    // S3 is the only state permitted to signal the host PID.
+    expect(b.hostKillAttempted).toBe(true);
+    expect(b.killOrder).toEqual(["pgid", "host"]);
+    expect(b.sessionInterruptionRequired).toBe(true);
+
+    // External death of BOTH governed targets.
+    const groupGone = await waitUntil(() => !groupExternallyAlive(pgid as number), HOST_OUTER_BOUND_MS);
+    expect(groupGone).toBe(true);
+    const hostGone = await waitUntil(() => !externallyAlive(handle.hostPid), HOST_OUTER_BOUND_MS);
+    expect(hostGone).toBe(true);
+  } finally {
+    try { process.kill(handle.hostPid, "SIGCONT"); } catch { /* gone */ }
+    cleanupProcesses(handle.hostPid, pgid);
+  }
+}, 25000);
+
+test("T-c: a terminal outcome is memoized and never repeats containment", async () => {
+  const handle = spawnPtyHost({
+    path: "/bin/sh",
+    sha256: sha256File("/bin/sh"),
+    argv: ["-c", 'trap "" TERM; while :; do sleep 0.05; done'],
+    env: { PATH: "/usr/bin:/bin" },
+    executionId: "exec-t44-memoize",
+  });
+  let pgid: number | null = null;
+  try {
+    const iterator = handle.facts()[Symbol.asyncIterator]();
+    const first = await iterator.next();
+    pgid = (first.value as Extract<HostFactFrame, { kind: "launched" }>).pgid;
+
+    // Wedge the host immediately so the FIRST attempt is terminal (S3),
+    // not S1 — memoization applies to S0/S2/S3/S4 only.
+    process.kill(handle.hostPid, "SIGSTOP");
+    const firstOutcome = await escalateWedgedHost(handle, pgid, handle.hostPid);
+    expect(firstOutcome.state).toBe("S3");
+    expect(escalationPhaseForTest(handle)).toBe("terminal");
+
+    const closesAfterFirst = closeStdinCallCountForTest(handle);
+    const sendsAfterFirst = terminateSendCountForTest(handle);
+
+    // Repeated invocation returns the IDENTICAL recorded outcome.
+    const second = await escalateWedgedHost(handle, pgid, handle.hostPid);
+    const third = await escalateWedgedHost(handle, pgid, handle.hostPid);
+    expect(second).toBe(firstOutcome);
+    expect(third).toBe(firstOutcome);
+
+    // No second close, no second terminate, no repeated signal ladder.
+    expect(closeStdinCallCountForTest(handle)).toBe(closesAfterFirst);
+    expect(terminateSendCountForTest(handle)).toBe(sendsAfterFirst);
+  } finally {
+    try { process.kill(handle.hostPid, "SIGCONT"); } catch { /* gone */ }
+    cleanupProcesses(handle.hostPid, pgid);
+  }
+}, 25000);
+
+test("T-d: two concurrent initial escalations share one execution and send exactly one terminate", async () => {
+  const handle = spawnPtyHost({
+    path: "/bin/sh",
+    sha256: sha256File("/bin/sh"),
+    argv: ["-c", 'trap "" TERM; while :; do sleep 0.05; done'],
+    env: { PATH: "/usr/bin:/bin" },
+    executionId: "exec-t44-concurrent",
+  });
+  let pgid: number | null = null;
+  try {
+    const iterator = handle.facts()[Symbol.asyncIterator]();
+    const first = await iterator.next();
+    pgid = (first.value as Extract<HostFactFrame, { kind: "launched" }>).pgid;
+    await new Promise((r) => setTimeout(r, 400));
+
+    expect(terminateSendCountForTest(handle)).toBe(0);
+
+    // Both calls start in the SAME microtask turn — the exact race the
+    // in-flight join exists to serialize.
+    const [x, y] = await Promise.all([
+      escalateWedgedHost(handle, pgid, handle.hostPid),
+      escalateWedgedHost(handle, pgid, handle.hostPid),
+    ]);
+
+    // Independent send-count observation on the BROKER side of the wire.
+    // Counting `termination_started` facts would NOT prove this: the host's
+    // closer is idempotent and can suppress the fact for a duplicate
+    // command, so a second terminate could be sent and leave no trace in
+    // the fact stream.
+    expect(terminateSendCountForTest(handle)).toBe(1);
+
+    // Shared result identity: one execution, one outcome object.
+    expect(x).toBe(y);
+
+    // Exactly one acknowledgement registration existed, and it is cleared.
+    expect(pendingAckRegisteredForTest(handle)).toBe(false);
+  } finally {
+    try { process.kill(handle.hostPid, "SIGCONT"); } catch { /* gone */ }
+    cleanupProcesses(handle.hostPid, pgid);
+  }
+}, 25000);
+
+test("T-e: the entry reason survives a host exit during the ladder, and the returned state is S3", async () => {
+  // Supersedes the former "mid-ladder S5" claim. `escalateWedgedHost`
+  // returns immediately after its kill attempts, so a host exit scheduled
+  // during the ladder CANNOT change the already-returned outcome. What is
+  // genuinely provable is that the entry reason is immutable and that the
+  // returned classification is the one taken at classification time (S3).
+  //
+  // S5 is NOT a returnable state and has been removed from EscalationState.
+  const handle = spawnPtyHost({
+    path: "/bin/cat",
+    sha256: sha256File("/bin/cat"),
+    argv: [],
+    env: {},
+    executionId: "exec-t44-entry-reason",
+  });
+  let pgid: number | null = null;
+  try {
+    const iterator = handle.facts()[Symbol.asyncIterator]();
+    const first = await iterator.next();
+    pgid = (first.value as Extract<HostFactFrame, { kind: "launched" }>).pgid;
+
+    process.kill(handle.hostPid, "SIGSTOP");
+
+    // A genuinely LATE acknowledgement produced by the REAL host: SIGSTOP
+    // prevents any answer until SIGCONT at t+300 ms, which is AFTER the
+    // 250 ms deadline. It must not cancel escalation (C7.3 step 4).
+    setTimeout(() => {
+      try { process.kill(handle.hostPid, "SIGCONT"); } catch { /* gone */ }
+    }, 300);
+    // Host exit scheduled during the ladder.
+    setTimeout(() => {
+      try { process.kill(handle.hostPid, "SIGKILL"); } catch { /* gone */ }
+    }, 380);
+
+    const tStart = performance.now();
+    const outcome = await escalateWedgedHost(handle, pgid, handle.hostPid);
+    const elapsed = performance.now() - tStart;
+
+    // The acknowledgement deadline was GENUINELY waited (2 ms scheduling
+    // tolerance: setTimeout can fire fractionally early vs performance.now).
+    expect(elapsed).toBeGreaterThanOrEqual(HOST_ACK_MS - 2);
+
+    // Entry classification is pinned to S3 and the reason is immutable.
+    expect(outcome.state).toBe("S3");
+    expect(outcome.reason).toBe("pty_host_failure");
+    expect(outcome.escalated).toBe(true);
+
+    // Ordered containment: PGID first, then the conditional host kill.
+    expect(outcome.killOrder).toEqual(["pgid", "host"]);
+    expect(outcome.pgidKillAttempted).toBe(true);
+    expect(outcome.hostKillAttempted).toBe(true);
+
+    // External death after return.
+    const groupGone = await waitUntil(() => !groupExternallyAlive(pgid as number), HOST_OUTER_BOUND_MS);
+    expect(groupGone).toBe(true);
+    const hostGone = await waitUntil(() => !externallyAlive(handle.hostPid), HOST_OUTER_BOUND_MS);
+    expect(hostGone).toBe(true);
   } finally {
     try { process.kill(handle.hostPid, "SIGCONT"); } catch { /* gone */ }
     cleanupProcesses(handle.hostPid, pgid);
