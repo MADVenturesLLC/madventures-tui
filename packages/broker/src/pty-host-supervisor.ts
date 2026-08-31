@@ -708,8 +708,22 @@ export interface EscalationOutcome {
    * site inside `spawnPtyHost`.
    */
   readonly closeStdinCalled: boolean;
-  /** Whether the whole session was interrupted. False on the S1 path. */
-  readonly interrupted: boolean;
+  /**
+   * Whether the CALLER must perform the durable session interruption.
+   *
+   * `true`  — Task 47/53's caller must perform the durable session
+   *           interruption. Every escalation state (S0, S2, S3, S4, S5)
+   *           requires it.
+   * `false` — the responsive S1 path requires no interruption; the normal
+   *           ladder owns containment.
+   *
+   * `escalateWedgedHost` does NOT itself interrupt the broker session: it
+   * has no session handle and no RuntimeBroker dependency. This field is a
+   * DIRECTIVE TO THE CALLER, not a report of a side effect this primitive
+   * performed. Tier-2 at head 35b608f flagged the previous name
+   * (`interrupted`) as a false claim of a completed interruption.
+   */
+  readonly sessionInterruptionRequired: boolean;
   /** True when the child PGID SIGKILL was attempted (mandatory always). */
   readonly pgidKillAttempted: boolean;
   /**
@@ -760,7 +774,9 @@ function probeSignal0(pid: number): "alive" | "eperm" | "esrch" {
  * supervisor must contain the governed child WITHOUT the host's
  * cooperation. Ordering: send terminate -> close host stdin -> wait the
  * bounded acknowledgement deadline -> SIGKILL the reported child PGID ->
- * SIGKILL the host (only where permitted) -> interrupt the session.
+ * SIGKILL the host (only where permitted) -> REQUEST session interruption
+ * from the caller via `sessionInterruptionRequired` (this primitive does
+ * not perform the interruption itself; Task 47/53 owns that).
  *
  * BINDING RULE (Founder, Task 44): host death is determined EXCLUSIVELY by
  * the spawn-time `proc.exited` watch. `send()` and `closeStdin()` are
@@ -877,8 +893,9 @@ export async function escalateWedgedHost(
   observedMs.ackWindowEndedMs = performance.now() - tCommand;
 
   // ---- S1 (C7.3 step 2): acknowledged in time and still alive ----
-  // NO escalation: no `closeStdin()`, no PGID kill, no host kill, no
-  // interruption. The normal ladder owns containment from here.
+  // NO escalation: no `closeStdin()`, no PGID kill, no host kill, and no
+  // session interruption is requested of the caller. The normal ladder owns
+  // containment from here.
   if (acked && lifecycle?.exitedResolved !== true) {
     observedMs.escalatedMs = -1;
     return {
@@ -886,7 +903,7 @@ export async function escalateWedgedHost(
       state: "S1",
       escalated: false,
       closeStdinCalled: false,
-      interrupted: false,
+      sessionInterruptionRequired: false,
       pgidKillAttempted: false,
       hostKillAttempted: false,
       unnecessaryHostExitConfirmed: false,
@@ -969,7 +986,7 @@ export async function escalateWedgedHost(
     state,
     escalated: true,
     closeStdinCalled,
-    interrupted: true,
+    sessionInterruptionRequired: true,
     pgidKillAttempted: true,
     hostKillAttempted,
     unnecessaryHostExitConfirmed: state === "S0" || state === "S2",

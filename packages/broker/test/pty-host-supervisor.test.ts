@@ -858,7 +858,7 @@ test("S1: a responsive host acknowledging within 250 ms causes no escalation (C7
   //   - closeStdin() was NOT called (independent seam, counted at the real
   //     call site inside spawnPtyHost — not self-reported by the escalation);
   //   - neither the PGID nor the host PID kill was attempted;
-  //   - no interruption was recorded.
+  //   - no session interruption was requested of the caller.
   const handle = spawnPtyHost({
     path: "/bin/cat",
     sha256: sha256File("/bin/cat"),
@@ -936,8 +936,10 @@ test("S1: a responsive host acknowledging within 250 ms causes no escalation (C7
     expect(outcome.hostKillAttempted).toBe(false);
     expect(outcome.killOrder).toEqual([]);
 
-    // No interruption was recorded.
-    expect(outcome.interrupted).toBe(false);
+    // No session interruption is requested of the caller on the S1 path.
+    // The primitive never interrupts the session itself; this field is a
+    // directive that Task 47/53's caller acts on.
+    expect(outcome.sessionInterruptionRequired).toBe(false);
 
     // EXTERNAL delivery evidence, stated precisely. The child group IS gone
     // after a responsive terminate — but the HOST's own §3.4 ladder did
@@ -1014,7 +1016,7 @@ test("S3: a SIGSTOPped host is not killed before the ack deadline and is contain
     expect(closeStdinCallCountForTest(handle)).toBe(1);
     expect(outcome.pgidKillAttempted).toBe(true);
     expect(outcome.hostKillAttempted).toBe(true);
-    expect(outcome.interrupted).toBe(true);
+    expect(outcome.sessionInterruptionRequired).toBe(true);
 
     // The ack window WAS observed (no instant escalation) …
     //
