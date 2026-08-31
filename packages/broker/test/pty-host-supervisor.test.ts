@@ -9,7 +9,7 @@
 // observation is deferred as PLAN-OPEN-T44-ENV-OBS-01 (addendum C8).
 
 import { expect, test } from "bun:test";
-import { clearAckSignalForTest, closeStdinCallCountForTest, escalateWedgedHost, setAckSignalForTest, spawnPtyHost, subscriberCountForTest, waiterCountForTest } from "../src/pty-host-supervisor";
+import { closeStdinCallCountForTest, escalateWedgedHost, pendingAckRegisteredForTest, spawnPtyHost, subscriberCountForTest, waiterCountForTest } from "../src/pty-host-supervisor";
 import type { HostFactFrame } from "../src/pty-host-protocol";
 
 // Test-owned §9.8 deadline values. Deliberately re-declared here rather
@@ -877,37 +877,43 @@ test("S1: a responsive host acknowledging within 250 ms causes no escalation (C7
     // Baseline: the lifeline has never been closed on this handle.
     expect(closeStdinCallCountForTest(handle)).toBe(0);
 
-    // The acknowledgement signal is the REAL `ack{ofKind:"terminate"}` fact
-    // from the live host — not a synthetic timer. Measured on this runtime
-    // the host acks at ~11.9 ms and then exits at ~14.5 ms, so a fabricated
-    // delay would race the genuine exit and make the test meaningless. The
-    // watcher is attached BEFORE the terminate command so the fact cannot
-    // be missed.
-    const iterator2 = handle.facts()[Symbol.asyncIterator]();
+    // C7 evidence 1, PRODUCTION PATH (Greptile P1 remediation): nothing is
+    // injected. The supervisor registers its own pending acknowledgement
+    // inside escalateWedgedHost and settles it from the REAL decoded-fact
+    // pump when the live host emits ack{ofKind:"terminate"} (or the ratified
+    // first termination-specific fact). This test therefore proves S1
+    // through the same code path production will use once Task 47/53 wire
+    // the caller — not through a test-populated promise.
+    //
+    // A parallel observer records the fact independently, purely so the test
+    // can assert on its OWN clock that the ack was timely. It does not feed
+    // the implementation.
+    const observer = handle.facts()[Symbol.asyncIterator]();
     let ackObservedMs = -1;
     const tCommand = performance.now();
-    const ackSignal = new Promise<boolean>((resolve) => {
-      void (async () => {
-        for (;;) {
-          const next = await iterator2.next();
-          if (next.done) {
-            resolve(false);
-            return;
-          }
-          const fact = next.value as HostFactFrame;
-          if (fact.kind === "ack" && fact.ofKind === "terminate") {
-            ackObservedMs = performance.now() - tCommand;
-            resolve(true);
-            return;
-          }
-        }
-      })();
+    const observerParked = observer.next().then(function consume(r): Promise<void> | void {
+      if (r.done) return;
+      const fact = r.value as HostFactFrame;
+      if (fact.kind === "ack" && fact.ofKind === "terminate") {
+        ackObservedMs = performance.now() - tCommand;
+        return;
+      }
+      return observer.next().then(consume);
     });
+    void observerParked;
+    // Async generators are lazy: the queue is attached on the first next(),
+    // so yield once here to guarantee the observer is genuinely parked
+    // before the terminate command is sent. Without this it can miss an
+    // acknowledgement that arrives ~12 ms later.
+    await new Promise((r) => setTimeout(r, 20));
 
-    // Register the acknowledgement through the module-private test seam —
-    // the public signature stays exactly (handle, pgid, hostPid).
-    setAckSignalForTest(handle, ackSignal);
     const outcome = await escalateWedgedHost(handle, pgid, handle.hostPid);
+
+    // Give the independent observer a bounded moment to receive the same
+    // ack the production notifier already consumed. Escalation returns the
+    // instant the notifier settles, which can be before this second
+    // subscriber is scheduled.
+    await Promise.race([observerParked, new Promise((r) => setTimeout(r, 300))]);
 
     // The acknowledgement genuinely arrived, and by the 250 ms deadline —
     // measured on the TEST's monotonic clock, not the implementation's.
@@ -915,6 +921,10 @@ test("S1: a responsive host acknowledging within 250 ms causes no escalation (C7
     expect(ackObservedMs).toBeLessThan(HOST_ACK_MS);
     expect(outcome.state).toBe("S1");
     expect(outcome.escalated).toBe(false);
+
+    // Requirement 3/4: no pending acknowledgement state survives the call,
+    // so nothing can satisfy a later escalation.
+    expect(pendingAckRegisteredForTest(handle)).toBe(false);
 
     // closeStdin() was NOT called — proven independently at the real call
     // site, so the escalation path cannot under-report a close it performed.
@@ -942,7 +952,6 @@ test("S1: a responsive host acknowledging within 250 ms causes no escalation (C7
     // escalation would have been signalled while `exited` was still pending.
     expect(outcome.unnecessaryHostExitConfirmed).toBe(false);
   } finally {
-    clearAckSignalForTest(handle);
     cleanupProcesses(handle.hostPid, pgid);
   }
 }, 15000);
@@ -1202,17 +1211,20 @@ test("pty_host_failure remains fixed through a mid-ladder host exit (C7 evidence
 
     process.kill(handle.hostPid, "SIGSTOP");
 
-    // A LATE acknowledgement: resolves well after the 250 ms deadline. It
-    // must not cancel or alter the escalation already under way. Registered
-    // through the module-private test seam.
-    const lateAck = new Promise<boolean>((resolve) => setTimeout(() => resolve(true), 400));
-    setAckSignalForTest(handle, lateAck);
-
-    // Kill the host mid-ladder, after the deadline has passed.
+    // A genuinely LATE acknowledgement, produced by the REAL host rather
+    // than injected: the host is SIGSTOPped, so it cannot answer the
+    // terminate command until it is resumed. SIGCONT at t+300 ms releases
+    // it AFTER the 250 ms deadline has already expired, so any ack it then
+    // emits reaches the production notifier late. It must not cancel or
+    // alter the escalation already under way (C7.3 step 4).
     setTimeout(() => {
       try { process.kill(handle.hostPid, "SIGCONT"); } catch { /* gone */ }
+    }, 300);
+
+    // Kill the host mid-ladder, after the deadline has passed (S5).
+    setTimeout(() => {
       try { process.kill(handle.hostPid, "SIGKILL"); } catch { /* gone */ }
-    }, 260);
+    }, 380);
 
     const outcome = await escalateWedgedHost(handle, pgid, handle.hostPid);
 
@@ -1225,7 +1237,6 @@ test("pty_host_failure remains fixed through a mid-ladder host exit (C7 evidence
     const groupGone = await waitUntil(() => !groupExternallyAlive(pgid as number), HOST_OUTER_BOUND_MS);
     expect(groupGone).toBe(true);
   } finally {
-    clearAckSignalForTest(handle);
     try { process.kill(handle.hostPid, "SIGCONT"); } catch { /* gone */ }
     cleanupProcesses(handle.hostPid, pgid);
   }
@@ -1258,17 +1269,36 @@ test("governed-child environment forwarding: exact key-set equality with the lau
   // `output` fact channel. No values are emitted, parsed, printed, or
   // asserted; no new fact kind and no codec change.
   //
-  // The fixture is /usr/bin/awk itself, driven by argv — no extra file to
-  // author, and decisively NO SHELL. A POSIX shell injects PWD, SHLVL and _
-  // into its own environment (proven: `env -i /bin/sh -c env` yields exactly
-  // those three from an empty environment), which would force the oracle to
-  // subtract interpreter-specific keys. awk's ENVIRON is the raw inherited
-  // environment: `env -i /usr/bin/awk` yields an EMPTY key list, so exact
-  // key-set equality is assertable with no subtraction whatsoever.
+  // PLATFORM-DISPATCHED ORACLE, no subtraction on either lane. Both fixtures
+  // are /usr/bin/awk driven by argv — no extra file, and decisively NO SHELL
+  // (a POSIX shell injects PWD, SHLVL and _ into its own environment).
   //
-  // Node/Bun were also rejected as fixture interpreters: Bun auto-loads .env
+  //  - Linux: read the inherited KERNEL environment block from
+  //    /proc/self/environ, split the NUL-delimited entries at the FIRST '='
+  //    and emit key names only. This is immune to interpreter injection.
+  //    CodeRabbit (PR #36, bound to head dda3481) correctly reported that the
+  //    previous ENVIRON oracle fails under gawk. Probed in containers:
+  //      Debian + gawk 5.2.1 : ENVIRON -> AWKPATH,AWKLIBPATH,... (INJECTS)
+  //                            /proc   -> HOSTNAME,HOME,PATH,MADV_...,PWD (clean)
+  //      Ubuntu + mawk 1.3.4 : ENVIRON -> clean ; /proc -> clean
+  //    So /proc is correct under BOTH awk variants; ENVIRON is not.
+  //  - macOS: /proc does not exist, so the verified BWK awk ENVIRON path is
+  //    used. Probed on this host: `env -i PATH=... MADV_FIXTURE_MARKER=...`
+  //    yields exactly those two keys — no interpreter injection.
+  //
+  // Node/Bun were rejected as fixture interpreters: Bun auto-loads .env
   // files, which injects unrelated keys into process.env.
   const fixture = "/usr/bin/awk";
+  const isLinux = process.platform === "linux";
+  // Linux: parse the kernel block (keys only). macOS: iterate ENVIRON (keys
+  // only). Neither program reads or emits a single environment VALUE.
+  const linuxProgram =
+    'BEGIN{RS="\\0"; s=""} {i=index($0,"="); if(i>0) s = s substr($0,1,i-1) ","} END{print "@@MADV_ENVKEYS " s "@@"; system("sleep 2")}';
+  const macosProgram =
+    'BEGIN{s="";for(k in ENVIRON) s=s k ",";print "@@MADV_ENVKEYS " s "@@";system("sleep 2")}';
+  const fixtureArgv = isLinux
+    ? [linuxProgram, "/proc/self/environ"]
+    : [macosProgram];
 
   // Plant an ambient canary in the SUPERVISOR's environment. It is absent
   // from descriptor.env, so its absence in the CHILD proves no ambient
@@ -1284,9 +1314,10 @@ test("governed-child environment forwarding: exact key-set equality with the lau
   const handle = spawnPtyHost({
     path: fixture,
     sha256: sha256File(fixture),
-    // Key names only: ENVIRON is iterated for keys and never for values, so
-    // no environment value can reach stdout, the fact stream, or this test.
-    argv: ["BEGIN{s=\"\";for(k in ENVIRON) s=s k \",\";print \"@@MADV_ENVKEYS \" s \"@@\";system(\"sleep 2\")}"],
+    // Key names only: the program emits substrings BEFORE the first '=' (or
+    // ENVIRON keys), never a value, so no environment value can reach
+    // stdout, the fact stream, a failure message, or any artifact.
+    argv: fixtureArgv,
     env: allowlisted,
     executionId: "exec-t44-envkeys",
   });

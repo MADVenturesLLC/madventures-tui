@@ -124,28 +124,57 @@ export function closeStdinCallCountForTest(handle: PtyHostHandle): number {
 }
 
 /**
- * Test-only acknowledgement seam, keyed by handle.
+ * Production acknowledgement registry, keyed by handle.
  *
- * `escalateWedgedHost` keeps the exact plan-specified public signature
- * `(handle, pgid, hostPid)`. Acknowledgement observation is nonetheless
- * load-bearing under C7 (a timely ack means NO escalation), so tests
- * register the acknowledgement they are driving through this module-private
- * WeakMap instead of through a public parameter.
+ * Greptile P1 (PR #36, bound to head dda3481): the previous design took the
+ * acknowledgement exclusively from a test-populated map, so in production
+ * the lookup always returned `undefined`, the ack branch could never win its
+ * race, and a RESPONSIVE host would have been escalated against once the
+ * caller was wired up. The C7 S1 semantics were therefore unreachable
+ * outside tests — the same "works only in the test" defect class as an
+ * inferred-liveness detector.
  *
- * Kept OFF the public `PtyHostHandle` contract and out of the package
- * barrel, exactly like `subscriberCountForTest` / `waiterCountForTest`.
- * Production callers never register a signal; the map lookup then yields
- * `undefined` and the ack branch simply never wins its race.
+ * The acknowledgement is now owned by the supervisor and resolved from the
+ * REAL decoded-fact path: `enqueue()` — the single pump that every host fact
+ * flows through — settles the pending record the moment it observes the
+ * command-specific `ack`. Tests exercise the same production path; nothing
+ * injects an acknowledgement.
  */
-const ackSignals = new WeakMap<PtyHostHandle, Promise<boolean>>();
-
-export function setAckSignalForTest(handle: PtyHostHandle, signal: Promise<boolean>): void {
-  ackSignals.set(handle, signal);
+interface PendingAck {
+  /** The command whose acknowledgement is awaited. */
+  readonly ofKind: HostCommandFrame["kind"];
+  /** Settled with true on a matching ack, false on any terminal path. */
+  readonly settle: (acked: boolean) => void;
+  /** Resolves once, on the first settle. */
+  readonly promise: Promise<boolean>;
+  settled: boolean;
 }
 
-export function clearAckSignalForTest(handle: PtyHostHandle): void {
-  ackSignals.delete(handle);
+/** Registers/looks up the pending acknowledgement owned by a handle. */
+const pendingAcks = new WeakMap<PtyHostHandle, PendingAck>();
+
+/** Registers/looks up the supervisor-internal ack notifier for a handle. */
+const ackNotifiers = new WeakMap<PtyHostHandle, (frame: HostFactFrame) => void>();
+
+/**
+ * Test-only observability: whether a pending acknowledgement record is
+ * currently registered for a handle. Off the public contract and off the
+ * barrel. Proves requirement 3/4 — that no stale acknowledgement state
+ * survives a terminal path and can satisfy a later escalation.
+ */
+const pendingAckProbes = new WeakMap<PtyHostHandle, () => boolean>();
+
+export function pendingAckRegisteredForTest(handle: PtyHostHandle): boolean {
+  return pendingAckProbes.get(handle)?.() ?? false;
 }
+
+/**
+ * Clears any pending acknowledgement for a handle. Invoked on the two
+ * lifecycle terminal paths the escalation call itself does not own — host
+ * exit and fact-stream settlement — so no acknowledgement state can survive
+ * to satisfy a LATER escalation (requirement 4).
+ */
+const lifecycleAckClosers = new WeakMap<PtyHostHandle, () => void>();
 
 /**
  * §9.8 host deadline mirror (broker-local; Task 44 packet C5).
@@ -385,11 +414,26 @@ export function spawnPtyHost(
   let pumpError: Error | null = null;
   let pumpSettled = false;
 
+  // Production acknowledgement notifier (Greptile P1 remediation). Assigned
+  // at handle construction; `enqueue` calls it for every decoded fact.
+  let ackNotify: ((frame: HostFactFrame) => void) | undefined;
+
+  // Clears the pending acknowledgement on lifecycle terminal paths owned by
+  // the supervisor itself (host exit, fact-stream settlement). Assigned at
+  // handle construction, once the handle identity exists.
+  let clearPendingAckLocal: () => void = () => {};
+
   const enqueue = (frame: HostFactFrame): void => {
     if (frame.kind === "launched") {
       reportedPgid = frame.pgid;
       if (pinnedLaunchedFact === null) pinnedLaunchedFact = frame;
     }
+    // Production acknowledgement path (Greptile P1 remediation): every
+    // decoded host fact flows through this single pump, so settling the
+    // pending acknowledgement here means `escalateWedgedHost` observes the
+    // REAL host response — not an injected test signal. The notifier is
+    // registered at handle construction below.
+    ackNotify?.(frame);
     history.push(frame);
     if (history.length > HISTORY_CAP) {
       // Trim the oldest half. The pinned `launched` fact is replayed
@@ -409,6 +453,10 @@ export function spawnPtyHost(
   };
 
   const settleSubscribers = (): void => {
+    // Requirement 3: fact-stream settlement is a terminal path — no ack can
+    // arrive after it, so any pending record is cleared rather than left to
+    // satisfy a later escalation.
+    clearPendingAckLocal();
     for (const q of subscribers) {
       if (!q.closed) {
         q.closed = true;
@@ -594,6 +642,41 @@ export function spawnPtyHost(
   });
   lifecycles.set(handle, lifecycle);
   closeStdinCounts.set(handle, () => closeStdinCalls);
+
+  // Production acknowledgement wiring (Greptile P1 remediation).
+  //
+  // The notifier settles the pending record from the REAL decoded-fact
+  // stream. Two settlement sources, per requirement 2:
+  //   - a matching `ack` whose `ofKind` equals the awaited command; or
+  //   - `termination_started`, the ratified first termination-specific fact
+  //     (§9.8: "the host must report `termination_started` within 500 ms of
+  //     the broker's command"), which on the terminate path the host emits
+  //     BEFORE the ack (main.ts orders termination_started then ack).
+  ackNotify = (frame: HostFactFrame): void => {
+    const pending = pendingAcks.get(handle);
+    if (pending === undefined || pending.settled) return;
+    const isMatchingAck = frame.kind === "ack" && frame.ofKind === pending.ofKind;
+    const isTerminationFirstFact = pending.ofKind === "terminate" && frame.kind === "termination_started";
+    if (isMatchingAck || isTerminationFirstFact) pending.settle(true);
+  };
+  pendingAckProbes.set(handle, () => {
+    const p = pendingAcks.get(handle);
+    return p !== undefined && !p.settled;
+  });
+  lifecycleAckClosers.set(handle, () => {
+    const p = pendingAcks.get(handle);
+    if (p !== undefined && !p.settled) p.settle(false);
+    pendingAcks.delete(handle);
+  });
+  clearPendingAckLocal = () => {
+    const p = pendingAcks.get(handle);
+    if (p !== undefined && !p.settled) p.settle(false);
+    pendingAcks.delete(handle);
+  };
+  // Requirement 3: host exit is a terminal path. An exited host will never
+  // acknowledge, so clear the pending record as soon as the authoritative
+  // watch resolves.
+  void lifecycle.exited.then(() => { clearPendingAckLocal(); });
   return handle;
 }
 
@@ -696,9 +779,45 @@ export async function escalateWedgedHost(
   hostPid: number,
 ): Promise<EscalationOutcome> {
   const lifecycle = lifecycles.get(handle);
-  const ackSignal = ackSignals.get(handle);
   const observedMs: Record<string, number> = {};
   const killOrder: ("pgid" | "host")[] = [];
+
+  // ---- Requirement 1: register the pending acknowledgement BEFORE the
+  // terminate command is sent. The host can ack in ~11.9 ms (measured), and
+  // `enqueue` runs synchronously on the decode path, so registering after
+  // the send would let an immediate acknowledgement race registration and be
+  // missed entirely.
+  let settleAck: (acked: boolean) => void = () => {};
+  const ackPromise = new Promise<boolean>((resolve) => {
+    settleAck = resolve;
+  });
+  const pending: PendingAck = {
+    ofKind: "terminate",
+    settled: false,
+    promise: ackPromise,
+    settle: (acked: boolean) => {
+      if (pending.settled) return;
+      pending.settled = true;
+      settleAck(acked);
+    },
+  };
+  pendingAcks.set(handle, pending);
+
+  // Requirement 3: clear on EVERY terminal path this call owns. Idempotent.
+  const clearPendingAck = (): void => {
+    if (!pending.settled) pending.settle(false);
+    if (pendingAcks.get(handle) === pending) pendingAcks.delete(handle);
+  };
+
+  try {
+    return await runEscalation();
+  } finally {
+    // Requirement 3/4: escalation completion OR throw — no stale
+    // acknowledgement state, waiter, or timer survives this call.
+    clearPendingAck();
+  }
+
+  async function runEscalation(): Promise<EscalationOutcome> {
 
   // ---- t_command: the sole timing anchor (monotonic) ----
   // C7.3 step 1: send the terminate command and begin observing BOTH the
@@ -736,16 +855,14 @@ export async function escalateWedgedHost(
     // promises observes whichever genuinely happened FIRST — the faithful
     // reading of C7.3 step 2, whose two bullets describe a race.
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const ackWon: Promise<"ack"> = ackSignal === undefined
-      ? await_never<"ack">()
-      : new Promise<"ack">((resolve) => {
-        void ackSignal.then((v) => {
-          if (v) resolve("ack");
-        }, () => {
-          // A rejected acknowledgement is not an acknowledgement; let the
-          // deadline or the exit watch decide.
-        });
+    const ackWon: Promise<"ack"> = new Promise<"ack">((resolve) => {
+      void ackPromise.then((v) => {
+        if (v) resolve("ack");
+      }, () => {
+        // A rejected acknowledgement is not an acknowledgement; let the
+        // deadline or the exit watch decide.
       });
+    });
     const exitWon: Promise<"exit"> = lifecycle === undefined
       ? await_never<"exit">()
       : lifecycle.exited.then<"exit">(() => "exit");
@@ -859,4 +976,5 @@ export async function escalateWedgedHost(
     killOrder,
     observedMs,
   };
+  }
 }
