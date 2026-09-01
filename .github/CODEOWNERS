@@ -1,0 +1,16 @@
+# CODEOWNERS for MADVenturesLLC/madventures-tui
+#
+# GitHub search order: .github/CODEOWNERS, then root CODEOWNERS, then
+# docs/CODEOWNERS. This file is the GitHub-preferred location.
+#
+# Owners must have write access. Review requests fire when a pull request
+# is marked ready for review (not while it is a draft).
+#
+# Require-code-owner-review is currently OFF on `main` (branch protection
+# and ruleset 20943319). This file requests a review; it does not gate
+# merge. Turning that setting on is a Founder security-posture change.
+
+* @decivantiq
+
+# Protect this file itself (GitHub recommended).
+/.github/CODEOWNERS @decivantiq
