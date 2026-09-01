@@ -1,12 +1,25 @@
 // packages/broker/test/pty-host-supervisor.test.ts
 // Task 42: the broker-side PTY-host supervisor. This file carries the
 // fifth named Task 42 test ("host exit interrupts the whole session") and
-// the real-pipeline lifeline ordering proof, and will carry the five Task 44
-// wedged-host escalation tests (expected GREEN: 10 pass once Task 44 lands).
+// the real-pipeline lifeline ordering proof, plus the Task 44 wedged-host
+// escalation suite (eight C7 evidence tests plus the five T-a..T-e
+// delegated-bypass tests; 27 tests in this file total).
+//
+// Task 44 environment scope: the C7 evidence-7 test proves GOVERNED-CHILD
+// environment forwarding only. Direct PTY-host process-environment
+// observation is deferred as PLAN-OPEN-T44-ENV-OBS-01 (addendum C8).
 
 import { expect, test } from "bun:test";
-import { spawnPtyHost, subscriberCountForTest, waiterCountForTest } from "../src/pty-host-supervisor";
+import { closeStdinCallCountForTest, escalateWedgedHost, escalationPhaseForTest, pendingAckRegisteredForTest, spawnPtyHost, subscriberCountForTest, terminateSendCountForTest, waiterCountForTest } from "../src/pty-host-supervisor";
 import type { HostFactFrame } from "../src/pty-host-protocol";
+
+// Test-owned §9.8 deadline values. Deliberately re-declared here rather
+// than imported from the implementation: a test that reads the same
+// constant it verifies cannot detect a wrong constant. These are the
+// ratified §9.8 numbers.
+const HOST_ACK_MS = 250;
+const HOST_HARD_KILL_MS = 500;
+const HOST_OUTER_BOUND_MS = 5000;
 
 function sha256File(path: string): string {
   return new Bun.CryptoHasher("sha256").update(require("node:fs").readFileSync(path)).digest("hex");
@@ -774,3 +787,899 @@ test("the launched fact survives history pressure and is replayed to late subscr
     handle.killPgid();
   }
 }, 15000);
+
+// ───────────────────────── Task 44: wedged-host escalation ─────────────────────────
+//
+// BINDING RULE (Founder, Task 44): dead-host escalation MUST use an
+// independent liveness signal (the spawn-time `proc.exited` watch) and MUST
+// NOT infer host death from `send()`/`closeStdin()` failure. Probed on Bun
+// 1.3.14: writes to a dead host's stdin succeed silently (FileSink swallows
+// EPIPE; zero sync throws, zero unhandled rejections), so a write-failure
+// detector never fires and its test passes vacuously.
+//
+// Every test below uses TEST-OWNED monotonic timing and EXTERNAL liveness
+// observation (signal-0 polling of the real process group / host pid).
+// `observedMs` from the implementation is never a pass condition.
+
+/** Test-owned external liveness probe — never the implementation's. */
+function externallyAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    const code = typeof err === "object" && err !== null && "code" in err
+      ? (err as { code: unknown }).code
+      : undefined;
+    // EPERM means it exists but is not ours to signal — still alive.
+    return code !== "ESRCH";
+  }
+}
+
+/** External group liveness: signal-0 against the negative pgid. */
+function groupExternallyAlive(pgid: number): boolean {
+  try {
+    process.kill(-pgid, 0);
+    return true;
+  } catch (err) {
+    const code = typeof err === "object" && err !== null && "code" in err
+      ? (err as { code: unknown }).code
+      : undefined;
+    return code !== "ESRCH";
+  }
+}
+
+/** Poll an external condition with the test's own monotonic clock. */
+async function waitUntil(
+  predicate: () => boolean,
+  timeoutMs: number,
+): Promise<boolean> {
+  const start = performance.now();
+  while (performance.now() - start < timeoutMs) {
+    if (predicate()) return true;
+    await new Promise((r) => setTimeout(r, 5));
+  }
+  return predicate();
+}
+
+/** Best-effort cleanup: every failure path must leave no real processes. */
+function cleanupProcesses(hostPid: number | null, pgid: number | null): void {
+  if (pgid !== null && Number.isInteger(pgid) && pgid > 1) {
+    try { process.kill(-pgid, "SIGKILL"); } catch { /* group gone */ }
+  }
+  if (hostPid !== null) {
+    try { process.kill(hostPid, "SIGKILL"); } catch { /* host gone */ }
+  }
+}
+
+test("S1: a responsive host acknowledging within 250 ms causes no escalation (C7 evidence 1)", async () => {
+  // C7.3 step 2: a timely acknowledgement on a live host means NO
+  // escalation. This test proves all four required negatives on the REAL
+  // responsive path:
+  //   - the acknowledgement arrived by the 250 ms deadline;
+  //   - closeStdin() was NOT called (independent seam, counted at the real
+  //     call site inside spawnPtyHost — not self-reported by the escalation);
+  //   - neither the PGID nor the host PID kill was attempted;
+  //   - no session interruption was requested of the caller.
+  const handle = spawnPtyHost({
+    path: "/bin/cat",
+    sha256: sha256File("/bin/cat"),
+    argv: [],
+    env: {},
+    executionId: "exec-t44-s1-responsive",
+  });
+  let pgid: number | null = null;
+  try {
+    const iterator = handle.facts()[Symbol.asyncIterator]();
+    const first = await iterator.next();
+    expect(first.done).toBe(false);
+    expect(first.value).toMatchObject({ kind: "launched" });
+    pgid = (first.value as Extract<HostFactFrame, { kind: "launched" }>).pgid;
+
+    // Baseline: the lifeline has never been closed on this handle.
+    expect(closeStdinCallCountForTest(handle)).toBe(0);
+
+    // C7 evidence 1, PRODUCTION PATH (Greptile P1 remediation): nothing is
+    // injected. The supervisor registers its own pending acknowledgement
+    // inside escalateWedgedHost and settles it from the REAL decoded-fact
+    // pump when the live host emits ack{ofKind:"terminate"} (or the ratified
+    // first termination-specific fact). This test therefore proves S1
+    // through the same code path production will use once Task 47/53 wire
+    // the caller — not through a test-populated promise.
+    //
+    // A parallel observer records the fact independently, purely so the test
+    // can assert on its OWN clock that the ack was timely. It does not feed
+    // the implementation.
+    const observer = handle.facts()[Symbol.asyncIterator]();
+    let ackObservedMs = -1;
+    const tCommand = performance.now();
+    const observerParked = observer.next().then(function consume(r): Promise<void> | void {
+      if (r.done) return;
+      const fact = r.value as HostFactFrame;
+      if (fact.kind === "ack" && fact.ofKind === "terminate") {
+        ackObservedMs = performance.now() - tCommand;
+        return;
+      }
+      return observer.next().then(consume);
+    });
+    void observerParked;
+    // Async generators are lazy: the queue is attached on the first next(),
+    // so yield once here to guarantee the observer is genuinely parked
+    // before the terminate command is sent. Without this it can miss an
+    // acknowledgement that arrives ~12 ms later.
+    await new Promise((r) => setTimeout(r, 20));
+
+    const outcome = await escalateWedgedHost(handle, pgid, handle.hostPid);
+
+    // Give the independent observer a bounded moment to receive the same
+    // ack the production notifier already consumed. Escalation returns the
+    // instant the notifier settles, which can be before this second
+    // subscriber is scheduled.
+    await Promise.race([observerParked, new Promise((r) => setTimeout(r, 300))]);
+
+    // The acknowledgement genuinely arrived, and by the 250 ms deadline —
+    // measured on the TEST's monotonic clock, not the implementation's.
+    expect(ackObservedMs).toBeGreaterThanOrEqual(0);
+    expect(ackObservedMs).toBeLessThan(HOST_ACK_MS);
+    expect(outcome.state).toBe("S1");
+    expect(outcome.escalated).toBe(false);
+
+    // Requirement 3/4: no pending acknowledgement state survives the call,
+    // so nothing can satisfy a later escalation.
+    expect(pendingAckRegisteredForTest(handle)).toBe(false);
+
+    // closeStdin() was NOT called — proven independently at the real call
+    // site, so the escalation path cannot under-report a close it performed.
+    expect(outcome.closeStdinCalled).toBe(false);
+    expect(closeStdinCallCountForTest(handle)).toBe(0);
+
+    // Neither kill was attempted.
+    expect(outcome.pgidKillAttempted).toBe(false);
+    expect(outcome.hostKillAttempted).toBe(false);
+    expect(outcome.killOrder).toEqual([]);
+
+    // No session interruption is requested of the caller on the S1 path.
+    // The primitive never interrupts the session itself; this field is a
+    // directive that Task 47/53's caller acts on.
+    expect(outcome.sessionInterruptionRequired).toBe(false);
+
+    // EXTERNAL delivery evidence, stated precisely. The child group IS gone
+    // after a responsive terminate — but the HOST's own §3.4 ladder did
+    // that, not this escalation path. The distinguishing evidence that the
+    // S1 path delivered nothing is the lifeline seam plus the empty kill
+    // order: had escalation run, closeStdin() would have been called and
+    // killOrder would contain "pgid".
+    expect(closeStdinCallCountForTest(handle)).toBe(0);
+    expect(outcome.killOrder).toEqual([]);
+    // The host also reached its own clean exit rather than being SIGKILLed
+    // by this path — an exit code/signal is observable, and a host killed by
+    // escalation would have been signalled while `exited` was still pending.
+    expect(outcome.unnecessaryHostExitConfirmed).toBe(false);
+  } finally {
+    cleanupProcesses(handle.hostPid, pgid);
+  }
+}, 15000);
+
+test("S3: a SIGSTOPped host is not killed before the ack deadline and is contained by the absolute 500 ms deadline (C7 evidence 2)", async () => {
+  // C7.3 steps 3-4 + §9.8/§6.4.10: a SIGSTOPped host cannot acknowledge and
+  // cannot contain its child. It earns NO extra grace. This proves both
+  // halves of the corrected timing contract:
+  //   - no kill occurs BEFORE the 250 ms acknowledgement deadline; and
+  //   - containment BEGINS by t_command + 500 ms absolute.
+  // Both measured on the TEST's own monotonic clock with EXTERNAL liveness
+  // observation; observedMs is never a pass condition.
+  const handle = spawnPtyHost({
+    path: "/bin/cat",
+    sha256: sha256File("/bin/cat"),
+    argv: [],
+    env: {},
+    executionId: "exec-t44-s3-sigstop",
+  });
+  let pgid: number | null = null;
+  try {
+    const iterator = handle.facts()[Symbol.asyncIterator]();
+    const first = await iterator.next();
+    expect(first.done).toBe(false);
+    pgid = (first.value as Extract<HostFactFrame, { kind: "launched" }>).pgid;
+
+    // Wedge the host: SIGSTOP freezes it without killing it, so `exited`
+    // stays pending and signal-0 reports alive — the S3 classification.
+    process.kill(handle.hostPid, "SIGSTOP");
+    expect(externallyAlive(handle.hostPid)).toBe(true);
+    expect(groupExternallyAlive(pgid)).toBe(true);
+
+    // Independent observer: sample the child group's liveness across the
+    // acknowledgement window. If any kill were delivered early, the group
+    // would be gone before the deadline.
+    const tCommand = performance.now();
+    let groupAliveAtDeadlineCheck = true;
+    const earlyObserver = (async () => {
+      while (performance.now() - tCommand < HOST_ACK_MS - 40) {
+        if (!groupExternallyAlive(pgid as number)) {
+          groupAliveAtDeadlineCheck = false;
+          return;
+        }
+        await new Promise((r) => setTimeout(r, 5));
+      }
+    })();
+
+    const outcome = await escalateWedgedHost(handle, pgid, handle.hostPid);
+    const elapsedToReturn = performance.now() - tCommand;
+    await earlyObserver;
+
+    // No kill before the acknowledgement deadline.
+    expect(groupAliveAtDeadlineCheck).toBe(true);
+
+    // The wedged host is alive-or-indeterminate => S3: both kills attempted.
+    expect(outcome.state).toBe("S3");
+    expect(outcome.reason).toBe("pty_host_failure");
+    expect(outcome.escalated).toBe(true);
+    expect(outcome.closeStdinCalled).toBe(true);
+    expect(closeStdinCallCountForTest(handle)).toBe(1);
+    expect(outcome.pgidKillAttempted).toBe(true);
+    expect(outcome.hostKillAttempted).toBe(true);
+    expect(outcome.sessionInterruptionRequired).toBe(true);
+
+    // The ack window WAS observed (no instant escalation) …
+    //
+    // Tolerance note: `setTimeout` may fire a fraction of a millisecond
+    // early relative to `performance.now()`, so the raw comparison flakes at
+    // ~249.7 vs 250. The requirement is "the acknowledgement window was
+    // genuinely waited out", not sub-millisecond timer exactness, so a 2 ms
+    // scheduling tolerance is applied. This cannot mask a real defect: the
+    // pre-C7 no-wait behavior returned in ~1 ms, two orders of magnitude
+    // away, and mutation 2 (a 400 ms added grace) is still caught by the
+    // absolute upper bound below.
+    expect(elapsedToReturn).toBeGreaterThanOrEqual(HOST_ACK_MS - 2);
+    // … and yet containment began inside the SAME absolute budget: no
+    // second grace period was granted for being unresponsive.
+    expect(elapsedToReturn).toBeLessThanOrEqual(HOST_HARD_KILL_MS);
+
+    // EXTERNAL delivery evidence: the group and the host are really gone,
+    // within the §9.8 outer bound.
+    const groupGone = await waitUntil(() => !groupExternallyAlive(pgid as number), HOST_OUTER_BOUND_MS);
+    expect(groupGone).toBe(true);
+    const hostGone = await waitUntil(() => !externallyAlive(handle.hostPid), HOST_OUTER_BOUND_MS);
+    expect(hostGone).toBe(true);
+  } finally {
+    try { process.kill(handle.hostPid, "SIGCONT"); } catch { /* gone */ }
+    cleanupProcesses(handle.hostPid, pgid);
+  }
+}, 25000);
+
+test("S0: a dead host with a stdin-inheriting descendant still triggers mandatory child-PGID containment (C7 evidence 3)", async () => {
+  // Evidence 3: the host is ALREADY dead (SIGKILLed) before escalation, and
+  // the governed child holds the inherited stdin. Containment of the child
+  // PGID is MANDATORY anyway and must not wait for EPIPE — which on Bun
+  // 1.3.14 never arrives, because writes to a dead host's stdin succeed
+  // silently. The child group must die from the direct PGID path alone.
+  const fixture = "/tmp/t44-stdin-inheritor.sh";
+  require("node:fs").writeFileSync(fixture, '#!/bin/sh\ntrap "" TERM\nwhile true; do sleep 0.05; done\n');
+  require("node:fs").chmodSync(fixture, 0o755);
+
+  const handle = spawnPtyHost({
+    path: fixture,
+    sha256: sha256File(fixture),
+    argv: [],
+    env: { PATH: "/bin:/usr/bin" },
+    executionId: "exec-t44-s0-dead-host",
+  });
+  let pgid: number | null = null;
+  try {
+    const iterator = handle.facts()[Symbol.asyncIterator]();
+    const first = await iterator.next();
+    expect(first.done).toBe(false);
+    pgid = (first.value as Extract<HostFactFrame, { kind: "launched" }>).pgid;
+
+    // Kill the HOST outright. The child group survives it (the child is in
+    // its own process group and ignores SIGTERM).
+    process.kill(handle.hostPid, "SIGKILL");
+    const hostGone = await waitUntil(() => !externallyAlive(handle.hostPid), 5000);
+    expect(hostGone).toBe(true);
+    // External proof the descendant outlived its host.
+    expect(groupExternallyAlive(pgid)).toBe(true);
+
+    const outcome = await escalateWedgedHost(handle, pgid, handle.hostPid);
+
+    // S0: the authoritative exit watch resolved => host death is KNOWN.
+    expect(outcome.state).toBe("S0");
+    expect(outcome.reason).toBe("pty_host_failure");
+    expect(outcome.unnecessaryHostExitConfirmed).toBe(true);
+    // Mandatory containment still ran …
+    expect(outcome.pgidKillAttempted).toBe(true);
+    expect(outcome.killOrder).toEqual(["pgid"]);
+    // … and the dead host's PID was NEVER signalled (PID-recycling
+    // protection, v2.2 invariant 1).
+    expect(outcome.hostKillAttempted).toBe(false);
+    expect(outcome.killOrder).not.toContain("host");
+    // S0 skips the lifeline close entirely — the host is already gone.
+    expect(outcome.closeStdinCalled).toBe(false);
+    expect(closeStdinCallCountForTest(handle)).toBe(0);
+
+    // EXTERNAL delivery evidence: the descendant group is really gone,
+    // killed by the direct PGID path with no EPIPE involved.
+    const groupGone = await waitUntil(() => !groupExternallyAlive(pgid as number), HOST_OUTER_BOUND_MS);
+    expect(groupGone).toBe(true);
+  } finally {
+    cleanupProcesses(handle.hostPid, pgid);
+  }
+}, 25000);
+
+test("a never-throwing send()/closeStdin() cannot prevent escalation (C7 evidence 4)", async () => {
+  // Evidence 4 + the BINDING RULE. This is the vacuity guard: a handle whose
+  // send() and closeStdin() NEVER throw (exactly Bun 1.3.14's real FileSink
+  // behavior against a dead host) must still escalate. Any implementation
+  // that inferred death from a write failure would silently do nothing here.
+  const real = spawnPtyHost({
+    path: "/bin/cat",
+    sha256: sha256File("/bin/cat"),
+    argv: [],
+    env: {},
+    executionId: "exec-t44-never-throw",
+  });
+  let pgid: number | null = null;
+  try {
+    const iterator = real.facts()[Symbol.asyncIterator]();
+    const first = await iterator.next();
+    pgid = (first.value as Extract<HostFactFrame, { kind: "launched" }>).pgid;
+
+    // Wedge the host so it cannot acknowledge.
+    process.kill(real.hostPid, "SIGSTOP");
+
+    // A handle whose lifeline operations are guaranteed silent no-ops.
+    let sendCalls = 0;
+    let closeCalls = 0;
+    const silentHandle: typeof real = {
+      hostPid: real.hostPid,
+      send: () => { sendCalls += 1; /* never throws, like a dead FileSink */ },
+      facts: real.facts,
+      closeStdin: () => { closeCalls += 1; /* never throws */ },
+      killPgid: real.killPgid,
+    };
+
+    const outcome = await escalateWedgedHost(silentHandle, pgid, real.hostPid);
+
+    // The silent lifeline was exercised …
+    expect(sendCalls).toBe(1);
+    expect(closeCalls).toBe(1);
+    // … and escalation happened anyway, driven by the independent liveness
+    // signal rather than by any write outcome.
+    expect(outcome.escalated).toBe(true);
+    expect(outcome.reason).toBe("pty_host_failure");
+    expect(outcome.pgidKillAttempted).toBe(true);
+    expect(outcome.state).toBe("S3");
+
+    // EXTERNAL delivery evidence.
+    const groupGone = await waitUntil(() => !groupExternallyAlive(pgid as number), HOST_OUTER_BOUND_MS);
+    expect(groupGone).toBe(true);
+  } finally {
+    try { process.kill(real.hostPid, "SIGCONT"); } catch { /* gone */ }
+    cleanupProcesses(real.hostPid, pgid);
+  }
+}, 25000);
+
+test("ordered kill attempts are paired with real external delivery evidence (C7 evidence 5)", async () => {
+  // Evidence 5 + v2.2 invariant 5: ORDERED CALL ATTEMPTS (the seam-recorded
+  // killOrder) are asserted separately from REAL DELIVERY (external
+  // signal-0 observation that the group and host are actually gone).
+  const handle = spawnPtyHost({
+    path: "/bin/cat",
+    sha256: sha256File("/bin/cat"),
+    argv: [],
+    env: {},
+    executionId: "exec-t44-ordered-kills",
+  });
+  let pgid: number | null = null;
+  try {
+    const iterator = handle.facts()[Symbol.asyncIterator]();
+    const first = await iterator.next();
+    pgid = (first.value as Extract<HostFactFrame, { kind: "launched" }>).pgid;
+
+    process.kill(handle.hostPid, "SIGSTOP");
+    const outcome = await escalateWedgedHost(handle, pgid, handle.hostPid);
+
+    // Ordering evidence: the child group is contained BEFORE the host, so a
+    // dying host can never orphan its child.
+    expect(outcome.state).toBe("S3");
+    expect(outcome.killOrder).toEqual(["pgid", "host"]);
+    expect(outcome.killOrder.indexOf("pgid")).toBeLessThan(outcome.killOrder.indexOf("host"));
+
+    // REAL delivery evidence, independent of the recorded order: both the
+    // group and the host are genuinely gone within the §9.8 outer bound.
+    const groupGone = await waitUntil(() => !groupExternallyAlive(pgid as number), HOST_OUTER_BOUND_MS);
+    expect(groupGone).toBe(true);
+    const hostGone = await waitUntil(() => !externallyAlive(handle.hostPid), HOST_OUTER_BOUND_MS);
+    expect(hostGone).toBe(true);
+  } finally {
+    try { process.kill(handle.hostPid, "SIGCONT"); } catch { /* gone */ }
+    cleanupProcesses(handle.hostPid, pgid);
+  }
+}, 25000);
+
+test("pty_host_failure remains fixed through a mid-ladder host exit (C7 evidence 6)", async () => {
+  // Evidence 6 + C7.3 step 4: the reason binds at escalation
+  // ENTRY. A host that dies DURING the ladder never relabels it, and a late
+  // acknowledgement never cancels escalation.
+  const handle = spawnPtyHost({
+    path: "/bin/cat",
+    sha256: sha256File("/bin/cat"),
+    argv: [],
+    env: {},
+    executionId: "exec-t44-midladder-exit",
+  });
+  let pgid: number | null = null;
+  try {
+    const iterator = handle.facts()[Symbol.asyncIterator]();
+    const first = await iterator.next();
+    pgid = (first.value as Extract<HostFactFrame, { kind: "launched" }>).pgid;
+
+    process.kill(handle.hostPid, "SIGSTOP");
+
+    // A genuinely LATE acknowledgement, produced by the REAL host rather
+    // than injected: the host is SIGSTOPped, so it cannot answer the
+    // terminate command until it is resumed. SIGCONT at t+300 ms releases
+    // it AFTER the 250 ms deadline has already expired, so any ack it then
+    // emits reaches the production notifier late. It must not cancel or
+    // alter the escalation already under way (C7.3 step 4).
+    setTimeout(() => {
+      try { process.kill(handle.hostPid, "SIGCONT"); } catch { /* gone */ }
+    }, 300);
+
+    // Kill the host during the ladder, after the deadline has passed. This
+    // cannot change the already-returned outcome — see T-e, which supersedes
+    // the former "mid-ladder S5" claim. S5 is not a returnable state.
+    setTimeout(() => {
+      try { process.kill(handle.hostPid, "SIGKILL"); } catch { /* gone */ }
+    }, 380);
+
+    const outcome = await escalateWedgedHost(handle, pgid, handle.hostPid);
+
+    // The entry reason survived both the late ack and the mid-ladder exit.
+    expect(outcome.reason).toBe("pty_host_failure");
+    expect(outcome.escalated).toBe(true);
+    // Containment still mandatory.
+    expect(outcome.pgidKillAttempted).toBe(true);
+
+    const groupGone = await waitUntil(() => !groupExternallyAlive(pgid as number), HOST_OUTER_BOUND_MS);
+    expect(groupGone).toBe(true);
+  } finally {
+    try { process.kill(handle.hostPid, "SIGCONT"); } catch { /* gone */ }
+    cleanupProcesses(handle.hostPid, pgid);
+  }
+}, 25000);
+
+test("governed-child environment forwarding: exact key-set equality with the launch-frame env, ambient canary absent (C7 evidence 7)", async () => {
+  // SCOPE OF THIS TEST — read before extending it.
+  //
+  // PROVES: the governed CHILD receives exactly the launch-frame
+  // environment. The fixture is launched through HostLaunchDescriptor.path,
+  // so the real supervisor spawns the real host and the host launches the
+  // fixture as the governed child; the observed key set is the descriptor's
+  // allowlist as forwarded through that chain to the child.
+  //
+  // DOES NOT PROVE: anything about the PTY HOST's own process environment.
+  // This test never observes the host process. Direct host-environment
+  // observation is DEFERRED as PLAN-OPEN-T44-ENV-OBS-01 (addendum C8) and
+  // would require a host-side keys-only reporting mechanism plus its own
+  // architecture and scope decision — it is not a test-only change.
+  //
+  // The host's own environment is protected by CONSTRUCTION only:
+  // `env: { ...descriptor.env }` at the Bun.spawn inside spawnPtyHost. That
+  // guarantee is asserted by code inspection, not by this test. Evidence:
+  // a mutation polluting the HOST SPAWN env left this test GREEN, because
+  // the child is spawned from the launch frame's env (terminal.ts:79-83),
+  // not from the host's process.env. Only a mutation of the LAUNCH FRAME
+  // turns this test RED (140 leaked keys detected).
+  //
+  // Secret-safety: the fixture emits KEY NAMES ONLY, through the existing
+  // `output` fact channel. No values are emitted, parsed, printed, or
+  // asserted; no new fact kind and no codec change.
+  //
+  // PLATFORM-DISPATCHED ORACLE, no subtraction on either lane. Both fixtures
+  // are /usr/bin/awk driven by argv — no extra file, and decisively NO SHELL
+  // (a POSIX shell injects PWD, SHLVL and _ into its own environment).
+  //
+  //  - Linux: read the inherited KERNEL environment block from
+  //    /proc/self/environ, split the NUL-delimited entries at the FIRST '='
+  //    and emit key names only. This is immune to interpreter injection.
+  //    CodeRabbit (PR #36, bound to head dda3481) correctly reported that the
+  //    previous ENVIRON oracle fails under gawk. Probed in containers:
+  //      Debian + gawk 5.2.1 : ENVIRON -> AWKPATH,AWKLIBPATH,... (INJECTS)
+  //                            /proc   -> HOSTNAME,HOME,PATH,MADV_...,PWD (clean)
+  //      Ubuntu + mawk 1.3.4 : ENVIRON -> clean ; /proc -> clean
+  //    So /proc is correct under BOTH awk variants; ENVIRON is not.
+  //  - macOS: /proc does not exist, so the verified BWK awk ENVIRON path is
+  //    used. Probed on this host: `env -i PATH=... MADV_FIXTURE_MARKER=...`
+  //    yields exactly those two keys — no interpreter injection.
+  //
+  // Node/Bun were rejected as fixture interpreters: Bun auto-loads .env
+  // files, which injects unrelated keys into process.env.
+  const fixture = "/usr/bin/awk";
+  const isLinux = process.platform === "linux";
+  // Linux: parse the kernel block (keys only). macOS: iterate ENVIRON (keys
+  // only). Neither program reads or emits a single environment VALUE.
+  const linuxProgram =
+    'BEGIN{RS="\\0"; s=""} {i=index($0,"="); if(i>0) s = s substr($0,1,i-1) ","} END{print "@@MADV_ENVKEYS " s "@@"; system("sleep 2")}';
+  const macosProgram =
+    'BEGIN{s="";for(k in ENVIRON) s=s k ",";print "@@MADV_ENVKEYS " s "@@";system("sleep 2")}';
+  const fixtureArgv = isLinux
+    ? [linuxProgram, "/proc/self/environ"]
+    : [macosProgram];
+
+  // Plant an ambient canary in the SUPERVISOR's environment. It is absent
+  // from descriptor.env, so its absence in the CHILD proves no ambient
+  // variable crossed the supervisor -> host -> child forwarding chain.
+  const canary = `MADVENTURES_CANARY_${Date.now()}`;
+  process.env[canary] = "ambient-leak-canary";
+
+  const allowlisted = {
+    PATH: "/bin:/usr/bin",
+    MADV_FIXTURE_MARKER: "task44",
+  };
+
+  const handle = spawnPtyHost({
+    path: fixture,
+    sha256: sha256File(fixture),
+    // Key names only: the program emits substrings BEFORE the first '=' (or
+    // ENVIRON keys), never a value, so no environment value can reach
+    // stdout, the fact stream, a failure message, or any artifact.
+    argv: fixtureArgv,
+    env: allowlisted,
+    executionId: "exec-t44-envkeys",
+  });
+  let pgid: number | null = null;
+  try {
+    const iterator = handle.facts()[Symbol.asyncIterator]();
+    const first = await iterator.next();
+    expect(first.done).toBe(false);
+    pgid = (first.value as Extract<HostFactFrame, { kind: "launched" }>).pgid;
+
+    // Scan the existing output channel for the fixture-only marker.
+    let markerPayload: string | null = null;
+    const deadline = performance.now() + 8000;
+    let accumulated = "";
+    while (performance.now() < deadline && markerPayload === null) {
+      const next = await iterator.next();
+      if (next.done) break;
+      const fact = next.value as HostFactFrame;
+      if (fact.kind !== "output") continue;
+      accumulated += new TextDecoder().decode(fact.bytes);
+      const match = /@@MADV_ENVKEYS ([^@]*)@@/.exec(accumulated);
+      if (match !== null) markerPayload = match[1] ?? "";
+    }
+    expect(markerPayload).not.toBeNull();
+
+    // EXACT normalized key-set equality: dedupe + sort both sides, UTF-8
+    // string comparison, NO subtraction of any kind. The awk fixture's
+    // ENVIRON is the raw inherited environment, so every observed key must
+    // come from descriptor.env. An empty env fails against a non-empty
+    // allowlist by construction.
+    const observedKeys = [...new Set((markerPayload as string).split(",").filter((k) => k.length > 0))].sort();
+    const expectedKeys = [...new Set(Object.keys(allowlisted))].sort();
+    expect(observedKeys).toEqual(expectedKeys);
+    expect(observedKeys.length).toBeGreaterThan(0);
+
+    // The ambient canary never crossed the supervisor -> host -> child chain.
+    expect(observedKeys).not.toContain(canary);
+    // …while the supervisor still holds it, proving the canary was live.
+    expect(process.env[canary]).toBe("ambient-leak-canary");
+
+    // No ambient MADVENTURES_* variable of any kind crossed.
+    expect(observedKeys.filter((k) => k.startsWith("MADVENTURES_"))).toEqual([]);
+
+    // Secret-safety self-check: the marker carries no "=" — names only.
+    expect(markerPayload as string).not.toContain("=");
+  } finally {
+    delete process.env[canary];
+    cleanupProcesses(handle.hostPid, pgid);
+  }
+}, 25000);
+
+test("every escalation failure path cleans up real processes (C7 evidence 8)", async () => {
+  // Evidence 8: after escalation, NO governed process may survive — proven
+  // by external observation, and by escalating against an already-reaped
+  // host (the hostile case where every kill target is gone) without
+  // throwing.
+  const fixture = "/tmp/t44-cleanup-child.sh";
+  require("node:fs").writeFileSync(fixture, '#!/bin/sh\ntrap "" TERM\nwhile true; do sleep 0.05; done\n');
+  require("node:fs").chmodSync(fixture, 0o755);
+
+  const handle = spawnPtyHost({
+    path: fixture,
+    sha256: sha256File(fixture),
+    argv: [],
+    env: { PATH: "/bin:/usr/bin" },
+    executionId: "exec-t44-cleanup",
+  });
+  let pgid: number | null = null;
+  try {
+    const iterator = handle.facts()[Symbol.asyncIterator]();
+    const first = await iterator.next();
+    pgid = (first.value as Extract<HostFactFrame, { kind: "launched" }>).pgid;
+
+    process.kill(handle.hostPid, "SIGSTOP");
+    const outcome = await escalateWedgedHost(handle, pgid, handle.hostPid);
+    expect(outcome.escalated).toBe(true);
+
+    // External proof: every governed process is gone inside the §9.8 outer
+    // bound — the child group first, then the host.
+    const groupGone = await waitUntil(() => !groupExternallyAlive(pgid as number), HOST_OUTER_BOUND_MS);
+    expect(groupGone).toBe(true);
+    const hostGone = await waitUntil(() => !externallyAlive(handle.hostPid), HOST_OUTER_BOUND_MS);
+    expect(hostGone).toBe(true);
+
+    // Hostile re-entry: escalating again, when every target is already
+    // reaped, must not throw. Under the phase machine the first outcome was
+    // TERMINAL (S3), so the re-entry returns that recorded outcome verbatim
+    // instead of re-running the ladder (requirement 5). T-c proves the
+    // no-repeated-containment half of this contract directly.
+    const closesBefore = closeStdinCallCountForTest(handle);
+    const second = await escalateWedgedHost(handle, pgid, handle.hostPid);
+    expect(second.reason).toBe("pty_host_failure");
+    expect(second).toBe(outcome);
+    expect(closeStdinCallCountForTest(handle)).toBe(closesBefore);
+  } finally {
+    try { process.kill(handle.hostPid, "SIGCONT"); } catch { /* gone */ }
+    cleanupProcesses(handle.hostPid, pgid);
+  }
+}, 25000);
+
+// ============================================================================
+// Task 44 round-2 correction: delegated-bypass phase machine (T-a .. T-e)
+// ----------------------------------------------------------------------------
+// These five tests cover the two head-bound findings raised on PR #36 at
+// 6bb03ca: stale-acknowledgement poisoning across overlapping escalation
+// attempts, and the unreachable S5 claim.
+//
+// CONTROLLED-DELAY FIXTURE (T-a): `trap 'sleep 0.12; exit 0' TERM` makes the
+// governed child survive SIGTERM for ~120 ms. Because the host's
+// `terminateChildGroup` waits for the child group to die BEFORE the host
+// emits `ack{terminate}`, that child delay pushes the ack into a measurable
+// trailing window. Measured on this machine (Bun 1.3.14, macOS):
+//   termination_started @ ~1.7 ms   -> settles the FIRST attempt (S1)
+//   ack                 @ ~133.6 ms -> the trailing ack, the poisoning vector
+// A 400 ms settle delay before `terminate` is REQUIRED: without it the
+// command outruns `sh` installing its TERM trap and the child dies at
+// ~12 ms, collapsing the window this test depends on.
+// ============================================================================
+
+test("T-a: a trailing acknowledgement from the first attempt cannot settle a second attempt as S1", async () => {
+  const handle = spawnPtyHost({
+    path: "/bin/sh",
+    sha256: sha256File("/bin/sh"),
+    argv: ["-c", "trap 'sleep 0.12; exit 0' TERM; while :; do sleep 0.05; done"],
+    env: { PATH: "/usr/bin:/bin" },
+    executionId: "exec-t44-stale-ack",
+  });
+  let pgid: number | null = null;
+  try {
+    const iterator = handle.facts()[Symbol.asyncIterator]();
+    const first = await iterator.next();
+    pgid = (first.value as Extract<HostFactFrame, { kind: "launched" }>).pgid;
+
+    // Let `sh` install its TERM trap before commanding termination.
+    await new Promise((r) => setTimeout(r, 400));
+
+    // Attempt A: the real responsive path. `termination_started` arrives in
+    // ~2 ms and settles A as S1; the host's `ack` is still ~130 ms away.
+    const a = await escalateWedgedHost(handle, pgid, handle.hostPid);
+    expect(a.state).toBe("S1");
+    expect(a.escalated).toBe(false);
+    // S1 is NOT terminal: the acknowledged ladder can still fail, so the
+    // handle is delegated rather than memoized.
+    expect(escalationPhaseForTest(handle)).toBe("delegated");
+
+    // Attempt B enters DURING the measured trailing-ack window, standing in
+    // for the Task 47-family watchdog reporting that the acknowledged ladder
+    // failed its governing completion bound.
+    const sendsBeforeB = terminateSendCountForTest(handle);
+    const b = await escalateWedgedHost(handle, pgid, handle.hostPid);
+
+    // Production behavior: B takes the bypass. It sends no second terminate,
+    // registers no acknowledgement, and therefore CANNOT be settled by A's
+    // trailing ack. It classifies live state and contains.
+    expect(terminateSendCountForTest(handle)).toBe(sendsBeforeB);
+    expect(pendingAckRegisteredForTest(handle)).toBe(false);
+    expect(b.state).toBe("S3");
+    expect(b.escalated).toBe(true);
+    expect(b.pgidKillAttempted).toBe(true);
+    expect(b.reason).toBe("pty_host_failure");
+
+    // External proof of containment.
+    const groupGone = await waitUntil(() => !groupExternallyAlive(pgid as number), HOST_OUTER_BOUND_MS);
+    expect(groupGone).toBe(true);
+  } finally {
+    cleanupProcesses(handle.hostPid, pgid);
+  }
+}, 25000);
+
+test("T-b: a host that wedges after acknowledging is still contained through the delegated bypass", async () => {
+  // SIGTERM-immune fixture: the child ignores TERM entirely, so the only
+  // thing that ends it is the SIGKILL rung.
+  const handle = spawnPtyHost({
+    path: "/bin/sh",
+    sha256: sha256File("/bin/sh"),
+    argv: ["-c", 'trap "" TERM; while :; do sleep 0.05; done'],
+    env: { PATH: "/usr/bin:/bin" },
+    executionId: "exec-t44-post-s1-wedge",
+  });
+  let pgid: number | null = null;
+  try {
+    const iterator = handle.facts()[Symbol.asyncIterator]();
+    const first = await iterator.next();
+    pgid = (first.value as Extract<HostFactFrame, { kind: "launched" }>).pgid;
+    await new Promise((r) => setTimeout(r, 400));
+
+    // A: the host acknowledges (termination_started) and A returns S1.
+    const a = await escalateWedgedHost(handle, pgid, handle.hostPid);
+    expect(a.state).toBe("S1");
+    expect(escalationPhaseForTest(handle)).toBe("delegated");
+
+    // The host now WEDGES during its own responsive-host ladder: SIGSTOP
+    // freezes it mid-grace, so its ladder can never complete. This is
+    // precisely the condition the Task 47-family watchdog detects.
+    process.kill(handle.hostPid, "SIGSTOP");
+
+    // B: delegated bypass. No terminate, no acknowledgement wait.
+    const b = await escalateWedgedHost(handle, pgid, handle.hostPid);
+    expect(b.state).toBe("S3");
+    expect(b.escalated).toBe(true);
+    expect(b.pgidKillAttempted).toBe(true);
+    // S3 is the only state permitted to signal the host PID.
+    expect(b.hostKillAttempted).toBe(true);
+    expect(b.killOrder).toEqual(["pgid", "host"]);
+    expect(b.sessionInterruptionRequired).toBe(true);
+
+    // External death of BOTH governed targets.
+    const groupGone = await waitUntil(() => !groupExternallyAlive(pgid as number), HOST_OUTER_BOUND_MS);
+    expect(groupGone).toBe(true);
+    const hostGone = await waitUntil(() => !externallyAlive(handle.hostPid), HOST_OUTER_BOUND_MS);
+    expect(hostGone).toBe(true);
+  } finally {
+    try { process.kill(handle.hostPid, "SIGCONT"); } catch { /* gone */ }
+    cleanupProcesses(handle.hostPid, pgid);
+  }
+}, 25000);
+
+test("T-c: a terminal outcome is memoized and never repeats containment", async () => {
+  const handle = spawnPtyHost({
+    path: "/bin/sh",
+    sha256: sha256File("/bin/sh"),
+    argv: ["-c", 'trap "" TERM; while :; do sleep 0.05; done'],
+    env: { PATH: "/usr/bin:/bin" },
+    executionId: "exec-t44-memoize",
+  });
+  let pgid: number | null = null;
+  try {
+    const iterator = handle.facts()[Symbol.asyncIterator]();
+    const first = await iterator.next();
+    pgid = (first.value as Extract<HostFactFrame, { kind: "launched" }>).pgid;
+
+    // Wedge the host immediately so the FIRST attempt is terminal (S3),
+    // not S1 — memoization applies to S0/S2/S3/S4 only.
+    process.kill(handle.hostPid, "SIGSTOP");
+    const firstOutcome = await escalateWedgedHost(handle, pgid, handle.hostPid);
+    expect(firstOutcome.state).toBe("S3");
+    expect(escalationPhaseForTest(handle)).toBe("terminal");
+
+    const closesAfterFirst = closeStdinCallCountForTest(handle);
+    const sendsAfterFirst = terminateSendCountForTest(handle);
+
+    // Repeated invocation returns the IDENTICAL recorded outcome.
+    const second = await escalateWedgedHost(handle, pgid, handle.hostPid);
+    const third = await escalateWedgedHost(handle, pgid, handle.hostPid);
+    expect(second).toBe(firstOutcome);
+    expect(third).toBe(firstOutcome);
+
+    // No second close, no second terminate, no repeated signal ladder.
+    expect(closeStdinCallCountForTest(handle)).toBe(closesAfterFirst);
+    expect(terminateSendCountForTest(handle)).toBe(sendsAfterFirst);
+  } finally {
+    try { process.kill(handle.hostPid, "SIGCONT"); } catch { /* gone */ }
+    cleanupProcesses(handle.hostPid, pgid);
+  }
+}, 25000);
+
+test("T-d: two concurrent initial escalations share one execution and send exactly one terminate", async () => {
+  const handle = spawnPtyHost({
+    path: "/bin/sh",
+    sha256: sha256File("/bin/sh"),
+    argv: ["-c", 'trap "" TERM; while :; do sleep 0.05; done'],
+    env: { PATH: "/usr/bin:/bin" },
+    executionId: "exec-t44-concurrent",
+  });
+  let pgid: number | null = null;
+  try {
+    const iterator = handle.facts()[Symbol.asyncIterator]();
+    const first = await iterator.next();
+    pgid = (first.value as Extract<HostFactFrame, { kind: "launched" }>).pgid;
+    await new Promise((r) => setTimeout(r, 400));
+
+    expect(terminateSendCountForTest(handle)).toBe(0);
+
+    // Both calls start in the SAME microtask turn — the exact race the
+    // in-flight join exists to serialize.
+    const [x, y] = await Promise.all([
+      escalateWedgedHost(handle, pgid, handle.hostPid),
+      escalateWedgedHost(handle, pgid, handle.hostPid),
+    ]);
+
+    // Independent send-count observation on the BROKER side of the wire.
+    // Counting `termination_started` facts would NOT prove this: the host's
+    // closer is idempotent and can suppress the fact for a duplicate
+    // command, so a second terminate could be sent and leave no trace in
+    // the fact stream.
+    expect(terminateSendCountForTest(handle)).toBe(1);
+
+    // Shared result identity: one execution, one outcome object.
+    expect(x).toBe(y);
+
+    // Exactly one acknowledgement registration existed, and it is cleared.
+    expect(pendingAckRegisteredForTest(handle)).toBe(false);
+  } finally {
+    try { process.kill(handle.hostPid, "SIGCONT"); } catch { /* gone */ }
+    cleanupProcesses(handle.hostPid, pgid);
+  }
+}, 25000);
+
+test("T-e: the entry reason survives a host exit during the ladder, and the returned state is S3", async () => {
+  // Supersedes the former "mid-ladder S5" claim. `escalateWedgedHost`
+  // returns immediately after its kill attempts, so a host exit scheduled
+  // during the ladder CANNOT change the already-returned outcome. What is
+  // genuinely provable is that the entry reason is immutable and that the
+  // returned classification is the one taken at classification time (S3).
+  //
+  // S5 is NOT a returnable state and has been removed from EscalationState.
+  const handle = spawnPtyHost({
+    path: "/bin/cat",
+    sha256: sha256File("/bin/cat"),
+    argv: [],
+    env: {},
+    executionId: "exec-t44-entry-reason",
+  });
+  let pgid: number | null = null;
+  try {
+    const iterator = handle.facts()[Symbol.asyncIterator]();
+    const first = await iterator.next();
+    pgid = (first.value as Extract<HostFactFrame, { kind: "launched" }>).pgid;
+
+    process.kill(handle.hostPid, "SIGSTOP");
+
+    // A genuinely LATE acknowledgement produced by the REAL host: SIGSTOP
+    // prevents any answer until SIGCONT at t+300 ms, which is AFTER the
+    // 250 ms deadline. It must not cancel escalation (C7.3 step 4).
+    setTimeout(() => {
+      try { process.kill(handle.hostPid, "SIGCONT"); } catch { /* gone */ }
+    }, 300);
+    // Host exit scheduled during the ladder.
+    setTimeout(() => {
+      try { process.kill(handle.hostPid, "SIGKILL"); } catch { /* gone */ }
+    }, 380);
+
+    const tStart = performance.now();
+    const outcome = await escalateWedgedHost(handle, pgid, handle.hostPid);
+    const elapsed = performance.now() - tStart;
+
+    // The acknowledgement deadline was GENUINELY waited (2 ms scheduling
+    // tolerance: setTimeout can fire fractionally early vs performance.now).
+    expect(elapsed).toBeGreaterThanOrEqual(HOST_ACK_MS - 2);
+
+    // Entry classification is pinned to S3 and the reason is immutable.
+    expect(outcome.state).toBe("S3");
+    expect(outcome.reason).toBe("pty_host_failure");
+    expect(outcome.escalated).toBe(true);
+
+    // Ordered containment: PGID first, then the conditional host kill.
+    expect(outcome.killOrder).toEqual(["pgid", "host"]);
+    expect(outcome.pgidKillAttempted).toBe(true);
+    expect(outcome.hostKillAttempted).toBe(true);
+
+    // External death after return.
+    const groupGone = await waitUntil(() => !groupExternallyAlive(pgid as number), HOST_OUTER_BOUND_MS);
+    expect(groupGone).toBe(true);
+    const hostGone = await waitUntil(() => !externallyAlive(handle.hostPid), HOST_OUTER_BOUND_MS);
+    expect(hostGone).toBe(true);
+  } finally {
+    try { process.kill(handle.hostPid, "SIGCONT"); } catch { /* gone */ }
+    cleanupProcesses(handle.hostPid, pgid);
+  }
+}, 25000);

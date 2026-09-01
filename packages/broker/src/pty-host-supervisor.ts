@@ -105,6 +105,207 @@ export function waiterCountForTest(handle: PtyHostHandle): number {
   return waiterCounts.get(handle)?.() ?? 0;
 }
 
+/**
+ * Test-only observability: how many times `closeStdin()` was invoked on a
+ * handle. Kept OFF the public `PtyHostHandle` contract and out of the
+ * package barrel, exactly like `subscriberCountForTest`.
+ *
+ * The C7 S1 regression must prove that a timely acknowledgement leaves the
+ * lifeline-EOF kill switch UNUSED. Counting inside `spawnPtyHost`'s own
+ * `closeStdin` (rather than inside `escalateWedgedHost`) makes this an
+ * INDEPENDENT observation: the counter increments at the real call site, so
+ * the escalation path cannot report a close it did not perform, nor hide
+ * one it did.
+ */
+const closeStdinCounts = new WeakMap<PtyHostHandle, () => number>();
+
+export function closeStdinCallCountForTest(handle: PtyHostHandle): number {
+  return closeStdinCounts.get(handle)?.() ?? 0;
+}
+
+/**
+ * Count of `terminate` command frames actually handed to `handle.send()`,
+ * keyed by handle. Module-private; NOT on the barrel and NOT a handle member.
+ *
+ * T-d correction: the number of `termination_started` facts is NOT valid
+ * proof that only one terminate was sent — the host's closer is idempotent
+ * and can suppress the fact for a duplicate command. This counter observes
+ * the BROKER side of the wire, which no host behavior can mask.
+ */
+const terminateSendCounts = new WeakMap<PtyHostHandle, () => number>();
+
+export function terminateSendCountForTest(handle: PtyHostHandle): number {
+  return terminateSendCounts.get(handle)?.() ?? 0;
+}
+
+/**
+ * Per-handle escalation phase machine (module-private).
+ *
+ * WHY: `escalateWedgedHost` is a primitive that the Task 47-family caller
+ * may invoke more than once for the same handle. Two distinct hazards follow
+ * from that, both raised against the previous head:
+ *
+ *  1. STALE-ACK POISONING. `ackNotify` matches frames by KIND only. If a
+ *     second call registered its own acknowledgement wait, a trailing
+ *     `ack{terminate}` or `termination_started` produced by the FIRST call's
+ *     terminate could settle the SECOND call as S1 — reporting a healthy
+ *     host while the host is in fact wedged, and skipping containment.
+ *
+ *  2. DUPLICATE TERMINATE. Two concurrent initial calls would each send a
+ *     terminate command.
+ *
+ * The phase machine removes both by making acknowledgement observation a
+ * property of the HANDLE's lifecycle rather than of an individual call.
+ *
+ *  none              — no escalation has run for this handle.
+ *  in_flight_initial — an initial escalation is running; concurrent callers
+ *                      JOIN its promise instead of sending a second
+ *                      terminate (requirement 2).
+ *  delegated         — an initial call returned S1: the host acknowledged
+ *                      and the responsive ladder owns containment. S1 is
+ *                      deliberately NOT memoized as terminal, because the
+ *                      acknowledged ladder can still fail afterwards.
+ *  in_flight_bypass  — a delegated re-entry is running the host-bypassing
+ *                      ladder. It sends NO terminate and waits for NO
+ *                      acknowledgement.
+ *  terminal          — a terminal outcome (S0/S2/S3/S4) is recorded and
+ *                      memoized for the handle's lifetime; later calls
+ *                      return it without repeating containment.
+ *
+ * DELEGATED RE-ENTRY IS AUTHORIZED ONLY when the Task 47-family watchdog has
+ * determined that the previously acknowledged host ladder failed its
+ * governing completion bound (§9.8: the 2 s responsive child grace and the
+ * 5 s outer bound). This primitive cannot make that determination itself —
+ * it holds no session state and no timer spanning calls — so re-entry is a
+ * caller obligation, not an inference made here.
+ */
+type EscalationPhase = "none" | "in_flight_initial" | "delegated" | "in_flight_bypass" | "terminal";
+
+interface EscalationRecord {
+  phase: EscalationPhase;
+  /** Shared promise for callers that JOIN an in-flight execution. */
+  inFlight: Promise<EscalationOutcome> | null;
+  /** Memoized terminal outcome (S0/S2/S3/S4 only). */
+  terminalOutcome: EscalationOutcome | null;
+}
+
+const escalationRecords = new WeakMap<PtyHostHandle, EscalationRecord>();
+
+function escalationRecordFor(handle: PtyHostHandle): EscalationRecord {
+  let rec = escalationRecords.get(handle);
+  if (rec === undefined) {
+    rec = { phase: "none", inFlight: null, terminalOutcome: null };
+    escalationRecords.set(handle, rec);
+  }
+  return rec;
+}
+
+/** Test-only observation of the phase. Module-private; not on the barrel. */
+export function escalationPhaseForTest(handle: PtyHostHandle): EscalationPhase {
+  return escalationRecords.get(handle)?.phase ?? "none";
+}
+
+/**
+ * Production acknowledgement registry, keyed by handle.
+ *
+ * Greptile P1 (PR #36, bound to head dda3481): the previous design took the
+ * acknowledgement exclusively from a test-populated map, so in production
+ * the lookup always returned `undefined`, the ack branch could never win its
+ * race, and a RESPONSIVE host would have been escalated against once the
+ * caller was wired up. The C7 S1 semantics were therefore unreachable
+ * outside tests — the same "works only in the test" defect class as an
+ * inferred-liveness detector.
+ *
+ * The acknowledgement is now owned by the supervisor and resolved from the
+ * REAL decoded-fact path: `enqueue()` — the single pump that every host fact
+ * flows through — settles the pending record the moment it observes the
+ * command-specific `ack`. Tests exercise the same production path; nothing
+ * injects an acknowledgement.
+ */
+interface PendingAck {
+  /** The command whose acknowledgement is awaited. */
+  readonly ofKind: HostCommandFrame["kind"];
+  /** Settled with true on a matching ack, false on any terminal path. */
+  readonly settle: (acked: boolean) => void;
+  /** Resolves once, on the first settle. */
+  readonly promise: Promise<boolean>;
+  settled: boolean;
+}
+
+/** Registers/looks up the pending acknowledgement owned by a handle. */
+const pendingAcks = new WeakMap<PtyHostHandle, PendingAck>();
+
+/** Registers/looks up the supervisor-internal ack notifier for a handle. */
+const ackNotifiers = new WeakMap<PtyHostHandle, (frame: HostFactFrame) => void>();
+
+/**
+ * Test-only observability: whether a pending acknowledgement record is
+ * currently registered for a handle. Off the public contract and off the
+ * barrel. Proves requirement 3/4 — that no stale acknowledgement state
+ * survives a terminal path and can satisfy a later escalation.
+ */
+const pendingAckProbes = new WeakMap<PtyHostHandle, () => boolean>();
+
+export function pendingAckRegisteredForTest(handle: PtyHostHandle): boolean {
+  return pendingAckProbes.get(handle)?.() ?? false;
+}
+
+/**
+ * Clears any pending acknowledgement for a handle. Invoked on the two
+ * lifecycle terminal paths the escalation call itself does not own — host
+ * exit and fact-stream settlement — so no acknowledgement state can survive
+ * to satisfy a LATER escalation (requirement 4).
+ */
+const lifecycleAckClosers = new WeakMap<PtyHostHandle, () => void>();
+
+/**
+ * §9.8 host deadline mirror (broker-local; Task 44 packet C5).
+ *
+ * The governing plan's Task 44 Interfaces line reads "Consumes:
+ * `PtyHostHandle`, `HOST_DEADLINES_MS`", but no governing text authorizes a
+ * broker->pty-host package import (the ratified constant lives in
+ * `packages/pty-host/src/signals.ts`) and the repo's architecture-boundaries
+ * guard governs cross-package edges. Task 44 therefore declares a
+ * module-local mirror of the ratified §9.8 values. §9.8 is the SOLE
+ * normative source; `packages/pty-host/src/signals.ts` `HOST_DEADLINES_MS`
+ * is the same table.
+ */
+const HOST_DEADLINES_MS: {
+  readonly ack: 250;
+  readonly terminationStarted: 500;
+  readonly responsiveChildGrace: 2000;
+  readonly outerBound: 5000;
+} = {
+  ack: 250,
+  terminationStarted: 500,
+  responsiveChildGrace: 2000,
+  outerBound: 5000,
+};
+
+/**
+ * Module-private host lifecycle record (Task 44 packet C3).
+ *
+ * BINDING RULE (Founder, Task 44): `send()` / `closeStdin()` success or
+ * failure is NEVER liveness evidence. Probed on Bun 1.3.14: a write to a
+ * dead host's stdin succeeds silently — `FileSink` swallows EPIPE, there is
+ * no synchronous throw and no unhandled rejection — so a detector built on
+ * write failure never fires and its test passes vacuously. `proc.exited` is
+ * the sole authoritative host-death signal; a signal-0 probe is
+ * corroboration only and never declares lifecycle death.
+ *
+ * The watch is attached at SPAWN time (alongside the stdout pump), not when
+ * escalation begins, so S0 (early exit) is observable the moment it happens
+ * and `escalateWedgedHost` never races to attach a watcher mid-escalation.
+ */
+interface HostLifecycle {
+  /** True once `proc.exited` has resolved — authoritative host death. */
+  exitedResolved: boolean;
+  /** Resolves when the OS reports host exit. Attached at spawn time. */
+  exited: Promise<void>;
+}
+
+const lifecycles = new WeakMap<PtyHostHandle, HostLifecycle>();
+
 function concatBytes(a: Uint8Array<ArrayBuffer>, b: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
   const out = new Uint8Array(a.byteLength + b.byteLength);
   out.set(a, 0);
@@ -206,7 +407,12 @@ export function spawnPtyHost(
   // caller (the per-keystroke input path). Fail-closed discipline: a dead
   // host is a terminal state, so EPIPE is swallowed (the send is a no-op —
   // there is nothing left to command); any other error propagates.
+  let terminateSends = 0;
   const send = (f: HostCommandFrame): void => {
+    // T-d seam: count terminate frames on the BROKER side of the wire. The
+    // host's idempotent closer can suppress a duplicate command's facts, so
+    // fact counts cannot prove how many commands were sent; this can.
+    if (f.kind === "terminate") terminateSends += 1;
     try {
       stdinSink.write(encodeCommand(f));
       stdinSink.flush();
@@ -226,7 +432,9 @@ export function spawnPtyHost(
   // stdin; the host's EOF handler terminates the child's process group in
   // response. Same EPIPE guard as `send` — a broken pipe after host death
   // means the lifeline is already closed.
+  let closeStdinCalls = 0;
   const closeStdin = (): void => {
+    closeStdinCalls += 1;
     try {
       stdinSink.end();
       stdinSink.flush();
@@ -293,11 +501,26 @@ export function spawnPtyHost(
   let pumpError: Error | null = null;
   let pumpSettled = false;
 
+  // Production acknowledgement notifier (Greptile P1 remediation). Assigned
+  // at handle construction; `enqueue` calls it for every decoded fact.
+  let ackNotify: ((frame: HostFactFrame) => void) | undefined;
+
+  // Clears the pending acknowledgement on lifecycle terminal paths owned by
+  // the supervisor itself (host exit, fact-stream settlement). Assigned at
+  // handle construction, once the handle identity exists.
+  let clearPendingAckLocal: () => void = () => {};
+
   const enqueue = (frame: HostFactFrame): void => {
     if (frame.kind === "launched") {
       reportedPgid = frame.pgid;
       if (pinnedLaunchedFact === null) pinnedLaunchedFact = frame;
     }
+    // Production acknowledgement path (Greptile P1 remediation): every
+    // decoded host fact flows through this single pump, so settling the
+    // pending acknowledgement here means `escalateWedgedHost` observes the
+    // REAL host response — not an injected test signal. The notifier is
+    // registered at handle construction below.
+    ackNotify?.(frame);
     history.push(frame);
     if (history.length > HISTORY_CAP) {
       // Trim the oldest half. The pinned `launched` fact is replayed
@@ -317,6 +540,10 @@ export function spawnPtyHost(
   };
 
   const settleSubscribers = (): void => {
+    // Requirement 3: fact-stream settlement is a terminal path — no ack can
+    // arrive after it, so any pending record is cleared rather than left to
+    // satisfy a later escalation.
+    clearPendingAckLocal();
     for (const q of subscribers) {
       if (!q.closed) {
         q.closed = true;
@@ -339,6 +566,25 @@ export function spawnPtyHost(
     }
   })();
   void pump;
+
+  // Task 44 packet C3: attach the AUTHORITATIVE exit watch at spawn time,
+  // alongside the stdout pump. Host death is therefore observable the
+  // moment it happens (making S0 detectable) instead of only once
+  // escalation starts, and no escalation path ever races to attach a
+  // watcher mid-ladder.
+  const lifecycle: HostLifecycle = {
+    exitedResolved: false,
+    exited: Promise.resolve(),
+  };
+  lifecycle.exited = (async () => {
+    try {
+      await proc.exited;
+    } catch {
+      // A spawn-level rejection still means the host is not running.
+    }
+    lifecycle.exitedResolved = true;
+  })();
+  void lifecycle.exited;
 
   const facts = async function* (): AsyncGenerator<HostFactFrame> {
     // Round-6 correction: the subscriber queue is attached to `subscribers`
@@ -481,5 +727,456 @@ export function spawnPtyHost(
     for (const q of subscribers) total += q.waiters.size;
     return total;
   });
+  lifecycles.set(handle, lifecycle);
+  closeStdinCounts.set(handle, () => closeStdinCalls);
+  terminateSendCounts.set(handle, () => terminateSends);
+
+  // Production acknowledgement wiring (Greptile P1 remediation).
+  //
+  // The notifier settles the pending record from the REAL decoded-fact
+  // stream. Two settlement sources, per requirement 2:
+  //   - a matching `ack` whose `ofKind` equals the awaited command; or
+  //   - `termination_started`, the ratified first termination-specific fact
+  //     (§9.8: "the host must report `termination_started` within 500 ms of
+  //     the broker's command"), which on the terminate path the host emits
+  //     BEFORE the ack (main.ts orders termination_started then ack).
+  ackNotify = (frame: HostFactFrame): void => {
+    const pending = pendingAcks.get(handle);
+    if (pending === undefined || pending.settled) return;
+    const isMatchingAck = frame.kind === "ack" && frame.ofKind === pending.ofKind;
+    const isTerminationFirstFact = pending.ofKind === "terminate" && frame.kind === "termination_started";
+    if (isMatchingAck || isTerminationFirstFact) pending.settle(true);
+  };
+  pendingAckProbes.set(handle, () => {
+    const p = pendingAcks.get(handle);
+    return p !== undefined && !p.settled;
+  });
+  lifecycleAckClosers.set(handle, () => {
+    const p = pendingAcks.get(handle);
+    if (p !== undefined && !p.settled) p.settle(false);
+    pendingAcks.delete(handle);
+  });
+  clearPendingAckLocal = () => {
+    const p = pendingAcks.get(handle);
+    if (p !== undefined && !p.settled) p.settle(false);
+    pendingAcks.delete(handle);
+  };
+  // Requirement 3: host exit is a terminal path. An exited host will never
+  // acknowledge, so clear the pending record as soon as the authoritative
+  // watch resolves.
+  void lifecycle.exited.then(() => { clearPendingAckLocal(); });
   return handle;
+}
+
+/** The ledger reason every Task 44 escalation state binds at entry. */
+export type EscalationReasonCode = "pty_host_failure";
+
+/** The lifecycle state an escalation resolved through (packet C4). */
+export type EscalationState = "S0" | "S1" | "S2" | "S3" | "S4";
+
+export interface EscalationOutcome {
+  /**
+   * Bound at escalation ENTRY and never relabelled — §3.4 line 399 ("host
+   * unresponsiveness past the deadline is host failure") plus §3.3's rule
+   * that the supervisor treats host exit as governed-child death. A late
+   * a host exit occurring during the ladder does NOT change this value.
+   */
+  readonly reason: EscalationReasonCode;
+  readonly state: EscalationState;
+  /**
+   * False only for S1 (timely acknowledgement, host alive). True for every
+   * state that entered the Task 44 escalation ladder.
+   */
+  readonly escalated: boolean;
+  /**
+   * Whether the lifeline-EOF kill switch was invoked. C7: never on the S1
+   * path, and never on S0 (the host has already exited — the lifeline is
+   * moot and S0's action set is containment-only). Cross-checked in tests
+   * against `closeStdinCallCountForTest`, which counts at the real call
+   * site inside `spawnPtyHost`.
+   */
+  readonly closeStdinCalled: boolean;
+  /**
+   * Whether the CALLER must perform the durable session interruption.
+   *
+   * `true`  — Task 47/53's caller must perform the durable session
+   *           interruption. Every escalation state (S0, S2, S3, S4)
+   *           requires it.
+   * `false` — the responsive S1 path requires no interruption; the normal
+   *           ladder owns containment.
+   *
+   * `escalateWedgedHost` does NOT itself interrupt the broker session: it
+   * has no session handle and no RuntimeBroker dependency. This field is a
+   * DIRECTIVE TO THE CALLER, not a report of a side effect this primitive
+   * performed. Tier-2 at head 35b608f flagged the previous name
+   * (`interrupted`) as a false claim of a completed interruption.
+   */
+  readonly sessionInterruptionRequired: boolean;
+  /** True when the child PGID SIGKILL was attempted (mandatory always). */
+  readonly pgidKillAttempted: boolean;
+  /**
+   * True only in S3: `exited` pending AND signal-0 not ESRCH. Never true
+   * after `proc.exited` resolved (PID-recycling protection) and never true
+   * on ESRCH corroboration alone.
+   */
+  readonly hostKillAttempted: boolean;
+  /** S0/S2 only: host death confirmed, so a host-PID kill was unnecessary. */
+  readonly unnecessaryHostExitConfirmed: boolean;
+  /** Ordered record of kill ATTEMPTS — ordering evidence, not delivery. */
+  readonly killOrder: readonly ("pgid" | "host")[];
+  /**
+   * Test/diagnostic timings measured from `t_command`. NEVER a pass
+   * condition on its own: tests assert against their own monotonic clock
+   * and external liveness observations.
+   */
+  readonly observedMs: Record<string, number>;
+}
+
+/**
+ * A promise that never settles. Used to keep a losing branch out of a
+ * `Promise.race` without resolving it to a spurious winner.
+ */
+function await_never<T>(): Promise<T> {
+  return new Promise<T>(() => {});
+}
+
+/** Signal-0 corroboration. Never declares death; never alone kills. */
+function probeSignal0(pid: number): "alive" | "eperm" | "esrch" {
+  try {
+    process.kill(pid, 0);
+    return "alive";
+  } catch (err) {
+    const code = typeof err === "object" && err !== null && "code" in err
+      ? (err as { code: unknown }).code
+      : undefined;
+    if (code === "ESRCH") return "esrch";
+    // EPERM: the process exists but is not ours to signal — alive.
+    return "eperm";
+  }
+}
+
+/**
+ * §3.4 / §9.8: the mandatory host-bypassing direct-PGID escalation.
+ *
+ * A wedged host stops reading commands and stops emitting facts, so the
+ * supervisor must contain the governed child WITHOUT the host's
+ * cooperation. C7 ordering: send terminate, then wait through the bounded
+ * acknowledgement deadline. Only if that deadline expires does the
+ * supervisor close host stdin and begin host-bypassing containment —
+ * SIGKILL the reported child PGID, then SIGKILL the host (only where
+ * permitted), then REQUEST session interruption from the caller via
+ * `sessionInterruptionRequired` (this primitive does not perform the
+ * interruption itself; Task 47/53 owns that). Closing stdin starts no new
+ * clock and grants no post-EOF grace.
+ *
+ * S0 exception (already implemented): if the authoritative `proc.exited`
+ * watch resolves before the deadline, mandatory PGID containment proceeds
+ * WITHOUT closing stdin and WITHOUT signalling the exited host PID.
+ *
+ * BINDING RULE (Founder, Task 44): host death is determined EXCLUSIVELY by
+ * the spawn-time `proc.exited` watch. `send()` and `closeStdin()` are
+ * issued for their protocol effect only — their success or failure is never
+ * read as liveness evidence, because on Bun 1.3.14 a write to a dead host's
+ * stdin succeeds silently.
+ *
+ * Timing (packet C3): `t_command` — the moment the terminate command is
+ * issued — is the SOLE anchor. The 250 ms acknowledgement period consumes
+ * the same absolute 500 ms hard-kill budget; there is no second grace
+ * window. Both kill attempts begin no later than `t_command + 500 ms`.
+ */
+export async function escalateWedgedHost(
+  handle: PtyHostHandle,
+  pgid: number,
+  hostPid: number,
+): Promise<EscalationOutcome> {
+  const rec = escalationRecordFor(handle);
+
+  // ---- Phase dispatch (requirements 2, 5, 4) ----
+  // Requirement 5: a recorded terminal outcome is returned verbatim. No
+  // second close, no second signal ladder, no repeated containment.
+  if (rec.phase === "terminal" && rec.terminalOutcome !== null) {
+    return rec.terminalOutcome;
+  }
+  // Requirement 2: a concurrent caller JOINS the running execution rather
+  // than sending a second terminate command.
+  if ((rec.phase === "in_flight_initial" || rec.phase === "in_flight_bypass") && rec.inFlight !== null) {
+    return rec.inFlight;
+  }
+
+  // Requirement 4: delegated re-entry runs the host-bypassing ladder.
+  const bypass = rec.phase === "delegated";
+
+  // Safeguard: install the in-flight phase AND the shared promise BEFORE any
+  // asynchronous suspension, so a concurrent caller arriving in the same
+  // microtask turn cannot observe a stale "none" phase and start a second
+  // execution. `runOwnedEscalation` is invoked (not awaited) here; the first
+  // await inside it happens strictly after this synchronous block completes.
+  rec.phase = bypass ? "in_flight_bypass" : "in_flight_initial";
+  const execution = runOwnedEscalation(handle, pgid, hostPid, bypass, rec);
+  rec.inFlight = execution;
+  return execution;
+}
+
+/**
+ * Owns one escalation execution for a handle.
+ *
+ * `bypass === false` — initial invocation: register the acknowledgement,
+ * send terminate, race ack / `proc.exited` / the 250 ms deadline (C7).
+ *
+ * `bypass === true` — delegated re-entry: the Task 47-family watchdog has
+ * determined that the previously acknowledged host ladder failed its
+ * governing completion bound. Send NO terminate, register and wait for NO
+ * acknowledgement, and go straight to classification and containment.
+ */
+async function runOwnedEscalation(
+  handle: PtyHostHandle,
+  pgid: number,
+  hostPid: number,
+  bypass: boolean,
+  rec: EscalationRecord,
+): Promise<EscalationOutcome> {
+  const lifecycle = lifecycles.get(handle);
+  const observedMs: Record<string, number> = {};
+  const killOrder: ("pgid" | "host")[] = [];
+
+  // ---- Requirement 1: register the pending acknowledgement BEFORE the
+  // terminate command is sent. The host can ack in ~11.9 ms (measured), and
+  // `enqueue` runs synchronously on the decode path, so registering after
+  // the send would let an immediate acknowledgement race registration and be
+  // missed entirely.
+  let settleAck: (acked: boolean) => void = () => {};
+  const ackPromise = new Promise<boolean>((resolve) => {
+    settleAck = resolve;
+  });
+  const pending: PendingAck = {
+    ofKind: "terminate",
+    settled: false,
+    promise: ackPromise,
+    settle: (acked: boolean) => {
+      if (pending.settled) return;
+      pending.settled = true;
+      settleAck(acked);
+    },
+  };
+  // Requirement 4: the delegated bypass path registers NO acknowledgement.
+  // This is the stale-ack-poisoning fix: with no record registered, a
+  // trailing ack produced by the FIRST call's terminate has nothing to
+  // settle and cannot fabricate an S1 for this attempt.
+  if (!bypass) pendingAcks.set(handle, pending);
+
+  // Requirement 3: clear on EVERY terminal path this call owns. Idempotent.
+  const clearPendingAck = (): void => {
+    if (!pending.settled) pending.settle(false);
+    if (pendingAcks.get(handle) === pending) pendingAcks.delete(handle);
+  };
+
+  try {
+    const outcome = await runEscalation();
+    // Requirement 3: S1 transitions to `delegated` and is deliberately NOT
+    // memoized as terminal — the acknowledged ladder may still fail, and the
+    // Task 47-family watchdog is entitled to re-enter.
+    // Requirement 5: S0/S2/S3/S4 are terminal and memoized for the handle's
+    // lifetime.
+    if (outcome.state === "S1") {
+      rec.phase = "delegated";
+      rec.terminalOutcome = null;
+    } else {
+      rec.phase = "terminal";
+      rec.terminalOutcome = outcome;
+    }
+    rec.inFlight = null;
+    return outcome;
+  } catch (err) {
+    // Safeguard: no exception path may leave the handle stuck in an
+    // unresolved in-flight phase. Reset to a phase a later caller can act
+    // on: `delegated` if an acknowledged ladder was already delegated to,
+    // otherwise `none`.
+    rec.phase = bypass ? "delegated" : "none";
+    rec.inFlight = null;
+    throw err;
+  } finally {
+    // Requirement 3/4: escalation completion OR throw — no stale
+    // acknowledgement state, waiter, or timer survives this call.
+    clearPendingAck();
+  }
+
+  async function runEscalation(): Promise<EscalationOutcome> {
+
+  // ---- Timing anchor (monotonic) ----
+  // INITIAL path: this is genuinely `t_command` — the instant the terminate
+  // command is sent — and it anchors the 250 ms acknowledgement window and
+  // the absolute 500 ms hard-kill budget (C7.3 step 1, §9.8).
+  //
+  // BYPASS path: NO command is sent, so calling this `t_command` would be a
+  // false claim. It is the attempt/bypass START time: the instant the
+  // delegated re-entry began. It anchors this attempt's observed durations
+  // only; the original command's budget was consumed by the initial call.
+  const tAttempt = performance.now();
+  if (!bypass) {
+    handle.send({ kind: "terminate" });
+    observedMs.terminateSentMs = performance.now() - tAttempt;
+  } else {
+    observedMs.bypassStartedMs = 0;
+  }
+
+  // ---- Acknowledgement window (C7.3 step 2) ----
+  // C7 ordering correction (Founder-ruled, Kimi-confirmed against §9.8):
+  // the prior implementation called `closeStdin()` BEFORE this wait, per
+  // packet v2.2 C3 and the plan's Interfaces line. That is superseded.
+  // §9.8 is explicit: "If the 250 ms acknowledgement deadline expires, the
+  // supervisor closes host stdin and starts the host-bypassing escalation
+  // ladder" — the close is conditional on expiry and is the ladder's FIRST
+  // act, not a precondition of the wait.
+  //
+  // Why it matters (probe evidence, Bun 1.3.14): `closeStdin()` is the
+  // deliberate lifeline-EOF kill switch from Task 43. A healthy host honours
+  // terminate + EOF and exits in ~26 ms — well inside this 250 ms window —
+  // so closing first made S1 UNREACHABLE: every healthy host presented as
+  // S0 by classification time.
+  const ackDeadline = tAttempt + HOST_DEADLINES_MS.ack;
+  let acked = false;
+  let earlyExit = false;
+  if (bypass) {
+    // Requirement 4: delegated re-entry waits for NO acknowledgement. The
+    // acknowledged ladder already failed its governing completion bound;
+    // waiting again would re-open the exact stale-ack window this phase
+    // machine exists to close. Classification uses the live exit state only.
+    earlyExit = lifecycle?.exitedResolved === true;
+  } else if (lifecycle?.exitedResolved === true) {
+    // The host was already gone before escalation began.
+    earlyExit = true;
+  } else {
+    // Event-driven race, deliberately NOT a polling loop. On the real
+    // responsive path the host emits `ack` and then exits ~2-3 ms later
+    // (measured, Bun 1.3.14), so a coarse poll can observe the exit while
+    // missing the acknowledgement that causally preceded it. Racing the
+    // promises observes whichever genuinely happened FIRST — the faithful
+    // reading of C7.3 step 2, whose two bullets describe a race.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const ackWon: Promise<"ack"> = new Promise<"ack">((resolve) => {
+      void ackPromise.then((v) => {
+        if (v) resolve("ack");
+      }, () => {
+        // A rejected acknowledgement is not an acknowledgement; let the
+        // deadline or the exit watch decide.
+      });
+    });
+    const exitWon: Promise<"exit"> = lifecycle === undefined
+      ? await_never<"exit">()
+      : lifecycle.exited.then<"exit">(() => "exit");
+    const deadlineWon = new Promise<"deadline">((resolve) => {
+      timer = setTimeout(() => resolve("deadline"), Math.max(0, ackDeadline - performance.now()));
+    });
+    const winner = await Promise.race([ackWon, exitWon, deadlineWon]);
+    if (timer !== undefined) clearTimeout(timer);
+    if (winner === "ack") acked = true;
+    else if (winner === "exit") earlyExit = true;
+  }
+  observedMs.ackWindowEndedMs = performance.now() - tAttempt;
+
+  // ---- S1 (C7.3 step 2): acknowledged in time and still alive ----
+  // NO escalation: no `closeStdin()`, no PGID kill, no host kill, and no
+  // session interruption is requested of the caller. The normal ladder owns
+  // containment from here.
+  if (acked && lifecycle?.exitedResolved !== true) {
+    observedMs.escalatedMs = -1;
+    return {
+      reason: "pty_host_failure",
+      state: "S1",
+      escalated: false,
+      closeStdinCalled: false,
+      sessionInterruptionRequired: false,
+      pgidKillAttempted: false,
+      hostKillAttempted: false,
+      unnecessaryHostExitConfirmed: false,
+      killOrder: [],
+      observedMs,
+    };
+  }
+
+  // ---- Escalation entry (C7.3 step 3): the reason binds HERE, forever ----
+  // Reached ONLY on acknowledgement-deadline expiry without acknowledgement,
+  // or on prior host exit. C7.3 step 4: a late acknowledgement arriving from
+  // this point on does NOT cancel escalation.
+  const reason: EscalationReasonCode = "pty_host_failure";
+
+  // §9.8: on expiry "the supervisor closes host stdin and starts the
+  // host-bypassing escalation ladder". Best-effort — it starts no new clock
+  // and its success or failure is NEVER liveness evidence.
+  //
+  // S0 exception (C7.3 step 2 / packet C4): when the host has already
+  // exited, its enumerated action set is containment-only and the lifeline
+  // is moot, so the close is skipped entirely.
+  // Requirement 4 (bypass): close stdin unless `proc.exited` already
+  // resolved. Same rule as the initial path's post-deadline branch — the
+  // close is best-effort and is never liveness evidence.
+  let closeStdinCalled = false;
+  if (!earlyExit) {
+    handle.closeStdin();
+    closeStdinCalled = true;
+    observedMs.stdinClosedMs = performance.now() - tAttempt;
+  }
+
+  // Classification (packet C4). `proc.exited` is authoritative; signal-0 is
+  // corroboration only.
+  const exitedAtClassification = lifecycle?.exitedResolved === true;
+  const corroboration = exitedAtClassification ? "esrch" : probeSignal0(hostPid);
+  observedMs.classifiedMs = performance.now() - tAttempt;
+
+  let state: EscalationState;
+  if (earlyExit) state = "S0";
+  else if (exitedAtClassification) state = "S2";
+  else if (corroboration === "esrch") state = "S4";
+  else state = "S3";
+
+  // Invariant 3: PGID containment is MANDATORY in every terminal state, and
+  // it does not wait for EPIPE, for the host, or for anything else.
+  //
+  // The caller-supplied `pgid` is the authoritative containment target (the
+  // plan's Task 44 signature passes it explicitly, sourced from the
+  // `launched` fact). `handle.killPgid()` is invoked as well because it is
+  // the ratified containment primitive and covers the case where the
+  // supervisor recorded the group but the caller passed a stale value.
+  killOrder.push("pgid");
+  if (Number.isInteger(pgid) && pgid > 1) {
+    try {
+      process.kill(-pgid, "SIGKILL");
+    } catch {
+      // Group already gone.
+    }
+  }
+  handle.killPgid();
+  observedMs.pgidKillAttemptedMs = performance.now() - tAttempt;
+
+  // Invariants 1/2/4: the host PID is signalled ONLY while `exited` is
+  // pending AND signal-0 is not ESRCH. After `proc.exited` resolves the PID
+  // may have been recycled, so signalling it could kill an unrelated
+  // process. ESRCH corroborates death but never declares it and never
+  // authorizes a kill on its own.
+  let hostKillAttempted = false;
+  if (state === "S3") {
+    killOrder.push("host");
+    try {
+      process.kill(hostPid, "SIGKILL");
+    } catch {
+      // Already gone, or not ours to signal.
+    }
+    hostKillAttempted = true;
+    observedMs.hostKillAttemptedMs = performance.now() - tAttempt;
+  }
+
+  observedMs.escalatedMs = performance.now() - tAttempt;
+  return {
+    reason,
+    state,
+    escalated: true,
+    closeStdinCalled,
+    sessionInterruptionRequired: true,
+    pgidKillAttempted: true,
+    hostKillAttempted,
+    unnecessaryHostExitConfirmed: state === "S0" || state === "S2",
+    killOrder,
+    observedMs,
+  };
+  }
 }
