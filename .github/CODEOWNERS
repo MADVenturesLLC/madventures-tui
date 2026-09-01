@@ -9,8 +9,11 @@
 # Require-code-owner-review is currently OFF on `main` (branch protection
 # and ruleset 20943319). This file requests a review; it does not gate
 # merge. Turning that setting on is a Founder security-posture change.
+#
+# Owner is the org team, not a personal login. The team is visible
+# (privacy: closed) and has admin on this repository.
 
-* @decivantiq
+* @MADVenturesLLC/owners
 
 # Protect this file itself (GitHub recommended).
-/.github/CODEOWNERS @decivantiq
+/.github/CODEOWNERS @MADVenturesLLC/owners

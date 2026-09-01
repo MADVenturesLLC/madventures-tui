@@ -47,7 +47,7 @@ gate used when preparing to push, open a PR, or declare a build complete.
 - Corrections to a head already reported to the Founder land as a **new
   commit**, not an amend of the reported commit.
 - Do not resolve review threads unless the Founder directs it.
-- Code owners: `.github/CODEOWNERS` assigns `@decivantiq`. Draft pull
+- Code owners: `.github/CODEOWNERS` assigns `@MADVenturesLLC/owners`. Draft pull
   requests do not auto-request that review; marking the PR ready for
   review does. Require-code-owner-review is currently off on `main`.
 
