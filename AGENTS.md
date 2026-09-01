@@ -178,4 +178,4 @@ decision required.
 
 - `CONTRIBUTING.md` — how authorized work enters this repository
 - `SECURITY.md` — how to report a vulnerability
-- `.github/CODEOWNERS` — default owner `@decivantiq`
+- `.github/CODEOWNERS` — default owner `@MADVenturesLLC/owners`
