@@ -2082,8 +2082,19 @@ Merge-gate item 11 requires an **approving** Tier-2 verdict for the exact
 candidate SHA. A `REQUEST_CHANGES`, rejection, inconclusive verdict, or review
 of another SHA does not satisfy the gate.
 
-This amended specification remains NO-GO for implementation planning until the
-Founder approves both this addendum and `DEC-20260812-01` as one instrument.
-After that approval, the next authorized action is to write the Phase 3A
-implementation plan. Implementation remains separately gated behind approval
-of that plan.
+This condition has been satisfied: the Founder approved this addendum and
+`DEC-20260812-01` together, as one instrument, at PR #9 head
+`c23cd46d501813185087c27cbe81fd89b9ee3a33` (merged as
+`aa16032c56fdf6c7105e99b1765ed9365d605bf4`), confirmed by
+[`DEC-20260831-01`](../../decisions/DEC-20260831-01-phase-3a-authority-drift-reconciliation.md)
+clause 1 (2026-08-31). This section's NO-GO gate is not standing policy —
+implementation planning proceeded (the Phase 3A implementation plan was
+written and separately approved at PR #10; see `DEC-20260831-01` clause 2).
+Implementation itself remains separately gated behind per-task Founder
+authorization, per that plan.
+
+> Original text, preserved verbatim: "This amended specification remains
+> NO-GO for implementation planning until the Founder approves both this
+> addendum and `DEC-20260812-01` as one instrument. After that approval, the
+> next authorized action is to write the Phase 3A implementation plan.
+> Implementation remains separately gated behind approval of that plan."
