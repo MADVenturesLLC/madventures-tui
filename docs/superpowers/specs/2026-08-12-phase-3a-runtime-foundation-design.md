@@ -1,6 +1,6 @@
 # MADVentures TUI — Phase 3A Production Runtime Foundation
 
-**Status:** Founder-approved architecture; contract corrections through N1–N3 and remaining F4. Founder review of this exact SHA is complete: approved at PR #9 head `c23cd46d501813185087c27cbe81fd89b9ee3a33`, merged as `aa16032c56fdf6c7105e99b1765ed9365d605bf4`. Confirmed by [`DEC-20260831-01`](../../decisions/DEC-20260831-01-phase-3a-authority-drift-reconciliation.md) clause 2 (2026-08-31); the prior "pending Founder review" wording was stale metadata.\
+**Status:** Founder-approved architecture; contract corrections through N1–N3 and remaining F4. Founder review of this exact SHA is complete: approved at PR #9 head `c23cd46d501813185087c27cbe81fd89b9ee3a33`, merged as `aa16032c56fdf6c7105e99b1765ed9365d605bf4`. Confirmed by [`DEC-20260831-01`](../../decisions/DEC-20260831-01-phase-3a-authority-drift-reconciliation.md) clause 1 (2026-08-31) — the PR #9 SHAs above are stated there, not in clause 2 (which covers the plan, PR #10); the prior "pending Founder review" wording was stale metadata.\
 **Date:** 2026-08-12  
 **Repository:** `MADVenturesLLC/madventures-tui`  
 **Baseline branch:** `main`  

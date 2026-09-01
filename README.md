@@ -63,7 +63,10 @@ bun run madv-tui start --envelope path/to/your-envelope.json
 # Development (TUI)
 bun run dev
 
-# Broker daemon
+# Broker daemon (currently a stub: packages/broker/src/broker.ts has no
+# top-level entrypoint code, and BrokerSocket.start() creates the runtime
+# directory but never actually binds broker.sock — running this does not
+# create a live socket and does not unblock `start` above)
 bun run broker
 
 # Verify (typecheck + tests)
