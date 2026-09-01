@@ -82,7 +82,7 @@ is still required (`repository-security-standard` / WF-17): scan the
 staged diff yourself before every commit.
 
 ```bash
-git diff --cached -U0 | grep -iE 'password|secret|api[_-]?key|token|BEGIN (RSA |OPENSSH )?PRIVATE|AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9]{20,}|sk-ant-[A-Za-z0-9-]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|glpat-[A-Za-z0-9_-]{20,}'
+git diff --cached -U0 | grep -iE 'password|secret|api[_-]?key|token|BEGIN (RSA |OPENSSH )?PRIVATE|AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9-]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|glpat-[A-Za-z0-9_-]{20,}'
 ```
 
 This is a manual grep, not a maintained secret scanner — it catches the
