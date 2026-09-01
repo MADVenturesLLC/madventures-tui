@@ -860,11 +860,18 @@ function probeSignal0(pid: number): "alive" | "eperm" | "esrch" {
  *
  * A wedged host stops reading commands and stops emitting facts, so the
  * supervisor must contain the governed child WITHOUT the host's
- * cooperation. Ordering: send terminate -> close host stdin -> wait the
- * bounded acknowledgement deadline -> SIGKILL the reported child PGID ->
- * SIGKILL the host (only where permitted) -> REQUEST session interruption
- * from the caller via `sessionInterruptionRequired` (this primitive does
- * not perform the interruption itself; Task 47/53 owns that).
+ * cooperation. C7 ordering: send terminate, then wait through the bounded
+ * acknowledgement deadline. Only if that deadline expires does the
+ * supervisor close host stdin and begin host-bypassing containment —
+ * SIGKILL the reported child PGID, then SIGKILL the host (only where
+ * permitted), then REQUEST session interruption from the caller via
+ * `sessionInterruptionRequired` (this primitive does not perform the
+ * interruption itself; Task 47/53 owns that). Closing stdin starts no new
+ * clock and grants no post-EOF grace.
+ *
+ * S0 exception (already implemented): if the authoritative `proc.exited`
+ * watch resolves before the deadline, mandatory PGID containment proceeds
+ * WITHOUT closing stdin and WITHOUT signalling the exited host PID.
  *
  * BINDING RULE (Founder, Task 44): host death is determined EXCLUSIVELY by
  * the spawn-time `proc.exited` watch. `send()` and `closeStdin()` are
