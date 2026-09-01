@@ -80,9 +80,12 @@ staged diff yourself before every commit.
 git diff --cached -U0 | grep -iE 'password|secret|api[_-]?key|token|BEGIN (RSA |OPENSSH )?PRIVATE|AKIA[0-9A-Z]{16}'
 ```
 
-A hit is a **rotation event**, not just a cleanup. Do not commit. Do not
-rewrite the value out of the diff and proceed. Rotate the credential, tell
-the Founder, and only then continue.
+Classify each hit before acting. A match on the words `secret`, `token`,
+or `api key` in policy prose (including this file) is not a rotation
+event. A match that is an actual credential value is a **rotation
+event**, not just a cleanup: do not commit, do not rewrite the value out
+of the diff and proceed, rotate the credential, tell the Founder, and
+only then continue.
 
 Never add `.env`, `.env.*`, keys, PEM files, or credential dumps. Those
 paths belong in `.gitignore`. Values belong in the deployment platform's

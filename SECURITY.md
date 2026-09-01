@@ -79,4 +79,4 @@ those settings and does not claim they are currently enabled.
 
 - `CONTRIBUTING.md` — contribution and pre-commit secret-scan guidance
 - `AGENTS.md` — agent operating rules for this repository
-- `.github/CODEOWNERS` — default owner `@decivantiq`
+- `.github/CODEOWNERS` — default owner `@MADVenturesLLC/owners`

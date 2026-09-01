@@ -140,7 +140,7 @@ docs/verification/             # verification records
   `CONTRIBUTING.md`).
 - Identify commits with the full 40-character SHA. Identify artifacts with
   the full 64-character SHA-256. Do not abbreviate.
-- "Push" means open a pull request. Do not push to `main`.
+- Push the branch, then open a pull request. Do not push to `main`.
 - Do not resolve review threads unless the Founder directs it.
 - Work that produced only filesystem artifacts is **custodied**, never
   "merged".
