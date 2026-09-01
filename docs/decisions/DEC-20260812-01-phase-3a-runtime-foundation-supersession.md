@@ -1,6 +1,13 @@
 # DEC-20260812-01 — Phase 3A Runtime Foundation Supersession
 
-**Status:** Pending Founder ratification with the Phase 3A written specification  
+**Status:** RATIFIED and ACTIVE — Founder approval occurred at PR #9 head
+`c23cd46d501813185087c27cbe81fd89b9ee3a33`, merged as
+`aa16032c56fdf6c7105e99b1765ed9365d605bf4`. Confirmed by
+[`DEC-20260831-01`](DEC-20260831-01-phase-3a-authority-drift-reconciliation.md)
+clause 1 (2026-08-31): the "Pending Founder ratification" wording below this
+line was stale metadata only and did not invalidate any task-specific
+authorization, review, merge, or M17–M19 work made in reliance on this
+decision.  
 **Date:** 2026-08-12  
 **Repository:** `MADVenturesLLC/madventures-tui`  
 **Baseline SHA:** `0b942771fc07e5eb05203b1d3d641d3e8ad101f1`  

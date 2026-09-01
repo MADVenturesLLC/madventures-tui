@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "my-opentui-project",
+      "name": "madventures-tui",
       "dependencies": {
         "@opentui/core": "^0.5.1",
         "@opentui/react": "^0.5.1",

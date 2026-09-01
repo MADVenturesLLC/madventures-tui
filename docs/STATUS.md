@@ -3,8 +3,13 @@
 > **Supersession notice (2026-08-09).** Sections 1–10 below are preserved
 > verbatim as historical evidence of the `f9e36d5` / `a0b4301` review state.
 > They describe the tree as it existed at that time and are **not current.**
-> The current closure status is recorded in section 11 at the end of this
-> document.
+>
+> **Section 11 is also historical, not current** (added 2026-09-01). Section
+> 11 was accurate as of `fd8322e` on 2026-08-09, but `main` has since moved
+> through PRs #5–#37 and dozens of commits — see `docs/verification/` for
+> later-dated records and `git log` for the true current `main` SHA. Treat
+> the `401 pass / 32 files` figure below as a historical snapshot, not the
+> current suite size.
 
 **Repo:** `MADVenturesLLC/madventures-tui`
 **Working host:** iMac (`michaels-imac.local`), path `~/madventures-tui`
@@ -236,7 +241,10 @@ The build is promising. The trust boundary is not ready. Do not describe the gov
 
 ## 11. Closure record — 2026-08-09
 
-**Current `origin/main` SHA:** `fd8322e3a599e8bcb2ac751b5f6b635ea4857b85`
+> **This section is historical, not current** (see the top-of-document
+> notice added 2026-09-01). It is preserved verbatim below.
+
+**`origin/main` SHA at the time this section was written:** `fd8322e3a599e8bcb2ac751b5f6b635ea4857b85`
 
 ### PR merge table
 
