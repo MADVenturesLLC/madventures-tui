@@ -27,10 +27,14 @@ security report.**
 
 1. Prefer GitHub private vulnerability reporting if it is enabled on this
    repository: **Security → Report a vulnerability**.
-2. Otherwise contact the repository owner, [@decivantiq](https://github.com/decivantiq),
-   through a private channel. Do not include secrets, tokens, or customer
-   data in the first message; say that you have a security report and wait
-   for a channel that can hold it.
+2. Otherwise contact this repository's named security contact,
+   [@decivantiq](https://github.com/decivantiq), through a private channel.
+   This is a specific point of contact for security reports, not the same
+   thing as the `.github/CODEOWNERS` review owner (`@MADVenturesLLC/owners`,
+   an org team) — a team cannot receive a private first-contact message the
+   way an individual can. Do not include secrets, tokens, or customer data
+   in the first message; say that you have a security report and wait for
+   a channel that can hold it.
 
 A report should include:
 

@@ -82,14 +82,23 @@ Stop and ask the Founder before:
 
 ## Architecture boundaries (Phase 3A)
 
-- One foreground supervisor. `BrokerClient` is the only TUI/adapter
+**Target design, not yet implemented.** The three bullets below (`BrokerClient`,
+`reduceLedgerEvent`, `live_runtime_not_certified`) describe the Phase 3A plan's
+forward architecture — none of these symbols exist in `packages/` or `apps/`
+at the current `main` head. Do not search for them as current code; cite the
+spec/plan, not this section, for what's actually implemented today.
+
+- One foreground supervisor. `BrokerClient` is the planned only TUI/adapter
   boundary. No PTY descriptor, subprocess handle, ledger handle, or shared
-  mutable state crosses it.
-- Supervisor exit kills every governed process fail-closed.
-- Append-only single ledger chain. One lifecycle reducer:
-  `packages/ledger/src/rebuild.ts` (`reduceLedgerEvent`).
-- Production live startup remains structurally unavailable (`live_runtime_not_certified`).
-- React in `apps/madbridge/src/tui/**` is presentation-only: it projects
+  mutable state is intended to cross it.
+- Supervisor exit is intended to kill every governed process fail-closed.
+- Append-only single ledger chain. `packages/ledger/src/rebuild.ts` exists
+  today and exports `rebuildState`/`rebuildBrokerState`; the plan's named
+  reducer (`reduceLedgerEvent`) is not yet implemented under that name.
+- Production live startup is intended to remain structurally unavailable
+  until Phase 3B certification; the specific error code
+  `live_runtime_not_certified` does not exist in source yet.
+- React in `apps/madbridge/src/tui/**` is presentation-only today: it projects
   broker state and routes input. It cannot decide authority, permissions,
   ownership, evidence acceptance, hashing, or recovery.
 
@@ -113,7 +122,7 @@ used when preparing to push, open a PR, or declare a build complete.
 
 ## Layout
 
-```
+```text
 packages/protocol/             # wire protocol, events, envelopes, canonical JSON
 packages/policy/               # scope, path, model, review-independence checks
 packages/ledger/               # append-only hash-chained SQLite ledger
@@ -147,10 +156,17 @@ docs/verification/             # verification records
 
 ## Attribution
 
-`DEC-20260820-01` binds this repository to `DEC-20260718-05`. Role-accountable
-commits and pull-request bodies carry:
+`DEC-20260820-01` is cited elsewhere as binding this repository to
+`DEC-20260718-05`. Both decisions live in FounderOS, not this repository —
+neither has a corresponding file here, and this repo cannot verify their
+ratification status from its own tree. Treat the rule below as this
+repository's own operative requirement regardless of that citation's status;
+if you need `DEC-20260820-01`/`DEC-20260718-05`'s status confirmed, return
+`FOUNDER_DECISION_REQUIRED` rather than assuming either is (or isn't) ratified.
 
-```
+Role-accountable commits and pull-request bodies carry:
+
+```text
 Role-Id: <role from the originating assignment; never self-selected>
 Actor-Id: <who performed the work; never a bare role name>
 Execution-Surface: <registered surface_id when known>

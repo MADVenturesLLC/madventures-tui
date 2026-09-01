@@ -53,10 +53,15 @@ gate used when preparing to push, open a PR, or declare a build complete.
 
 ## Attribution
 
-`DEC-20260820-01` binds this repository to FounderOS `DEC-20260718-05`.
+`DEC-20260820-01` is cited elsewhere as binding this repository to FounderOS
+`DEC-20260718-05`. Both decisions live in FounderOS, not this repository —
+neither has a corresponding file here, and this repo cannot verify their
+ratification status from its own tree. Treat the rule below as this
+repository's own operative requirement regardless of that citation's status.
+
 Role-accountable commits and pull-request bodies carry:
 
-```
+```text
 Role-Id: <role from the originating assignment; never self-selected>
 Actor-Id: <who performed the work; never a bare role name>
 Execution-Surface: <registered surface_id when known>
@@ -77,12 +82,15 @@ is still required (`repository-security-standard` / WF-17): scan the
 staged diff yourself before every commit.
 
 ```bash
-git diff --cached -U0 | grep -iE 'password|secret|api[_-]?key|token|BEGIN (RSA |OPENSSH )?PRIVATE|AKIA[0-9A-Z]{16}'
+git diff --cached -U0 | grep -iE 'password|secret|api[_-]?key|token|BEGIN (RSA |OPENSSH )?PRIVATE|AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9]{20,}|sk-ant-[A-Za-z0-9-]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|glpat-[A-Za-z0-9_-]{20,}'
 ```
 
-Classify each hit before acting. A match on the words `secret`, `token`,
-or `api key` in policy prose (including this file) is not a rotation
-event. A match that is an actual credential value is a **rotation
+This is a manual grep, not a maintained secret scanner — it catches the
+credential-value shapes named above (GitHub PATs, OpenAI/Anthropic-style
+keys, Slack tokens, GitLab PATs, AWS keys) plus policy-word matches, but it
+is not exhaustive. Classify each hit before acting. A match on the words
+`secret`, `token`, or `api key` in policy prose (including this file) is not
+a rotation event. A match that is an actual credential value is a **rotation
 event**, not just a cleanup: do not commit, do not rewrite the value out
 of the diff and proceed, rotate the credential, tell the Founder, and
 only then continue.
