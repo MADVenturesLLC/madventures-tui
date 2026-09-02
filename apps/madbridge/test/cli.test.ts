@@ -123,29 +123,30 @@ describe("doctor command — read-only", () => {
   });
 });
 
-describe("start command — preflight validation", () => {
-  test("start without envelope exits nonzero (blocked)", async () => {
-    const result = await cli(["start"]);
-    expect(result.exitCode).not.toBe(0);
-    expect(result.stderr.toLowerCase()).toMatch(/preflight|envelope|missing|invalid/);
+describe("start command — Phase 3A gate", () => {
+  test("start exits 78 whether or not an envelope is supplied", async () => {
+    const bare = await cli(["start"]);
+    const withEnvelope = await cli(["start", "--envelope", "/nonexistent/envelope.json"]);
+    expect(bare.exitCode).toBe(78);
+    expect(withEnvelope.exitCode).toBe(78);
+    expect(withEnvelope.stderr).toBe(bare.stderr);
   });
 
-  test("start with --json and no envelope produces JSON error", async () => {
+  test("start with --json reports live_runtime_not_certified", async () => {
     const { result, json } = await cliJson(["start"]);
-    expect(result.exitCode).not.toBe(0);
+    expect(result.exitCode).toBe(78);
     expect(json).not.toBeNull();
-    expect(json.error).toBeDefined();
+    expect(json.error).toBe("live_runtime_not_certified");
   });
 
-  test("start with invalid envelope exits nonzero and makes no runtime dir", async () => {
+  test("start creates no runtime directory", async () => {
     const tempDir = mkdtempSync(join(tmpdir(), "madv-start-"));
     try {
       const result = await runCli(
         ["start", "--envelope", "/nonexistent/envelope.json"],
         { stdin: "", cwd: tempDir },
       );
-      expect(result.exitCode).not.toBe(0);
-      // No runtime directory should be created on failed preflight
+      expect(result.exitCode).toBe(78);
       expect(existsSync(join(tempDir, ".madv-runtime"))).toBe(false);
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
