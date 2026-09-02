@@ -155,24 +155,24 @@ describe("start command — Phase 3A gate", () => {
 });
 
 describe("session commands — exit codes", () => {
-  test("status without running broker exits nonzero", async () => {
+  test("status exits 69 — external control unavailable", async () => {
     const result = await cli(["status"]);
-    expect(result.exitCode).not.toBe(0);
+    expect(result.exitCode).toBe(69);
   });
 
-  test("pause without running session exits nonzero", async () => {
+  test("pause exits 69 — external control unavailable", async () => {
     const result = await cli(["pause", "--reason", "testing"]);
-    expect(result.exitCode).not.toBe(0);
+    expect(result.exitCode).toBe(69);
   });
 
-  test("resume without running session exits nonzero", async () => {
+  test("resume exits 69 — external control unavailable", async () => {
     const result = await cli(["resume"]);
-    expect(result.exitCode).not.toBe(0);
+    expect(result.exitCode).toBe(69);
   });
 
-  test("close without running session exits nonzero", async () => {
+  test("close exits 69 — external control unavailable", async () => {
     const result = await cli(["close", "--summary", "done"]);
-    expect(result.exitCode).not.toBe(0);
+    expect(result.exitCode).toBe(69);
   });
 
   test("verify-ledger without ledger exits nonzero", async () => {
