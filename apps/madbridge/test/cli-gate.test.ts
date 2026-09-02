@@ -96,3 +96,28 @@ describe("production start gate", () => {
     expect(source).not.toMatch(/import\s*\(/);
   });
 });
+
+describe("help truth surface", () => {
+  test("help does not claim start launches a session", async () => {
+    const result = await cli(["--help"]);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).not.toMatch(/launch a governed session/i);
+  });
+
+  test("help names the four reserved external-control commands", async () => {
+    const result = await cli(["--help"]);
+    for (const line of [
+      "status            Reserved external-control name — no external control plane",
+      "pause             Reserved external-control name — no external control plane",
+      "resume            Reserved external-control name — no external control plane",
+      "close             Reserved external-control name — no external control plane",
+    ]) {
+      expect(result.stdout).toContain(line);
+    }
+  });
+
+  test("help mentions no socket, broker daemon, or runtime directory", async () => {
+    const result = await cli(["--help"]);
+    expect(result.stdout).not.toMatch(/socket|daemon|\.madv-runtime|broker\.sock/i);
+  });
+});

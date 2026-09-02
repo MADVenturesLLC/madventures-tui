@@ -38,15 +38,15 @@ const HELP_TEXT = `madv-tui — MadBridge governance CLI
 Usage: madv-tui <command> [options]
 
 Commands:
-  init              Preview and apply runtime directory + CLI configuration
+  init              Preview and create the host storage root (no repository writes)
   doctor            Read-only environment health checks
-  start             Validate preflight and launch a governed session
-  status            Read broker snapshot
-  pause             Send governed pause event
-  resume            Send governed resume event
+  start             Present but not certified — live startup requires Phase 3B
+  status            Reserved external-control name — no external control plane
+  pause             Reserved external-control name — no external control plane
+  resume            Reserved external-control name — no external control plane
+  close             Reserved external-control name — no external control plane
   verify-ledger     Perform complete-chain verification
   export-evidence   Write sanitized evidence package
-  close             Send governed close event
 
 Global options:
   --json            Output JSON on stdout
