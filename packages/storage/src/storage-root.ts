@@ -60,8 +60,11 @@ export function validateStorageRoot(
     existing = candidate;
   }
 
+  // ancestorPaths() always yields "/" first for an absolute path, and "/"
+  // always exists, so existing is never empty here. Fail closed rather
+  // than silently accepting a path with no verifiable ancestor.
   if (existing === "") {
-    return { ok: true };
+    throw new Error(`validateStorageRoot: no existing ancestor found for ${path}`);
   }
 
   const stat = statSync(existing);
@@ -93,10 +96,17 @@ function isInsideBoundary(path: string, boundary: string): boolean {
   return path === boundary || path.startsWith(normalizedBoundary);
 }
 
-/** Cumulative ancestor paths from the top down, e.g. "/a/b/c" -> ["/a", "/a/b", "/a/b/c"]. */
+/**
+ * Cumulative ancestor paths from the filesystem root down, e.g.
+ * "/a/b/c" -> ["/", "/a", "/a/b", "/a/b/c"]. The root is always included:
+ * without it, a proposed path whose first named component does not exist
+ * (e.g. "/newtop/dir") walked no candidates at all, leaving the deepest
+ * existing ancestor empty and skipping every ownership/mode/realpath
+ * check entirely.
+ */
 function ancestorPaths(path: string): string[] {
   const parts = path.split(sep).filter((part) => part.length > 0);
-  const acc: string[] = [];
+  const acc: string[] = [sep];
   let current = "";
   for (const part of parts) {
     current = current + sep + part;

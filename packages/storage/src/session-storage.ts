@@ -37,10 +37,20 @@ export function createSessionStorage(
   const artifactsDir = join(sessionDir, "artifacts");
   const sanitizedEvidenceDir = join(sessionDir, "sanitized-evidence");
 
+  // Validate before any filesystem mutation - validateStorageRoot is pure
+  // preflight and creates nothing, so an invalid root or a symlink planted
+  // above sessionDir is rejected before we ever create or traverse it.
+  const preflight = validateStorageRoot(sessionDir, repositoryRoot, worktree);
+  if (!preflight.ok) {
+    throw new Error(`session storage failed preflight validation: ${preflight.failure}`);
+  }
+
   for (const dir of [sessionDir, ledgerDir, artifactsDir, sanitizedEvidenceDir]) {
     mkdirSync(dir, { recursive: true, mode: 0o700 });
   }
 
+  // Revalidate what was actually created (spec §5.2): closes the TOCTOU
+  // window between the preflight check above and this creation.
   const revalidation = validateStorageRoot(sessionDir, repositoryRoot, worktree);
   if (!revalidation.ok) {
     rmSync(sessionDir, { recursive: true, force: true });

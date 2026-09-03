@@ -82,6 +82,19 @@ test("rollback never targets the storage root", () => {
   }
 });
 
+test("an invalid target is rejected before any directory is created", () => {
+  // Regression: createSessionStorage() used to mkdirSync before ever
+  // calling validateStorageRoot, so an invalid root (e.g. inside the
+  // repository) produced filesystem side effects before rejection.
+  const root = tempRoot();
+  try {
+    expect(() => createSessionStorage(root, "session-d", root, root)).toThrow();
+    expect(existsSync(join(root, "sessions"))).toBe(false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("a session id containing a path separator is rejected", () => {
   const root = tempRoot();
   try {

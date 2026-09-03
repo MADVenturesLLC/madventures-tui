@@ -30,7 +30,15 @@ export function assertHomeConsistency(env: NodeJS.ProcessEnv): void {
     return;
   }
   const passwdHome = resolvePasswdHome();
-  const resolvedEnvHome = realpathSync(envHome);
+  let resolvedEnvHome: string;
+  try {
+    resolvedEnvHome = realpathSync(envHome);
+  } catch {
+    // A $HOME that does not exist, or cannot be read, does not resolve to
+    // the passwd home either - callers should see the one typed failure
+    // for every non-resolving $HOME, not a raw fs error type.
+    throw new HomeMismatchError(passwdHome, envHome);
+  }
   if (resolvedEnvHome !== passwdHome) {
     throw new HomeMismatchError(passwdHome, envHome);
   }

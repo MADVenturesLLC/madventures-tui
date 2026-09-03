@@ -18,6 +18,10 @@ test("an absent $HOME is accepted and the passwd home is used", () => {
   expect(() => assertHomeConsistency({})).not.toThrow();
 });
 
+test("a $HOME that does not exist on disk is a typed failure, not a raw fs error", () => {
+  expect(() => assertHomeConsistency({ HOME: "/nonexistent-madv-home-test-path" })).toThrow(HomeMismatchError);
+});
+
 test("a $HOME that is a symlink resolving to the passwd home is accepted", () => {
   const dir = mkdtempSync(join(tmpdir(), "madv-home-test-"));
   const link = join(dir, "home-link");

@@ -106,6 +106,17 @@ test("storage root rejects not_writable_local", () => {
   }
 });
 
+test("a proposed path whose first component does not exist still walks to the filesystem root, not an empty ancestor", () => {
+  // Regression: ancestorPaths() used to omit "/" itself, so a path whose
+  // first named component did not exist (nothing to lstat) left the
+  // deepest existing ancestor empty and short-circuited to { ok: true },
+  // skipping every ownership/mode/realpath check. "/" always exists and
+  // is root-owned on a stock install, so this must now reject.
+  const proposed = "/__madv_storage_test_nonexistent_top_level__/sub";
+  const result = validateStorageRoot(proposed, REPO, WORKTREE);
+  expect(result).toEqual({ ok: false, failure: "not_owned_by_uid" });
+});
+
 test("the default root is <passwd-home>/Library/Application Support/MADVentures/madventures-tui", () => {
   const expected = join(resolvePasswdHome(), "Library", "Application Support", "MADVentures", "madventures-tui");
   expect(proposeStorageRoot({}, REPO, WORKTREE)).toBe(expected);
