@@ -45,7 +45,17 @@ events; it is preserved unedited rather than amended.
 
 ---
 
-## The transcribing comment's attestation caveat (verbatim, unedited)
+## The transcribing comment's attestation caveat (verbatim, one link corrected)
+
+One markdown link below has been corrected. In the source PR comment it read
+`../blob/main/docs/decisions/DEC-20260831-01-phase-3a-authority-drift-reconciliation.md`
+— a GitHub-comment-relative URL that renders as a broken path from inside this
+file. It has been rewritten below as a repository-relative path,
+`DEC-20260831-01-phase-3a-authority-drift-reconciliation.md`, so the link
+resolves. No other character in this section, and nothing in the fenced act
+text below it, was changed. The unmodified source is preserved verbatim in
+the fenced `~~~text` block later in this file, which this correction does
+not touch.
 
 ### Provenance and its limits
 
@@ -53,7 +63,7 @@ This act was delivered by the Founder (Michael Daley) as a written ruling in a C
 
 **Attestation caveat, so no reviewer overweights this comment:** the transcription below is *builder-attested*. A comment authored by the builder is not, on its own, immutable provenance for the builder's own authority. Two stronger forms exist and neither is available under this act:
 
-- The repository's established pattern is a verbatim `docs/decisions/DEC-*.md` transcription with provenance and independent verification, exactly as [`DEC-20260831-01`](../blob/main/docs/decisions/DEC-20260831-01-phase-3a-authority-drift-reconciliation.md) did for the 2026-08-31 ruling. **Part C item 13 of this very act forbids me from editing `docs/**`,** so that record requires a separate, docs-only Founder authorization.
+- The repository's established pattern is a verbatim `docs/decisions/DEC-*.md` transcription with provenance and independent verification, exactly as [`DEC-20260831-01`](DEC-20260831-01-phase-3a-authority-drift-reconciliation.md) did for the 2026-08-31 ruling. **Part C item 13 of this very act forbids me from editing `docs/**`,** so that record requires a separate, docs-only Founder authorization.
 - Founder countersignature on this PR.
 
 ---
