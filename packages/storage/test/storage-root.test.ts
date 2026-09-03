@@ -50,9 +50,12 @@ test("storage root rejects symlink_component", () => {
 });
 
 test("storage root rejects not_owned_by_uid", () => {
-  // /Library is root-owned on every stock macOS install; its uid
-  // deterministically differs from the current process's uid.
-  const proposed = "/Library/__madv_storage_test_not_owned__";
+  // /usr is root-owned and a real (non-symlink) top-level directory on
+  // every stock macOS and Linux install, including Ubuntu's usrmerge
+  // layout, where /usr is the merge *target* and so is never itself a
+  // symlink - unlike /etc, which is a symlink on macOS. Its uid
+  // deterministically differs from the current (non-root) process's uid.
+  const proposed = "/usr/__madv_storage_test_not_owned__";
   const result = validateStorageRoot(proposed, REPO, WORKTREE);
   expect(result).toEqual({ ok: false, failure: "not_owned_by_uid" });
 });
