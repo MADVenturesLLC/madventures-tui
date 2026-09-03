@@ -243,6 +243,83 @@ describe("init command", () => {
   });
 });
 
+describe("shipped entrypoint — process output", () => {
+  // These tests spawn the REAL CLI entrypoint (apps/madbridge/src/cli.ts) as
+  // a child process, exercising main()'s stdout/stderr writing — the path
+  // runCli()-based tests cannot see. Commands return output already ending
+  // in "\n"; main() must not append a second newline.
+  const ENTRY = join(import.meta.dir, "..", "src", "cli.ts");
+
+  async function runEntrypoint(
+    args: string[],
+  ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+    const proc = Bun.spawn({
+      cmd: [process.execPath, ENTRY, ...args],
+      stdout: "pipe",
+      stderr: "pipe",
+      stdin: "ignore",
+    });
+    const [stdout, stderr] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+    ]);
+    const exitCode = await proc.exited;
+    return { exitCode, stdout, stderr };
+  }
+
+  function assertSingleTrailingNewline(stream: string, label: string) {
+    expect(stream.endsWith("\n"), `${label} ends with a newline`).toBe(true);
+    expect(stream.endsWith("\n\n"), `${label} has no double newline`).toBe(false);
+    // Exactly one trailing newline: after removing one, no newline remains.
+    expect(stream.slice(0, -1).endsWith("\n"), `${label} has exactly one trailing newline`).toBe(false);
+  }
+
+  test("start (text) emits exactly one trailing newline on stderr", async () => {
+    const { exitCode, stdout, stderr } = await runEntrypoint(["start"]);
+    expect(exitCode).toBe(78);
+    expect(stdout).toBe("");
+    assertSingleTrailingNewline(stderr, "stderr");
+  });
+
+  test("start --json emits exactly one trailing newline on stdout", async () => {
+    const { exitCode, stdout, stderr } = await runEntrypoint(["start", "--json"]);
+    expect(exitCode).toBe(78);
+    expect(stderr).toBe("");
+    assertSingleTrailingNewline(stdout, "stdout");
+    expect(() => JSON.parse(stdout)).not.toThrow();
+  });
+
+  test("status (text) emits exactly one trailing newline on stderr", async () => {
+    const { exitCode, stdout, stderr } = await runEntrypoint(["status"]);
+    expect(exitCode).toBe(69);
+    expect(stdout).toBe("");
+    assertSingleTrailingNewline(stderr, "stderr");
+  });
+
+  test("status --json emits exactly one trailing newline on stdout", async () => {
+    const { exitCode, stdout, stderr } = await runEntrypoint(["status", "--json"]);
+    expect(exitCode).toBe(69);
+    expect(stderr).toBe("");
+    assertSingleTrailingNewline(stdout, "stdout");
+    expect(() => JSON.parse(stdout)).not.toThrow();
+  });
+
+  test("close (text) emits exactly one trailing newline on stderr", async () => {
+    const { exitCode, stdout, stderr } = await runEntrypoint(["close"]);
+    expect(exitCode).toBe(69);
+    expect(stdout).toBe("");
+    assertSingleTrailingNewline(stderr, "stderr");
+  });
+
+  test("close --json emits exactly one trailing newline on stdout", async () => {
+    const { exitCode, stdout, stderr } = await runEntrypoint(["close", "--json"]);
+    expect(exitCode).toBe(69);
+    expect(stderr).toBe("");
+    assertSingleTrailingNewline(stdout, "stdout");
+    expect(() => JSON.parse(stdout)).not.toThrow();
+  });
+});
+
 // ─── Helper variant for init tests with cwd ───
 
 async function cliJsonWithCwd(

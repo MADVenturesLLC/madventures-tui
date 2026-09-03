@@ -194,8 +194,16 @@ async function main() {
   }
 
   const result = await runCli(args, ctx);
-  if (result.stdout) process.stdout.write(result.stdout + "\n");
-  if (result.stderr) process.stderr.write(result.stderr + "\n");
+  // Preserve command-returned output bytes: append a newline only when a
+  // non-empty stream does not already end in one. Commands already return
+  // trailing-newline output (e.g. `${HUMAN_LINE}\n`); appending again would
+  // emit a double newline from the shipped entrypoint.
+  if (result.stdout) {
+    process.stdout.write(result.stdout.endsWith("\n") ? result.stdout : `${result.stdout}\n`);
+  }
+  if (result.stderr) {
+    process.stderr.write(result.stderr.endsWith("\n") ? result.stderr : `${result.stderr}\n`);
+  }
   process.exit(result.exitCode);
 }
 
