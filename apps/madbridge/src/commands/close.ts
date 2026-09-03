@@ -1,56 +1,25 @@
 // apps/madbridge/src/commands/close.ts
-// close — sends a typed session close event.
-// Returns nonzero if no running session is found.
+// close — a reserved external-control name (spec section 4.3).
+//
+// Phase 3A exposes no external control plane. The command is a constant: it
+// performs no socket, PID, filesystem, ledger, or discovery probing. Its
+// output additionally names the incident path, because `close` is the command
+// an operator reaches for when the TUI itself is unresponsive.
 
-import { existsSync } from "fs";
-import { MADV_SOCKET_PATH } from "@madventures/broker";
 import type { CommandFlags, CommandContext, CommandResult } from "./types";
 
+const HUMAN_LINE =
+  "External control unavailable. Use the certified TUI governance controls. If the TUI is unresponsive during an incident, terminate the foreground supervisor process; supervisor exit terminates all governed children fail-closed.";
+
+const JSON_BODY =
+  '{"ok":false,"error":"external_control_unavailable","hint":"Use the certified TUI governance controls. If the TUI is unresponsive during an incident, terminate the foreground supervisor process; supervisor exit terminates all governed children fail-closed."}';
+
 export async function closeCommand(
-  flags: CommandFlags,
+  _flags: CommandFlags,
   ctx: CommandContext,
 ): Promise<CommandResult> {
-  const summary = typeof flags["summary"] === "string" ? flags["summary"] : "session closed";
-
-  const socketPath = process.env.MADV_RUNTIME_DIR
-    ? `${process.env.MADV_RUNTIME_DIR}/broker.sock`
-    : MADV_SOCKET_PATH;
-
-  if (!existsSync(socketPath)) {
-    if (ctx.json) {
-      return {
-        exitCode: 1,
-        stdout: JSON.stringify({
-          error: "no_running_session: broker socket not found",
-          ok: false,
-        }),
-        stderr: "",
-      };
-    }
-    return {
-      exitCode: 1,
-      stdout: "",
-      stderr: "no running session — broker socket not found\n",
-    };
-  }
-
-  // In full implementation, this would dispatch a typed "session_close" event
-  // through the broker with the summary payload, then wait for "complete".
   if (ctx.json) {
-    return {
-      exitCode: 0,
-      stdout: JSON.stringify({
-        ok: true,
-        event: "session_close",
-        summary,
-      }),
-      stderr: "",
-    };
+    return { exitCode: 69, stdout: JSON_BODY, stderr: "" };
   }
-
-  return {
-    exitCode: 0,
-    stdout: `Close event sent (summary: ${summary})\n`,
-    stderr: "",
-  };
+  return { exitCode: 69, stdout: "", stderr: `${HUMAN_LINE}\n` };
 }

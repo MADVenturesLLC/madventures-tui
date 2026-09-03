@@ -38,15 +38,15 @@ const HELP_TEXT = `madv-tui — MadBridge governance CLI
 Usage: madv-tui <command> [options]
 
 Commands:
-  init              Preview and apply runtime directory + CLI configuration
+  init              Preview and create the host storage root (no repository writes)
   doctor            Read-only environment health checks
-  start             Validate preflight and launch a governed session
-  status            Read broker snapshot
-  pause             Send governed pause event
-  resume            Send governed resume event
+  start             Present but not certified — live startup requires Phase 3B
+  status            Reserved external-control name — no external control plane
+  pause             Reserved external-control name — no external control plane
+  resume            Reserved external-control name — no external control plane
+  close             Reserved external-control name — no external control plane
   verify-ledger     Perform complete-chain verification
   export-evidence   Write sanitized evidence package
-  close             Send governed close event
 
 Global options:
   --json            Output JSON on stdout
@@ -194,8 +194,16 @@ async function main() {
   }
 
   const result = await runCli(args, ctx);
-  if (result.stdout) process.stdout.write(result.stdout + "\n");
-  if (result.stderr) process.stderr.write(result.stderr + "\n");
+  // Preserve command-returned output bytes: append a newline only when a
+  // non-empty stream does not already end in one. Commands already return
+  // trailing-newline output (e.g. `${HUMAN_LINE}\n`); appending again would
+  // emit a double newline from the shipped entrypoint.
+  if (result.stdout) {
+    process.stdout.write(result.stdout.endsWith("\n") ? result.stdout : `${result.stdout}\n`);
+  }
+  if (result.stderr) {
+    process.stderr.write(result.stderr.endsWith("\n") ? result.stderr : `${result.stderr}\n`);
+  }
   process.exit(result.exitCode);
 }
 

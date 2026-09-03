@@ -1,53 +1,23 @@
 // apps/madbridge/src/commands/resume.ts
-// resume — sends a typed session resume event.
-// Returns nonzero if no running session is found.
+// resume — a reserved external-control name (spec section 4.3).
+//
+// Phase 3A exposes no external control plane. The command is a constant: it
+// performs no socket, PID, filesystem, ledger, or discovery probing, and it
+// instructs the operator to use the certified TUI governance controls.
 
-import { existsSync } from "fs";
-import { MADV_SOCKET_PATH } from "@madventures/broker";
 import type { CommandFlags, CommandContext, CommandResult } from "./types";
+
+const HUMAN_LINE = "External control unavailable. Use the certified TUI governance controls.";
+
+const JSON_BODY =
+  '{"ok":false,"error":"external_control_unavailable","hint":"Use the certified TUI governance controls."}';
 
 export async function resumeCommand(
   _flags: CommandFlags,
   ctx: CommandContext,
 ): Promise<CommandResult> {
-  const socketPath = process.env.MADV_RUNTIME_DIR
-    ? `${process.env.MADV_RUNTIME_DIR}/broker.sock`
-    : MADV_SOCKET_PATH;
-
-  if (!existsSync(socketPath)) {
-    if (ctx.json) {
-      return {
-        exitCode: 1,
-        stdout: JSON.stringify({
-          error: "no_running_session: broker socket not found",
-          ok: false,
-        }),
-        stderr: "",
-      };
-    }
-    return {
-      exitCode: 1,
-      stdout: "",
-      stderr: "no running session — broker socket not found\n",
-    };
-  }
-
-  // In full implementation, this would dispatch a typed "resume" event
-  // through the broker.
   if (ctx.json) {
-    return {
-      exitCode: 0,
-      stdout: JSON.stringify({
-        ok: true,
-        event: "resume",
-      }),
-      stderr: "",
-    };
+    return { exitCode: 69, stdout: JSON_BODY, stderr: "" };
   }
-
-  return {
-    exitCode: 0,
-    stdout: "Resume event sent\n",
-    stderr: "",
-  };
+  return { exitCode: 69, stdout: "", stderr: `${HUMAN_LINE}\n` };
 }

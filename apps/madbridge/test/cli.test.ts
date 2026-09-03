@@ -123,29 +123,30 @@ describe("doctor command — read-only", () => {
   });
 });
 
-describe("start command — preflight validation", () => {
-  test("start without envelope exits nonzero (blocked)", async () => {
-    const result = await cli(["start"]);
-    expect(result.exitCode).not.toBe(0);
-    expect(result.stderr.toLowerCase()).toMatch(/preflight|envelope|missing|invalid/);
+describe("start command — Phase 3A gate", () => {
+  test("start exits 78 whether or not an envelope is supplied", async () => {
+    const bare = await cli(["start"]);
+    const withEnvelope = await cli(["start", "--envelope", "/nonexistent/envelope.json"]);
+    expect(bare.exitCode).toBe(78);
+    expect(withEnvelope.exitCode).toBe(78);
+    expect(withEnvelope.stderr).toBe(bare.stderr);
   });
 
-  test("start with --json and no envelope produces JSON error", async () => {
+  test("start with --json reports live_runtime_not_certified", async () => {
     const { result, json } = await cliJson(["start"]);
-    expect(result.exitCode).not.toBe(0);
+    expect(result.exitCode).toBe(78);
     expect(json).not.toBeNull();
-    expect(json.error).toBeDefined();
+    expect(json.error).toBe("live_runtime_not_certified");
   });
 
-  test("start with invalid envelope exits nonzero and makes no runtime dir", async () => {
+  test("start creates no runtime directory", async () => {
     const tempDir = mkdtempSync(join(tmpdir(), "madv-start-"));
     try {
       const result = await runCli(
         ["start", "--envelope", "/nonexistent/envelope.json"],
         { stdin: "", cwd: tempDir },
       );
-      expect(result.exitCode).not.toBe(0);
-      // No runtime directory should be created on failed preflight
+      expect(result.exitCode).toBe(78);
       expect(existsSync(join(tempDir, ".madv-runtime"))).toBe(false);
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
@@ -154,24 +155,24 @@ describe("start command — preflight validation", () => {
 });
 
 describe("session commands — exit codes", () => {
-  test("status without running broker exits nonzero", async () => {
+  test("status exits 69 — external control unavailable", async () => {
     const result = await cli(["status"]);
-    expect(result.exitCode).not.toBe(0);
+    expect(result.exitCode).toBe(69);
   });
 
-  test("pause without running session exits nonzero", async () => {
+  test("pause exits 69 — external control unavailable", async () => {
     const result = await cli(["pause", "--reason", "testing"]);
-    expect(result.exitCode).not.toBe(0);
+    expect(result.exitCode).toBe(69);
   });
 
-  test("resume without running session exits nonzero", async () => {
+  test("resume exits 69 — external control unavailable", async () => {
     const result = await cli(["resume"]);
-    expect(result.exitCode).not.toBe(0);
+    expect(result.exitCode).toBe(69);
   });
 
-  test("close without running session exits nonzero", async () => {
+  test("close exits 69 — external control unavailable", async () => {
     const result = await cli(["close", "--summary", "done"]);
-    expect(result.exitCode).not.toBe(0);
+    expect(result.exitCode).toBe(69);
   });
 
   test("verify-ledger without ledger exits nonzero", async () => {
@@ -239,6 +240,83 @@ describe("init command", () => {
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("shipped entrypoint — process output", () => {
+  // These tests spawn the REAL CLI entrypoint (apps/madbridge/src/cli.ts) as
+  // a child process, exercising main()'s stdout/stderr writing — the path
+  // runCli()-based tests cannot see. Commands return output already ending
+  // in "\n"; main() must not append a second newline.
+  const ENTRY = join(import.meta.dir, "..", "src", "cli.ts");
+
+  async function runEntrypoint(
+    args: string[],
+  ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+    const proc = Bun.spawn({
+      cmd: [process.execPath, ENTRY, ...args],
+      stdout: "pipe",
+      stderr: "pipe",
+      stdin: "ignore",
+    });
+    const [stdout, stderr] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+    ]);
+    const exitCode = await proc.exited;
+    return { exitCode, stdout, stderr };
+  }
+
+  function assertSingleTrailingNewline(stream: string, label: string) {
+    expect(stream.endsWith("\n"), `${label} ends with a newline`).toBe(true);
+    expect(stream.endsWith("\n\n"), `${label} has no double newline`).toBe(false);
+    // Exactly one trailing newline: after removing one, no newline remains.
+    expect(stream.slice(0, -1).endsWith("\n"), `${label} has exactly one trailing newline`).toBe(false);
+  }
+
+  test("start (text) emits exactly one trailing newline on stderr", async () => {
+    const { exitCode, stdout, stderr } = await runEntrypoint(["start"]);
+    expect(exitCode).toBe(78);
+    expect(stdout).toBe("");
+    assertSingleTrailingNewline(stderr, "stderr");
+  });
+
+  test("start --json emits exactly one trailing newline on stdout", async () => {
+    const { exitCode, stdout, stderr } = await runEntrypoint(["start", "--json"]);
+    expect(exitCode).toBe(78);
+    expect(stderr).toBe("");
+    assertSingleTrailingNewline(stdout, "stdout");
+    expect(() => JSON.parse(stdout)).not.toThrow();
+  });
+
+  test("status (text) emits exactly one trailing newline on stderr", async () => {
+    const { exitCode, stdout, stderr } = await runEntrypoint(["status"]);
+    expect(exitCode).toBe(69);
+    expect(stdout).toBe("");
+    assertSingleTrailingNewline(stderr, "stderr");
+  });
+
+  test("status --json emits exactly one trailing newline on stdout", async () => {
+    const { exitCode, stdout, stderr } = await runEntrypoint(["status", "--json"]);
+    expect(exitCode).toBe(69);
+    expect(stderr).toBe("");
+    assertSingleTrailingNewline(stdout, "stdout");
+    expect(() => JSON.parse(stdout)).not.toThrow();
+  });
+
+  test("close (text) emits exactly one trailing newline on stderr", async () => {
+    const { exitCode, stdout, stderr } = await runEntrypoint(["close"]);
+    expect(exitCode).toBe(69);
+    expect(stdout).toBe("");
+    assertSingleTrailingNewline(stderr, "stderr");
+  });
+
+  test("close --json emits exactly one trailing newline on stdout", async () => {
+    const { exitCode, stdout, stderr } = await runEntrypoint(["close", "--json"]);
+    expect(exitCode).toBe(69);
+    expect(stderr).toBe("");
+    assertSingleTrailingNewline(stdout, "stdout");
+    expect(() => JSON.parse(stdout)).not.toThrow();
   });
 });
 
