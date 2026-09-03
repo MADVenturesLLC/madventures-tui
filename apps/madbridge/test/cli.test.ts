@@ -226,7 +226,8 @@ describe("init command", () => {
 
   test("init --json previews changes without applying when declined", async () => {
     const tempDir = realpathSync(mkdtempSync(join(tmpdir(), "madv-init-")));
-    const storageDir = join(realpathSync(mkdtempSync(join(tmpdir(), "madv-init-storage-"))), "root");
+    const storageParent1 = realpathSync(mkdtempSync(join(tmpdir(), "madv-init-storage-")));
+    const storageDir = join(storageParent1, "root");
     process.env.MADV_STORAGE_DIR = storageDir;
     try {
       const { result, json } = await cliJsonWithCwd(["init"], tempDir, "n");
@@ -240,12 +241,14 @@ describe("init command", () => {
       expect(existsSync(storageDir)).toBe(false);
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
+      rmSync(storageParent1, { recursive: true, force: true });
     }
   });
 
   test("init with --yes creates the host storage root, not a repository directory", async () => {
     const tempDir = realpathSync(mkdtempSync(join(tmpdir(), "madv-init-yes-")));
-    const storageDir = join(realpathSync(mkdtempSync(join(tmpdir(), "madv-init-yes-storage-"))), "root");
+    const storageParent2 = realpathSync(mkdtempSync(join(tmpdir(), "madv-init-yes-storage-")));
+    const storageDir = join(storageParent2, "root");
     process.env.MADV_STORAGE_DIR = storageDir;
     try {
       const result = await runCli(["init", "--yes"], { stdin: "", cwd: tempDir });
@@ -254,12 +257,14 @@ describe("init command", () => {
       expect(existsSync(storageDir)).toBe(true);
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
+      rmSync(storageParent2, { recursive: true, force: true });
     }
   });
 
   test("init --yes --json reports applied=true", async () => {
     const tempDir = realpathSync(mkdtempSync(join(tmpdir(), "madv-init-json-")));
-    const storageDir = join(realpathSync(mkdtempSync(join(tmpdir(), "madv-init-json-storage-"))), "root");
+    const storageParent3 = realpathSync(mkdtempSync(join(tmpdir(), "madv-init-json-storage-")));
+    const storageDir = join(storageParent3, "root");
     process.env.MADV_STORAGE_DIR = storageDir;
     try {
       const result = await runCli(["init", "--yes", "--json"], { stdin: "", cwd: tempDir });
@@ -269,6 +274,7 @@ describe("init command", () => {
       expect(json.preview).toBeDefined();
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
+      rmSync(storageParent3, { recursive: true, force: true });
     }
   });
 });

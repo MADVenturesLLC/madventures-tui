@@ -14,6 +14,7 @@ import { join } from "path";
 import { runCli } from "../src/cli";
 
 let repoDir: string;
+let storageParent: string;
 let storageDir: string;
 let previousStorageDir: string | undefined;
 
@@ -22,9 +23,13 @@ beforeEach(() => {
   // /private/var - canonicalize both mkdtemp roots so neither trips
   // validateStorageRoot's symlink_component check on the mkdtemp root
   // itself (the "root" leaf below storageDir is left non-existent, which
-  // is the actual scenario being tested).
+  // is the actual scenario being tested). storageParent is tracked
+  // separately so it can be removed in afterEach - storageDir itself is
+  // a non-existent child of it in every test but "creates the three
+  // directories" and "does not create runtime/".
   repoDir = realpathSync(mkdtempSync(join(tmpdir(), "madv-init-repo-")));
-  storageDir = join(realpathSync(mkdtempSync(join(tmpdir(), "madv-init-storage-"))), "root");
+  storageParent = realpathSync(mkdtempSync(join(tmpdir(), "madv-init-storage-")));
+  storageDir = join(storageParent, "root");
   previousStorageDir = process.env.MADV_STORAGE_DIR;
   process.env.MADV_STORAGE_DIR = storageDir;
 });
@@ -36,6 +41,7 @@ afterEach(() => {
     process.env.MADV_STORAGE_DIR = previousStorageDir;
   }
   rmSync(repoDir, { recursive: true, force: true });
+  rmSync(storageParent, { recursive: true, force: true });
 });
 
 test("init writes nothing inside the repository", async () => {
