@@ -8,3 +8,5 @@ export {
   validateStorageRoot,
 } from "./storage-root";
 export type { StorageRootFailure } from "./storage-root";
+export { createSessionStorage, rollbackSessionStorage } from "./session-storage";
+export type { SessionStorage } from "./session-storage";
