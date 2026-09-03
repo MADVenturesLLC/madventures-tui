@@ -13,7 +13,8 @@
     "@madventures/artifact-store": "workspace:*",
     "@madventures/broker": "workspace:*",
     "@madventures/adapter-claude-code": "workspace:*",
-    "@madventures/adapter-antigravity": "workspace:*"
+    "@madventures/adapter-antigravity": "workspace:*",
+    "@madventures/storage": "workspace:*"
   },
   "devDependencies": {
     "@types/react": "^19.2.18"

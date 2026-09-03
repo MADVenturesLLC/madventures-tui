@@ -11,7 +11,7 @@
 //   - JSON output when --json is present
 
 import { test, expect, describe, beforeEach, afterEach } from "bun:test";
-import { rmSync, existsSync, mkdtempSync, readdirSync } from "fs";
+import { rmSync, existsSync, mkdtempSync, readdirSync, realpathSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { runCli, type CliResult } from "../src/cli";
@@ -203,34 +203,69 @@ describe("JSON output mode", () => {
 });
 
 describe("init command", () => {
+  // Host-storage init (Task 29 / M12) never writes into the repository
+  // it is invoked from, so every case here routes through
+  // MADV_STORAGE_DIR to a disposable root - never the real passwd-home
+  // default - matching apps/madbridge/test/init-storage.test.ts, which
+  // covers the substantive behavior in full. os.tmpdir() resolves
+  // through a symlink on macOS (/var -> /private/var), so both roots
+  // are canonicalized before use.
+  let previousStorageDir: string | undefined;
+
+  beforeEach(() => {
+    previousStorageDir = process.env.MADV_STORAGE_DIR;
+  });
+
+  afterEach(() => {
+    if (previousStorageDir === undefined) {
+      delete process.env.MADV_STORAGE_DIR;
+    } else {
+      process.env.MADV_STORAGE_DIR = previousStorageDir;
+    }
+  });
+
   test("init --json previews changes without applying when declined", async () => {
-    const tempDir = mkdtempSync(join(tmpdir(), "madv-init-"));
+    const tempDir = realpathSync(mkdtempSync(join(tmpdir(), "madv-init-")));
+    const storageParent1 = realpathSync(mkdtempSync(join(tmpdir(), "madv-init-storage-")));
+    const storageDir = join(storageParent1, "root");
+    process.env.MADV_STORAGE_DIR = storageDir;
     try {
       const { result, json } = await cliJsonWithCwd(["init"], tempDir, "n");
       expect(result.exitCode).toBe(0);
       expect(json).not.toBeNull();
       expect(json.preview).toBeDefined();
       expect(json.applied).toBe(false);
-      // No directories created when declined
+      // No directories created when declined - not in the repository,
+      // and not at the storage root either.
       expect(existsSync(join(tempDir, ".madv-runtime"))).toBe(false);
+      expect(existsSync(storageDir)).toBe(false);
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
+      rmSync(storageParent1, { recursive: true, force: true });
     }
   });
 
-  test("init with --yes creates approved directories", async () => {
-    const tempDir = mkdtempSync(join(tmpdir(), "madv-init-yes-"));
+  test("init with --yes creates the host storage root, not a repository directory", async () => {
+    const tempDir = realpathSync(mkdtempSync(join(tmpdir(), "madv-init-yes-")));
+    const storageParent2 = realpathSync(mkdtempSync(join(tmpdir(), "madv-init-yes-storage-")));
+    const storageDir = join(storageParent2, "root");
+    process.env.MADV_STORAGE_DIR = storageDir;
     try {
       const result = await runCli(["init", "--yes"], { stdin: "", cwd: tempDir });
       expect(result.exitCode).toBe(0);
-      expect(existsSync(join(tempDir, ".madv-runtime"))).toBe(true);
+      expect(existsSync(join(tempDir, ".madv-runtime"))).toBe(false);
+      expect(existsSync(storageDir)).toBe(true);
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
+      rmSync(storageParent2, { recursive: true, force: true });
     }
   });
 
   test("init --yes --json reports applied=true", async () => {
-    const tempDir = mkdtempSync(join(tmpdir(), "madv-init-json-"));
+    const tempDir = realpathSync(mkdtempSync(join(tmpdir(), "madv-init-json-")));
+    const storageParent3 = realpathSync(mkdtempSync(join(tmpdir(), "madv-init-json-storage-")));
+    const storageDir = join(storageParent3, "root");
+    process.env.MADV_STORAGE_DIR = storageDir;
     try {
       const result = await runCli(["init", "--yes", "--json"], { stdin: "", cwd: tempDir });
       expect(result.exitCode).toBe(0);
@@ -239,6 +274,7 @@ describe("init command", () => {
       expect(json.preview).toBeDefined();
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
+      rmSync(storageParent3, { recursive: true, force: true });
     }
   });
 });
