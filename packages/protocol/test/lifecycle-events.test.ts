@@ -333,3 +333,44 @@ test("a founder-kind terminal with a non-string reason_code fails with base_reco
     "base_record_shape",
   );
 });
+
+// ─── Correction: exact-own-key payload validation ───
+
+test("a payload whose expected keys come only from the prototype chain fails with payload_shape", () => {
+  // Arrange — own keys are entirely unexpected; the expected key names are
+  // reachable only through the prototype. `key in payload` is satisfied by
+  // inherited properties, so an own-key check is what actually closes this.
+  const prototype = { command_id: "cmd-1", authorized_by: "founder" };
+  const smuggled = Object.create(prototype) as Record<string, unknown>;
+  smuggled["evil_one"] = "payload-smuggling";
+  smuggled["evil_two"] = "second-unexpected-own-key";
+
+  // Sanity: the fixture really does have the shape the defect needs.
+  expect(Object.keys(smuggled)).toEqual(["evil_one", "evil_two"]);
+  expect("command_id" in smuggled).toBe(true);
+  expect(Object.hasOwn(smuggled, "command_id")).toBe(false);
+
+  const record = lifecycleRecord("session_paused", smuggled);
+
+  // Act / Assert — exact-key-set means exact OWN-key set.
+  expect(failureOf(() => parseSessionLifecycleEvent(record, context()))).toBe("payload_shape");
+});
+
+test("a payload missing an own expected key fails even when the prototype supplies it", () => {
+  // One expected key is a real own property; the other is inherited only.
+  const prototype = { authorized_by: "founder" };
+  const partial = Object.create(prototype) as Record<string, unknown>;
+  partial["command_id"] = "cmd-1";
+
+  const record = lifecycleRecord("session_paused", partial);
+  expect(failureOf(() => parseSessionLifecycleEvent(record, context()))).toBe("payload_shape");
+});
+
+test("a payload carrying an extra own key is still rejected", () => {
+  const record = lifecycleRecord("session_paused", {
+    command_id: "cmd-1",
+    authorized_by: "founder",
+    extra_own_key: true,
+  });
+  expect(failureOf(() => parseSessionLifecycleEvent(record, context()))).toBe("payload_shape");
+});

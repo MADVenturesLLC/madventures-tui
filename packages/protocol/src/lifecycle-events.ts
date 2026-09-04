@@ -199,10 +199,16 @@ function isStringArray(value: unknown): value is readonly string[] {
   return Array.isArray(value) && value.every((entry) => typeof entry === "string");
 }
 
-/** Exact key-set match, so an unexpected payload field is a shape failure. */
+/**
+ * Exact OWN-key match, so an unexpected payload field is a shape failure.
+ *
+ * The membership test must be an own-property check. `key in payload` is
+ * satisfied by inherited properties, which would let a payload carry entirely
+ * unexpected own keys while borrowing the expected names from its prototype.
+ */
 function hasExactKeys(payload: Record<string, unknown>, keys: readonly string[]): boolean {
   const actual = Object.keys(payload);
-  return actual.length === keys.length && keys.every((key) => key in payload);
+  return actual.length === keys.length && keys.every((key) => Object.hasOwn(payload, key));
 }
 
 function isFounderCommand(payload: Record<string, unknown>): boolean {
