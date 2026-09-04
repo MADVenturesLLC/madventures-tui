@@ -7,10 +7,12 @@ import {
   assertActiveSurfaceCardinality,
   canonicalPairKey,
   CardinalityError,
+  evaluatePairEligibility,
   parsePairConstraints,
   PairConstraintsError,
+  type PairConstraintsV1,
 } from "../src/pair-constraints";
-import { parseSurfaceId } from "../src/surface-id";
+import { parseSurfaceId, type SurfaceId } from "../src/surface-id";
 import { parseTaskEnvelope, PROTOCOL_VERSION, type ExecutionIdentity } from "../src";
 
 // ─── Fixtures ───
@@ -167,4 +169,119 @@ test("allowed_surface_pairs cannot weaken a global rule", () => {
   // Act / Assert — listing the pair narrows eligibility; it never exempts the
   // pair from a global rule the envelope itself declares.
   expect(() => parseTaskEnvelope(env)).toThrow("providers are not distinct");
+});
+
+// ─── Task 9: the nine pair-eligibility rules ───
+
+const STRICT = parsePairConstraints(strictConstraints());
+
+/** Distinct organizations, so rule 6 passes unless a test says otherwise. */
+function distinctOrganizations(): ReadonlyMap<SurfaceId, string> {
+  return new Map<SurfaceId, string>([
+    [parseSurfaceId("claude-code"), "anthropic"],
+    [parseSurfaceId("antigravity"), "google"],
+  ]);
+}
+
+function evaluate(
+  executions: readonly ExecutionIdentity[],
+  constraints: PairConstraintsV1 = STRICT,
+  organizations: ReadonlyMap<SurfaceId, string> = distinctOrganizations(),
+) {
+  return evaluatePairEligibility(executions, constraints, organizations);
+}
+
+function failureOf(result: ReturnType<typeof evaluate>): string {
+  return result.ok ? "<eligible>" : result.failure;
+}
+
+test("pair eligibility rejects duplicate_execution_id", () => {
+  const result = evaluate([
+    builderExecution({ execution_id: "same-id" }),
+    reviewerExecution({ execution_id: "same-id" }),
+  ]);
+  expect(failureOf(result)).toBe("duplicate_execution_id");
+});
+
+test("pair eligibility rejects role_composition", () => {
+  const result = evaluate([
+    builderExecution(),
+    reviewerExecution({ role: "builder" }),
+  ]);
+  expect(failureOf(result)).toBe("role_composition");
+});
+
+test("pair eligibility rejects observer_not_active", () => {
+  const result = evaluate([
+    builderExecution(),
+    reviewerExecution({ role: "observer" }),
+  ]);
+  expect(failureOf(result)).toBe("observer_not_active");
+});
+
+test("pair eligibility rejects provider_not_distinct", () => {
+  const result = evaluate([
+    builderExecution(),
+    reviewerExecution({ provider: "anthropic" }),
+  ]);
+  expect(failureOf(result)).toBe("provider_not_distinct");
+});
+
+test("pair eligibility rejects independence_domain_not_distinct", () => {
+  const result = evaluate([
+    builderExecution({ independence_domain: "shared-domain" }),
+    reviewerExecution({ independence_domain: "shared-domain" }),
+  ]);
+  expect(failureOf(result)).toBe("independence_domain_not_distinct");
+});
+
+test("pair eligibility rejects common_review_control", () => {
+  // Providers and independence domains are distinct; only the organization is
+  // shared. Equal organization_id alone must defeat the pair.
+  const sharedOrganization = new Map<SurfaceId, string>([
+    [parseSurfaceId("claude-code"), "one-parent"],
+    [parseSurfaceId("antigravity"), "one-parent"],
+  ]);
+  const result = evaluate([builderExecution(), reviewerExecution()], STRICT, sharedOrganization);
+  expect(failureOf(result)).toBe("common_review_control");
+});
+
+test("pair eligibility rejects self_review", () => {
+  // A surface cannot review its own output, even as a separate execution with
+  // a distinct id, provider, domain, and organization.
+  const sameSurface = new Map<SurfaceId, string>([[parseSurfaceId("claude-code"), "anthropic"]]);
+  const result = evaluate(
+    [
+      builderExecution(),
+      reviewerExecution({ surface: parseSurfaceId("claude-code"), provider: "google" }),
+    ],
+    STRICT,
+    sameSurface,
+  );
+  expect(failureOf(result)).toBe("self_review");
+});
+
+test("pair eligibility rejects surface_not_admitted", () => {
+  // Syntactically valid, but absent from the closed adapter registry.
+  const result = evaluate([
+    builderExecution(),
+    reviewerExecution({ surface: parseSurfaceId("unregistered-surface") }),
+  ]);
+  expect(failureOf(result)).toBe("surface_not_admitted");
+});
+
+test("pair eligibility rejects envelope_constraint_weaker", () => {
+  // A constraints value that never passed parsePairConstraints, so it can carry
+  // a weakened flag. Eligibility must reject it rather than honor it.
+  const weakened = {
+    ...STRICT,
+    require_distinct_providers: false,
+  } as unknown as PairConstraintsV1;
+  const result = evaluate([builderExecution(), reviewerExecution()], weakened);
+  expect(failureOf(result)).toBe("envelope_constraint_weaker");
+});
+
+test("pair eligibility accepts a distinct builder and independent reviewer", () => {
+  const result = evaluate([builderExecution(), reviewerExecution()]);
+  expect(result.ok).toBe(true);
 });
