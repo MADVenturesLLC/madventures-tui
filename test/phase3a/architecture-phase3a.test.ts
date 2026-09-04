@@ -1007,7 +1007,18 @@ describe("Phase 3A pty-host isolation", () => {
  */
 
 const PAIRED_SURFACE_NAME_PATTERN = /surfaceA|surfaceB|adapterA|adapterB/;
-const LITERAL_CARDINALITY_PATTERN = /executions\.length\s*===\s*2|executions\.length\s*!==\s*2/;
+// Every literal comparison of executions.length against exactly two, in either
+// operand order: `2 < executions.length` encodes the same forbidden rule as
+// `executions.length > 2`, so a guard that reads only one order can be evaded
+// by writing the comparison backwards. The operator alternation lists <= and >=
+// before < and > so the two-character forms win, and the digit guards keep the
+// literal 2 from matching inside 20, 12, or 2.5.
+const CARDINALITY_COMPARISON = String.raw`(?:===|!==|<=|>=|<|>)`;
+const CARDINALITY_LITERAL = String.raw`(?<![\d.])2(?![\d.])`;
+const LITERAL_CARDINALITY_PATTERN = new RegExp(
+  `executions\\.length\\s*${CARDINALITY_COMPARISON}\\s*${CARDINALITY_LITERAL}` +
+    `|${CARDINALITY_LITERAL}\\s*${CARDINALITY_COMPARISON}\\s*executions\\.length`,
+);
 const CARDINALITY_AUTHORITY_PATH = "packages/protocol/src/pair-constraints.ts";
 const CARDINALITY_EXEMPT_PREFIX = "apps/madbridge/src/tui/";
 
@@ -1031,5 +1042,37 @@ function findCardinalityViolations(root: string): string[] {
 describe("Phase 3A surface cardinality", () => {
   test("no production module encodes surface cardinality outside MAX_ACTIVE_SURFACES_V1", () => {
     expect(findCardinalityViolations(REPO_ROOT)).toEqual([]);
+  });
+
+  test("the cardinality pattern detects every literal comparison against two", () => {
+    // Arrange — each comparison form a production module could use to encode
+    // the cardinality, in both operand orders, plus near-misses that must not
+    // be flagged.
+    const operators = ["===", "!==", "<", "<=", ">", ">="];
+    const detected = [
+      ...operators.map((operator) => `executions.length ${operator} 2`),
+      ...operators.map((operator) => `2 ${operator} executions.length`),
+      "if (executions.length===2) {",
+      "return executions.length >= 2;",
+    ];
+    const ignored = [
+      "executions.length === 20",
+      "executions.length !== 20",
+      "executions.length >= 20",
+      "20 > executions.length",
+      "12 < executions.length",
+      "executions.length < 2.5",
+      "executions.length === 0",
+      "executions.length !== MAX_ACTIVE_SURFACES_V1",
+    ];
+
+    // Act / Assert — a guard that misses an operator or an operand order can be
+    // evaded, and one that matches 20 fails builds it has no business failing.
+    for (const source of detected) {
+      expect(LITERAL_CARDINALITY_PATTERN.test(source)).toBe(true);
+    }
+    for (const source of ignored) {
+      expect(LITERAL_CARDINALITY_PATTERN.test(source)).toBe(false);
+    }
   });
 });
