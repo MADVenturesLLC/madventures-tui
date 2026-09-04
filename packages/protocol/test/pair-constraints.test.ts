@@ -171,6 +171,36 @@ test("allowed_surface_pairs cannot weaken a global rule", () => {
   expect(() => parseTaskEnvelope(env)).toThrow("providers are not distinct");
 });
 
+// ─── Parser-level self-review and allowed-pair typing ───
+
+test("an envelope whose executions share a surface fails parsing", () => {
+  // Arrange — distinct execution ids, roles, providers, and independence
+  // domains. Only the surface is shared, so every other rule passes and the
+  // self-review rule is the one under test.
+  const env = envelopeWithConstraints(strictConstraints(), [
+    builderExecution(),
+    reviewerExecution({
+      surface: parseSurfaceId("claude-code"),
+      provider: "google",
+      independence_domain: "google",
+    }),
+  ]);
+
+  // Act / Assert — a surface cannot review its own output. The parser must
+  // agree with evaluatePairEligibility, which classifies this as self_review.
+  expect(() => parseTaskEnvelope(env)).toThrow("an execution cannot review its own output");
+});
+
+test("non-string allowed pair entries are a parse failure", () => {
+  // Arrange — values that would become syntactically valid surface ids if
+  // coerced with String(): true -> "true", null -> "null".
+  const constraints = strictConstraints();
+  constraints["allowed_surface_pairs"] = [[true, null]];
+
+  // Act / Assert — ids must already be strings; coercion is not admission.
+  expect(() => parsePairConstraints(constraints)).toThrow(PairConstraintsError);
+});
+
 // ─── Task 9: the nine pair-eligibility rules ───
 
 const STRICT = parsePairConstraints(strictConstraints());
