@@ -4,8 +4,12 @@
 import { expect, test } from "bun:test";
 import {
   INTERRUPTION_REASON_CODES,
+  LifecycleValidationError,
+  parseSessionLifecycleEvent,
   SESSION_LIFECYCLE_EVENT_TYPES,
+  type LifecycleContext,
 } from "../src/lifecycle-events";
+import { PROTOCOL_VERSION } from "../src";
 
 // ─── Task 10: the closed vocabulary ───
 
@@ -55,4 +59,133 @@ test("the interruption reason union has exactly twelve members", () => {
   const actual: readonly string[] = INTERRUPTION_REASON_CODES;
   expect(actual).toHaveLength(12);
   expect(actual).toEqual(expected);
+});
+
+// ─── Task 11: deterministic payload validation ───
+
+const ENVELOPE_EXECUTION_IDS = ["exec-builder", "exec-reviewer"] as const;
+
+function context(overrides: Partial<LifecycleContext> = {}): LifecycleContext {
+  return {
+    envelopeExecutionIds: [...ENVELOPE_EXECUTION_IDS],
+    openIncidentId: "incident-1",
+    openReasonCode: "child_failure",
+    ...overrides,
+  };
+}
+
+/** A well-formed lifecycle record; each test perturbs exactly one thing. */
+function lifecycleRecord(
+  eventType: string,
+  payload: unknown,
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    protocol_version: PROTOCOL_VERSION,
+    event_id: "evt-1",
+    session_id: "ses-1",
+    event_type: eventType,
+    actor: "madbridge",
+    task_envelope_hash: "a".repeat(64),
+    repository_fingerprint: {
+      kind: "commit",
+      sha256: "a".repeat(64),
+      git_sha: "b".repeat(40),
+    },
+    fencing_token: 1,
+    reason_code: null,
+    created_at: "2026-09-04T00:00:00.000Z",
+    previous_event_hash: "c".repeat(64),
+    payload,
+    ...overrides,
+  };
+}
+
+function interruptedPayload(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    incident_id: "incident-1",
+    reason: "child exited non-zero",
+    severity: "high",
+    source_event_id: null,
+    reported_by_execution_id: null,
+    ...overrides,
+  };
+}
+
+function failureOf(run: () => unknown): string {
+  try {
+    run();
+    return "<accepted>";
+  } catch (error) {
+    return error instanceof LifecycleValidationError ? error.failure : `<${String(error)}>`;
+  }
+}
+
+test("session_interrupted without a reason code fails with missing_reason_code", () => {
+  const record = lifecycleRecord("session_interrupted", interruptedPayload(), {
+    reason_code: null,
+  });
+  expect(failureOf(() => parseSessionLifecycleEvent(record, context()))).toBe(
+    "missing_reason_code",
+  );
+});
+
+test("interruption-kind session_closed carrying a different incident id fails with incident_id_mismatch", () => {
+  const record = lifecycleRecord(
+    "session_closed",
+    {
+      closure_kind: "interruption",
+      incident_id: "incident-OTHER",
+      reason_code: "child_failure",
+    },
+    { reason_code: "child_failure" },
+  );
+  expect(failureOf(() => parseSessionLifecycleEvent(record, context()))).toBe(
+    "incident_id_mismatch",
+  );
+});
+
+test("session_activated with a partial execution set fails with execution_set_mismatch", () => {
+  const record = lifecycleRecord("session_activated", {
+    execution_ids: ["exec-builder"],
+    readiness_snapshot_seq: 7,
+  });
+  expect(failureOf(() => parseSessionLifecycleEvent(record, context()))).toBe(
+    "execution_set_mismatch",
+  );
+});
+
+test("session_activated with a duplicated execution id fails with duplicate_execution_id", () => {
+  const record = lifecycleRecord("session_activated", {
+    execution_ids: ["exec-builder", "exec-builder"],
+    readiness_snapshot_seq: 7,
+  });
+  expect(failureOf(() => parseSessionLifecycleEvent(record, context()))).toBe(
+    "duplicate_execution_id",
+  );
+});
+
+test("a lifecycle record with actor other than madbridge fails with actor_not_madbridge", () => {
+  const record = lifecycleRecord("session_paused", {
+    command_id: "cmd-1",
+    authorized_by: "founder",
+  }, { actor: "exec-builder" });
+  expect(failureOf(() => parseSessionLifecycleEvent(record, context()))).toBe(
+    "actor_not_madbridge",
+  );
+});
+
+test("an unknown lifecycle type fails with unknown_event_type and not a default branch", () => {
+  const record = lifecycleRecord("session_teleported", { anything: true });
+  expect(failureOf(() => parseSessionLifecycleEvent(record, context()))).toBe(
+    "unknown_event_type",
+  );
+});
+
+test("validation precedence prefers unknown_event_type over payload_shape", () => {
+  // Both defects are present. The fixed precedence decides which is reported.
+  const record = lifecycleRecord("session_teleported", "not-an-object-at-all");
+  expect(failureOf(() => parseSessionLifecycleEvent(record, context()))).toBe(
+    "unknown_event_type",
+  );
 });
