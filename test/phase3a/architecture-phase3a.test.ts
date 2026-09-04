@@ -989,3 +989,47 @@ describe("Phase 3A pty-host isolation", () => {
     }
   });
 });
+
+/**
+ * Phase 3A surface cardinality.
+ *
+ * Spec section 1.2: exactly one production module encodes how many active
+ * surfaces a Version 1 live pair may contain. Two patterns are forbidden
+ * everywhere else — paired two-tuple identifier names, which smuggle the
+ * cardinality into an identity system, and a literal comparison of
+ * `executions.length` against two.
+ *
+ * Two exemptions exist, both documented in the spec and neither widened here:
+ * `packages/protocol/src/pair-constraints.ts`, the authority module itself,
+ * and `apps/madbridge/src/tui/**`. `PairConstraintsV1.allowed_surface_pairs`
+ * is exempt from the paired-name pattern by that exact field name only
+ * (spec section 1.2), so the pattern below never matches it.
+ */
+
+const PAIRED_SURFACE_NAME_PATTERN = /surfaceA|surfaceB|adapterA|adapterB/;
+const LITERAL_CARDINALITY_PATTERN = /executions\.length\s*===\s*2|executions\.length\s*!==\s*2/;
+const CARDINALITY_AUTHORITY_PATH = "packages/protocol/src/pair-constraints.ts";
+const CARDINALITY_EXEMPT_PREFIX = "apps/madbridge/src/tui/";
+
+function findCardinalityViolations(root: string): string[] {
+  const violations: string[] = [];
+  for (const file of enumerateProductionFiles(root)) {
+    const rel = toPortablePath(relative(root, file));
+    if (rel === CARDINALITY_AUTHORITY_PATH) continue;
+    if (rel.startsWith(CARDINALITY_EXEMPT_PREFIX)) continue;
+    const source = readFileSync(file, "utf8");
+    if (PAIRED_SURFACE_NAME_PATTERN.test(source)) {
+      violations.push(`${rel} [paired-surface-name]`);
+    }
+    if (LITERAL_CARDINALITY_PATTERN.test(source)) {
+      violations.push(`${rel} [literal-cardinality]`);
+    }
+  }
+  return violations.sort();
+}
+
+describe("Phase 3A surface cardinality", () => {
+  test("no production module encodes surface cardinality outside MAX_ACTIVE_SURFACES_V1", () => {
+    expect(findCardinalityViolations(REPO_ROOT)).toEqual([]);
+  });
+});

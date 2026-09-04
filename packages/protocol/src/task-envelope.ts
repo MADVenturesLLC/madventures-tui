@@ -3,6 +3,7 @@
 
 import { sha256CanonicalSync } from "./canonical-json";
 import { normalizeIndependenceDomain } from "./normalization";
+import { assertActiveSurfaceCardinality } from "./pair-constraints";
 import { InvalidSurfaceIdError, parseSurfaceId, type SurfaceId } from "./surface-id";
 
 export const PROTOCOL_VERSION = "madbridge-protocol/v1" as const;
@@ -158,9 +159,12 @@ export function parseTaskEnvelope(raw: Record<string, unknown>): TaskEnvelopeV1 
 
   // Executions — validate each
   const executions = raw["executions"];
+  // Presence check only. Cardinality is not decided here: the permitted number
+  // of active surfaces lives solely in assertActiveSurfaceCardinality.
   if (!Array.isArray(executions) || executions.length === 0) {
     throw new Error("missing executions");
   }
+  assertActiveSurfaceCardinality(executions as readonly ExecutionIdentity[]);
   const seenExecutionIds = new Set<string>();
   for (const exec of executions) {
     if (typeof exec !== "object" || exec === null) {
