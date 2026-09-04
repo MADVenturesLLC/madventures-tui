@@ -140,6 +140,7 @@ export type LedgerEventV1 = BridgeEventV1 | SessionLifecycleEventV1;
 export type LifecycleValidationFailure =
   | "unknown_event_type"
   | "unknown_field"
+  | "base_record_shape"
   | "missing_reason_code"
   | "payload_shape"
   | "incident_id_mismatch"
@@ -227,6 +228,35 @@ function isTerminalPayload(payload: Record<string, unknown>): boolean {
   return false;
 }
 
+function isRepositoryFingerprint(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  if (value["kind"] !== "commit" && value["kind"] !== "working_tree") return false;
+  if (typeof value["sha256"] !== "string") return false;
+  if (typeof value["git_sha"] !== "string") return false;
+  const baseGitSha = value["base_git_sha"];
+  return baseGitSha === undefined || typeof baseGitSha === "string";
+}
+
+/**
+ * The required structural contract of SessionLifecycleEventBaseV1, excluding
+ * every field that already has a more specific failure code: `event_type`
+ * (unknown_event_type), `actor` (actor_not_madbridge), `payload`
+ * (payload_shape), and `reason_code` (missing_reason_code and
+ * reason_code_mismatch). Type shape only; no semantic constraint beyond what
+ * section 9.6 states.
+ */
+function hasValidBaseRecordShape(raw: Record<string, unknown>): boolean {
+  if (raw["protocol_version"] !== PROTOCOL_VERSION) return false;
+  if (typeof raw["event_id"] !== "string") return false;
+  if (typeof raw["session_id"] !== "string") return false;
+  if (typeof raw["task_envelope_hash"] !== "string") return false;
+  if (!isRepositoryFingerprint(raw["repository_fingerprint"])) return false;
+  const fencingToken = raw["fencing_token"];
+  if (fencingToken !== null && typeof fencingToken !== "number") return false;
+  if (typeof raw["created_at"] !== "string") return false;
+  return typeof raw["previous_event_hash"] === "string";
+}
+
 /**
  * Per-type payload shape predicates, keyed by event type.
  *
@@ -290,8 +320,9 @@ const PAYLOAD_SHAPE: Readonly<
  * Failures are decided in the specification's fixed precedence, so the reported
  * reason is deterministic when a record has more than one defect:
  *
- *   unknown_event_type -> unknown_field -> actor_not_madbridge -> payload_shape
- *   -> missing_reason_code -> execution_set_mismatch / duplicate_execution_id
+ *   unknown_event_type -> unknown_field -> base_record_shape
+ *   -> actor_not_madbridge -> payload_shape -> missing_reason_code
+ *   -> execution_set_mismatch / duplicate_execution_id
  *   -> incident_id_mismatch -> reason_code_mismatch
  *
  * Within the sixth position, duplicates are checked before set equality: a
@@ -319,19 +350,25 @@ export function parseSessionLifecycleEvent(
     }
   }
 
-  // 3. Actor identity. Lifecycle truth is authored by madbridge, never by an
+  // 3. Required lifecycle-base structure. A record that reaches the return path
+  //    must satisfy the whole base contract, not merely type, actor, and payload.
+  if (!hasValidBaseRecordShape(raw)) {
+    fail("base_record_shape", `record does not satisfy the lifecycle base contract`);
+  }
+
+  // 4. Actor identity. Lifecycle truth is authored by madbridge, never by an
   //    execution, and never by a fabricated sender.
   if (raw["actor"] !== "madbridge") {
     fail("actor_not_madbridge", `actor must be madbridge, received ${String(raw["actor"])}`);
   }
 
-  // 4. Payload shape for this exact type.
+  // 5. Payload shape for this exact type.
   const payload = raw["payload"];
   if (!isRecord(payload) || !PAYLOAD_SHAPE[knownType](payload)) {
     fail("payload_shape", `payload does not match ${knownType}`);
   }
 
-  // 5. Interruption records carry a real reason code.
+  // 6. Interruption records carry a real reason code.
   const reasonCode = raw["reason_code"];
   if (knownType === "session_interrupted") {
     if (typeof reasonCode !== "string" || !INTERRUPTION_REASON_CODE_SET.has(reasonCode)) {
@@ -339,7 +376,7 @@ export function parseSessionLifecycleEvent(
     }
   }
 
-  // 6. Activation carries the complete envelope execution set, order ignored.
+  // 7. Activation carries the complete envelope execution set, order ignored.
   if (knownType === "session_activated") {
     const executionIds = payload["execution_ids"] as readonly string[];
     if (new Set(executionIds).size !== executionIds.length) {
@@ -354,7 +391,14 @@ export function parseSessionLifecycleEvent(
     }
   }
 
-  // 7 and 8. Interruption-kind terminals preserve incident and reason linkage.
+  // 8 and 9. Terminals preserve incident and reason linkage.
+  if (
+    (knownType === "session_closing" || knownType === "session_closed") &&
+    payload["closure_kind"] === "founder" &&
+    reasonCode !== null
+  ) {
+    fail("reason_code_mismatch", "a founder-kind terminal must carry reason_code null");
+  }
   if (
     (knownType === "session_closing" || knownType === "session_closed") &&
     payload["closure_kind"] === "interruption"

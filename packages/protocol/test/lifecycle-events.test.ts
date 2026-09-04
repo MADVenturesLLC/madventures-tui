@@ -189,3 +189,102 @@ test("validation precedence prefers unknown_event_type over payload_shape", () =
     "unknown_event_type",
   );
 });
+
+// ─── Correction: base-record structural validation ───
+
+function founderTerminalPayload(): Record<string, unknown> {
+  return {
+    command_id: "cmd-1",
+    authorized_by: "founder",
+    closure_kind: "founder",
+    incident_id: null,
+  };
+}
+
+test("a lifecycle record missing required base fields is not returned as valid", () => {
+  // Arrange — a valid event type, actor, and payload, and nothing else. Every
+  // required SessionLifecycleEventBaseV1 field is absent.
+  const skeletal: Record<string, unknown> = {
+    event_type: "session_paused",
+    actor: "madbridge",
+    payload: { command_id: "cmd-1", authorized_by: "founder" },
+  };
+
+  // Act / Assert — a record is exactly well-formed or a typed failure.
+  expect(failureOf(() => parseSessionLifecycleEvent(skeletal, context()))).toBe(
+    "base_record_shape",
+  );
+});
+
+test("an incorrect protocol_version fails with base_record_shape", () => {
+  const record = lifecycleRecord("session_paused", {
+    command_id: "cmd-1",
+    authorized_by: "founder",
+  }, { protocol_version: "madbridge-protocol/v999" });
+  expect(failureOf(() => parseSessionLifecycleEvent(record, context()))).toBe(
+    "base_record_shape",
+  );
+});
+
+test("malformed required base-field types fail with base_record_shape", () => {
+  const payload = { command_id: "cmd-1", authorized_by: "founder" };
+  const malformations: readonly Record<string, unknown>[] = [
+    { event_id: 42 },
+    { session_id: null },
+    { task_envelope_hash: false },
+    { repository_fingerprint: "not-an-object" },
+    { repository_fingerprint: { kind: "invented", sha256: "a", git_sha: "b" } },
+    { fencing_token: "1" },
+    { created_at: 0 },
+    { previous_event_hash: [] },
+  ];
+
+  for (const malformation of malformations) {
+    const record = lifecycleRecord("session_paused", payload, malformation);
+    expect(
+      failureOf(() => parseSessionLifecycleEvent(record, context())),
+    ).toBe("base_record_shape");
+  }
+});
+
+test("validation precedence prefers unknown_event_type over every later defect", () => {
+  // Unknown type, absent base fields, wrong actor, and a junk payload at once.
+  const record: Record<string, unknown> = {
+    event_type: "session_teleported",
+    actor: "exec-builder",
+    payload: "not-an-object-at-all",
+  };
+  expect(failureOf(() => parseSessionLifecycleEvent(record, context()))).toBe(
+    "unknown_event_type",
+  );
+});
+
+test("validation precedence prefers unknown_field over base_record_shape", () => {
+  // A recognized type carrying an extra top-level field, with base fields absent.
+  const record: Record<string, unknown> = {
+    event_type: "session_paused",
+    actor: "madbridge",
+    payload: { command_id: "cmd-1", authorized_by: "founder" },
+    smuggled_field: true,
+  };
+  expect(failureOf(() => parseSessionLifecycleEvent(record, context()))).toBe(
+    "unknown_field",
+  );
+});
+
+test("a founder-kind terminal carrying a non-null reason code fails with reason_code_mismatch", () => {
+  // Founder closures are not interruptions; their top-level reason_code is null.
+  const record = lifecycleRecord("session_closed", founderTerminalPayload(), {
+    reason_code: "containment_failed",
+  });
+  expect(failureOf(() => parseSessionLifecycleEvent(record, context()))).toBe(
+    "reason_code_mismatch",
+  );
+});
+
+test("a well-formed founder-kind terminal with a null reason code is accepted", () => {
+  const record = lifecycleRecord("session_closed", founderTerminalPayload(), {
+    reason_code: null,
+  });
+  expect(failureOf(() => parseSessionLifecycleEvent(record, context()))).toBe("<accepted>");
+});
