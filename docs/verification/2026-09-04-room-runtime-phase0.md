@@ -30,8 +30,15 @@ untouched; no package.json/lockfile/tsconfig/CI change.
 
 ## Test results (2026-09-04, this host, Bun 1.3.14)
 
-- `bun test test/phase0/` — 12 tests, 12 pass, 0 fail (68 expect()).
-- Full suite `bun test` — 910 tests, 910 pass, 0 fail (4096 expect()).
+- `bun test test/phase0/` — 11 tests, 11 pass, 0 fail (57 expect()),
+  across 5 files (the committed candidate state; independently verified
+  by br-operator at the same counts).
+- Full suite `bun test` — 909 tests, 909 pass, 0 fail, across 59 files
+  (committed candidate state; independently verified at 909/909). The
+  `expect()` call count varies slightly run-to-run on this suite
+  (observed 4088 at candidate time, 4086 on a re-run) — the pass/fail
+  counts are the stable result, consistent with the repo's known
+  expect()-count instability; no fixed expect() total is claimed.
 - `bunx tsc --noEmit` — clean.
 
 ## Parent-death, grandchild reap, control-FD scrub (AT-R4-02/03/36)
@@ -50,13 +57,23 @@ Observed (fact transcript from the proof run):
   pty-host's blocking read returned EOF → M19 ladder ran → the agent
   process group (shell + grandchild) was reaped within bound → the
   pty-host self-reaped (exited) — full transcript in the run;
-- no member of the dead tree survived; nothing was adopted.
+- no member of the dead tree survived; nothing was adopted;
+- scope limit, stated plainly: the proof records and kills at the
+  agent PGID level — it does not separately record the grandchild's
+  own PID. Grandchild reap is observed as part of the group-level
+  gone-within-bound check (`kill(-pgid, 0)` fails), not via an
+  individually tracked grandchild PID.
 
 ## Viewer-death survival (AT-R4-01)
 
 Killing a real attached viewer process: occupancy stayed `OCCUPIED`, both
 slot processes alive, receipts continued appending before and after the
-kill. No occupancy transition fired.
+kill. No occupancy transition fired. The occupancy value is
+fixture-assigned Phase 0 proof state (the spike's in-test occupancy
+variable), asserted by the same test that killed the viewer — the real
+process liveness checks are the independently observable part; the
+occupancy label itself is proof-fixture state, not Gateway production
+state.
 
 ## Gateway-minted viewer_id (AT-R4-35)
 
@@ -85,6 +102,10 @@ outcome is `PrivateTransportExhausted` → Slot A
 is never `LIVE` across the hole; the projector wire carries VT patches
 only (raw-PTY frame is a protocol violation by construction);
 `checkpoint_seq ≤ durable_committed_seq` held on the exhausted path.
+Scope note: the Slot A execution state, the occupancy value, and the
+banner are fixture-assigned Phase 0 proof state asserted by the test; the
+independently observable parts are the real spool/exhaustion behavior
+and the real Slot B process liveness.
 
 ## Prerequisite C — Node 22 inventory/load (r4 §9 stop-gate)
 
