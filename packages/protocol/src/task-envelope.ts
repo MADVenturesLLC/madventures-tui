@@ -249,6 +249,10 @@ export function parseTaskEnvelope(raw: Record<string, unknown>): TaskEnvelopeV1 
     throw new Error("missing pair_constraints");
   }
   const pairConstraints = parsePairConstraints(raw["pair_constraints"]);
+  // Write the parsed value back, as this function already does for each
+  // execution's surface, so the returned envelope carries the validated
+  // constraints its declared type promises rather than the raw input.
+  raw["pair_constraints"] = pairConstraints;
   assertExecutionsSatisfyPairConstraints(
     executions as readonly ExecutionIdentity[],
     pairConstraints,
