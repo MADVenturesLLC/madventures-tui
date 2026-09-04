@@ -34,3 +34,20 @@ export type { WireMessage } from "./wire";
 
 export type { AdapterRegistrationV1 } from "./adapter-registry";
 export { ADAPTER_REGISTRY, lookupRegistration } from "./adapter-registry";
+
+export type {
+  SessionLifecycleEventTypeV1,
+  InterruptionReasonCodeV1,
+  PublishedIncidentPayloadV1,
+  SessionInterruptedPayloadV1,
+  FounderCommandPayloadV1,
+  SessionTerminalPayloadV1,
+  LifecyclePayloadByTypeV1,
+  SessionLifecycleEventBaseV1,
+  SessionLifecycleEventV1,
+  LedgerEventV1,
+} from "./lifecycle-events";
+export {
+  SESSION_LIFECYCLE_EVENT_TYPES,
+  INTERRUPTION_REASON_CODES,
+} from "./lifecycle-events";
