@@ -288,3 +288,48 @@ test("a well-formed founder-kind terminal with a null reason code is accepted", 
   });
   expect(failureOf(() => parseSessionLifecycleEvent(record, context()))).toBe("<accepted>");
 });
+
+// ─── Correction addendum: reason_code base-shape boundary ───
+
+test("a non-interrupted record with a numeric reason_code fails with base_record_shape", () => {
+  // reason_code is part of the base contract: string | null for every type
+  // other than session_interrupted.
+  const record = lifecycleRecord("session_paused", {
+    command_id: "cmd-1",
+    authorized_by: "founder",
+  }, { reason_code: 42 });
+  expect(failureOf(() => parseSessionLifecycleEvent(record, context()))).toBe(
+    "base_record_shape",
+  );
+});
+
+test("session_interrupted with a non-string reason_code still fails with missing_reason_code", () => {
+  // The base check must not consume or preempt the specific interruption
+  // contract, which owns reason_code for this type at its own precedence slot.
+  const record = lifecycleRecord("session_interrupted", interruptedPayload(), {
+    reason_code: 42,
+  });
+  expect(failureOf(() => parseSessionLifecycleEvent(record, context()))).toBe(
+    "missing_reason_code",
+  );
+});
+
+test("session_interrupted with an out-of-vocabulary reason_code still fails with missing_reason_code", () => {
+  const record = lifecycleRecord("session_interrupted", interruptedPayload(), {
+    reason_code: "invented_reason",
+  });
+  expect(failureOf(() => parseSessionLifecycleEvent(record, context()))).toBe(
+    "missing_reason_code",
+  );
+});
+
+test("a founder-kind terminal with a non-string reason_code fails with base_record_shape", () => {
+  // Structurally malformed, so the base check settles it before the semantic
+  // founder-closure rule is reached.
+  const record = lifecycleRecord("session_closed", founderTerminalPayload(), {
+    reason_code: 42,
+  });
+  expect(failureOf(() => parseSessionLifecycleEvent(record, context()))).toBe(
+    "base_record_shape",
+  );
+});

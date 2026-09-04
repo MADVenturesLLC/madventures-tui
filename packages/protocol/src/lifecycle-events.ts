@@ -240,12 +240,20 @@ function isRepositoryFingerprint(value: unknown): boolean {
 /**
  * The required structural contract of SessionLifecycleEventBaseV1, excluding
  * every field that already has a more specific failure code: `event_type`
- * (unknown_event_type), `actor` (actor_not_madbridge), `payload`
- * (payload_shape), and `reason_code` (missing_reason_code and
- * reason_code_mismatch). Type shape only; no semantic constraint beyond what
- * section 9.6 states.
+ * (unknown_event_type), `actor` (actor_not_madbridge), and `payload`
+ * (payload_shape). Type shape only; no semantic constraint beyond what section
+ * 9.6 states.
+ *
+ * `reason_code` is part of the base contract and is checked here as
+ * `string | null` for every type EXCEPT `session_interrupted`. That one type is
+ * carved out because its reason code is owned by the specific
+ * `missing_reason_code` rule at a later precedence position; checking it here
+ * would preempt that rule and make it unreachable.
  */
-function hasValidBaseRecordShape(raw: Record<string, unknown>): boolean {
+function hasValidBaseRecordShape(
+  raw: Record<string, unknown>,
+  eventType: SessionLifecycleEventTypeV1,
+): boolean {
   if (raw["protocol_version"] !== PROTOCOL_VERSION) return false;
   if (typeof raw["event_id"] !== "string") return false;
   if (typeof raw["session_id"] !== "string") return false;
@@ -254,7 +262,12 @@ function hasValidBaseRecordShape(raw: Record<string, unknown>): boolean {
   const fencingToken = raw["fencing_token"];
   if (fencingToken !== null && typeof fencingToken !== "number") return false;
   if (typeof raw["created_at"] !== "string") return false;
-  return typeof raw["previous_event_hash"] === "string";
+  if (typeof raw["previous_event_hash"] !== "string") return false;
+  if (eventType !== "session_interrupted") {
+    const reasonCode = raw["reason_code"];
+    if (reasonCode !== null && typeof reasonCode !== "string") return false;
+  }
+  return true;
 }
 
 /**
@@ -352,7 +365,7 @@ export function parseSessionLifecycleEvent(
 
   // 3. Required lifecycle-base structure. A record that reaches the return path
   //    must satisfy the whole base contract, not merely type, actor, and payload.
-  if (!hasValidBaseRecordShape(raw)) {
+  if (!hasValidBaseRecordShape(raw, knownType)) {
     fail("base_record_shape", `record does not satisfy the lifecycle base contract`);
   }
 
