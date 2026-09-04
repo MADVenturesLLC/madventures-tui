@@ -62,6 +62,12 @@ export function makeFixtureSnapshot(): BrokerSnapshot {
       dataClass: "internal",
       allowedEgressDestinations: [],
     },
+    pair_constraints: {
+      required_roles: ["builder", "independent-reviewer"],
+      require_distinct_providers: true,
+      require_distinct_independence_domains: true,
+      prohibit_self_review: true,
+    },
     expires_at: "2026-12-31T23:59:59Z",
     created_at: "2026-08-08T12:00:00Z",
     envelope_hash: "fixture-hash-001",

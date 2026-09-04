@@ -50,6 +50,14 @@ function validEnvelope(): Record<string, unknown> {
       dataClass: "internal",
       allowedEgressDestinations: [],
     },
+    // Required since Task 8 (M3): every envelope must carry strict pair
+    // constraints. There is no default-constraints path.
+    pair_constraints: {
+      required_roles: ["builder", "independent-reviewer"],
+      require_distinct_providers: true,
+      require_distinct_independence_domains: true,
+      prohibit_self_review: true,
+    },
     expires_at: "2099-12-31T23:59:59Z",
     created_at: "2026-08-08T16:00:00.000Z",
     envelope_hash: "c".repeat(64),

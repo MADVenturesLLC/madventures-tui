@@ -989,3 +989,103 @@ describe("Phase 3A pty-host isolation", () => {
     }
   });
 });
+
+/**
+ * Phase 3A surface cardinality.
+ *
+ * Spec section 1.2: exactly one production module encodes how many active
+ * surfaces a Version 1 live pair may contain. Two patterns are forbidden
+ * everywhere else — paired two-tuple identifier names, which smuggle the
+ * cardinality into an identity system, and a literal comparison of
+ * `executions.length` against two.
+ *
+ * Two exemptions exist, both documented in the spec and neither widened here:
+ * `packages/protocol/src/pair-constraints.ts`, the authority module itself,
+ * and `apps/madbridge/src/tui/**`. `PairConstraintsV1.allowed_surface_pairs`
+ * is exempt from the paired-name pattern by that exact field name only
+ * (spec section 1.2), so the pattern below never matches it.
+ */
+
+const PAIRED_SURFACE_NAME_PATTERN = /surfaceA|surfaceB|adapterA|adapterB/;
+// Every literal comparison of executions.length against exactly two, in either
+// operand order: `2 < executions.length` encodes the same forbidden rule as
+// `executions.length > 2`, so a guard that reads only one order can be evaded
+// by writing the comparison backwards. The invariant is operator-independent,
+// so loose equality counts too: `==` and `!=` would be unusual in this
+// TypeScript repository, but "unusual" is not "impossible" and this guard is
+// fail-closed.
+//
+// Alternation order is load-bearing. Each longer operator must precede the
+// shorter one it starts with — === before ==, !== before !=, <= before <,
+// >= before > — or the longer form is consumed as its prefix and the match
+// fails. The digit guards keep the literal 2 from matching inside 20, 12,
+// or 2.5.
+const CARDINALITY_COMPARISON = String.raw`(?:===|!==|==|!=|<=|>=|<|>)`;
+const CARDINALITY_LITERAL = String.raw`(?<![\d.])2(?![\d.])`;
+const LITERAL_CARDINALITY_PATTERN = new RegExp(
+  `executions\\.length\\s*${CARDINALITY_COMPARISON}\\s*${CARDINALITY_LITERAL}` +
+    `|${CARDINALITY_LITERAL}\\s*${CARDINALITY_COMPARISON}\\s*executions\\.length`,
+);
+const CARDINALITY_AUTHORITY_PATH = "packages/protocol/src/pair-constraints.ts";
+const CARDINALITY_EXEMPT_PREFIX = "apps/madbridge/src/tui/";
+
+function findCardinalityViolations(root: string): string[] {
+  const violations: string[] = [];
+  for (const file of enumerateProductionFiles(root)) {
+    const rel = toPortablePath(relative(root, file));
+    if (rel === CARDINALITY_AUTHORITY_PATH) continue;
+    if (rel.startsWith(CARDINALITY_EXEMPT_PREFIX)) continue;
+    const source = readFileSync(file, "utf8");
+    if (PAIRED_SURFACE_NAME_PATTERN.test(source)) {
+      violations.push(`${rel} [paired-surface-name]`);
+    }
+    if (LITERAL_CARDINALITY_PATTERN.test(source)) {
+      violations.push(`${rel} [literal-cardinality]`);
+    }
+  }
+  return violations.sort();
+}
+
+describe("Phase 3A surface cardinality", () => {
+  test("no production module encodes surface cardinality outside MAX_ACTIVE_SURFACES_V1", () => {
+    expect(findCardinalityViolations(REPO_ROOT)).toEqual([]);
+  });
+
+  test("the cardinality pattern detects every literal comparison against two", () => {
+    // Arrange — every comparison form a production module could use to encode
+    // the cardinality, in both operand orders, plus near-misses that must not
+    // be flagged. Loose equality is included: the invariant is about the
+    // comparison, not about which operator spelling a module chose.
+    const operators = ["===", "!==", "==", "!=", "<", "<=", ">", ">="];
+    const detected = [
+      ...operators.map((operator) => `executions.length ${operator} 2`),
+      ...operators.map((operator) => `2 ${operator} executions.length`),
+      "if (executions.length===2) {",
+      "return executions.length >= 2;",
+      "if (executions.length==2) {",
+      "if (executions.length!=2) {",
+    ];
+    const ignored = [
+      "executions.length === 20",
+      "executions.length !== 20",
+      "executions.length >= 20",
+      "executions.length == 20",
+      "executions.length != 20",
+      "20 == executions.length",
+      "20 > executions.length",
+      "12 < executions.length",
+      "executions.length < 2.5",
+      "executions.length === 0",
+      "executions.length !== MAX_ACTIVE_SURFACES_V1",
+    ];
+
+    // Act / Assert — a guard that misses an operator or an operand order can be
+    // evaded, and one that matches 20 fails builds it has no business failing.
+    for (const source of detected) {
+      expect(LITERAL_CARDINALITY_PATTERN.test(source)).toBe(true);
+    }
+    for (const source of ignored) {
+      expect(LITERAL_CARDINALITY_PATTERN.test(source)).toBe(false);
+    }
+  });
+});

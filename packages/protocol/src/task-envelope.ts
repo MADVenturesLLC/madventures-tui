@@ -3,6 +3,12 @@
 
 import { sha256CanonicalSync } from "./canonical-json";
 import { normalizeIndependenceDomain } from "./normalization";
+import {
+  assertActiveSurfaceCardinality,
+  assertExecutionsSatisfyPairConstraints,
+  parsePairConstraints,
+  type PairConstraintsV1,
+} from "./pair-constraints";
 import { InvalidSurfaceIdError, parseSurfaceId, type SurfaceId } from "./surface-id";
 
 export const PROTOCOL_VERSION = "madbridge-protocol/v1" as const;
@@ -61,6 +67,7 @@ export interface TaskEnvelopeV1 {
   readonly executions: readonly ExecutionIdentity[];
   readonly initial_writer: string; // execution_id
   readonly scope: TaskScope;
+  readonly pair_constraints: PairConstraintsV1;
   readonly expires_at: string; // ISO 8601
   readonly created_at: string;
   readonly envelope_hash: string;
@@ -69,8 +76,8 @@ export interface TaskEnvelopeV1 {
 const KNOWN_TOP_LEVEL_KEYS = new Set([
   "protocol_version", "task_id", "authorization_reference",
   "repository", "branch", "worktree", "repository_fingerprint",
-  "executions", "initial_writer", "scope", "expires_at",
-  "created_at", "envelope_hash",
+  "executions", "initial_writer", "scope", "pair_constraints",
+  "expires_at", "created_at", "envelope_hash",
 ]);
 
 const SCOPE_KEYS = new Set([
@@ -158,9 +165,12 @@ export function parseTaskEnvelope(raw: Record<string, unknown>): TaskEnvelopeV1 
 
   // Executions — validate each
   const executions = raw["executions"];
+  // Presence check only. Cardinality is not decided here: the permitted number
+  // of active surfaces lives solely in assertActiveSurfaceCardinality.
   if (!Array.isArray(executions) || executions.length === 0) {
     throw new Error("missing executions");
   }
+  assertActiveSurfaceCardinality(executions as readonly ExecutionIdentity[]);
   const seenExecutionIds = new Set<string>();
   for (const exec of executions) {
     if (typeof exec !== "object" || exec === null) {
@@ -232,6 +242,21 @@ export function parseTaskEnvelope(raw: Record<string, unknown>): TaskEnvelopeV1 
   if (!KNOWN_DATA_CLASSES.includes(s["dataClass"] as DataClass)) {
     throw new Error(`unknown data class: ${String(s["dataClass"])}`);
   }
+
+  // Pair constraints — required, strict, and enforced against the executions.
+  // There is no default-constraints path and no bypass field.
+  if (raw["pair_constraints"] === undefined) {
+    throw new Error("missing pair_constraints");
+  }
+  const pairConstraints = parsePairConstraints(raw["pair_constraints"]);
+  // Write the parsed value back, as this function already does for each
+  // execution's surface, so the returned envelope carries the validated
+  // constraints its declared type promises rather than the raw input.
+  raw["pair_constraints"] = pairConstraints;
+  assertExecutionsSatisfyPairConstraints(
+    executions as readonly ExecutionIdentity[],
+    pairConstraints,
+  );
 
   return raw as unknown as TaskEnvelopeV1;
 }
