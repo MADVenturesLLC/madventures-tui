@@ -442,3 +442,68 @@ describe("replay propagates typed reducer failures", () => {
     ).toBe("incident_id_mismatch");
   });
 });
+
+describe("session_open constructs a fresh session during replay", () => {
+  // The reducer-level invariant is asserted field by field in
+  // reduce-ledger-event.test.ts. These two cover what replay exposes to a
+  // caller: hasIncident is the public projection of the leak, so a new session
+  // that inherits a prior incident is visible through rebuildBrokerState alone.
+
+  const reopenRow = () =>
+    lifecycleRow(
+      "session_open",
+      { authorization_reference: "FOUNDER-20260905-01", execution_ids: ["exec-builder"] },
+      { session_id: "ses-2" },
+    );
+  const closingInterruption = () =>
+    lifecycleRow("session_closing", {
+      command_id: "cmd-5",
+      authorized_by: "founder",
+      closure_kind: "interruption",
+      incident_id: "incident-1",
+    });
+  const closedInterruption = () =>
+    lifecycleRow("session_closed", {
+      command_id: "cmd-5",
+      authorized_by: "founder",
+      closure_kind: "interruption",
+      incident_id: "incident-1",
+    });
+
+  test("replay of a re-open after an interruption reports no incident", () => {
+    const interruptedPrefix = [openRow(), tokenRow(), activatedRow(), interruptedRow()];
+
+    // The legal prefix really does carry an open incident, so the assertion
+    // below is about the re-open and not about an empty history.
+    const before = rebuildBrokerState(interruptedPrefix);
+    expect(before.sessionState).toBe("interrupted");
+    expect(before.hasIncident).toBe(true);
+
+    const after = rebuildBrokerState([...interruptedPrefix, reopenRow()]);
+    expect(after.sessionState).toBe("starting");
+    expect(after.hasIncident).toBe(false);
+    expect(after.currentFencingToken).toBeNull();
+    expect(after.tokenUsable).toBe(false);
+  });
+
+  test("replay of a re-open after a completed closure reports no incident", () => {
+    const closedHistory = [
+      openRow(),
+      tokenRow(),
+      activatedRow(),
+      interruptedRow(),
+      closingInterruption(),
+      closedInterruption(),
+    ];
+
+    const before = rebuildBrokerState(closedHistory);
+    expect(before.sessionState).toBe("closed");
+    expect(before.hasIncident).toBe(true);
+
+    const after = rebuildBrokerState([...closedHistory, reopenRow()]);
+    expect(after.sessionState).toBe("starting");
+    expect(after.hasIncident).toBe(false);
+    expect(after.currentFencingToken).toBeNull();
+    expect(after.tokenUsable).toBe(false);
+  });
+});

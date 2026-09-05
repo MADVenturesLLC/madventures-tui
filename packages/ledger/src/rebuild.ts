@@ -142,14 +142,16 @@ export function reduceLedgerEvent(state: LifecycleState, event: LedgerEventV1): 
 
   switch (type) {
     // create session; phase starting; token not_issued/null
+    //
+    // Creation is total. A new session inherits nothing session-scoped from
+    // whatever the projection last held, so the fresh fields come from the
+    // canonical initial state rather than a hand-picked list of resets: a field
+    // added to LifecycleState later cannot start leaking across a session
+    // boundary. The row names no phase precondition, and none is added here.
     case "session_open":
       return {
-        ...state,
+        ...INITIAL_LIFECYCLE_STATE,
         sessionId: typeof raw["session_id"] === "string" ? raw["session_id"] : state.sessionId,
-        phase: "starting",
-        fencingToken: null,
-        tokenState: "not_issued",
-        tokenUsable: false,
       };
 
     // require starting or active ownership transfer; token valid; phase unchanged

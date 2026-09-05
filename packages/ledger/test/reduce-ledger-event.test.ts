@@ -335,3 +335,95 @@ test("an unknown non-madbridge bridge event type stays lifecycle-inert", () => {
   const after = fold(OPEN, TOKEN_ISSUED, ACTIVATED, bridge("some_future_bridge_type"));
   expect(after).toEqual(before);
 });
+
+// ─── session_open constructs a fresh session ───
+//
+// The section 9.6 row reads "create session". Creation is total: a new session
+// inherits nothing session-scoped from whatever the projection last held. The
+// reducer must build the new state from the canonical initial state rather than
+// resetting a hand-picked subset of fields, so a field added to LifecycleState
+// later cannot silently start leaking across a session boundary.
+//
+// No phase precondition is asserted here. The controlling mapping names none
+// for session_open, and this is about fresh construction, not ordering.
+
+/** A second session_open. A distinct session id proves the new id is adopted. */
+const REOPEN = lifecycle(
+  "session_open",
+  { authorization_reference: "FOUNDER-20260905-01", execution_ids: ["exec-builder"] },
+  { session_id: "ses-2" },
+);
+
+const CLOSING_INTERRUPTION = lifecycle("session_closing", {
+  command_id: "cmd-5",
+  authorized_by: "founder",
+  closure_kind: "interruption",
+  incident_id: "incident-1",
+});
+
+const CLOSED_INTERRUPTION = lifecycle("session_closed", {
+  command_id: "cmd-5",
+  authorized_by: "founder",
+  closure_kind: "interruption",
+  incident_id: "incident-1",
+});
+
+test("session_open after an interruption constructs a fresh lifecycle state", () => {
+  // The prefix is legal and carries every session-scoped field the new session
+  // must not inherit.
+  const interrupted = fold(OPEN, TOKEN_ISSUED, ACTIVATED, INTERRUPTED);
+  expect(interrupted.phase).toBe("interrupted");
+  expect(interrupted.incident).not.toBeNull();
+  expect(interrupted.reasonCode).toBe("child_failure");
+  expect(interrupted.readyExecutionIds.length).toBeGreaterThan(0);
+
+  const reopened = fold(OPEN, TOKEN_ISSUED, ACTIVATED, INTERRUPTED, REOPEN);
+  expect(reopened.phase).toBe("starting");
+  expect(reopened.sessionId).toBe("ses-2");
+  expect(reopened.fencingToken).toBeNull();
+  expect(reopened.tokenState).toBe("not_issued");
+  expect(reopened.tokenUsable).toBe(false);
+  expect(reopened.incident).toBeNull();
+  expect(reopened.reasonCode).toBeNull();
+  expect(reopened.readyExecutionIds).toEqual([]);
+  expect(reopened.closureKind).toBeNull();
+
+  // The whole-state form is the actual invariant: fresh except the new id.
+  expect(reopened).toEqual({ ...INITIAL_LIFECYCLE_STATE, sessionId: "ses-2" });
+});
+
+test("session_open after a completed interruption closure constructs a fresh lifecycle state", () => {
+  const closed = fold(
+    OPEN,
+    TOKEN_ISSUED,
+    ACTIVATED,
+    INTERRUPTED,
+    CLOSING_INTERRUPTION,
+    CLOSED_INTERRUPTION,
+  );
+  expect(closed.phase).toBe("closed");
+  expect(closed.closureKind).toBe("interruption");
+  expect(closed.incident).not.toBeNull();
+  expect(closed.reasonCode).toBe("child_failure");
+
+  const reopened = fold(
+    OPEN,
+    TOKEN_ISSUED,
+    ACTIVATED,
+    INTERRUPTED,
+    CLOSING_INTERRUPTION,
+    CLOSED_INTERRUPTION,
+    REOPEN,
+  );
+  expect(reopened.phase).toBe("starting");
+  expect(reopened.sessionId).toBe("ses-2");
+  expect(reopened.fencingToken).toBeNull();
+  expect(reopened.tokenState).toBe("not_issued");
+  expect(reopened.tokenUsable).toBe(false);
+  expect(reopened.incident).toBeNull();
+  expect(reopened.reasonCode).toBeNull();
+  expect(reopened.readyExecutionIds).toEqual([]);
+  expect(reopened.closureKind).toBeNull();
+
+  expect(reopened).toEqual({ ...INITIAL_LIFECYCLE_STATE, sessionId: "ses-2" });
+});
