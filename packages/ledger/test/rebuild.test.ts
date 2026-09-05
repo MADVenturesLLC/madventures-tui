@@ -7,7 +7,7 @@
 // of lifecycle change, and `"reconciling"` is not a Phase 3A phase.
 
 import { expect, test, describe } from "bun:test";
-import { rebuildState, rebuildBrokerState } from "../src/rebuild";
+import { rebuildState, rebuildBrokerState, ReducerError } from "../src/rebuild";
 import type { LedgerRow } from "../src/ledger";
 import { testLedger, validEvent } from "./fixtures";
 
@@ -79,6 +79,16 @@ const interruptedRow = () =>
     },
     { reason_code: "child_failure" },
   );
+
+/** The typed ReducerError kind replay raises for a history, or "<accepted>". */
+function replayFailureOf(rows: readonly LedgerRow[]): string {
+  try {
+    rebuildBrokerState(rows);
+    return "<accepted>";
+  } catch (error) {
+    return error instanceof ReducerError ? error.kind : `<${String(error)}>`;
+  }
+}
 
 // ─── rebuildState ───
 
@@ -228,7 +238,8 @@ describe("typed lifecycle replay (Phase 3A)", () => {
 
   test("a closed session is not reopened by a later interruption record", () => {
     // Was: "closed session followed by incident does not become interrupted".
-    // Phase 3A rejects the out-of-phase lifecycle record fail-closed.
+    // Phase 3A rejects the out-of-phase lifecycle record fail-closed, and the
+    // rejection is a typed replay failure rather than a silent skip.
     const closing = lifecycleRow("session_closing", {
       command_id: "cmd-4",
       authorized_by: "founder",
@@ -241,16 +252,13 @@ describe("typed lifecycle replay (Phase 3A)", () => {
       closure_kind: "founder",
       incident_id: null,
     });
-    const state = rebuildBrokerState([
-      openRow(),
-      tokenRow(),
-      activatedRow(),
-      closing,
-      closed,
-      interruptedRow(),
-    ]);
+    const prefix = [openRow(), tokenRow(), activatedRow(), closing, closed];
+
+    const state = rebuildBrokerState(prefix);
     expect(state.sessionState).toBe("closed");
     expect(state.tokenUsable).toBe(false);
+
+    expect(replayFailureOf([...prefix, interruptedRow()])).toBe("invalid_phase_precondition");
   });
 
   test("interrupted does not become active again without a typed transition", () => {
@@ -266,15 +274,19 @@ describe("typed lifecycle replay (Phase 3A)", () => {
     expect(interrupted.sessionState).toBe("interrupted");
     expect(interrupted.tokenUsable).toBe(false);
 
-    const afterResume = rebuildBrokerState([
-      openRow(),
-      tokenRow(),
-      activatedRow(),
-      interruptedRow(),
-      resumedRow(),
-    ]);
-    expect(afterResume.sessionState).toBe("interrupted");
-    expect(String(afterResume.sessionState)).not.toBe("reconciling");
+    expect(String(interrupted.sessionState)).not.toBe("reconciling");
+
+    // session_resumed is legal only from paused. Replaying it over interrupted
+    // rejects the history rather than leaving the projection where it was.
+    expect(
+      replayFailureOf([
+        openRow(),
+        tokenRow(),
+        activatedRow(),
+        interruptedRow(),
+        resumedRow(),
+      ]),
+    ).toBe("invalid_phase_precondition");
   });
 
   test("pause and resume replay to active only through the typed records", () => {
@@ -301,23 +313,26 @@ describe("typed lifecycle replay (Phase 3A)", () => {
       closure_kind: "founder",
       incident_id: null,
     });
-    const state = rebuildBrokerState([openRow(), tokenRow(), activatedRow(), closed]);
+    const prefix = [openRow(), tokenRow(), activatedRow()];
+
+    const state = rebuildBrokerState(prefix);
     expect(state.sessionState).toBe("active");
     expect(state.sessionState).not.toBe("closed");
+
+    expect(replayFailureOf([...prefix, closed])).toBe("impossible_order");
   });
 
   test("pause while interrupted is rejected (fail-closed)", () => {
-    // Was: "pause while interrupted is ignored (fail-closed)".
-    const state = rebuildBrokerState([
-      openRow(),
-      tokenRow(),
-      activatedRow(),
-      interruptedRow(),
-      pausedRow(),
-    ]);
+    // Was: "pause while interrupted is ignored (fail-closed)". Ignoring it is
+    // exactly what section 9.6 forbids: the replay is rejected, typed.
+    const prefix = [openRow(), tokenRow(), activatedRow(), interruptedRow()];
+
+    const state = rebuildBrokerState(prefix);
     expect(state.sessionState).toBe("interrupted");
     expect(state.hasIncident).toBe(true);
     expect(state.tokenUsable).toBe(false);
+
+    expect(replayFailureOf([...prefix, pausedRow()])).toBe("invalid_phase_precondition");
   });
 
   test("replay routes a paused interruption after a full recovery cycle", () => {
@@ -335,5 +350,45 @@ describe("typed lifecycle replay (Phase 3A)", () => {
     expect(state.sessionState).toBe("interrupted");
     expect(state.hasIncident).toBe(true);
     expect(state.tokenUsable).toBe(false);
+  });
+});
+
+// ─── Category C: replay surfaces typed lifecycle failures ───
+//
+// Section 9.6 names four typed reconciliation failures and makes them binding
+// in replay as well as live apply. Replay must therefore reject an illegal
+// history with the same typed error the reducer raises — it must not preserve
+// the prior projection and carry on as though the record were absent.
+
+describe("replay propagates typed reducer failures", () => {
+  test("replay propagates unknown_lifecycle_type", () => {
+    const unknown = lifecycleRow("session_teleported", { anything: true });
+    expect(replayFailureOf([openRow(), tokenRow(), activatedRow(), unknown])).toBe(
+      "unknown_lifecycle_type",
+    );
+  });
+
+  test("replay propagates impossible_order", () => {
+    // session_unclean_closure requires no typed terminal prefix; a completed
+    // founder close is exactly such a prefix.
+    const closing = lifecycleRow("session_closing", {
+      command_id: "cmd-4",
+      authorized_by: "founder",
+      closure_kind: "founder",
+      incident_id: null,
+    });
+    const closed = lifecycleRow("session_closed", {
+      command_id: "cmd-4",
+      authorized_by: "founder",
+      closure_kind: "founder",
+      incident_id: null,
+    });
+    const unclean = lifecycleRow("session_unclean_closure", {
+      detected_at_startup: true,
+      last_durable_event_id: "evt-last",
+    });
+    expect(
+      replayFailureOf([openRow(), tokenRow(), activatedRow(), closing, closed, unclean]),
+    ).toBe("impossible_order");
   });
 });

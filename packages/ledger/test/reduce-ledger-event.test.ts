@@ -312,3 +312,26 @@ test("reconciling is not a reachable phase", () => {
     expect(String(state.phase)).not.toBe("reconciling");
   }
 });
+
+// ─── Closed-vocabulary classification ───
+//
+// Authorship decides whether a record is a lifecycle record at all; the closed
+// twelve-member type set then decides whether it is a *known* one. An unknown
+// madbridge-authored lifecycle record is a typed reconciliation failure, not a
+// silent pass-through.
+
+test("a madbridge-authored unknown lifecycle type is a typed failure", () => {
+  const unknown = lifecycle("session_teleported", { anything: true });
+  expect(failureOf(() => fold(OPEN, TOKEN_ISSUED, ACTIVATED, unknown))).toBe(
+    "unknown_lifecycle_type",
+  );
+});
+
+test("an unknown non-madbridge bridge event type stays lifecycle-inert", () => {
+  // Authorship, not the type set, is what makes ordinary traffic inert. A
+  // bridge event nobody has taught the reducer about is still not a lifecycle
+  // record and must not become a reconciliation failure.
+  const before = fold(OPEN, TOKEN_ISSUED, ACTIVATED);
+  const after = fold(OPEN, TOKEN_ISSUED, ACTIVATED, bridge("some_future_bridge_type"));
+  expect(after).toEqual(before);
+});

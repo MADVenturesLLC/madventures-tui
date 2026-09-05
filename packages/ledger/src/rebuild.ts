@@ -120,15 +120,21 @@ function requirePhase(
  */
 export function reduceLedgerEvent(state: LifecycleState, event: LedgerEventV1): LifecycleState {
   const raw = event as unknown as Record<string, unknown>;
-  const eventType = raw["event_type"];
-  if (typeof eventType !== "string") {
+
+  // Authorship decides whether this is a lifecycle record at all. Ordinary
+  // bridge traffic is lifecycle-inert whatever its event_type says.
+  if (raw["actor"] !== "madbridge") {
     return state;
   }
 
-  // Ordinary bridge traffic is lifecycle-inert. A record is a lifecycle record
-  // only when it is both a known lifecycle type and authored by madbridge.
-  if (!LIFECYCLE_TYPE_SET.has(eventType) || raw["actor"] !== "madbridge") {
-    return state;
+  // The lifecycle vocabulary is closed. A madbridge-authored record outside the
+  // twelve types is a typed reconciliation failure, never a silent acceptance.
+  const eventType = raw["event_type"];
+  if (typeof eventType !== "string" || !LIFECYCLE_TYPE_SET.has(eventType)) {
+    throw new ReducerError(
+      "unknown_lifecycle_type",
+      `unknown lifecycle event type: ${String(eventType)}`,
+    );
   }
 
   const type = eventType as SessionLifecycleEventTypeV1;
@@ -302,8 +308,9 @@ export function reduceLedgerEvent(state: LifecycleState, event: LedgerEventV1): 
       return { ...state, phase: "closed", closureKind: "unclean", tokenUsable: false };
 
     default: {
-      // Exhaustive over the closed lifecycle union. No value is returned here;
-      // an unrecognized type is a typed failure, never a silent pass-through.
+      // Compile-time exhaustiveness over the closed lifecycle union. An
+      // unrecognized type is already rejected above, so reaching this branch
+      // would mean the union grew without a matching row.
       const unreachable: never = type;
       throw new ReducerError(
         "unknown_lifecycle_type",
@@ -339,9 +346,10 @@ export function rebuildState(rows: Array<LedgerRow>): RebuiltState {
  * by that one function; this wrapper only carries the row-level bookkeeping
  * (count, chain head, last fingerprint) that is not lifecycle state.
  *
- * A row whose lifecycle record is illegal or malformed leaves the projection
- * unchanged, so replay is fail-closed rather than force-applied. Callers that
- * need the typed failure call reduceLedgerEvent directly.
+ * Replay is fail-closed by rejection, not by omission: an illegal or malformed
+ * lifecycle record raises the same typed ReducerError the live path raises, and
+ * that error propagates to the caller. The projection is never quietly carried
+ * past an event the reducer refused.
  */
 export function rebuildBrokerState(rows: readonly LedgerRow[]): RebuiltBrokerState {
   let lastFingerprint: RepositoryFingerprint | null = null;
@@ -360,12 +368,7 @@ export function rebuildBrokerState(rows: readonly LedgerRow[]): RebuiltBrokerSta
       lastFingerprint = fingerprint as RepositoryFingerprint;
     }
 
-    try {
-      lifecycle = reduceLedgerEvent(lifecycle, event as unknown as LedgerEventV1);
-    } catch {
-      // Fail-closed: an illegal or malformed lifecycle record does not mutate
-      // the projection.
-    }
+    lifecycle = reduceLedgerEvent(lifecycle, event as unknown as LedgerEventV1);
   }
 
   const last = rows[rows.length - 1];
