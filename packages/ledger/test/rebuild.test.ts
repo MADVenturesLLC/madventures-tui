@@ -391,4 +391,54 @@ describe("replay propagates typed reducer failures", () => {
       replayFailureOf([openRow(), tokenRow(), activatedRow(), closing, closed, unclean]),
     ).toBe("impossible_order");
   });
+
+  test("replay propagates incident_id_mismatch", () => {
+    // Both throw sites are covered: the closure record and the terminal
+    // record. An interruption close must name the incident it is closing, and
+    // replay rejects a history that names a different one.
+    const interruptedPrefix = [openRow(), tokenRow(), activatedRow(), interruptedRow()];
+
+    const closingFor = (incidentId: string) =>
+      lifecycleRow("session_closing", {
+        command_id: "cmd-5",
+        authorized_by: "founder",
+        closure_kind: "interruption",
+        incident_id: incidentId,
+      });
+    const closedFor = (incidentId: string) =>
+      lifecycleRow("session_closed", {
+        command_id: "cmd-5",
+        authorized_by: "founder",
+        closure_kind: "interruption",
+        incident_id: incidentId,
+      });
+
+    // The legal prefix establishes the open incident.
+    const opened = rebuildBrokerState(interruptedPrefix);
+    expect(opened.sessionState).toBe("interrupted");
+    expect(opened.hasIncident).toBe(true);
+
+    // The matching incident id closes cleanly, so the rejections below are
+    // caused by the mismatch itself and not by the closing records.
+    const legal = rebuildBrokerState([
+      ...interruptedPrefix,
+      closingFor("incident-1"),
+      closedFor("incident-1"),
+    ]);
+    expect(legal.sessionState).toBe("closed");
+
+    // Mismatch at the closure record.
+    expect(replayFailureOf([...interruptedPrefix, closingFor("incident-999")])).toBe(
+      "incident_id_mismatch",
+    );
+
+    // Mismatch at the terminal record, after a legal closure.
+    expect(
+      replayFailureOf([
+        ...interruptedPrefix,
+        closingFor("incident-1"),
+        closedFor("incident-999"),
+      ]),
+    ).toBe("incident_id_mismatch");
+  });
 });
