@@ -1,10 +1,96 @@
 // packages/ledger/test/rebuild.test.ts
 // State reconstruction from ledger events.
-// Session replay must use the same legal transitions as the broker session machine.
+//
+// Phase 3A: replay is a fold of the single reduceLedgerEvent. Ordinary
+// BridgeEventV1 traffic is lifecycle-inert — it never changes phase, incident,
+// or fencing state. Typed SessionLifecycleEventV1 records are the only source
+// of lifecycle change, and `"reconciling"` is not a Phase 3A phase.
 
 import { expect, test, describe } from "bun:test";
-import { rebuildState, rebuildBrokerState } from "../src/rebuild";
+import { rebuildState, rebuildBrokerState, ReducerError } from "../src/rebuild";
+import type { LedgerRow } from "../src/ledger";
 import { testLedger, validEvent } from "./fixtures";
+
+// ─── Local lifecycle row helper ───
+//
+// Task 12 tests construct LedgerRow values directly. Ledger.append() still
+// takes BridgeEventV1; widening it to LedgerEventV1 is M6 and is not done here.
+// This helper only exercises replay/reducer behavior and proves nothing about
+// persistence or append-chain support.
+
+let nextSequence = 1;
+
+function lifecycleRow(
+  eventType: string,
+  payload: unknown,
+  overrides: Record<string, unknown> = {},
+): LedgerRow {
+  const sequence = nextSequence++;
+  const event = {
+    protocol_version: "madbridge-protocol/v1",
+    event_id: `evt-${eventType}-${sequence}`,
+    session_id: "ses-1",
+    event_type: eventType,
+    actor: "madbridge",
+    task_envelope_hash: "a".repeat(64),
+    repository_fingerprint: { kind: "commit", sha256: "a".repeat(64), git_sha: "b".repeat(40) },
+    fencing_token: null,
+    reason_code: null,
+    created_at: "2026-09-04T00:00:00.000Z",
+    previous_event_hash: "c".repeat(64),
+    payload,
+    ...overrides,
+  };
+  return {
+    sequence,
+    event_id: event.event_id,
+    event_json: JSON.stringify(event),
+    previous_hash: "c".repeat(64),
+    event_hash: `${sequence}`.padStart(64, "e"),
+    created_at: event.created_at,
+  };
+}
+
+const openRow = () =>
+  lifecycleRow("session_open", {
+    authorization_reference: "FOUNDER-20260904-01",
+    execution_ids: ["exec-builder", "exec-reviewer"],
+  });
+const tokenRow = () =>
+  lifecycleRow("fencing_token_issued", { writer_execution_id: "exec-builder" }, { fencing_token: 1 });
+const activatedRow = () =>
+  lifecycleRow("session_activated", {
+    execution_ids: ["exec-builder", "exec-reviewer"],
+    readiness_snapshot_seq: 7,
+  });
+const pausedRow = () =>
+  lifecycleRow("session_paused", { command_id: "cmd-1", authorized_by: "founder" });
+const resumedRow = () =>
+  lifecycleRow("session_resumed", { command_id: "cmd-2", authorized_by: "founder" });
+const interruptedRow = () =>
+  lifecycleRow(
+    "session_interrupted",
+    {
+      incident_id: "incident-1",
+      reason: "child exited non-zero",
+      severity: "high",
+      source_event_id: null,
+      reported_by_execution_id: null,
+    },
+    { reason_code: "child_failure" },
+  );
+
+/** The typed ReducerError kind replay raises for a history, or "<accepted>". */
+function replayFailureOf(rows: readonly LedgerRow[]): string {
+  try {
+    rebuildBrokerState(rows);
+    return "<accepted>";
+  } catch (error) {
+    return error instanceof ReducerError ? error.kind : `<${String(error)}>`;
+  }
+}
+
+// ─── rebuildState ───
 
 test("rebuildState reconstructs from verified events", () => {
   const ledger = testLedger();
@@ -32,7 +118,11 @@ test("rebuildBrokerState on empty events returns starting state", () => {
   expect(state.currentFencingToken).toBeNull();
 });
 
-test("rebuildBrokerState reconstructs from normal events", () => {
+// ─── Category A: ordinary BridgeEvent history is lifecycle-inert ───
+
+test("rebuildBrokerState leaves ordinary events lifecycle-inert", () => {
+  // Was: "reconstructs from normal events", which asserted that the first
+  // ordinary event synthesized `active`. Phase 3A synthesizes nothing.
   const ledger = testLedger();
   ledger.append(validEvent());
   ledger.append(validEvent());
@@ -42,38 +132,70 @@ test("rebuildBrokerState reconstructs from normal events", () => {
 
   expect(state.count).toBe(2);
   expect(state.hasIncident).toBe(false);
-  expect(state.tokenUsable).toBe(true);
-  expect(state.sessionState).toBe("active");
-});
-
-test("rebuildBrokerState detects incident and marks token unusable", () => {
-  const ledger = testLedger();
-  ledger.append(validEvent());
-  ledger.append({ ...validEvent(), event_type: "incident" });
-
-  const events = ledger.readAfter(0);
-  const state = rebuildBrokerState(events);
-
-  expect(state.hasIncident).toBe(true);
   expect(state.tokenUsable).toBe(false);
-  expect(state.sessionState).toBe("interrupted");
+  expect(state.sessionState).toBe("starting");
 });
 
-test("rebuildBrokerState reconstructs resume after incident with new token", () => {
-  // Proper path: incident -> interrupted, resume injects reconcile then active
-  // (same as broker rebuildBrokerState / resumeSession).
+test("a legacy incident BridgeEvent does not mark an incident or disturb the token", () => {
+  // Was: "detects incident and marks token unusable". Only session_interrupted
+  // populates the incident; a published execution incident is evidence of who
+  // reported the problem, not lifecycle state.
   const ledger = testLedger();
   ledger.append(validEvent());
   ledger.append({ ...validEvent(), event_type: "incident" });
+
+  const state = rebuildBrokerState(ledger.readAfter(0));
+
+  expect(state.hasIncident).toBe(false);
+  expect(state.sessionState).toBe("starting");
+  expect(state.tokenUsable).toBe(false);
+});
+
+test("legacy pause and resume BridgeEvents do not move the lifecycle phase", () => {
+  // Was: "reconstructs resume after incident with new token". Legacy
+  // execution-authored pause/resume are historical data only.
+  const ledger = testLedger();
+  ledger.append(validEvent());
+  ledger.append({ ...validEvent(), event_type: "pause" });
   ledger.append({ ...validEvent(), event_type: "resume" });
 
-  const events = ledger.readAfter(0);
-  const state = rebuildBrokerState(events);
+  const state = rebuildBrokerState(ledger.readAfter(0));
 
-  expect(state.hasIncident).toBe(true);
-  expect(state.tokenUsable).toBe(true);
-  expect(state.sessionState).toBe("active");
-  expect(state.currentFencingToken).not.toBeNull();
+  expect(state.sessionState).toBe("starting");
+  expect(state.currentFencingToken).toBeNull();
+  expect(state.hasIncident).toBe(false);
+});
+
+test("a legacy session_close BridgeEvent does not close the session", () => {
+  const ledger = testLedger();
+  ledger.append(validEvent());
+  ledger.append({ ...validEvent(), event_type: "session_close" });
+
+  const state = rebuildBrokerState(ledger.readAfter(0));
+
+  expect(state.sessionState).toBe("starting");
+  expect(state.sessionState).not.toBe("closed");
+});
+
+test("ordinary traffic interleaved with lifecycle records changes nothing extra", () => {
+  const ledger = testLedger();
+  ledger.append(validEvent());
+  ledger.append({ ...validEvent(), event_type: "incident" });
+  const bridgeRows = ledger.readAfter(0);
+
+  const withoutTraffic = rebuildBrokerState([openRow(), tokenRow(), activatedRow()]);
+  const withTraffic = rebuildBrokerState([
+    openRow(),
+    tokenRow(),
+    ...bridgeRows,
+    activatedRow(),
+    ...bridgeRows,
+  ]);
+
+  expect(withTraffic.sessionState).toBe(withoutTraffic.sessionState);
+  expect(withTraffic.hasIncident).toBe(withoutTraffic.hasIncident);
+  expect(withTraffic.currentFencingToken).toBe(withoutTraffic.currentFencingToken);
+  expect(withTraffic.tokenUsable).toBe(withoutTraffic.tokenUsable);
 });
 
 test("rebuildBrokerState persists last fingerprint from events", () => {
@@ -89,107 +211,299 @@ test("rebuildBrokerState persists last fingerprint from events", () => {
   expect(state.lastFingerprint?.sha256).toBe("d".repeat(64));
 });
 
-describe("session-machine alignment (follow-up defect 6)", () => {
-  test("paused incident replays to interrupted through legal transition", () => {
-    // active -> pause -> paused, then incident: paused -> interrupted is legal.
-    const ledger = testLedger();
-    ledger.append(validEvent());
-    ledger.append({ ...validEvent(), event_type: "pause" });
-    ledger.append({ ...validEvent(), event_type: "incident" });
+// ─── Category B: typed lifecycle replay ───
 
-    const state = rebuildBrokerState(ledger.readAfter(0));
-    expect(state.sessionState).toBe("interrupted");
-    expect(state.hasIncident).toBe(true);
-    expect(state.tokenUsable).toBe(false);
-  });
-
-  test("closed session followed by incident does not become interrupted", () => {
-    // Replay reaches closed via interrupt → resume → session_close.
-    // closed -> interrupted is not legal; incident still records fail-closed signals.
-    const ledger = testLedger();
-    ledger.append(validEvent());
-    ledger.append({ ...validEvent(), event_type: "incident" });
-    ledger.append({ ...validEvent(), event_type: "resume" });
-    ledger.append({ ...validEvent(), event_type: "session_close" });
-    ledger.append({ ...validEvent(), event_type: "incident" });
-
-    const state = rebuildBrokerState(ledger.readAfter(0));
-    expect(state.sessionState).toBe("closed");
-    expect(state.hasIncident).toBe(true);
-    expect(state.tokenUsable).toBe(false);
-  });
-
-  test("interrupted cannot become active without the reconciliation path", () => {
-    // Alone, an incident leaves the session interrupted — no silent jump to active.
-    const ledger = testLedger();
-    ledger.append(validEvent());
-    ledger.append({ ...validEvent(), event_type: "incident" });
-
-    const afterIncident = rebuildBrokerState(ledger.readAfter(0));
-    expect(afterIncident.sessionState).toBe("interrupted");
-    expect(afterIncident.tokenUsable).toBe(false);
-
-    // Resume is only legal after the machine injects reconcile (interrupted ->
-    // reconciling -> active). Direct interrupted -> active is rejected by the
-    // transition table; the resume handler must not assign "active" without that step.
-    ledger.append({ ...validEvent(), event_type: "resume" });
-    const afterResume = rebuildBrokerState(ledger.readAfter(0));
-    expect(afterResume.sessionState).toBe("active");
-    expect(afterResume.tokenUsable).toBe(true);
-    expect(afterResume.currentFencingToken).not.toBeNull();
-  });
-
-  test("valid reconciliation/resume sequence produces active", () => {
-    const ledger = testLedger();
-    ledger.append(validEvent());
-    ledger.append({ ...validEvent(), event_type: "incident" });
-    ledger.append({ ...validEvent(), event_type: "resume" });
-
-    const state = rebuildBrokerState(ledger.readAfter(0));
+describe("typed lifecycle replay (Phase 3A)", () => {
+  test("typed activation replays to active with a valid token", () => {
+    const state = rebuildBrokerState([openRow(), tokenRow(), activatedRow()]);
     expect(state.sessionState).toBe("active");
-    expect(state.hasIncident).toBe(true);
-    expect(state.tokenUsable).toBe(true);
     expect(state.currentFencingToken).toBe(1);
-  });
-
-  test("invalid transition is fail-closed — not silently coerced", () => {
-    // Resume while closed is illegal; state must stay closed (not forced active).
-    const ledger = testLedger();
-    ledger.append(validEvent());
-    ledger.append({ ...validEvent(), event_type: "session_close" });
-    ledger.append({ ...validEvent(), event_type: "resume" });
-
-    const state = rebuildBrokerState(ledger.readAfter(0));
-    expect(state.sessionState).toBe("closed");
-    // Resume must not issue a fencing token when the transition is rejected
-    expect(state.currentFencingToken).toBeNull();
     expect(state.tokenUsable).toBe(true);
   });
 
-  test("pause while interrupted is ignored (fail-closed)", () => {
-    const ledger = testLedger();
-    ledger.append(validEvent());
-    ledger.append({ ...validEvent(), event_type: "incident" });
-    ledger.append({ ...validEvent(), event_type: "pause" });
-
-    const state = rebuildBrokerState(ledger.readAfter(0));
+  test("paused interruption replays to interrupted through the typed record", () => {
+    // Was: "paused incident replays to interrupted through legal transition",
+    // driven by an ordinary `incident` after an ordinary `pause`.
+    const state = rebuildBrokerState([
+      openRow(),
+      tokenRow(),
+      activatedRow(),
+      pausedRow(),
+      interruptedRow(),
+    ]);
     expect(state.sessionState).toBe("interrupted");
     expect(state.hasIncident).toBe(true);
     expect(state.tokenUsable).toBe(false);
   });
 
-  test("rebuild routes paused interruption after full recovery cycle", () => {
-    // Matches broker regression: interrupt → resume → pause → incident
-    const ledger = testLedger();
-    ledger.append(validEvent());
-    ledger.append({ ...validEvent(), event_type: "incident" });
-    ledger.append({ ...validEvent(), event_type: "resume" });
-    ledger.append({ ...validEvent(), event_type: "pause" });
-    ledger.append({ ...validEvent(), event_type: "incident" });
+  test("a closed session is not reopened by a later interruption record", () => {
+    // Was: "closed session followed by incident does not become interrupted".
+    // Phase 3A rejects the out-of-phase lifecycle record fail-closed, and the
+    // rejection is a typed replay failure rather than a silent skip.
+    const closing = lifecycleRow("session_closing", {
+      command_id: "cmd-4",
+      authorized_by: "founder",
+      closure_kind: "founder",
+      incident_id: null,
+    });
+    const closed = lifecycleRow("session_closed", {
+      command_id: "cmd-4",
+      authorized_by: "founder",
+      closure_kind: "founder",
+      incident_id: null,
+    });
+    const prefix = [openRow(), tokenRow(), activatedRow(), closing, closed];
 
-    const state = rebuildBrokerState(ledger.readAfter(0));
+    const state = rebuildBrokerState(prefix);
+    expect(state.sessionState).toBe("closed");
+    expect(state.tokenUsable).toBe(false);
+
+    expect(replayFailureOf([...prefix, interruptedRow()])).toBe("invalid_phase_precondition");
+  });
+
+  test("interrupted does not become active again without a typed transition", () => {
+    // Was: "interrupted cannot become active without the reconciliation path",
+    // which relied on interrupted -> reconciling -> active. `"reconciling"` is
+    // not a Phase 3A phase, and session_resumed is legal only from paused.
+    const interrupted = rebuildBrokerState([
+      openRow(),
+      tokenRow(),
+      activatedRow(),
+      interruptedRow(),
+    ]);
+    expect(interrupted.sessionState).toBe("interrupted");
+    expect(interrupted.tokenUsable).toBe(false);
+
+    expect(String(interrupted.sessionState)).not.toBe("reconciling");
+
+    // session_resumed is legal only from paused. Replaying it over interrupted
+    // rejects the history rather than leaving the projection where it was.
+    expect(
+      replayFailureOf([
+        openRow(),
+        tokenRow(),
+        activatedRow(),
+        interruptedRow(),
+        resumedRow(),
+      ]),
+    ).toBe("invalid_phase_precondition");
+  });
+
+  test("pause and resume replay to active only through the typed records", () => {
+    // Was: "valid reconciliation/resume sequence produces active".
+    const state = rebuildBrokerState([
+      openRow(),
+      tokenRow(),
+      activatedRow(),
+      pausedRow(),
+      resumedRow(),
+    ]);
+    expect(state.sessionState).toBe("active");
+    expect(state.currentFencingToken).toBe(1);
+    expect(state.tokenUsable).toBe(true);
+  });
+
+  test("an illegal typed transition is fail-closed, not silently coerced", () => {
+    // Was: "invalid transition is fail-closed — not silently coerced", driven by
+    // an ordinary resume while closed. A session_closed with no preceding
+    // session_closing is an impossible order; replay preserves the projection.
+    const closed = lifecycleRow("session_closed", {
+      command_id: "cmd-4",
+      authorized_by: "founder",
+      closure_kind: "founder",
+      incident_id: null,
+    });
+    const prefix = [openRow(), tokenRow(), activatedRow()];
+
+    const state = rebuildBrokerState(prefix);
+    expect(state.sessionState).toBe("active");
+    expect(state.sessionState).not.toBe("closed");
+
+    expect(replayFailureOf([...prefix, closed])).toBe("impossible_order");
+  });
+
+  test("pause while interrupted is rejected (fail-closed)", () => {
+    // Was: "pause while interrupted is ignored (fail-closed)". Ignoring it is
+    // exactly what section 9.6 forbids: the replay is rejected, typed.
+    const prefix = [openRow(), tokenRow(), activatedRow(), interruptedRow()];
+
+    const state = rebuildBrokerState(prefix);
     expect(state.sessionState).toBe("interrupted");
     expect(state.hasIncident).toBe(true);
     expect(state.tokenUsable).toBe(false);
+
+    expect(replayFailureOf([...prefix, pausedRow()])).toBe("invalid_phase_precondition");
+  });
+
+  test("replay routes a paused interruption after a full recovery cycle", () => {
+    // Was: "rebuild routes paused interruption after full recovery cycle",
+    // driven by interrupt -> resume -> pause -> incident via ordinary events.
+    const state = rebuildBrokerState([
+      openRow(),
+      tokenRow(),
+      activatedRow(),
+      pausedRow(),
+      resumedRow(),
+      pausedRow(),
+      interruptedRow(),
+    ]);
+    expect(state.sessionState).toBe("interrupted");
+    expect(state.hasIncident).toBe(true);
+    expect(state.tokenUsable).toBe(false);
+  });
+});
+
+// ─── Category C: replay surfaces typed lifecycle failures ───
+//
+// Section 9.6 names four typed reconciliation failures and makes them binding
+// in replay as well as live apply. Replay must therefore reject an illegal
+// history with the same typed error the reducer raises — it must not preserve
+// the prior projection and carry on as though the record were absent.
+
+describe("replay propagates typed reducer failures", () => {
+  test("replay propagates unknown_lifecycle_type", () => {
+    const unknown = lifecycleRow("session_teleported", { anything: true });
+    expect(replayFailureOf([openRow(), tokenRow(), activatedRow(), unknown])).toBe(
+      "unknown_lifecycle_type",
+    );
+  });
+
+  test("replay propagates impossible_order", () => {
+    // session_unclean_closure requires no typed terminal prefix; a completed
+    // founder close is exactly such a prefix.
+    const closing = lifecycleRow("session_closing", {
+      command_id: "cmd-4",
+      authorized_by: "founder",
+      closure_kind: "founder",
+      incident_id: null,
+    });
+    const closed = lifecycleRow("session_closed", {
+      command_id: "cmd-4",
+      authorized_by: "founder",
+      closure_kind: "founder",
+      incident_id: null,
+    });
+    const unclean = lifecycleRow("session_unclean_closure", {
+      detected_at_startup: true,
+      last_durable_event_id: "evt-last",
+    });
+    expect(
+      replayFailureOf([openRow(), tokenRow(), activatedRow(), closing, closed, unclean]),
+    ).toBe("impossible_order");
+  });
+
+  test("replay propagates incident_id_mismatch", () => {
+    // Both throw sites are covered: the closure record and the terminal
+    // record. An interruption close must name the incident it is closing, and
+    // replay rejects a history that names a different one.
+    const interruptedPrefix = [openRow(), tokenRow(), activatedRow(), interruptedRow()];
+
+    const closingFor = (incidentId: string) =>
+      lifecycleRow("session_closing", {
+        command_id: "cmd-5",
+        authorized_by: "founder",
+        closure_kind: "interruption",
+        incident_id: incidentId,
+      });
+    const closedFor = (incidentId: string) =>
+      lifecycleRow("session_closed", {
+        command_id: "cmd-5",
+        authorized_by: "founder",
+        closure_kind: "interruption",
+        incident_id: incidentId,
+      });
+
+    // The legal prefix establishes the open incident.
+    const opened = rebuildBrokerState(interruptedPrefix);
+    expect(opened.sessionState).toBe("interrupted");
+    expect(opened.hasIncident).toBe(true);
+
+    // The matching incident id closes cleanly, so the rejections below are
+    // caused by the mismatch itself and not by the closing records.
+    const legal = rebuildBrokerState([
+      ...interruptedPrefix,
+      closingFor("incident-1"),
+      closedFor("incident-1"),
+    ]);
+    expect(legal.sessionState).toBe("closed");
+
+    // Mismatch at the closure record.
+    expect(replayFailureOf([...interruptedPrefix, closingFor("incident-999")])).toBe(
+      "incident_id_mismatch",
+    );
+
+    // Mismatch at the terminal record, after a legal closure.
+    expect(
+      replayFailureOf([
+        ...interruptedPrefix,
+        closingFor("incident-1"),
+        closedFor("incident-999"),
+      ]),
+    ).toBe("incident_id_mismatch");
+  });
+});
+
+describe("session_open constructs a fresh session during replay", () => {
+  // The reducer-level invariant is asserted field by field in
+  // reduce-ledger-event.test.ts. These two cover what replay exposes to a
+  // caller: hasIncident is the public projection of the leak, so a new session
+  // that inherits a prior incident is visible through rebuildBrokerState alone.
+
+  const reopenRow = () =>
+    lifecycleRow(
+      "session_open",
+      { authorization_reference: "FOUNDER-20260905-01", execution_ids: ["exec-builder"] },
+      { session_id: "ses-2" },
+    );
+  const closingInterruption = () =>
+    lifecycleRow("session_closing", {
+      command_id: "cmd-5",
+      authorized_by: "founder",
+      closure_kind: "interruption",
+      incident_id: "incident-1",
+    });
+  const closedInterruption = () =>
+    lifecycleRow("session_closed", {
+      command_id: "cmd-5",
+      authorized_by: "founder",
+      closure_kind: "interruption",
+      incident_id: "incident-1",
+    });
+
+  test("replay of a re-open after an interruption reports no incident", () => {
+    const interruptedPrefix = [openRow(), tokenRow(), activatedRow(), interruptedRow()];
+
+    // The legal prefix really does carry an open incident, so the assertion
+    // below is about the re-open and not about an empty history.
+    const before = rebuildBrokerState(interruptedPrefix);
+    expect(before.sessionState).toBe("interrupted");
+    expect(before.hasIncident).toBe(true);
+
+    const after = rebuildBrokerState([...interruptedPrefix, reopenRow()]);
+    expect(after.sessionState).toBe("starting");
+    expect(after.hasIncident).toBe(false);
+    expect(after.currentFencingToken).toBeNull();
+    expect(after.tokenUsable).toBe(false);
+  });
+
+  test("replay of a re-open after a completed closure reports no incident", () => {
+    const closedHistory = [
+      openRow(),
+      tokenRow(),
+      activatedRow(),
+      interruptedRow(),
+      closingInterruption(),
+      closedInterruption(),
+    ];
+
+    const before = rebuildBrokerState(closedHistory);
+    expect(before.sessionState).toBe("closed");
+    expect(before.hasIncident).toBe(true);
+
+    const after = rebuildBrokerState([...closedHistory, reopenRow()]);
+    expect(after.sessionState).toBe("starting");
+    expect(after.hasIncident).toBe(false);
+    expect(after.currentFencingToken).toBeNull();
+    expect(after.tokenUsable).toBe(false);
   });
 });

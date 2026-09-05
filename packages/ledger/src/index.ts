@@ -4,4 +4,11 @@ export type { LedgerRow, VerifyResult } from "./ledger";
 export { computeEventHash, GENESIS_HASH } from "./hash-chain";
 export { rebuildState, rebuildBrokerState } from "./rebuild";
 export type { RebuiltState, RebuiltBrokerState } from "./rebuild";
+export { reduceLedgerEvent, INITIAL_LIFECYCLE_STATE, ReducerError } from "./rebuild";
+export type {
+  LifecyclePhase,
+  TokenState,
+  LifecycleState,
+  SessionStateKind,
+} from "./rebuild";
 export { SCHEMA_SQL } from "./schema";
