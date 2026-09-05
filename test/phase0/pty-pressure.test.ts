@@ -27,6 +27,7 @@ import {
   createRawSpool,
   feedUnderPressure,
   isRawPtyOnProjectorWire,
+  requireSpawnedPid,
   type VtPatchFrame,
 } from "./spike/phase0-lib";
 
@@ -49,7 +50,12 @@ describe("phase0 PTY pressure and two-slot fail-closed (AT-R4-38 r4.4)", () => {
   });
 
   afterAll(() => {
-    if (slotB !== undefined && isAlive(slotBPid)) slotB.kill("SIGKILL");
+    // Cleanup never operates on a captured fallback PID: it uses the live
+    // spawned object's own pid and only signals a strictly positive value.
+    if (slotB !== undefined) {
+      const pid = slotB.pid;
+      if (typeof pid === "number" && pid > 0 && isAlive(pid)) slotB.kill("SIGKILL");
+    }
     rmSync(dir, { recursive: true, force: true });
   });
 
@@ -58,7 +64,11 @@ describe("phase0 PTY pressure and two-slot fail-closed (AT-R4-38 r4.4)", () => {
     slotB = spawn("/bin/sh", ["-c", "while true; do sleep 1; done"], {
       stdio: "ignore",
     });
-    slotBPid = slotB.pid ?? 0;
+    // Copilot T2 correction: a missing spawned PID fails this proof
+    // IMMEDIATELY. Neither the liveness probe below nor the afterAll
+    // cleanup may ever operate on PID 0 — kill(0, …) would signal the
+    // test runner's whole process group (spurious liveness / self-kill).
+    slotBPid = requireSpawnedPid(slotB, "slot-B fixture process");
 
     // Slot A: bounded spool (r4.3 §2) with NO durable covering commit.
     const spool = createRawSpool(64); // tiny bound so the flood is quick

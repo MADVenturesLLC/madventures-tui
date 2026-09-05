@@ -17,6 +17,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
+import { requireSpawnedPid } from "./spike/phase0-lib";
 
 const HERE = import.meta.dir;
 
@@ -57,7 +58,11 @@ describe("phase0 viewer-death survival (AT-R4-01)", () => {
     // A real fixture viewer: a process that would "attach". Its death must
     // be nothing in occupancy.
     const viewer = spawn("/bin/sh", ["-c", "sleep 300"], { stdio: "ignore" });
-    const viewerPid = viewer.pid ?? 0;
+    // Copilot T3 correction: a missing spawned PID fails the viewer-death
+    // proof BEFORE it proceeds. PID 0 must never be signaled —
+    // kill(0, SIGKILL) would terminate this test runner's own process
+    // group, and the liveness probe would pass spuriously.
+    const viewerPid = requireSpawnedPid(viewer, "fixture viewer");
     await new Promise((r) => setTimeout(r, 200));
     expect(isAlive(viewerPid)).toBe(true);
 

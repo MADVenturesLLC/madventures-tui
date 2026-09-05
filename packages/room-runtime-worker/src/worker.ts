@@ -130,7 +130,25 @@ function frame(payload: unknown): Buffer {
 }
 
 function respond(payload: Record<string, unknown>): void {
-  writeSync(FD_RESPONSE, frame(payload));
+  // Copilot T4 correction: a response-channel (fd 4) write failure must
+  // never escape as an uncontrolled exception/crash. Response-channel loss
+  // is fail-closed: when the response cannot be delivered, no success can
+  // be inferred by anyone, so the worker emits a scrubbed diagnostic and
+  // exits deterministically under the EXISTING transport-broken
+  // classification (exit code 2). No retry/restart authority is created
+  // here — termination is the only deterministic outcome, and the Gateway
+  // remains the sole observer/reaper.
+  try {
+    writeSync(FD_RESPONSE, frame(payload));
+  } catch {
+    diag("transport_broken: response channel write failed; exiting fail-closed");
+    try {
+      ledger.close();
+    } catch {
+      // best effort on the fail-closed exit path
+    }
+    process.exit(WORKER_EXIT_CODES.transportBroken);
+  }
 }
 
 type RequestFrame = {

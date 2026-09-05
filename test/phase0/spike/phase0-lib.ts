@@ -106,6 +106,26 @@ export function feedUnderPressure(
   return { outcome: 'private_transport_exhausted', dropped_records: 0 };
 }
 
+/**
+ * Fail-closed spawned-PID guard (Copilot T1/T2/T3 correction): a missing or
+ * non-positive PID fails the proof IMMEDIATELY, before any liveness probe or
+ * signal operation. PID 0 must never reach `process.kill()` — `kill(0, sig)`
+ * targets the caller's entire process group (which would signal the test
+ * runner itself and/or make liveness checks pass spuriously).
+ */
+export function requireSpawnedPid(
+  proc: { readonly pid?: number | undefined },
+  what: string,
+): number {
+  const pid = proc.pid;
+  if (pid === undefined || !Number.isInteger(pid) || pid <= 0) {
+    throw new Error(
+      `${what}: spawn produced no usable PID (got ${String(pid)}); failing closed before any liveness probe or signal operation`,
+    );
+  }
+  return pid;
+}
+
 /** VT patch frame as it appears on the projector wire (r4.1 §3). */
 export interface VtPatchFrame {
   readonly execution_id: string;
@@ -119,12 +139,22 @@ export interface VtPatchFrame {
 /**
  * The projector-wire boundary (r4.1 §3): frames are VT patches only — a
  * raw PTY byte frame is a protocol violation that must FAIL (AT-R4-04/09).
+ *
+ * Copilot T6 correction: the candidate is accepted as `unknown` so this
+ * predicate is CAPABLE AT RUNTIME of receiving a malformed/raw candidate
+ * and detecting it. Under the previous `'checkpoint' | 'patch'` input type
+ * the forbidden state was statically impossible and the predicate could
+ * never return true, making the raw-PTY-fails assertions ineffective. Any
+ * non-object candidate, or any object whose discriminator is not exactly
+ * 'checkpoint' or 'patch', is the forbidden raw/malformed state.
  */
-export function isRawPtyOnProjectorWire(frame: VtPatchFrame): boolean {
+export function isRawPtyOnProjectorWire(frame: unknown): boolean {
   // Raw PTY on the projector wire would be a frame whose payload is raw
   // bytes rather than a checkpoint/patch cell grid. In the fixture's
   // vocabulary, any frame claiming to carry raw PTY is the violation.
-  return frame.checkpoint_or_patch !== 'checkpoint' && frame.checkpoint_or_patch !== 'patch';
+  if (typeof frame !== 'object' || frame === null) return true;
+  const kind = (frame as Partial<VtPatchFrame>).checkpoint_or_patch;
+  return kind !== 'checkpoint' && kind !== 'patch';
 }
 
 /** Gateway-minted viewer identity (r4.1 §5). */
@@ -145,7 +175,15 @@ export interface ViewerRegistry {
 
 let mintCounter = 0;
 
-export function createViewerRegistry(occupancyScope: string): ViewerRegistry {
+/**
+ * Deterministic injected-clock test seam (Copilot T7 correction). Used SOLELY
+ * to prove expiry behavior at validation time; it mints nothing and confers
+ * no authority. Production proofs use the default (Date.now).
+ */
+export function createViewerRegistry(
+  occupancyScope: string,
+  now: () => number = Date.now,
+): ViewerRegistry {
   const minted = new Map<string, ViewerCapability>();
   return {
     occupancy_scope: occupancyScope,
@@ -154,7 +192,11 @@ export function createViewerRegistry(occupancyScope: string): ViewerRegistry {
       const cap: ViewerCapability = {
         viewer_id: `viewer-${mintCounter}-${Math.random().toString(36).slice(2, 10)}`,
         bind_nonce: Math.random().toString(36).slice(2, 14),
-        expiry: Number.MAX_SAFE_INTEGER,
+        // A capability is minted with a bounded lifetime: valid now, and no
+        // longer valid once the runtime clock passes the stored expiry.
+        // (No permanent-TTL doctrine is established here; the bound exists
+        // to make expiry validation testable and fail-closed.)
+        expiry: now() + 60_000,
         occupancy_scope: occupancyScope,
       };
       minted.set(cap.viewer_id, cap);
@@ -170,9 +212,20 @@ export function createViewerRegistry(occupancyScope: string): ViewerRegistry {
       ) {
         return null;
       }
+      // T7: the presented expiry must carry the required runtime type — a
+      // missing, non-number, non-integer, or non-finite expiry is rejected.
+      if (typeof cap.expiry !== 'number' || !Number.isInteger(cap.expiry)) {
+        return null;
+      }
       const stored = minted.get(cap.viewer_id);
       if (stored === undefined) return null;
       if (stored.bind_nonce !== cap.bind_nonce) return null;
+      // T7: the presented expiry must equal the Gateway-minted stored value —
+      // it can never be extended or altered by a presenter.
+      if (stored.expiry !== cap.expiry) return null;
+      // T7: an actually minted capability that is expired at validation time
+      // is rejected. A valid, unexpired minted capability remains accepted.
+      if (stored.expiry <= now()) return null;
       return stored;
     },
   };

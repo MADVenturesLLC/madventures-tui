@@ -30,6 +30,7 @@ import { mkdtempSync, rmSync, readFileSync, existsSync, unlinkSync } from "node:
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawn, execFileSync } from "node:child_process";
+import { requireSpawnedPid } from "./spike/phase0-lib";
 
 const HERE = import.meta.dir;
 const GATEWAY_CHILD = join(HERE, "spike", "gateway-child.ts");
@@ -126,7 +127,11 @@ describe("phase0 parent-death, grandchild reap, and control-FD scrub (AT-R4-02/0
       PHASE0_FACTS_PATH: factsPath,
     });
     const gatewayFacts = collectFacts(gateway);
-    const gatewayPid = gateway.pid ?? 0;
+    // Copilot T1 correction: a missing spawned PID fails this proof
+    // IMMEDIATELY, before any liveness probe or signal operation. PID 0
+    // must never reach process.kill() — kill(0, SIGKILL) would target this
+    // test runner's own process group and make the proof meaningless.
+    const gatewayPid = requireSpawnedPid(gateway, "gateway-child");
 
     // The pty-host emits on ITS stdout, which the gateway passes through
     // (stdio inherit → same channel). Wait for the readiness sequence.

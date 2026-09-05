@@ -119,6 +119,16 @@ class WorkerHandle {
   readonly fdDiag: number;
   private respBuffer: Buffer = Buffer.alloc(0);
   private readonly respWaiters: Array<(buf: Buffer) => void> = [];
+  /**
+   * Copilot T5 correction: complete response frames are RETAINED here until
+   * consumed. The previous code decoded a frame in the read pump and dropped
+   * it when no waiter had been installed yet (`if (waiter) waiter(frame)`),
+   * so a worker responding before `readOneResponse()` ran lost the frame.
+   * Invariant: SEQUENTIAL REQUEST RESPONSE CANNOT BE LOST BETWEEN RECEIVE
+   * AND WAITER REGISTRATION — a frame either goes to a waiting consumer or
+   * stays queued for the next one, never both-lost nor duplicated.
+   */
+  private readonly respFrames: Buffer[] = [];
   private diagChunks: Buffer[] = [];
   private nextId = 1;
   private closedForEof = false;
@@ -165,20 +175,17 @@ class WorkerHandle {
       const frame = Buffer.from(this.respBuffer.subarray(4, 4 + length));
       this.respBuffer = Buffer.from(this.respBuffer.subarray(4 + length));
       const waiter = this.respWaiters.shift();
+      // T5: never discard a complete frame — deliver to a registered waiter
+      // or retain it in the queue until one is installed.
       if (waiter) waiter(frame);
+      else this.respFrames.push(frame);
     }
   }
 
   private nextFrame(timeoutMs = 10_000): Promise<Buffer> {
-    const existing = this.respBuffer;
-    if (existing.byteLength >= 4) {
-      const length = existing.readUInt32BE(0);
-      if (existing.byteLength >= 4 + length) {
-        const frame = Buffer.from(existing.subarray(4, 4 + length));
-        this.respBuffer = Buffer.from(existing.subarray(4 + length));
-        return Promise.resolve(frame);
-      }
-    }
+    // T5: consume retained complete frames first (FIFO order preserved).
+    const retained = this.respFrames.shift();
+    if (retained !== undefined) return Promise.resolve(retained);
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error("frame timeout")), timeoutMs);
       this.respWaiters.push((buf) => {
@@ -652,6 +659,88 @@ describe("prereq-c C2 worker — transport failure fails closed", () => {
     } finally {
       await w.endControl();
       await w.exitCode();
+    }
+  });
+});
+
+describe("prereq-c C2 worker — response-channel loss fails closed (T4)", () => {
+  test("fd-4 write failure exits deterministically as transport_broken (2), never an uncontrolled crash", async () => {
+    const child = Bun.spawn([process.execPath, WORKER_ENTRYPOINT], {
+      // fd 5 (diag) → /dev/null; the proof observable is the exit code.
+      stdio: ["ignore", "ignore", "ignore", "pipe", "pipe", "ignore"],
+      env: { PREREQC_WORKER_DB_PATH: dbPath }, // credential access: NONE
+    });
+    try {
+      const stdio = child.stdio;
+      const fd3 = stdio[3];
+      const fd4 = stdio[4];
+      if (typeof fd3 !== "number" || typeof fd4 !== "number") {
+        throw new Error("worker stdio channels 3/4 not established as parent FDs");
+      }
+      // Destroy the parent-side response channel BEFORE any request: the
+      // worker's next respond() write to fd 4 must fail with EPIPE.
+      closeSync(fd4);
+      // Send a well-formed hello request on the control channel.
+      const hello = JSON.stringify({ id: 1, op: "hello", params: { generation: "gen-t4" } });
+      const payload = Buffer.from(hello, "utf8");
+      const frame = Buffer.alloc(4 + payload.byteLength);
+      frame.writeUInt32BE(payload.byteLength, 0);
+      payload.copy(frame, 4);
+      let offset = 0;
+      while (offset < frame.byteLength) offset += writeSync(fd3, frame.subarray(offset));
+      const code = await child.exited;
+      // OLD behavior: writeSync threw EPIPE out of respond() — an
+      // uncontrolled exception (exit 1). NEW behavior: fail-closed
+      // deterministic termination under the EXISTING transport-broken
+      // classification (exit 2). No success can be inferred: the response
+      // was never delivered and the worker is gone.
+      expect(code).toBe(2);
+      expect(child.signalCode).toBeNull();
+      closeSync(fd3);
+    } finally {
+      try {
+        child.kill(9);
+      } catch {
+        // already exited
+      }
+      await child.exited;
+    }
+  });
+});
+
+describe("prereq-c C2 worker — sequential response cannot be lost between receive and waiter registration (T5)", () => {
+  test("response frame decoded before any waiter registration is retained and consumed, never dropped", async () => {
+    const w = new WorkerHandle(dbPath);
+    try {
+      // Write the hello frame directly, then WAIT so the read pump decodes
+      // the complete response frame while NO waiter is registered. Under
+      // the old `if (waiter) waiter(frame)` drop behavior, the frame was
+      // discarded here and the subsequent read timed out — this test fails
+      // (5s timeout) on the old code and passes on the corrected queue.
+      const rawId = 999;
+      const hello = JSON.stringify({ id: rawId, op: "hello", params: { generation: "gen-t5" } });
+      const payload = Buffer.from(hello, "utf8");
+      const frame = Buffer.alloc(4 + payload.byteLength);
+      frame.writeUInt32BE(payload.byteLength, 0);
+      payload.copy(frame, 4);
+      await w.sendRaw(frame);
+      // 300ms is far beyond the local round-trip (sibling requests in this
+      // suite respond in <60ms), so the pump has certainly decoded the
+      // frame before the read below registers its waiter.
+      await new Promise((r) => setTimeout(r, 300));
+      const resp = await w.readOneResponse(5_000);
+      expect(resp.id).toBe(rawId);
+      expect(resp.ok).toBe(true);
+      expect(resp.generation).toBe("gen-t5");
+      // Order/no-loss integrity: a subsequent sequential request still
+      // receives ITS OWN response — retention must not duplicate or
+      // swallow frames.
+      const ping = await w.request("ping", {});
+      expect(ping.ok).toBe(true);
+      expect((ping.result as { pong: boolean }).pong).toBe(true);
+    } finally {
+      await w.endControl();
+      expect(await w.exitCode()).toBe(0);
     }
   });
 });

@@ -106,4 +106,65 @@ describe("phase0 recovery-mode rehydration (AT-R4-37, r4.2 §2)", () => {
     const receiptKinds = result.frames.map((f: VtPatchFrame) => f.checkpoint_or_patch);
     expect(receiptKinds.includes("ActivityResult" as never)).toBe(false);
   });
+
+  it("NEGATIVE CONTROL (T6): forged/raw/non-checkpoint-non-patch projector-wire candidates are DETECTED", () => {
+    // The predicate accepts `unknown`, so the forbidden raw-PTY state is
+    // reachable at runtime and demonstrably detected. Under the old
+    // `'checkpoint' | 'patch'` input type these candidates could not even
+    // be passed in — the proof was statically impossible, hence
+    // ineffective. Every candidate below is a protocol violation on the
+    // projector wire and MUST be reported as raw.
+
+    // Forged candidate: a well-formed frame shape with a raw discriminator.
+    const forgedRaw = {
+      execution_id: "exec-a",
+      pty_output_seq: 1,
+      resize_epoch: 1,
+      vt_codec_version: codec,
+      checkpoint_or_patch: "raw",
+      cells: "\u001b[6n\u001b[?25l raw pty bytes",
+    };
+    expect(isRawPtyOnProjectorWire(forgedRaw)).toBe(true);
+
+    // Non-checkpoint/non-patch discriminator variants.
+    expect(isRawPtyOnProjectorWire({ ...forgedRaw, checkpoint_or_patch: "Checkpoint" })).toBe(true);
+    expect(isRawPtyOnProjectorWire({ ...forgedRaw, checkpoint_or_patch: "" })).toBe(true);
+    expect(isRawPtyOnProjectorWire({ ...forgedRaw, checkpoint_or_patch: 0 })).toBe(true);
+    expect(isRawPtyOnProjectorWire({ ...forgedRaw, checkpoint_or_patch: undefined })).toBe(true);
+
+    // Missing discriminator entirely.
+    const { checkpoint_or_patch: _omit, ...noDiscriminator } = forgedRaw;
+    void _omit;
+    expect(isRawPtyOnProjectorWire(noDiscriminator)).toBe(true);
+
+    // Raw bytes / non-frame inputs reaching the wire boundary.
+    expect(isRawPtyOnProjectorWire("\u001b[2J raw pty stream")).toBe(true);
+    expect(isRawPtyOnProjectorWire(Buffer.from([0x1b, 0x5b, 0x48]))).toBe(true);
+    expect(isRawPtyOnProjectorWire(null)).toBe(true);
+    expect(isRawPtyOnProjectorWire(undefined)).toBe(true);
+    expect(isRawPtyOnProjectorWire(42)).toBe(true);
+
+    // Positive controls preserved: genuine VT checkpoint/patch frames are
+    // NOT the violation.
+    expect(
+      isRawPtyOnProjectorWire({
+        execution_id: "exec-a",
+        pty_output_seq: 1,
+        resize_epoch: 1,
+        vt_codec_version: codec,
+        checkpoint_or_patch: "checkpoint",
+        cells: "grid",
+      }),
+    ).toBe(false);
+    expect(
+      isRawPtyOnProjectorWire({
+        execution_id: "exec-a",
+        pty_output_seq: 2,
+        resize_epoch: 1,
+        vt_codec_version: codec,
+        checkpoint_or_patch: "patch",
+        cells: "…",
+      }),
+    ).toBe(false);
+  });
 });
