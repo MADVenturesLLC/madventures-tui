@@ -120,7 +120,23 @@ const agent = spawn("/bin/sh", ["-c", agentCommand], {
   stdio: "ignore",
   detached: true,
 });
-const agentPid = agent.pid ?? 0;
+// PID-safety micro-correction (Founder authorization 2026-09-05): no
+// unknown/zero/non-positive agent PID may enter liveness, lsof, identity,
+// pgid, or signal operations. A missing or invalid spawned PID fails the
+// fixture closed IMMEDIATELY (same fail-closed principle as the T1–T3
+// corrections). There is no PID-zero fallback: kill(0/−0, …) would target
+// the fixture's own process group (default process-group signaling) and
+// unknown-PID adoption is forbidden by the parent-death contract.
+const agentPid = agent.pid;
+if (typeof agentPid !== "number" || !Number.isInteger(agentPid) || agentPid <= 0) {
+  emit({
+    phase: "error",
+    message: `agent spawn produced no usable PID (got ${String(agentPid)}); failing closed before any liveness, lsof, identity, pgid, or signal operation`,
+  });
+  process.exit(1);
+}
+// pgid == pid model (detached session leader) — derived only AFTER the
+// PID validation above.
 const agentPgid = agentPid;
 const agentStarttime = await new Promise<string>((resolve) => {
   const timer = setTimeout(() => resolve(""), 2_000);
