@@ -1,0 +1,10 @@
+{
+  "name": "@mad/claim-boundary",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "description": "Pure honesty library: every durable receipt must declare what it is NOT evidence of. Closed enum set forced by rung.",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

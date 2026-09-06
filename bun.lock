@@ -30,6 +30,7 @@
         "@madventures/ledger": "workspace:*",
         "@madventures/policy": "workspace:*",
         "@madventures/protocol": "workspace:*",
+        "@madventures/storage": "workspace:*",
         "@opentui/core": "^0.5.1",
         "@opentui/react": "^0.5.1",
         "react": "^19.2.6",
@@ -72,6 +73,10 @@
         "node-pty": "^1.1.0",
       },
     },
+    "packages/claim-boundary": {
+      "name": "@mad/claim-boundary",
+      "version": "0.1.0",
+    },
     "packages/ledger": {
       "name": "@madventures/ledger",
       "version": "0.1.0",
@@ -100,6 +105,8 @@
     },
   },
   "packages": {
+    "@mad/claim-boundary": ["@mad/claim-boundary@workspace:packages/claim-boundary"],
+
     "@madventures/adapter-antigravity": ["@madventures/adapter-antigravity@workspace:packages/adapter-antigravity"],
 
     "@madventures/adapter-claude-code": ["@madventures/adapter-claude-code@workspace:packages/adapter-claude-code"],
