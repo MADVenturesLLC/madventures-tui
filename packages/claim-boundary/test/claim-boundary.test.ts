@@ -237,8 +237,8 @@ describe("package isolation (pure honesty library)", () => {
       "@madventures/adapter-antigravity",
       "gateway-daemon",
     ];
-    // Match import/require specifiers, not prose — the module's own docs name
-    // the infrastructure it refuses to depend on.
+    // Match statement-leading import/export-from/require specifiers, not prose —
+    // the module's own docs name the infrastructure it refuses to depend on.
     const importPattern = /^\s*(?:import\s+[^'"]*from\s+|import\s+|require\(\s*|export\s+[^'"]*from\s+)["']([^"']+)["']/gm;
     for (const file of readdirSync(srcDir)) {
       const source = readFileSync(join(srcDir, file), "utf8");
