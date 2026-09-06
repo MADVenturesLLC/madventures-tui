@@ -239,7 +239,7 @@ describe("package isolation (pure honesty library)", () => {
     ];
     // Match import/require specifiers, not prose — the module's own docs name
     // the infrastructure it refuses to depend on.
-    const importPattern = /(?:from\s+|require\(\s*|import\s+)["']([^"']+)["']/g;
+    const importPattern = /^\s*(?:import\s+[^'"]*from\s+|import\s+|require\(\s*|export\s+[^'"]*from\s+)["']([^"']+)["']/gm;
     for (const file of readdirSync(srcDir)) {
       const source = readFileSync(join(srcDir, file), "utf8");
       const specifiers = new Set<string>();
