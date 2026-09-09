@@ -161,7 +161,7 @@ async function runScenarioFresh(
     asciinema: boolean;
     log: (msg: string) => void;
   },
-): Promise<ScenarioResult> {
+): Promise<{ result: ScenarioResult; fixtureFlags: string[]; castPath: string | null }> {
   const cast = opts.asciinema
     ? startCast(
         { width: opts.cols, height: opts.rows },
@@ -176,10 +176,20 @@ async function runScenarioFresh(
     cast,
   });
   const ctx = makeRunContext(tui, opts.artifactsDir, opts.log);
+  let castPath: string | null = null;
   try {
-    return await fn(ctx);
+    const result = await fn(ctx);
+    if (cast) {
+      // F2: finish the recording and record the ACTUAL artifact path on the
+      // scenario's own artifact list — never an invented filename.
+      castPath = cast.finish();
+      result.artifacts.push(castPath);
+    }
+    // F1: fixtureFlags come from the session that actually ran (built beside
+    // the child env in tui-session.ts), not from a duplicate list here.
+    return { result, fixtureFlags: tui.fixtureFlags, castPath };
   } finally {
-    if (cast) cast.finish();
+    if (cast && !castPath) cast.finish();
     await tui.close();
   }
 }
@@ -215,9 +225,15 @@ async function cmdRun(argv: string[]): Promise<number> {
 
   const startedAt = new Date().toISOString();
   const results: ScenarioResult[] = [];
+  // F1: the packet's fixture_flags must be the flags actually exercised by
+  // the run — derived from session state, never re-declared here. Each
+  // scenario runs in a fresh session, so collect each session's flags.
+  const exercisedFixtureFlags = new Set<string>();
+  // F2: every cast the run actually wrote, for a truthful packet reference.
+  const castPaths: string[] = [];
   for (const name of requested) {
     log(`▶ scenario ${name} (fresh TUI session)`);
-    const result = await runScenarioFresh(name, SCENARIOS[name]!, {
+    const { result, fixtureFlags, castPath } = await runScenarioFresh(name, SCENARIOS[name]!, {
       repoRoot,
       cols,
       rows,
@@ -225,6 +241,8 @@ async function cmdRun(argv: string[]): Promise<number> {
       asciinema,
       log,
     });
+    for (const f of fixtureFlags) exercisedFixtureFlags.add(f);
+    if (castPath) castPaths.push(castPath);
 
     // Golden grid comparison happens BEFORE the result is reported so the
     // PASS/FAIL line always reflects the complete invariant set (goldens
@@ -260,12 +278,16 @@ async function cmdRun(argv: string[]): Promise<number> {
     startedAt,
     finishedAt,
     entrypoint: "apps/madbridge/src/tui/main.tsx --fixture",
-    fixtureFlags: ["MADV_TUI_FIXTURE=1"],
+    // F1: actual flags used by the run (e.g. ansi_flood also sets
+    // MADV_TUI_FIXTURE_STREAM=1); sorted for determinism.
+    fixtureFlags: [...exercisedFixtureFlags].sort(),
     cols,
     rows,
     scenarioResults: results,
     reportPath: path.join(dir, "report.json"),
-    asciinemaPath: asciinema ? path.join(dir, "governance_focus.cast") : null,
+    // F2: single truthful reference when the run wrote casts; null when it
+    // wrote none (--no-asciinema). Never an invented filename.
+    asciinemaPath: castPaths.length > 0 ? castPaths[0]! : null,
   });
 
   const reportFile = path.join(dir, "report.json");

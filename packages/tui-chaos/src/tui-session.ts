@@ -13,6 +13,7 @@
 //     processes and creates no daemon, socket, or endpoint.
 
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { openPtySession, type PtySession } from "./pty/session";
 import { Screen } from "./screen";
 import type { CastWriter } from "./asciinema";
@@ -37,7 +38,9 @@ export interface TuiFixtureSession {
 
 export function defaultRepoRoot(): string {
   // packages/tui-chaos/src -> repo root is three levels up.
-  return path.resolve(new URL("..", import.meta.url).pathname, "..", "..");
+  // fileURLToPath (not raw URL.pathname): import.meta.url is percent-encoded
+  // (spaces -> %20), which would corrupt filesystem paths containing them.
+  return path.resolve(fileURLToPath(new URL("..", import.meta.url)), "..", "..");
 }
 
 export async function launchTuiFixtureSession(opts: TuiLaunchOptions): Promise<TuiFixtureSession> {
