@@ -30,8 +30,8 @@ export interface ScreenSnapshot {
 
 export class Screen {
   private term: Terminal;
-  private pending: Array<{ data: string; cb: () => void }> = [];
-  private drained = true;
+  /** Number of writes handed to the parser whose callback has not fired. */
+  private inFlight = 0;
 
   constructor(
     public cols: number,
@@ -47,20 +47,25 @@ export class Screen {
   /** Feed raw PTY output. The returned promise resolves after xterm parses it. */
   write(data: string): Promise<void> {
     return new Promise<void>((resolve) => {
-      this.drained = false;
+      this.inFlight += 1;
       this.term.write(data, () => {
-        this.drained = true;
+        this.inFlight -= 1;
         resolve();
       });
     });
   }
 
-  /** Wait until every queued write has been parsed by the parser. */
+  /**
+   * Wait until every queued write has been parsed by the parser.
+   *
+   * Drained is defined by counting in-flight writes: each write() increments
+   * the counter on hand-off and its parser callback decrements it, so the
+   * counter reaches zero only after the final outstanding write's callback
+   * has fired. This does NOT rely on assumed xterm write serialization for
+   * correctness — overlapping write() calls are fully accounted.
+   */
   async flush(): Promise<void> {
-    // xterm serializes writes internally; each write() callback already
-    // guarantees its own chunk was parsed. Await a microtask turn for any
-    // in-flight chunk from the bridge.
-    while (!this.drained) {
+    while (this.inFlight > 0) {
       await new Promise<void>((r) => setTimeout(r, 5));
     }
   }

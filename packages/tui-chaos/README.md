@@ -42,9 +42,10 @@ bun packages/tui-chaos/src/cli.ts start --stream # same, with the colorized fixt
   precisely why the fixture path exists. The harness does not paper over it
   by standing up broker IPC.
 
-Both seams live in `apps/madbridge/src/tui/main.tsx` (the smallest possible
-diff), are dead unless the env gate is set, and change nothing for normal
-users or the existing `bun test` suite.
+Both fixture seams are implemented in `apps/madbridge/src/fixture/harness.ts`
+and wired/invoked from `apps/madbridge/src/tui/main.tsx` (the smallest
+possible diff). They are dead unless the env gate is set, and change nothing
+for normal users or the existing `bun test` suite.
 
 ## Commands
 

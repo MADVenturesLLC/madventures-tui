@@ -64,4 +64,100 @@ describe("Screen", () => {
       await waitFor(screen, (s) => s.lines[0]!.includes("absent"), 120, 20),
     ).toBe(false);
   });
+
+  // ─── F3: drain accounting under overlapping writes ───
+
+  test("flush() waits through the final overlapping write before returning", async () => {
+    // Reproduces the ready-state review finding: two overlapping (not
+    // awaited) writes, the first completing parse while the second is still
+    // in flight. A boolean "drained" flag set true by the FIRST callback
+    // lets flush() return before the second write is parsed; in-flight
+    // counting cannot. Order below is deterministic: flush() may return
+    // only after the last write's callback fired and resolved its promise.
+    const screen = new Screen(40, 4);
+    const events: string[] = [];
+    const p1 = screen.write("first-");
+    const p2 = screen.write("second").then(() => {
+      events.push("second-parsed");
+    });
+    await p1.then(() => {
+      events.push("first-awaited");
+    });
+    await screen.flush();
+    events.push("flushed");
+    expect(events).toEqual(["first-awaited", "second-parsed", "flushed"]);
+    await p2;
+    const snap = screen.snapshot();
+    expect(snap.lines[0]).toContain("first-");
+    expect(snap.lines[0]).toContain("second");
+  });
+
+  test("flush() accounts for multiple overlapping writes (PTY onData pattern)", async () => {
+    // onData() calls write() fire-and-forget; three chunks can be in flight
+    // at once. After flush(), every chunk must be reflected in the grid.
+    const screen = new Screen(60, 4);
+    const w1 = screen.write("alpha ");
+    const w2 = screen.write("beta ");
+    const w3 = screen.write("gamma");
+    await screen.flush();
+    const line = screen.snapshot().lines[0]!;
+    expect(line).toContain("alpha");
+    expect(line).toContain("beta");
+    expect(line).toContain("gamma");
+    await Promise.all([w1, w2, w3]);
+  });
+
+  test("flush() is a no-op promise when nothing is in flight", async () => {
+    const screen = new Screen(20, 2);
+    await screen.write("settled");
+    await screen.flush();
+    await screen.flush();
+    expect(screen.snapshot().lines[0]).toContain("settled");
+  });
+
+  test("drain accounting holds while a later queued write is still outstanding", async () => {
+    // Deterministic negative coverage for the ready-state review finding:
+    // a controlled parser double releases each write callback on demand,
+    // reproducing the exact interleaving the real parser can produce when
+    // its write budget splits overlapping writes across macrotasks — the
+    // first write's callback fires while the second is still queued.
+    // A boolean "drained" flag set by the FIRST callback lets flush()
+    // return early; in-flight counting cannot. (Verified to fail the
+    // previous boolean-drained implementation and pass the corrected one.)
+    const { Terminal } = await import("@xterm/headless");
+    const origWrite = Terminal.prototype.write;
+    const queued: Array<{ data: string; cb: () => void }> = [];
+    Terminal.prototype.write = function (data: string, cb?: () => void) {
+      queued.push({ data, cb: cb ?? (() => {}) });
+    };
+    try {
+      const screen = new Screen(40, 4);
+      const p1 = screen.write("one");
+      const p2 = screen.write("two");
+      expect(queued.length).toBe(2);
+
+      let flushDone = false;
+      const flushP = screen.flush().then(() => {
+        flushDone = true;
+      });
+      // Neither write parsed yet: flush() must not be able to complete.
+      await new Promise((r) => setTimeout(r, 20));
+      expect(flushDone).toBe(false);
+
+      // Parser finishes chunk 1 only. Chunk 2 is STILL outstanding —
+      // flush() must remain pending. (The old boolean-drained screen
+      // reports drained here and flush() returns: the defect.)
+      queued[0]!.cb();
+      await new Promise((r) => setTimeout(r, 20));
+      expect(flushDone).toBe(false);
+
+      // Parser finishes the final write: flush() may now complete.
+      queued[1]!.cb();
+      await flushP;
+      expect(flushDone).toBe(true);
+      await Promise.all([p1, p2]);
+    } finally {
+      Terminal.prototype.write = origWrite;
+    }
+  });
 });

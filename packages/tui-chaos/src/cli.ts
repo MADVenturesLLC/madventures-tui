@@ -161,7 +161,7 @@ async function runScenarioFresh(
     asciinema: boolean;
     log: (msg: string) => void;
   },
-): Promise<ScenarioResult> {
+): Promise<{ result: ScenarioResult; fixtureFlags: string[]; castPath: string | null }> {
   const cast = opts.asciinema
     ? startCast(
         { width: opts.cols, height: opts.rows },
@@ -177,7 +177,11 @@ async function runScenarioFresh(
   });
   const ctx = makeRunContext(tui, opts.artifactsDir, opts.log);
   try {
-    return await fn(ctx);
+    const result = await fn(ctx);
+    // The session's own derived flags are the authoritative record of what
+    // env the TUI actually ran under (F1); the cast path is the artifact
+    // actually written for THIS scenario (F2).
+    return { result, fixtureFlags: tui.fixtureFlags, castPath: cast ? cast.finish() : null };
   } finally {
     if (cast) cast.finish();
     await tui.close();
@@ -215,9 +219,14 @@ async function cmdRun(argv: string[]): Promise<number> {
 
   const startedAt = new Date().toISOString();
   const results: ScenarioResult[] = [];
+  // Authoritative records derived from the sessions/casts themselves (F1/F2):
+  // effective fixture flags = union of what each session actually set;
+  // cast paths = the files actually written, per scenario.
+  const effectiveFixtureFlags: string[] = [];
+  const castPaths: string[] = [];
   for (const name of requested) {
     log(`▶ scenario ${name} (fresh TUI session)`);
-    const result = await runScenarioFresh(name, SCENARIOS[name]!, {
+    const { result, fixtureFlags, castPath } = await runScenarioFresh(name, SCENARIOS[name]!, {
       repoRoot,
       cols,
       rows,
@@ -225,6 +234,15 @@ async function cmdRun(argv: string[]): Promise<number> {
       asciinema,
       log,
     });
+    for (const flag of fixtureFlags) {
+      if (!effectiveFixtureFlags.includes(flag)) effectiveFixtureFlags.push(flag);
+    }
+    if (castPath) {
+      castPaths.push(castPath);
+      // Scenario-specific cast: recorded as an artifact of its own scenario
+      // block, never a invented single filename at the subject level.
+      if (!result.artifacts.includes(castPath)) result.artifacts.push(castPath);
+    }
 
     // Golden grid comparison happens BEFORE the result is reported so the
     // PASS/FAIL line always reflects the complete invariant set (goldens
@@ -260,12 +278,16 @@ async function cmdRun(argv: string[]): Promise<number> {
     startedAt,
     finishedAt,
     entrypoint: "apps/madbridge/src/tui/main.tsx --fixture",
-    fixtureFlags: ["MADV_TUI_FIXTURE=1"],
+    fixtureFlags: effectiveFixtureFlags,
     cols,
     rows,
     scenarioResults: results,
     reportPath: path.join(dir, "report.json"),
-    asciinemaPath: asciinema ? path.join(dir, "governance_focus.cast") : null,
+    // F2: reference the actual cast only when exactly one canonical cast
+    // exists for the run; multi-cast runs are represented per scenario
+    // (each scenario block's artifacts carry its own cast path), and the
+    // subject-level field is explicitly null rather than a fabricated name.
+    asciinemaPath: castPaths.length === 1 ? castPaths[0]! : null,
   });
 
   const reportFile = path.join(dir, "report.json");

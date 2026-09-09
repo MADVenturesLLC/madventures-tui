@@ -13,6 +13,7 @@
 //     processes and creates no daemon, socket, or endpoint.
 
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { openPtySession, type PtySession } from "./pty/session";
 import { Screen } from "./screen";
 import type { CastWriter } from "./asciinema";
@@ -35,9 +36,21 @@ export interface TuiFixtureSession {
   close(): Promise<void>;
 }
 
+/**
+ * Derive the repo root from a module URL using the correct URL-to-filesystem
+ * conversion. `URL.pathname` is percent-encoded (spaces arrive as %20), so it
+ * must never be used directly as a filesystem path; `fileURLToPath` decodes.
+ * `moduleUrl` is expected to be .../packages/tui-chaos/src/<file>.
+ */
+export function repoRootFromModuleUrl(moduleUrl: URL): string {
+  return path.resolve(fileURLToPath(new URL("../../..", moduleUrl)));
+}
+
 export function defaultRepoRoot(): string {
   // packages/tui-chaos/src -> repo root is three levels up.
-  return path.resolve(new URL("..", import.meta.url).pathname, "..", "..");
+  // import.meta.url is a string in TS; wrap it into a URL for the
+  // fileURLToPath-based derivation.
+  return repoRootFromModuleUrl(new URL(import.meta.url));
 }
 
 export async function launchTuiFixtureSession(opts: TuiLaunchOptions): Promise<TuiFixtureSession> {
@@ -50,19 +63,23 @@ export async function launchTuiFixtureSession(opts: TuiLaunchOptions): Promise<T
   }
 
   const entrypoint = path.join(opts.repoRoot, "apps", "madbridge", "src", "tui", "main.tsx");
+  // ── Fixture gates (the ONLY env seams the harness sets) ──
+  // fixtureFlags is DERIVED from the env actually constructed here — the
+  // authoritative session state — so evidence packets can never drift from
+  // what the run really used.
+  const fixtureEnv: Record<string, string> = {
+    MADV_TUI_FIXTURE: "1",
+    ...(opts.stream ? { MADV_TUI_FIXTURE_STREAM: "1" } : {}),
+  };
   const env: Record<string, string> = {
     PATH: process.env.PATH ?? "/usr/bin:/bin",
     HOME: process.env.HOME ?? "/tmp",
     TERM: "xterm-256color",
     LANG: process.env.LANG ?? "en_US.UTF-8",
     TMPDIR: process.env.TMPDIR ?? "/tmp",
-    // ── Fixture gates (the ONLY env seams the harness sets) ──
-    MADV_TUI_FIXTURE: "1",
-    ...(opts.stream ? { MADV_TUI_FIXTURE_STREAM: "1" } : {}),
+    ...fixtureEnv,
   };
-  const fixtureFlags = opts.stream
-    ? ["--fixture", "MADV_TUI_FIXTURE=1", "MADV_TUI_FIXTURE_STREAM=1"]
-    : ["--fixture", "MADV_TUI_FIXTURE=1"];
+  const fixtureFlags = Object.entries(fixtureEnv).map(([k, v]) => `${k}=${v}`);
 
   const session = await openPtySession({
     file: bunExec,
