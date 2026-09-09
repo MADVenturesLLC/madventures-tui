@@ -290,7 +290,8 @@ export function validateClaimBoundary(value: unknown): ClaimBoundaryIssue[] {
           path: "not_evidence_of",
         });
       }
-      const overbroad = [...seen].filter((c) => provenClaims(rung).includes(c as EvidenceClaim));
+      const proven = provenClaims(rung);
+      const overbroad = [...seen].filter((c) => proven.includes(c as EvidenceClaim));
       if (overbroad.length > 0) {
         issues.push({
           code: "OVERBROAD_NOT_EVIDENCE_OF",
