@@ -31,7 +31,7 @@ export interface ScreenSnapshot {
 export class Screen {
   private term: Terminal;
   private pending: Array<{ data: string; cb: () => void }> = [];
-  private drained = true;
+  private inFlight = 0;
 
   constructor(
     public cols: number,
@@ -46,10 +46,14 @@ export class Screen {
 
   /** Feed raw PTY output. The returned promise resolves after xterm parses it. */
   write(data: string): Promise<void> {
+    // Count every submitted chunk as in-flight until ITS OWN parser callback
+    // fires — overlapping write() calls each increment, each callback
+    // decrements, so drained == zero in-flight/pending parser writes even
+    // when several chunks are queued inside xterm at once.
+    this.inFlight++;
     return new Promise<void>((resolve) => {
-      this.drained = false;
       this.term.write(data, () => {
-        this.drained = true;
+        this.inFlight--;
         resolve();
       });
     });
@@ -57,10 +61,10 @@ export class Screen {
 
   /** Wait until every queued write has been parsed by the parser. */
   async flush(): Promise<void> {
-    // xterm serializes writes internally; each write() callback already
-    // guarantees its own chunk was parsed. Await a microtask turn for any
-    // in-flight chunk from the bridge.
-    while (!this.drained) {
+    // Correctness does not depend on assumed xterm write serialization:
+    // inFlight counts every write() still awaiting its own parser callback,
+    // so flush() returns only when the last queued chunk has parsed.
+    while (this.inFlight > 0) {
       await new Promise<void>((r) => setTimeout(r, 5));
     }
   }
