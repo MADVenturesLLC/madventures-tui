@@ -66,7 +66,8 @@ const issues = validateClaimBoundary(receipt.claim_boundary);
 if (issues.length > 0) {
   // Refuse the receipt. Issue codes:
   //   MISSING_RUNG / UNKNOWN_RUNG          rung not in the closed set
-  //   MISSING_NOT_EVIDENCE_OF / NOT_ARRAY  the declaration itself is absent
+  //   MISSING_NOT_EVIDENCE_OF           the declaration itself is absent
+  //   NOT_EVIDENCE_OF_NOT_ARRAY         field present but not an array
   //   UNKNOWN_CLAIM / DUPLICATE_CLAIM      vocabulary violations
   //   INCOMPLETE_NOT_EVIDENCE_OF           lie by omission — forced claims missing
   //   OVERBROAD_NOT_EVIDENCE_OF            contradiction — proven claims disclaimed
