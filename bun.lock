@@ -95,6 +95,13 @@
       "name": "@madventures/protocol",
       "version": "0.1.0",
     },
+    "packages/proving-ground": {
+      "name": "@mad/proving-ground",
+      "version": "0.1.0",
+      "dependencies": {
+        "@mad/claim-boundary": "workspace:*",
+      },
+    },
     "packages/pty-host": {
       "name": "@madventures/pty-host",
       "version": "0.1.0",
@@ -120,6 +127,8 @@
   ],
   "packages": {
     "@mad/claim-boundary": ["@mad/claim-boundary@workspace:packages/claim-boundary"],
+
+    "@mad/proving-ground": ["@mad/proving-ground@workspace:packages/proving-ground"],
 
     "@madventures/adapter-antigravity": ["@madventures/adapter-antigravity@workspace:packages/adapter-antigravity"],
 

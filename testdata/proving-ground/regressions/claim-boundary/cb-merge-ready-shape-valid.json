@@ -1,0 +1,18 @@
+{
+  "id": "cb-merge-ready-shape-valid",
+  "source": "proving-ground",
+  "challenge": "pg-cb-lies",
+  "label": "rung 'merged' with empty forced set and triumphant gloss — shape-valid, evidence unproven",
+  "boundary": {
+    "rung": "merged",
+    "not_evidence_of": [],
+    "gloss": "merge-ready — nothing left to disclaim"
+  },
+  "expect": {
+    "verdict": "accept",
+    "rung": "merged",
+    "notEvidenceOf": []
+  },
+  "promotedAt": "2026-09-09T19:24:21.258Z",
+  "reason": "durable law regression L6/A3: shape-valid merge-ready boundary must stay ACCEPTED — shape validity is not evidence"
+}

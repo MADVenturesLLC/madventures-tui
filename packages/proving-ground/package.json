@@ -1,0 +1,13 @@
+{
+  "name": "@mad/proving-ground",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "description": "Adversarial Proving Ground v0: turns known defect classes into reproducible failing cases, then into checked-in durable regressions.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@mad/claim-boundary": "workspace:*"
+  }
+}

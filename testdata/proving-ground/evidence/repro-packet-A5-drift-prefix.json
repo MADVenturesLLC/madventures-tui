@@ -1,0 +1,1732 @@
+{
+  "schema": "REP-v1-pg",
+  "label": "PROVING_GROUND — NOT PHASE_0 — NOT OCCUPANCY_PROOF",
+  "run_id": "pg-20260909192305-3459d8",
+  "git_sha": "76579b0e5ad0fb2a3d3b68fb1c74314962049e05",
+  "seed": 20260906,
+  "started_at": "2026-09-09T19:23:05.454Z",
+  "finished_at": "2026-09-09T19:23:06.866Z",
+  "challenges": [
+    {
+      "id": "pg-cb-lies",
+      "kind": "malformed_authority",
+      "title": "Claim-boundary lying receipts are judged by the law, not by luck",
+      "outcome": "pass",
+      "oracle": "@mad/claim-boundary validate/parse (law oracle in src/law.ts)",
+      "seed": 20260906,
+      "cases": [
+        {
+          "caseId": "cb-incomplete-executed-minus-merge",
+          "origin": "authored",
+          "input": {
+            "label": "executed receipt drops 'merge' from not_evidence_of — lie by omission",
+            "vector": {
+              "rung": "executed",
+              "not_evidence_of": [
+                "attestation",
+                "verification",
+                "review",
+                "ci"
+              ]
+            }
+          },
+          "expected": "reject (INCOMPLETE_NOT_EVIDENCE_OF)",
+          "actual": "rejected with [INCOMPLETE_NOT_EVIDENCE_OF]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-incomplete-prepared-minimal",
+          "origin": "authored",
+          "input": {
+            "label": "prepared receipt claims only 'merge' is not proven — hides six lies",
+            "vector": {
+              "rung": "prepared",
+              "not_evidence_of": [
+                "merge"
+              ]
+            }
+          },
+          "expected": "reject (INCOMPLETE_NOT_EVIDENCE_OF)",
+          "actual": "rejected with [INCOMPLETE_NOT_EVIDENCE_OF]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-overbroad-executed-self-disclaimer",
+          "origin": "authored",
+          "input": {
+            "label": "executed receipt disclaims 'execution' — merge-ready at executed",
+            "vector": {
+              "rung": "executed",
+              "not_evidence_of": [
+                "attestation",
+                "verification",
+                "review",
+                "ci",
+                "merge",
+                "execution"
+              ]
+            }
+          },
+          "expected": "reject (OVERBROAD_NOT_EVIDENCE_OF)",
+          "actual": "rejected with [OVERBROAD_NOT_EVIDENCE_OF]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-overbroad-prepared-done-lie",
+          "origin": "authored",
+          "input": {
+            "label": "prepared receipt disclaims proven preparation — 'done' lie at the bottom rung",
+            "vector": {
+              "rung": "prepared",
+              "not_evidence_of": [
+                "verification",
+                "review",
+                "ci",
+                "merge",
+                "preparation"
+              ]
+            }
+          },
+          "expected": "reject (OVERBROAD_NOT_EVIDENCE_OF|INCOMPLETE_NOT_EVIDENCE_OF)",
+          "actual": "rejected with [INCOMPLETE_NOT_EVIDENCE_OF,OVERBROAD_NOT_EVIDENCE_OF]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-unknown-rung",
+          "origin": "authored",
+          "input": {
+            "label": "rung 'shipped' is not on the ladder",
+            "vector": {
+              "rung": "shipped",
+              "not_evidence_of": []
+            }
+          },
+          "expected": "reject (UNKNOWN_RUNG)",
+          "actual": "rejected with [UNKNOWN_RUNG]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-unknown-claim",
+          "origin": "authored",
+          "input": {
+            "label": "claim 'deployed' is not in the closed claim set",
+            "vector": {
+              "rung": "ci",
+              "not_evidence_of": [
+                "merge",
+                "deployed"
+              ]
+            }
+          },
+          "expected": "reject (UNKNOWN_CLAIM)",
+          "actual": "rejected with [UNKNOWN_CLAIM]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-missing-declaration",
+          "origin": "authored",
+          "input": {
+            "label": "receipt with no not_evidence_of at all",
+            "vector": {
+              "rung": "verified"
+            }
+          },
+          "expected": "reject (MISSING_NOT_EVIDENCE_OF)",
+          "actual": "rejected with [MISSING_NOT_EVIDENCE_OF]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-duplicate-claim",
+          "origin": "authored",
+          "input": {
+            "label": "'merge' declared twice in not_evidence_of",
+            "vector": {
+              "rung": "ci",
+              "not_evidence_of": [
+                "merge",
+                "merge"
+              ]
+            }
+          },
+          "expected": "reject (DUPLICATE_CLAIM)",
+          "actual": "rejected with [DUPLICATE_CLAIM]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-unknown-field",
+          "origin": "authored",
+          "input": {
+            "label": "stowaway field 'verified: true' smuggled into the boundary",
+            "vector": {
+              "rung": "ci",
+              "not_evidence_of": [
+                "merge"
+              ],
+              "verified": true
+            }
+          },
+          "expected": "reject (UNKNOWN_FIELD)",
+          "actual": "rejected with [UNKNOWN_FIELD]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-gloss-lie-prepared",
+          "origin": "authored",
+          "input": {
+            "label": "prepared receipt whose gloss claims verified+reviewed+ci+merge",
+            "vector": {
+              "rung": "prepared",
+              "not_evidence_of": [
+                "dispatch",
+                "execution",
+                "attestation",
+                "verification",
+                "review",
+                "ci",
+                "merge"
+              ],
+              "gloss": "fully verified, independently reviewed, CI green, and merged"
+            }
+          },
+          "expected": "accept rung=prepared",
+          "actual": "accepted, canonical rung prepared, set exact",
+          "pass": true,
+          "citation": "Prose is never semantic: the boundary stays 'prepared' and still disclaims every claim above it — including everything the gloss boasts."
+        },
+        {
+          "caseId": "cb-merge-ready-shape-valid",
+          "origin": "authored",
+          "input": {
+            "label": "rung 'merged' with empty forced set and triumphant gloss — shape-valid, evidence unproven",
+            "vector": {
+              "rung": "merged",
+              "not_evidence_of": [],
+              "gloss": "merge-ready — nothing left to disclaim"
+            }
+          },
+          "expected": "accept rung=merged",
+          "actual": "accepted, canonical rung merged, set exact",
+          "pass": true,
+          "citation": "validateClaimBoundary(makeClaimBoundary('merged')) accepts with no external evidence. Shape-valid ≠ evidence: the caller must validate supporting records and subject identities before deriving the displayed rung (audit A3)."
+        },
+        {
+          "caseId": "cb-canonical-prepared",
+          "origin": "authored",
+          "input": {
+            "label": "canonical boundary at rung 'prepared' is legal and exact",
+            "vector": {
+              "rung": "prepared",
+              "not_evidence_of": [
+                "dispatch",
+                "execution",
+                "attestation",
+                "verification",
+                "review",
+                "ci",
+                "merge"
+              ]
+            }
+          },
+          "expected": "accept rung=prepared",
+          "actual": "accepted, canonical rung prepared, set exact",
+          "pass": true
+        },
+        {
+          "caseId": "cb-canonical-dispatched",
+          "origin": "authored",
+          "input": {
+            "label": "canonical boundary at rung 'dispatched' is legal and exact",
+            "vector": {
+              "rung": "dispatched",
+              "not_evidence_of": [
+                "execution",
+                "attestation",
+                "verification",
+                "review",
+                "ci",
+                "merge"
+              ]
+            }
+          },
+          "expected": "accept rung=dispatched",
+          "actual": "accepted, canonical rung dispatched, set exact",
+          "pass": true
+        },
+        {
+          "caseId": "cb-canonical-executed",
+          "origin": "authored",
+          "input": {
+            "label": "canonical boundary at rung 'executed' is legal and exact",
+            "vector": {
+              "rung": "executed",
+              "not_evidence_of": [
+                "attestation",
+                "verification",
+                "review",
+                "ci",
+                "merge"
+              ]
+            }
+          },
+          "expected": "accept rung=executed",
+          "actual": "accepted, canonical rung executed, set exact",
+          "pass": true
+        },
+        {
+          "caseId": "cb-canonical-attested",
+          "origin": "authored",
+          "input": {
+            "label": "canonical boundary at rung 'attested' is legal and exact",
+            "vector": {
+              "rung": "attested",
+              "not_evidence_of": [
+                "verification",
+                "review",
+                "ci",
+                "merge"
+              ]
+            }
+          },
+          "expected": "accept rung=attested",
+          "actual": "accepted, canonical rung attested, set exact",
+          "pass": true
+        },
+        {
+          "caseId": "cb-canonical-verified",
+          "origin": "authored",
+          "input": {
+            "label": "canonical boundary at rung 'verified' is legal and exact",
+            "vector": {
+              "rung": "verified",
+              "not_evidence_of": [
+                "review",
+                "ci",
+                "merge"
+              ]
+            }
+          },
+          "expected": "accept rung=verified",
+          "actual": "accepted, canonical rung verified, set exact",
+          "pass": true
+        },
+        {
+          "caseId": "cb-canonical-reviewed",
+          "origin": "authored",
+          "input": {
+            "label": "canonical boundary at rung 'reviewed' is legal and exact",
+            "vector": {
+              "rung": "reviewed",
+              "not_evidence_of": [
+                "ci",
+                "merge"
+              ]
+            }
+          },
+          "expected": "accept rung=reviewed",
+          "actual": "accepted, canonical rung reviewed, set exact",
+          "pass": true
+        },
+        {
+          "caseId": "cb-canonical-ci",
+          "origin": "authored",
+          "input": {
+            "label": "canonical boundary at rung 'ci' is legal and exact",
+            "vector": {
+              "rung": "ci",
+              "not_evidence_of": [
+                "merge"
+              ]
+            }
+          },
+          "expected": "accept rung=ci",
+          "actual": "accepted, canonical rung ci, set exact",
+          "pass": true
+        },
+        {
+          "caseId": "cb-canonical-merged",
+          "origin": "authored",
+          "input": {
+            "label": "canonical boundary at rung 'merged' is legal and exact",
+            "vector": {
+              "rung": "merged",
+              "not_evidence_of": []
+            }
+          },
+          "expected": "accept rung=merged",
+          "actual": "accepted, canonical rung merged, set exact",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-000-inject-unknown-claim",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded inject-unknown-claim on dispatched",
+            "vector": {
+              "rung": "dispatched",
+              "not_evidence_of": [
+                "execution",
+                "attestation",
+                "verification",
+                "review",
+                "ci",
+                "merge",
+                "deployed"
+              ]
+            }
+          },
+          "expected": "reject (UNKNOWN_CLAIM)",
+          "actual": "rejected with [UNKNOWN_CLAIM]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-001-inject-unknown-claim",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded inject-unknown-claim on ci",
+            "vector": {
+              "rung": "ci",
+              "not_evidence_of": [
+                "merge",
+                "deployed"
+              ]
+            }
+          },
+          "expected": "reject (UNKNOWN_CLAIM)",
+          "actual": "rejected with [UNKNOWN_CLAIM]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-002-add-proven-claim",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded add-proven-claim on attested",
+            "vector": {
+              "rung": "attested",
+              "not_evidence_of": [
+                "verification",
+                "review",
+                "ci",
+                "merge",
+                "execution"
+              ]
+            }
+          },
+          "expected": "reject (OVERBROAD_NOT_EVIDENCE_OF)",
+          "actual": "rejected with [OVERBROAD_NOT_EVIDENCE_OF]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-003-inject-unknown-claim",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded inject-unknown-claim on executed",
+            "vector": {
+              "rung": "executed",
+              "not_evidence_of": [
+                "attestation",
+                "verification",
+                "review",
+                "ci",
+                "merge",
+                "deployed"
+              ]
+            }
+          },
+          "expected": "reject (UNKNOWN_CLAIM)",
+          "actual": "rejected with [UNKNOWN_CLAIM]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-004-shuffle-order",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded shuffle-order on executed",
+            "vector": {
+              "rung": "executed",
+              "not_evidence_of": [
+                "verification",
+                "review",
+                "merge",
+                "attestation",
+                "ci"
+              ]
+            }
+          },
+          "expected": "accept rung=executed",
+          "actual": "accepted, canonical rung executed, set exact",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-005-shuffle-order",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded shuffle-order on merged",
+            "vector": {
+              "rung": "merged",
+              "not_evidence_of": []
+            }
+          },
+          "expected": "accept rung=merged",
+          "actual": "accepted, canonical rung merged, set exact",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-006-add-proven-claim",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded add-proven-claim on merged",
+            "vector": {
+              "rung": "merged",
+              "not_evidence_of": [
+                "execution"
+              ]
+            }
+          },
+          "expected": "reject (OVERBROAD_NOT_EVIDENCE_OF)",
+          "actual": "rejected with [OVERBROAD_NOT_EVIDENCE_OF]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-007-corrupt-rung",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded corrupt-rung on merged",
+            "vector": {
+              "rung": "shipped",
+              "not_evidence_of": []
+            }
+          },
+          "expected": "reject (UNKNOWN_RUNG)",
+          "actual": "rejected with [UNKNOWN_RUNG]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-008-drop-random-forced",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded drop-random-forced on prepared",
+            "vector": {
+              "rung": "prepared",
+              "not_evidence_of": [
+                "dispatch",
+                "execution",
+                "attestation",
+                "review",
+                "ci",
+                "merge"
+              ]
+            }
+          },
+          "expected": "reject (INCOMPLETE_NOT_EVIDENCE_OF)",
+          "actual": "rejected with [INCOMPLETE_NOT_EVIDENCE_OF]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-009-corrupt-rung",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded corrupt-rung on attested",
+            "vector": {
+              "rung": "shipped",
+              "not_evidence_of": [
+                "verification",
+                "review",
+                "ci",
+                "merge"
+              ]
+            }
+          },
+          "expected": "reject (UNKNOWN_RUNG)",
+          "actual": "rejected with [UNKNOWN_RUNG]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-010-drop-random-forced",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded drop-random-forced on prepared",
+            "vector": {
+              "rung": "prepared",
+              "not_evidence_of": [
+                "dispatch",
+                "execution",
+                "attestation",
+                "review",
+                "ci",
+                "merge"
+              ]
+            }
+          },
+          "expected": "reject (INCOMPLETE_NOT_EVIDENCE_OF)",
+          "actual": "rejected with [INCOMPLETE_NOT_EVIDENCE_OF]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-011-shuffle-order",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded shuffle-order on dispatched",
+            "vector": {
+              "rung": "dispatched",
+              "not_evidence_of": [
+                "ci",
+                "attestation",
+                "review",
+                "execution",
+                "verification",
+                "merge"
+              ]
+            }
+          },
+          "expected": "accept rung=dispatched",
+          "actual": "accepted, canonical rung dispatched, set exact",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-012-add-proven-claim",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded add-proven-claim on executed",
+            "vector": {
+              "rung": "executed",
+              "not_evidence_of": [
+                "attestation",
+                "verification",
+                "review",
+                "ci",
+                "merge",
+                "execution"
+              ]
+            }
+          },
+          "expected": "reject (OVERBROAD_NOT_EVIDENCE_OF)",
+          "actual": "rejected with [OVERBROAD_NOT_EVIDENCE_OF]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-013-duplicate-random-claim",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded duplicate-random-claim on merged",
+            "vector": {
+              "rung": "merged",
+              "not_evidence_of": [
+                "merge",
+                "merge"
+              ]
+            }
+          },
+          "expected": "reject (OVERBROAD_NOT_EVIDENCE_OF|DUPLICATE_CLAIM)",
+          "actual": "rejected with [DUPLICATE_CLAIM,OVERBROAD_NOT_EVIDENCE_OF]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-014-add-proven-claim",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded add-proven-claim on executed",
+            "vector": {
+              "rung": "executed",
+              "not_evidence_of": [
+                "attestation",
+                "verification",
+                "review",
+                "ci",
+                "merge",
+                "execution"
+              ]
+            }
+          },
+          "expected": "reject (OVERBROAD_NOT_EVIDENCE_OF)",
+          "actual": "rejected with [OVERBROAD_NOT_EVIDENCE_OF]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-015-shuffle-order",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded shuffle-order on reviewed",
+            "vector": {
+              "rung": "reviewed",
+              "not_evidence_of": [
+                "merge",
+                "ci"
+              ]
+            }
+          },
+          "expected": "accept rung=reviewed",
+          "actual": "accepted, canonical rung reviewed, set exact",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-016-add-proven-claim",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded add-proven-claim on attested",
+            "vector": {
+              "rung": "attested",
+              "not_evidence_of": [
+                "verification",
+                "review",
+                "ci",
+                "merge",
+                "attestation"
+              ]
+            }
+          },
+          "expected": "reject (OVERBROAD_NOT_EVIDENCE_OF)",
+          "actual": "rejected with [OVERBROAD_NOT_EVIDENCE_OF]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-017-shuffle-order",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded shuffle-order on prepared",
+            "vector": {
+              "rung": "prepared",
+              "not_evidence_of": [
+                "attestation",
+                "verification",
+                "dispatch",
+                "execution",
+                "merge",
+                "review",
+                "ci"
+              ]
+            }
+          },
+          "expected": "accept rung=prepared",
+          "actual": "accepted, canonical rung prepared, set exact",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-018-add-proven-claim",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded add-proven-claim on dispatched",
+            "vector": {
+              "rung": "dispatched",
+              "not_evidence_of": [
+                "execution",
+                "attestation",
+                "verification",
+                "review",
+                "ci",
+                "merge",
+                "dispatch"
+              ]
+            }
+          },
+          "expected": "reject (OVERBROAD_NOT_EVIDENCE_OF)",
+          "actual": "rejected with [OVERBROAD_NOT_EVIDENCE_OF]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-019-add-proven-claim",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded add-proven-claim on prepared",
+            "vector": {
+              "rung": "prepared",
+              "not_evidence_of": [
+                "dispatch",
+                "execution",
+                "attestation",
+                "verification",
+                "review",
+                "ci",
+                "merge",
+                "preparation"
+              ]
+            }
+          },
+          "expected": "reject (OVERBROAD_NOT_EVIDENCE_OF)",
+          "actual": "rejected with [OVERBROAD_NOT_EVIDENCE_OF]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-020-delete-declaration",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded delete-declaration on ci",
+            "vector": {
+              "rung": "ci"
+            }
+          },
+          "expected": "reject (MISSING_NOT_EVIDENCE_OF)",
+          "actual": "rejected with [MISSING_NOT_EVIDENCE_OF]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-021-duplicate-random-claim",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded duplicate-random-claim on reviewed",
+            "vector": {
+              "rung": "reviewed",
+              "not_evidence_of": [
+                "ci",
+                "merge",
+                "merge"
+              ]
+            }
+          },
+          "expected": "reject (DUPLICATE_CLAIM)",
+          "actual": "rejected with [DUPLICATE_CLAIM]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-022-corrupt-rung",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded corrupt-rung on attested",
+            "vector": {
+              "rung": "shipped",
+              "not_evidence_of": [
+                "verification",
+                "review",
+                "ci",
+                "merge"
+              ]
+            }
+          },
+          "expected": "reject (UNKNOWN_RUNG)",
+          "actual": "rejected with [UNKNOWN_RUNG]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-023-drop-random-forced",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded drop-random-forced on verified",
+            "vector": {
+              "rung": "verified",
+              "not_evidence_of": [
+                "review",
+                "merge"
+              ]
+            }
+          },
+          "expected": "reject (INCOMPLETE_NOT_EVIDENCE_OF)",
+          "actual": "rejected with [INCOMPLETE_NOT_EVIDENCE_OF]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-024-corrupt-rung",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded corrupt-rung on attested",
+            "vector": {
+              "rung": "shipped",
+              "not_evidence_of": [
+                "verification",
+                "review",
+                "ci",
+                "merge"
+              ]
+            }
+          },
+          "expected": "reject (UNKNOWN_RUNG)",
+          "actual": "rejected with [UNKNOWN_RUNG]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-025-inject-unknown-claim",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded inject-unknown-claim on attested",
+            "vector": {
+              "rung": "attested",
+              "not_evidence_of": [
+                "verification",
+                "review",
+                "ci",
+                "merge",
+                "deployed"
+              ]
+            }
+          },
+          "expected": "reject (UNKNOWN_CLAIM)",
+          "actual": "rejected with [UNKNOWN_CLAIM]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-026-inject-unknown-claim",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded inject-unknown-claim on prepared",
+            "vector": {
+              "rung": "prepared",
+              "not_evidence_of": [
+                "dispatch",
+                "execution",
+                "attestation",
+                "verification",
+                "review",
+                "ci",
+                "merge",
+                "deployed"
+              ]
+            }
+          },
+          "expected": "reject (UNKNOWN_CLAIM)",
+          "actual": "rejected with [UNKNOWN_CLAIM]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-027-shuffle-order",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded shuffle-order on prepared",
+            "vector": {
+              "rung": "prepared",
+              "not_evidence_of": [
+                "dispatch",
+                "execution",
+                "review",
+                "merge",
+                "ci",
+                "verification",
+                "attestation"
+              ]
+            }
+          },
+          "expected": "accept rung=prepared",
+          "actual": "accepted, canonical rung prepared, set exact",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-028-add-proven-claim",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded add-proven-claim on verified",
+            "vector": {
+              "rung": "verified",
+              "not_evidence_of": [
+                "review",
+                "ci",
+                "merge",
+                "preparation"
+              ]
+            }
+          },
+          "expected": "reject (OVERBROAD_NOT_EVIDENCE_OF)",
+          "actual": "rejected with [OVERBROAD_NOT_EVIDENCE_OF]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-029-inject-unknown-claim",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded inject-unknown-claim on dispatched",
+            "vector": {
+              "rung": "dispatched",
+              "not_evidence_of": [
+                "execution",
+                "attestation",
+                "verification",
+                "review",
+                "ci",
+                "merge",
+                "deployed"
+              ]
+            }
+          },
+          "expected": "reject (UNKNOWN_CLAIM)",
+          "actual": "rejected with [UNKNOWN_CLAIM]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-030-add-proven-claim",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded add-proven-claim on executed",
+            "vector": {
+              "rung": "executed",
+              "not_evidence_of": [
+                "attestation",
+                "verification",
+                "review",
+                "ci",
+                "merge",
+                "dispatch"
+              ]
+            }
+          },
+          "expected": "reject (OVERBROAD_NOT_EVIDENCE_OF)",
+          "actual": "rejected with [OVERBROAD_NOT_EVIDENCE_OF]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-031-duplicate-random-claim",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded duplicate-random-claim on verified",
+            "vector": {
+              "rung": "verified",
+              "not_evidence_of": [
+                "review",
+                "ci",
+                "merge",
+                "merge"
+              ]
+            }
+          },
+          "expected": "reject (DUPLICATE_CLAIM)",
+          "actual": "rejected with [DUPLICATE_CLAIM]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-032-corrupt-rung",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded corrupt-rung on attested",
+            "vector": {
+              "rung": "shipped",
+              "not_evidence_of": [
+                "verification",
+                "review",
+                "ci",
+                "merge"
+              ]
+            }
+          },
+          "expected": "reject (UNKNOWN_RUNG)",
+          "actual": "rejected with [UNKNOWN_RUNG]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-033-delete-declaration",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded delete-declaration on dispatched",
+            "vector": {
+              "rung": "dispatched"
+            }
+          },
+          "expected": "reject (MISSING_NOT_EVIDENCE_OF)",
+          "actual": "rejected with [MISSING_NOT_EVIDENCE_OF]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-034-delete-declaration",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded delete-declaration on reviewed",
+            "vector": {
+              "rung": "reviewed"
+            }
+          },
+          "expected": "reject (MISSING_NOT_EVIDENCE_OF)",
+          "actual": "rejected with [MISSING_NOT_EVIDENCE_OF]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-035-drop-random-forced",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded drop-random-forced on prepared",
+            "vector": {
+              "rung": "prepared",
+              "not_evidence_of": [
+                "dispatch",
+                "execution",
+                "attestation",
+                "verification",
+                "review",
+                "ci"
+              ]
+            }
+          },
+          "expected": "reject (INCOMPLETE_NOT_EVIDENCE_OF)",
+          "actual": "rejected with [INCOMPLETE_NOT_EVIDENCE_OF]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-036-duplicate-random-claim",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded duplicate-random-claim on ci",
+            "vector": {
+              "rung": "ci",
+              "not_evidence_of": [
+                "merge",
+                "merge"
+              ]
+            }
+          },
+          "expected": "reject (DUPLICATE_CLAIM)",
+          "actual": "rejected with [DUPLICATE_CLAIM]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-037-corrupt-rung",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded corrupt-rung on dispatched",
+            "vector": {
+              "rung": "shipped",
+              "not_evidence_of": [
+                "execution",
+                "attestation",
+                "verification",
+                "review",
+                "ci",
+                "merge"
+              ]
+            }
+          },
+          "expected": "reject (UNKNOWN_RUNG)",
+          "actual": "rejected with [UNKNOWN_RUNG]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-038-delete-declaration",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded delete-declaration on reviewed",
+            "vector": {
+              "rung": "reviewed"
+            }
+          },
+          "expected": "reject (MISSING_NOT_EVIDENCE_OF)",
+          "actual": "rejected with [MISSING_NOT_EVIDENCE_OF]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-039-drop-random-forced",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded drop-random-forced on reviewed",
+            "vector": {
+              "rung": "reviewed",
+              "not_evidence_of": [
+                "ci"
+              ]
+            }
+          },
+          "expected": "reject (INCOMPLETE_NOT_EVIDENCE_OF)",
+          "actual": "rejected with [INCOMPLETE_NOT_EVIDENCE_OF]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-040-drop-random-forced",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded drop-random-forced on dispatched",
+            "vector": {
+              "rung": "dispatched",
+              "not_evidence_of": [
+                "execution",
+                "attestation",
+                "verification",
+                "review",
+                "merge"
+              ]
+            }
+          },
+          "expected": "reject (INCOMPLETE_NOT_EVIDENCE_OF)",
+          "actual": "rejected with [INCOMPLETE_NOT_EVIDENCE_OF]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-041-corrupt-rung",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded corrupt-rung on dispatched",
+            "vector": {
+              "rung": "shipped",
+              "not_evidence_of": [
+                "execution",
+                "attestation",
+                "verification",
+                "review",
+                "ci",
+                "merge"
+              ]
+            }
+          },
+          "expected": "reject (UNKNOWN_RUNG)",
+          "actual": "rejected with [UNKNOWN_RUNG]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-042-add-proven-claim",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded add-proven-claim on ci",
+            "vector": {
+              "rung": "ci",
+              "not_evidence_of": [
+                "merge",
+                "attestation"
+              ]
+            }
+          },
+          "expected": "reject (OVERBROAD_NOT_EVIDENCE_OF)",
+          "actual": "rejected with [OVERBROAD_NOT_EVIDENCE_OF]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-043-shuffle-order",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded shuffle-order on merged",
+            "vector": {
+              "rung": "merged",
+              "not_evidence_of": []
+            }
+          },
+          "expected": "accept rung=merged",
+          "actual": "accepted, canonical rung merged, set exact",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-044-duplicate-random-claim",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded duplicate-random-claim on attested",
+            "vector": {
+              "rung": "attested",
+              "not_evidence_of": [
+                "verification",
+                "review",
+                "ci",
+                "merge",
+                "merge"
+              ]
+            }
+          },
+          "expected": "reject (DUPLICATE_CLAIM)",
+          "actual": "rejected with [DUPLICATE_CLAIM]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-045-corrupt-rung",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded corrupt-rung on executed",
+            "vector": {
+              "rung": "shipped",
+              "not_evidence_of": [
+                "attestation",
+                "verification",
+                "review",
+                "ci",
+                "merge"
+              ]
+            }
+          },
+          "expected": "reject (UNKNOWN_RUNG)",
+          "actual": "rejected with [UNKNOWN_RUNG]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-046-delete-declaration",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded delete-declaration on verified",
+            "vector": {
+              "rung": "verified"
+            }
+          },
+          "expected": "reject (MISSING_NOT_EVIDENCE_OF)",
+          "actual": "rejected with [MISSING_NOT_EVIDENCE_OF]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-047-drop-random-forced",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded drop-random-forced on prepared",
+            "vector": {
+              "rung": "prepared",
+              "not_evidence_of": [
+                "dispatch",
+                "execution",
+                "attestation",
+                "verification",
+                "review",
+                "merge"
+              ]
+            }
+          },
+          "expected": "reject (INCOMPLETE_NOT_EVIDENCE_OF)",
+          "actual": "rejected with [INCOMPLETE_NOT_EVIDENCE_OF]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-048-inject-unknown-claim",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded inject-unknown-claim on reviewed",
+            "vector": {
+              "rung": "reviewed",
+              "not_evidence_of": [
+                "ci",
+                "merge",
+                "deployed"
+              ]
+            }
+          },
+          "expected": "reject (UNKNOWN_CLAIM)",
+          "actual": "rejected with [UNKNOWN_CLAIM]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-049-drop-random-forced",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded drop-random-forced on reviewed",
+            "vector": {
+              "rung": "reviewed",
+              "not_evidence_of": [
+                "ci"
+              ]
+            }
+          },
+          "expected": "reject (INCOMPLETE_NOT_EVIDENCE_OF)",
+          "actual": "rejected with [INCOMPLETE_NOT_EVIDENCE_OF]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-050-delete-declaration",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded delete-declaration on attested",
+            "vector": {
+              "rung": "attested"
+            }
+          },
+          "expected": "reject (MISSING_NOT_EVIDENCE_OF)",
+          "actual": "rejected with [MISSING_NOT_EVIDENCE_OF]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-051-drop-random-forced",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded drop-random-forced on ci",
+            "vector": {
+              "rung": "ci",
+              "not_evidence_of": []
+            }
+          },
+          "expected": "reject (INCOMPLETE_NOT_EVIDENCE_OF)",
+          "actual": "rejected with [INCOMPLETE_NOT_EVIDENCE_OF]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-052-drop-random-forced",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded drop-random-forced on merged",
+            "vector": {
+              "rung": "merged",
+              "not_evidence_of": [
+                "merge"
+              ]
+            }
+          },
+          "expected": "reject (OVERBROAD_NOT_EVIDENCE_OF)",
+          "actual": "rejected with [OVERBROAD_NOT_EVIDENCE_OF]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-053-add-proven-claim",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded add-proven-claim on prepared",
+            "vector": {
+              "rung": "prepared",
+              "not_evidence_of": [
+                "dispatch",
+                "execution",
+                "attestation",
+                "verification",
+                "review",
+                "ci",
+                "merge",
+                "preparation"
+              ]
+            }
+          },
+          "expected": "reject (OVERBROAD_NOT_EVIDENCE_OF)",
+          "actual": "rejected with [OVERBROAD_NOT_EVIDENCE_OF]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-054-duplicate-random-claim",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded duplicate-random-claim on merged",
+            "vector": {
+              "rung": "merged",
+              "not_evidence_of": [
+                "merge",
+                "merge"
+              ]
+            }
+          },
+          "expected": "reject (OVERBROAD_NOT_EVIDENCE_OF|DUPLICATE_CLAIM)",
+          "actual": "rejected with [DUPLICATE_CLAIM,OVERBROAD_NOT_EVIDENCE_OF]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-055-corrupt-rung",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded corrupt-rung on ci",
+            "vector": {
+              "rung": "shipped",
+              "not_evidence_of": [
+                "merge"
+              ]
+            }
+          },
+          "expected": "reject (UNKNOWN_RUNG)",
+          "actual": "rejected with [UNKNOWN_RUNG]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-056-inject-unknown-claim",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded inject-unknown-claim on prepared",
+            "vector": {
+              "rung": "prepared",
+              "not_evidence_of": [
+                "dispatch",
+                "execution",
+                "attestation",
+                "verification",
+                "review",
+                "ci",
+                "merge",
+                "deployed"
+              ]
+            }
+          },
+          "expected": "reject (UNKNOWN_CLAIM)",
+          "actual": "rejected with [UNKNOWN_CLAIM]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-057-drop-random-forced",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded drop-random-forced on reviewed",
+            "vector": {
+              "rung": "reviewed",
+              "not_evidence_of": [
+                "ci"
+              ]
+            }
+          },
+          "expected": "reject (INCOMPLETE_NOT_EVIDENCE_OF)",
+          "actual": "rejected with [INCOMPLETE_NOT_EVIDENCE_OF]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-058-drop-random-forced",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded drop-random-forced on prepared",
+            "vector": {
+              "rung": "prepared",
+              "not_evidence_of": [
+                "dispatch",
+                "execution",
+                "attestation",
+                "verification",
+                "review",
+                "merge"
+              ]
+            }
+          },
+          "expected": "reject (INCOMPLETE_NOT_EVIDENCE_OF)",
+          "actual": "rejected with [INCOMPLETE_NOT_EVIDENCE_OF]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-059-add-proven-claim",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded add-proven-claim on executed",
+            "vector": {
+              "rung": "executed",
+              "not_evidence_of": [
+                "attestation",
+                "verification",
+                "review",
+                "ci",
+                "merge",
+                "preparation"
+              ]
+            }
+          },
+          "expected": "reject (OVERBROAD_NOT_EVIDENCE_OF)",
+          "actual": "rejected with [OVERBROAD_NOT_EVIDENCE_OF]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-060-duplicate-random-claim",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded duplicate-random-claim on prepared",
+            "vector": {
+              "rung": "prepared",
+              "not_evidence_of": [
+                "dispatch",
+                "execution",
+                "attestation",
+                "verification",
+                "review",
+                "ci",
+                "merge",
+                "merge"
+              ]
+            }
+          },
+          "expected": "reject (DUPLICATE_CLAIM)",
+          "actual": "rejected with [DUPLICATE_CLAIM]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-061-corrupt-rung",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded corrupt-rung on dispatched",
+            "vector": {
+              "rung": "shipped",
+              "not_evidence_of": [
+                "execution",
+                "attestation",
+                "verification",
+                "review",
+                "ci",
+                "merge"
+              ]
+            }
+          },
+          "expected": "reject (UNKNOWN_RUNG)",
+          "actual": "rejected with [UNKNOWN_RUNG]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-062-drop-random-forced",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded drop-random-forced on prepared",
+            "vector": {
+              "rung": "prepared",
+              "not_evidence_of": [
+                "dispatch",
+                "attestation",
+                "verification",
+                "review",
+                "ci",
+                "merge"
+              ]
+            }
+          },
+          "expected": "reject (INCOMPLETE_NOT_EVIDENCE_OF)",
+          "actual": "rejected with [INCOMPLETE_NOT_EVIDENCE_OF]",
+          "pass": true
+        },
+        {
+          "caseId": "cb-fuzz-063-add-proven-claim",
+          "origin": "fuzz",
+          "input": {
+            "label": "seeded add-proven-claim on prepared",
+            "vector": {
+              "rung": "prepared",
+              "not_evidence_of": [
+                "dispatch",
+                "execution",
+                "attestation",
+                "verification",
+                "review",
+                "ci",
+                "merge",
+                "preparation"
+              ]
+            }
+          },
+          "expected": "reject (OVERBROAD_NOT_EVIDENCE_OF)",
+          "actual": "rejected with [OVERBROAD_NOT_EVIDENCE_OF]",
+          "pass": true
+        }
+      ],
+      "citations": [
+        "Prose is never semantic: the boundary stays 'prepared' and still disclaims every claim above it — including everything the gloss boasts.",
+        "validateClaimBoundary(makeClaimBoundary('merged')) accepts with no external evidence. Shape-valid ≠ evidence: the caller must validate supporting records and subject identities before deriving the displayed rung (audit A3)."
+      ],
+      "durationMs": 1
+    },
+    {
+      "id": "pg-tui-governance",
+      "kind": "tui_governance",
+      "title": "Founder decision surface stays governed in a live headless TUI",
+      "oracle": "tui-chaos governance_focus scenario (exit 0 + scenario pass)",
+      "seed": 20260906,
+      "cases": [
+        {
+          "caseId": "tui-governance-focus",
+          "origin": "check",
+          "input": {
+            "scenario": "governance_focus",
+            "report": "/Users/michaeldaley/madventures-tui/testdata/proving-ground/runs/pg-20260909192305-3459d8/tui-governance/tui-chaos-20260909192305-2e62e6/report.json"
+          },
+          "expected": "scenario pass=true in tui-chaos REP packet",
+          "actual": "pass=true in tui-chaos REP packet",
+          "pass": true
+        }
+      ],
+      "citations": [],
+      "outcome": "pass",
+      "artifacts": [
+        "/Users/michaeldaley/madventures-tui/testdata/proving-ground/runs/pg-20260909192305-3459d8/tui-governance/tui-chaos-20260909192305-2e62e6/report.json"
+      ],
+      "durationMs": 1407
+    },
+    {
+      "id": "pg-agents-drift",
+      "kind": "static_instruction_drift",
+      "title": "AGENTS.md matches shipped reality (audit A5 class)",
+      "oracle": "drift pins (symbol-existence ⇒ no staleness claim)",
+      "seed": 20260906,
+      "citations": [],
+      "outcome": "fail",
+      "cases": [
+        {
+          "caseId": "pin-reduceLedgerEvent",
+          "origin": "pin",
+          "input": {
+            "symbol": "reduceLedgerEvent",
+            "probeDir": "packages/ledger/src",
+            "symbolExists": true
+          },
+          "expected": "staleness fragments absent from instructions",
+          "actual": "code has 'reduceLedgerEvent' but instructions still claim staleness via: \"is not yet implemented under that name\"",
+          "pass": false
+        },
+        {
+          "caseId": "pin-live_runtime_not_certified",
+          "origin": "pin",
+          "input": {
+            "symbol": "live_runtime_not_certified",
+            "probeDir": "apps/madbridge/src",
+            "symbolExists": true
+          },
+          "expected": "staleness fragments absent from instructions",
+          "actual": "code has 'live_runtime_not_certified' but instructions still claim staleness via: \"does not exist in source yet\"",
+          "pass": false
+        },
+        {
+          "caseId": "pin-collective-preamble",
+          "origin": "pin",
+          "input": {
+            "symbol": "reduceLedgerEvent",
+            "probeDir": "packages/ledger/src",
+            "symbolExists": true
+          },
+          "expected": "staleness fragments absent from instructions",
+          "actual": "code has 'reduceLedgerEvent' but instructions still claim staleness via: \"none of these symbols exist in\"",
+          "pass": false
+        }
+      ],
+      "artifacts": [],
+      "durationMs": 3
+    },
+    {
+      "id": "pg-a1-spec",
+      "kind": "spec_card",
+      "title": "A1 reserve-before-spawn race — durable spec card (fix owned elsewhere)",
+      "oracle": "spec card structural validation",
+      "seed": 20260906,
+      "citations": [],
+      "outcome": "fail",
+      "cases": [
+        {
+          "caseId": "card-card-has-section-defect-observed-",
+          "origin": "check",
+          "input": {
+            "requirement": "card has section 'Defect (observed)'"
+          },
+          "expected": "card satisfies requirement",
+          "actual": "found '## Defect (observed)'",
+          "pass": true
+        },
+        {
+          "caseId": "card-card-has-section-why-this-repo-must-not-fix-it-",
+          "origin": "check",
+          "input": {
+            "requirement": "card has section 'Why this repo must not fix it'"
+          },
+          "expected": "card satisfies requirement",
+          "actual": "found '## Why this repo must not fix it'",
+          "pass": true
+        },
+        {
+          "caseId": "card-card-has-section-law-oracle-sketch-",
+          "origin": "check",
+          "input": {
+            "requirement": "card has section 'Law-oracle sketch'"
+          },
+          "expected": "card satisfies requirement",
+          "actual": "found '## Law-oracle sketch'",
+          "pass": true
+        },
+        {
+          "caseId": "card-card-has-section-owner-",
+          "origin": "check",
+          "input": {
+            "requirement": "card has section 'Owner'"
+          },
+          "expected": "card satisfies requirement",
+          "actual": "found '## Owner'",
+          "pass": true
+        },
+        {
+          "caseId": "card-card-names-an-owner",
+          "origin": "check",
+          "input": {
+            "requirement": "card names an Owner"
+          },
+          "expected": "card satisfies requirement",
+          "actual": "no 'Owner:' line",
+          "pass": false
+        },
+        {
+          "caseId": "card-card-lists-forbidden-here-paths-blast-radius-hon",
+          "origin": "check",
+          "input": {
+            "requirement": "card lists FORBIDDEN-here paths (blast-radius honesty)"
+          },
+          "expected": "card satisfies requirement",
+          "actual": "missing 'FORBIDDEN here'",
+          "pass": false
+        }
+      ],
+      "artifacts": [
+        "/Users/michaeldaley/madventures-tui/testdata/proving-ground/challenges/a1-reserve-before-spawn.spec.md"
+      ],
+      "durationMs": 1
+    }
+  ],
+  "promoted_regressions": [],
+  "summary": {
+    "total": 4,
+    "passed": 2,
+    "failed": 2,
+    "unsupported": 0,
+    "spec_only": 0,
+    "exit_ok": false
+  },
+  "artifacts": {
+    "dir": "/Users/michaeldaley/madventures-tui/testdata/proving-ground/runs/pg-20260909192305-3459d8",
+    "packet": "packet.json"
+  }
+}

@@ -82,11 +82,10 @@ Stop and ask the Founder before:
 
 ## Architecture boundaries (Phase 3A)
 
-**Target design, not yet implemented.** The three bullets below (`BrokerClient`,
-`reduceLedgerEvent`, `live_runtime_not_certified`) describe the Phase 3A plan's
-forward architecture — none of these symbols exist in `packages/` or `apps/`
-at the current `main` head. Do not search for them as current code; cite the
-spec/plan, not this section, for what's actually implemented today.
+**Mixed state — verify before citing.** Of the three named symbols below,
+`reduceLedgerEvent` and `live_runtime_not_certified` exist in the current tree
+(see their bullets); `BrokerClient` remains plan-only. Cite the code for what
+exists today and the spec/plan for forward design.
 
 - One foreground supervisor. `BrokerClient` is the planned only TUI/adapter
   boundary. No PTY descriptor, subprocess handle, ledger handle, or shared
@@ -94,10 +93,12 @@ spec/plan, not this section, for what's actually implemented today.
 - Supervisor exit is intended to kill every governed process fail-closed.
 - Append-only single ledger chain. `packages/ledger/src/rebuild.ts` exists
   today and exports `rebuildState`/`rebuildBrokerState`; the plan's named
-  reducer (`reduceLedgerEvent`) is not yet implemented under that name.
+  reducer exists as `reduceLedgerEvent` (exported from
+  `packages/ledger/src/index.ts`).
 - Production live startup is intended to remain structurally unavailable
-  until Phase 3B certification; the specific error code
-  `live_runtime_not_certified` does not exist in source yet.
+  until Phase 3B certification; production start fails closed with exit 78
+  and the error code `live_runtime_not_certified`
+  (`apps/madbridge/src/commands/start.ts`).
 - React in `apps/madbridge/src/tui/**` is presentation-only today: it projects
   broker state and routes input. It cannot decide authority, permissions,
   ownership, evidence acceptance, hashing, or recovery.

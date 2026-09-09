@@ -1,0 +1,29 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Proving Ground challenge card",
+  "description": "A durable spec card for a defect whose fix is owned by another track. PROVING_GROUND — NOT PHASE_0 — NOT OCCUPANCY_PROOF",
+  "type": "object",
+  "required": ["id", "kind", "title", "defect_class", "owner", "status", "oracle", "forbidden_here", "references"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^pg-" },
+    "kind": { "const": "spec_card" },
+    "title": { "type": "string", "minLength": 8 },
+    "defect_class": { "type": "string", "minLength": 4 },
+    "owner": { "type": "string", "minLength": 4, "description": "The track/repository that owns the fix. This card never owns it." },
+    "status": { "enum": ["open", "owned-elsewhere", "resolved-upstream"] },
+    "oracle": {
+      "type": "object",
+      "required": ["assertion", "positive_control", "failure_signature"],
+      "properties": {
+        "assertion": { "type": "string", "minLength": 16 },
+        "positive_control": { "type": "string", "minLength": 8 },
+        "failure_signature": { "type": "string", "minLength": 4 }
+      },
+      "additionalProperties": false
+    },
+    "forbidden_here": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+    "references": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+    "notes": { "type": "string" }
+  },
+  "additionalProperties": false
+}

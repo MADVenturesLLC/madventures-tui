@@ -1,0 +1,23 @@
+{
+  "id": "cb-incomplete-executed-minus-merge",
+  "source": "proving-ground",
+  "challenge": "pg-cb-lies",
+  "label": "executed receipt drops 'merge' from not_evidence_of — lie by omission",
+  "boundary": {
+    "rung": "executed",
+    "not_evidence_of": [
+      "attestation",
+      "verification",
+      "review",
+      "ci"
+    ]
+  },
+  "expect": {
+    "verdict": "reject",
+    "anyCodes": [
+      "INCOMPLETE_NOT_EVIDENCE_OF"
+    ]
+  },
+  "promotedAt": "2026-09-09T19:24:21.222Z",
+  "reason": "durable law regression L1: executed receipt omitting 'merge' must stay rejected (INCOMPLETE_NOT_EVIDENCE_OF)"
+}

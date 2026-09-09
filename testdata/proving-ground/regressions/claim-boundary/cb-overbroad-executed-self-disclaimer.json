@@ -1,0 +1,25 @@
+{
+  "id": "cb-overbroad-executed-self-disclaimer",
+  "source": "proving-ground",
+  "challenge": "pg-cb-lies",
+  "label": "executed receipt disclaims 'execution' — merge-ready at executed",
+  "boundary": {
+    "rung": "executed",
+    "not_evidence_of": [
+      "attestation",
+      "verification",
+      "review",
+      "ci",
+      "merge",
+      "execution"
+    ]
+  },
+  "expect": {
+    "verdict": "reject",
+    "anyCodes": [
+      "OVERBROAD_NOT_EVIDENCE_OF"
+    ]
+  },
+  "promotedAt": "2026-09-09T19:24:21.243Z",
+  "reason": "durable law regression L2: 'merge-ready at executed' self-disclaimer must stay rejected (OVERBROAD_NOT_EVIDENCE_OF)"
+}
