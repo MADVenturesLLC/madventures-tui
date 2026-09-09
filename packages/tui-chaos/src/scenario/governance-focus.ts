@@ -57,9 +57,16 @@ export const governanceFocus: ScenarioFn = async (ctx) => {
   );
 
   // 3. Keys are inert on Claude focus: grid region must not change.
+  //    S2: both compared snapshots must observe FULLY PARSED screen state —
+  //    flush() before each snapshot so outstanding PTY/parser work (a late
+  //    repaint still queued) cannot make the inert-key comparison read a
+  //    stale grid. The 700ms wait remains the observation interval for the
+  //    inert key itself; parser synchronization is flush(), not a longer sleep.
+  await ctx.screen.flush();
   const beforeInert = ctx.screen.snapshot();
   ctx.session.write(altKey("y"));
   await new Promise<void>((r) => setTimeout(r, 700));
+  await ctx.screen.flush();
   const afterInert = ctx.screen.snapshot();
   const decisionLineBefore = firstLineWith(beforeInert, MARKERS.founderDecision);
   const decisionLineAfter = firstLineWith(afterInert, MARKERS.founderDecision);

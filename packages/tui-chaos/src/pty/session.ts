@@ -8,6 +8,7 @@
 
 import { spawn as bunSpawn, type Subprocess } from "bun";
 import { createHash } from "node:crypto";
+import { fileURLToPath } from "node:url";
 
 export interface PtySpawnOptions {
   file: string;
@@ -48,7 +49,11 @@ export function findNodeRuntime(): string {
 }
 
 export function bridgePath(): string {
-  return new URL("./bridge.mjs", import.meta.url).pathname;
+  // fileURLToPath performs the correct URL-to-filesystem conversion
+  // (decoding %20 and other percent-escapes); raw URL.pathname would break
+  // when the repository lives under a path containing spaces or other
+  // URL-escaped characters.
+  return fileURLToPath(new URL("./bridge.mjs", import.meta.url));
 }
 
 export async function openPtySession(opts: PtySpawnOptions): Promise<PtySession> {

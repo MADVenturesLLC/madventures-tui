@@ -8,8 +8,9 @@
 //   - cursor position
 //   - a stable sha256 over the normalized grid (golden-fixture compatible)
 //
-// xterm's write() parses asynchronously; snapshot() therefore goes through a
-// write callback so a snapshot is always taken after the feed has been parsed.
+// xterm's write() parses asynchronously. Callers that need a quiescent,
+// fully parsed screen must await write() or flush() first; snapshot() itself
+// is synchronous and reads the currently parsed xterm buffer as-is.
 
 import { Terminal } from "@xterm/headless";
 import { createHash } from "node:crypto";
@@ -30,7 +31,6 @@ export interface ScreenSnapshot {
 
 export class Screen {
   private term: Terminal;
-  private pending: Array<{ data: string; cb: () => void }> = [];
   private inFlight = 0;
 
   constructor(
