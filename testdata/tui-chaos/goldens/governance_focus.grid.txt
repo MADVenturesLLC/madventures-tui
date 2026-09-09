@@ -1,0 +1,41 @@
+# golden grid for tui-chaos — sha256:99f715ae22cda325d7c8c1ed5cd553a24b4fc5565c55b9fb3eea7d3606c1ff0f
+┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ Event Log (hash-chained ledger)                                                                                      │
+│ #3 ownership_accept exec-claude-code tok:3 ghi345def678                                                              │
+│ #2 message exec-claude-code tok:1 def789abc012                                                                       │
+│ #1 session-start claude-code tok:1 abc123def456                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+CLAUDE CODE | docked | WRITER tok#3 | builder | claude-sonnet-4 | 0 buffered
+ANTIGRAVITY | docked | independent-reviewer | gemini-2.5-pro | 0 buffered
+FIXTURE DATA — NOT A LIVE SESSION
+CONNECTED | session active | writer exec-claude-code #3 | pending 2 | focus EVENTS | ledger #3

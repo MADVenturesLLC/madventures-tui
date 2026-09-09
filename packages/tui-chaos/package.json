@@ -1,0 +1,16 @@
+{
+  "name": "@madventures/tui-chaos",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "tui-chaos": "./src/cli.ts"
+  },
+  "scripts": {
+    "chaos": "bun ./src/cli.ts run"
+  },
+  "dependencies": {
+    "@xterm/headless": "^6.0.0",
+    "node-pty": "^1.1.0"
+  }
+}

@@ -9,6 +9,11 @@ import { createRoot } from "@opentui/react";
 import type { ReactNode } from "react";
 import { App } from "./App";
 import type { BrokerSnapshot } from "./types";
+import {
+  isHarnessStreamEnabled,
+  makeStreamingFixtureSubscribe,
+  withHarnessApprovalQueue,
+} from "../fixture/harness";
 import { parseSurfaceId, type ExecutionIdentity, type RepositoryFingerprint, type TaskEnvelopeV1 } from "@madventures/protocol";
 
 /**
@@ -130,6 +135,11 @@ export function makeFixtureSnapshot(): BrokerSnapshot {
   };
 }
 
+// ─── tui-chaos harness seams (PILLAR-1 headless acceptance) ───
+// The seam implementations live in src/fixture/harness.ts (outside src/tui/,
+// which is under a standing no-timer governance scan) and are DEAD unless
+// the MADV_TUI_FIXTURE / MADV_TUI_FIXTURE_STREAM env gates are set to "1".
+
 async function main(): Promise<void> {
   const isFixture = process.argv.includes("--fixture");
 
@@ -139,11 +149,14 @@ async function main(): Promise<void> {
   if (isFixture) {
     // Fixture mode — render with demo data, no live broker connection.
     // The fixture banner is permanently visible inside App via the fixture prop.
-    const fixtureSnapshot = makeFixtureSnapshot();
-    const fixtureSubscribe = (listener: (snapshot: BrokerSnapshot) => void): (() => void) => {
-      listener(fixtureSnapshot);
-      return () => {};
-    };
+    const base = makeFixtureSnapshot();
+    const fixtureSnapshot = withHarnessApprovalQueue(base);
+    const fixtureSubscribe = isHarnessStreamEnabled()
+      ? makeStreamingFixtureSubscribe(fixtureSnapshot)
+      : (listener: (snapshot: BrokerSnapshot) => void): (() => void) => {
+          listener(fixtureSnapshot);
+          return () => {};
+        };
 
     root.render(
       <App
