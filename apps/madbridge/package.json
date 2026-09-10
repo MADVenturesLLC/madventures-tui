@@ -14,7 +14,8 @@
     "@madventures/broker": "workspace:*",
     "@madventures/adapter-claude-code": "workspace:*",
     "@madventures/adapter-antigravity": "workspace:*",
-    "@madventures/storage": "workspace:*"
+    "@madventures/storage": "workspace:*",
+    "@mad/claim-boundary": "workspace:*"
   },
   "devDependencies": {
     "@types/react": "^19.2.18"
