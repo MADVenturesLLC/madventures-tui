@@ -14,6 +14,16 @@ from typing import Optional
 
 from .types import GateResult, GateSpec, Severity
 
+# Stored gate evidence is bounded. Test runners print failure identity and
+# aggregate counts last, so a head-only slice of a long red run can hold
+# nothing but earlier passing lines. Evidence therefore keeps a bounded head
+# for context and gives the rest of the budget to the tail, with an explicit
+# marker for the omitted middle. The bound applies to the stored string as a
+# whole, marker included.
+EVIDENCE_MAX_CHARS = 4000
+EVIDENCE_HEAD_CHARS = 1000
+EVIDENCE_TRUNCATION_MARKER = "\n... [OUTPUT TRUNCATED: {omitted} chars omitted] ...\n"
+
 
 def parse_profile(raw: str, source: str = "<profile>") -> dict:
     data = json.loads(raw)
@@ -105,13 +115,32 @@ def _run_command(
     return proc.returncode, out.strip()
 
 
+def bound_evidence(out: str) -> str:
+    """Bound captured output to EVIDENCE_MAX_CHARS, preserving both ends.
+
+    Output within the bound is stored unchanged. Longer output keeps its first
+    EVIDENCE_HEAD_CHARS, then the truncation marker, then as much of the tail
+    as the remaining budget allows. The result is a pure function of `out`.
+    """
+    if len(out) <= EVIDENCE_MAX_CHARS:
+        return out
+    head = out[:EVIDENCE_HEAD_CHARS]
+    # Reserve marker space using the widest count the marker could carry
+    # (omitted <= len(out)), so the final string never exceeds the bound.
+    reserved = len(EVIDENCE_TRUNCATION_MARKER.format(omitted=len(out)))
+    tail_chars = EVIDENCE_MAX_CHARS - EVIDENCE_HEAD_CHARS - reserved
+    tail = out[len(out) - tail_chars :]
+    omitted = len(out) - len(head) - len(tail)
+    return head + EVIDENCE_TRUNCATION_MARKER.format(omitted=omitted) + tail
+
+
 def run_gate(spec: GateSpec, cwd: str | Path, env: dict[str, str]) -> GateResult:
     code, out = _run_command(spec.command, cwd, spec.timeout_seconds, env)
     passed = code == 0
     return GateResult(
         gate_id=spec.id,
         passed=passed,
-        evidence=out[:4000],
+        evidence=bound_evidence(out),
         exit_code=code,
     )
 

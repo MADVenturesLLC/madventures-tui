@@ -27,6 +27,7 @@ sys.path.insert(0, str(HERE))
 
 from build_gate.engine import any_failed, parse_profile, run_all_gates  # noqa: E402
 from build_gate.freeze import (  # noqa: E402
+    install_frozen_dependencies,
     materialize_frozen_worktree,
     remove_frozen_worktree,
     verify_frozen_execution,
@@ -76,6 +77,10 @@ def main() -> int:
         )
         if post:
             return _failure(post)
+        # Gates such as MTUI-TYPECHECK and MTUI-TEST need the candidate's own
+        # dependencies. A frozen worktree has none, so materialize them from
+        # the frozen lockfile before any gate runs. Fail closed on error.
+        install_frozen_dependencies(worktree)
         gate_env = dict(os.environ)
         gate_env["PYTHONDONTWRITEBYTECODE"] = "1"
         frozen_scripts = Path(worktree) / ".agents" / "skills" / "build-gate" / "scripts"
