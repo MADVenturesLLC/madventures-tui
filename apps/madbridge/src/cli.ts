@@ -1,8 +1,12 @@
 // apps/madbridge/src/cli.ts
-// MadBridge CLI entry point — the nine approved commands.
+// MadBridge CLI entry point — the nine approved commands plus the four
+// frozen Room Runtime Phase 1 attach verbs.
 //
 // Commands: init, doctor, start, status, pause, resume,
 //           verify-ledger, export-evidence, close
+// Phase 1 attach family (Commission Final r3 §9 — verbs frozen exactly;
+// no aliases, no competing public contract):
+//           join --room <room_id>, leave, follow --json, rooms --json
 //
 // Exit codes: 0 = success, nonzero = blocked / invalid / interrupted
 // --json: produces JSON output on stdout
@@ -16,6 +20,10 @@ import { resumeCommand } from "./commands/resume";
 import { verifyLedgerCommand } from "./commands/verify-ledger";
 import { exportEvidenceCommand } from "./commands/export-evidence";
 import { closeCommand } from "./commands/close";
+import { joinCommand } from "./commands/join";
+import { leaveCommand } from "./commands/leave";
+import { followCommand } from "./commands/follow";
+import { roomsCommand } from "./commands/rooms";
 
 export interface CliResult {
   exitCode: number;
@@ -31,6 +39,8 @@ export interface CliContext {
 const COMMANDS = new Set([
   "init", "doctor", "start", "status", "pause",
   "resume", "verify-ledger", "export-evidence", "close",
+  // Room Runtime Phase 1 frozen attach verbs (r3 §9).
+  "join", "leave", "follow", "rooms",
 ]);
 
 const HELP_TEXT = `madv-tui — MadBridge governance CLI
@@ -47,6 +57,10 @@ Commands:
   close             Reserved external-control name — no external control plane
   verify-ledger     Perform complete-chain verification
   export-evidence   Write sanitized evidence package
+  join              Attach to a Gateway room as a viewer (--room <room_id>)
+  leave             Detach this viewer (occupancy untouched)
+  follow            Observe projection streams read-only (--json)
+  rooms             List Gateway-provided room facts (--json)
 
 Global options:
   --json            Output JSON on stdout
@@ -75,10 +89,13 @@ function parseArgs(args: string[]): {
       // Check if next arg is a value (not a flag)
       if (i + 1 < rest.length && !rest[i + 1]!.startsWith("--")) {
         flags[key] = rest[i + 1]!;
+        // Consume exactly the pair. (Phase 1 fix: the previous `i += 2` was
+        // followed by the loop's `i++`, silently dropping the flag after any
+        // valued flag — `join --room <id> --json` lost `--json`.)
         i += 2;
-      } else {
-        flags[key] = true;
+        continue;
       }
+      flags[key] = true;
     } else {
       positional.push(arg);
     }
@@ -144,6 +161,14 @@ export async function runCli(args: string[], ctx: CliContext): Promise<CliResult
         return await exportEvidenceCommand(flags, { ...ctx, json });
       case "close":
         return await closeCommand(flags, { ...ctx, json });
+      case "join":
+        return await joinCommand(flags, { ...ctx, json });
+      case "leave":
+        return await leaveCommand(flags, { ...ctx, json });
+      case "follow":
+        return await followCommand(flags, { ...ctx, json });
+      case "rooms":
+        return await roomsCommand(flags, { ...ctx, json });
       default: {
         // exhaustiveness check — should never reach here because
         // COMMANDS.has() already filtered unknown commands above
