@@ -206,6 +206,55 @@ def materialize_frozen_worktree(cwd: str | Path, target_ref: str) -> Path:
     return dest
 
 
+def install_frozen_dependencies(worktree: str | Path) -> None:
+    """Materialize the frozen candidate's own locked dependencies in place.
+
+    `git worktree add` produces a source-only checkout: it creates no
+    `node_modules`, and the worktree lives under a temporary directory with no
+    dependency-bearing ancestor. Type-carrying packages therefore cannot
+    resolve, and a typecheck gate fails for reasons that have nothing to do
+    with the candidate under test.
+
+    The install is derived from the frozen candidate's own committed
+    `package.json` and `bun.lock` and uses the repository's controlling
+    discipline, `bun install --frozen-lockfile`, the same command AGENTS.md and
+    both CI jobs use. The lockfile is never regenerated and no dependency is
+    upgraded, so the dependency state is reproducible from the candidate alone
+    and never borrowed from the operator's working checkout.
+
+    Fail closed. A non-zero install, or an install that mutates tracked state,
+    raises instead of letting gates run against an invalid environment.
+    """
+    dest = Path(worktree)
+    # Dependency state is derived from the candidate. A candidate that declares
+    # no manifest has nothing to materialize, and inventing one would be the
+    # opposite of frozen. A candidate that declares a manifest but cannot
+    # install from its own lockfile fails below rather than proceeding.
+    if not (dest / "package.json").is_file():
+        return
+    proc = subprocess.run(
+        ["bun", "install", "--frozen-lockfile"],
+        cwd=str(dest),
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        detail = (proc.stderr or proc.stdout).strip()
+        raise RuntimeError(
+            "frozen dependency materialization failed: "
+            f"bun install --frozen-lockfile exited {proc.returncode}: {detail[-800:]}"
+        )
+    # The install must leave the candidate byte-identical. node_modules is
+    # gitignored, so anything reported here is a real mutation of the content
+    # under test and disqualifies the run.
+    dirty = _git(dest, ["status", "--porcelain"])
+    if dirty:
+        raise RuntimeError(
+            "frozen dependency materialization mutated the candidate; refusing "
+            f"to run gates against modified content: {dirty}"
+        )
+
+
 def remove_frozen_worktree(repo_cwd: str | Path, worktree: str | Path) -> None:
     """Remove a worktree created by materialize_frozen_worktree."""
     repo = Path(repo_cwd).resolve()
