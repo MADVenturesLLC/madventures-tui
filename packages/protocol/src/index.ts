@@ -28,6 +28,12 @@ export { parseSurfaceId } from "./surface-id";
 
 export { canonicalJson, sha256Canonical, sha256CanonicalSync } from "./canonical-json";
 export { sha256Hex } from "./crypto";
+
+// Room Runtime Phase 1 — TUI boundary CONSUMER representation of Gateway
+// IPC v2 (Commission Final r3 §10: canonical truth stays in Build Room's
+// packages/gateway-protocol; this is the limited consumer-side definition
+// only — no duplicated authoritative behavior).
+export * from "./room-ipc-v2";
 export { newEventId, newSessionId } from "./ids";
 export { encodeWire, decodeWire } from "./wire";
 export type { WireMessage } from "./wire";
