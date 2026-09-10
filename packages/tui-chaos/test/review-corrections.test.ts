@@ -11,7 +11,8 @@
 // TUI_ACCEPTANCE — NOT PHASE_0 — NOT OCCUPANCY_PROOF.
 
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -103,8 +104,10 @@ describe("F4: defaultRepoRoot survives percent-encoded paths", () => {
     // must be REAL COPIES (Bun realpaths through symlinked directories, which
     // would rewrite import.meta.url back to the original location); only
     // node_modules stays a symlink (it does not affect this module's URL).
-    const spaceRoot = "/tmp/tui-chaos-f4/space dir";
-    rmSync("/tmp/tui-chaos-f4", { recursive: true, force: true });
+    // C3: per-test unique temp root (mkdtempSync under os.tmpdir()), cleaned
+    // in finally — no shared fixed /tmp path.
+    const tempRoot = mkdtempSync(path.join(tmpdir(), "tui-chaos-f4-"));
+    const spaceRoot = path.join(tempRoot, "space dir");
     mkdirSync(path.join(spaceRoot, "packages"), { recursive: true });
     const dstPkg = path.join(spaceRoot, "packages/tui-chaos");
     mkdirSync(dstPkg, { recursive: true });
@@ -132,7 +135,7 @@ describe("F4: defaultRepoRoot survives percent-encoded paths", () => {
       expect(root.includes("space dir")).toBe(true);
       expect(existsSync(root)).toBe(true);
     } finally {
-      rmSync("/tmp/tui-chaos-f4", { recursive: true, force: true });
+      rmSync(tempRoot, { recursive: true, force: true });
     }
   });
 });
@@ -157,60 +160,78 @@ function parsePacket(stdout: string): EvidencePacket {
 
 describe("F1/F2: real run — mixed selection (governance_focus + ansi_flood)", () => {
   test("packet records the flags the run actually used and references existing casts", () => {
-    const r = runHarness([
-      "run",
-      "--scenarios",
-      "governance_focus,ansi_flood",
-      "--out",
-      "/tmp/tui-chaos-f1f2/mixed",
-      "--json",
-    ]);
-    expect(r.exitCode).toBe(0);
-    const packet = parsePacket(r.stdout);
-    // F1: ansi_flood in the selection => the STREAM flag was actually used.
-    expect(packet.subject.fixture_flags).toContain("MADV_TUI_FIXTURE=1");
-    expect(packet.subject.fixture_flags).toContain("MADV_TUI_FIXTURE_STREAM=1");
-    expect(packet.git_sha).toMatch(/^[0-9a-f]{40}$/);
-    // F2: the referenced cast must exist and belong to THIS run's artifacts.
-    const cast = packet.artifacts.asciinema;
-    expect(cast).not.toBeNull();
-    expect(existsSync(cast!)).toBe(true);
-    // Each scenario's artifact list carries its own actual cast.
-    const gf = packet.scenarios.find((s) => s.name === "governance_focus");
-    const af = packet.scenarios.find((s) => s.name === "ansi_flood");
-    expect(gf?.artifacts.some((a) => a.endsWith("governance_focus.cast") && existsSync(a))).toBe(true);
-    expect(af?.artifacts.some((a) => a.endsWith("ansi_flood.cast") && existsSync(a))).toBe(true);
-    expect(packet.label).toBe("TUI_ACCEPTANCE — NOT PHASE_0 — NOT OCCUPANCY_PROOF");
-    expect(packet.summary).toEqual({ total: 2, passed: 2, failed: 0, exit_ok: true });
+    // C4: per-test unique temp root, removed in finally.
+    const tempRoot = mkdtempSync(path.join(tmpdir(), "tui-chaos-f1f2-mixed-"));
+    try {
+      const r = runHarness([
+        "run",
+        "--scenarios",
+        "governance_focus,ansi_flood",
+        "--out",
+        tempRoot,
+        "--json",
+      ]);
+      expect(r.exitCode).toBe(0);
+      const packet = parsePacket(r.stdout);
+      // F1: ansi_flood in the selection => the STREAM flag was actually used.
+      expect(packet.subject.fixture_flags).toContain("MADV_TUI_FIXTURE=1");
+      expect(packet.subject.fixture_flags).toContain("MADV_TUI_FIXTURE_STREAM=1");
+      expect(packet.git_sha).toMatch(/^[0-9a-f]{40}$/);
+      // F2: the referenced cast must exist and belong to THIS run's artifacts.
+      const cast = packet.artifacts.asciinema;
+      expect(cast).not.toBeNull();
+      expect(existsSync(cast!)).toBe(true);
+      // Each scenario's artifact list carries its own actual cast.
+      const gf = packet.scenarios.find((s) => s.name === "governance_focus");
+      const af = packet.scenarios.find((s) => s.name === "ansi_flood");
+      expect(gf?.artifacts.some((a) => a.endsWith("governance_focus.cast") && existsSync(a))).toBe(true);
+      expect(af?.artifacts.some((a) => a.endsWith("ansi_flood.cast") && existsSync(a))).toBe(true);
+      expect(packet.label).toBe("TUI_ACCEPTANCE — NOT PHASE_0 — NOT OCCUPANCY_PROOF");
+      expect(packet.summary).toEqual({ total: 2, passed: 2, failed: 0, exit_ok: true });
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
   });
 });
 
 describe("F1/F2: real run — excluding governance_focus", () => {
   test("single ansi_flood run references its own cast, never a nonexistent one", () => {
-    const r = runHarness(["run", "--scenarios", "ansi_flood", "--out", "/tmp/tui-chaos-f1f2/flood", "--json"]);
-    expect(r.exitCode).toBe(0);
-    const packet = parsePacket(r.stdout);
-    expect(packet.subject.fixture_flags).toContain("MADV_TUI_FIXTURE_STREAM=1");
-    const cast = packet.artifacts.asciinema;
-    expect(cast).not.toBeNull();
-    expect(cast!.endsWith("ansi_flood.cast")).toBe(true);
-    expect(existsSync(cast!)).toBe(true);
-    // The run never wrote governance_focus.cast — the packet must not point
-    // at it (the exact defect F2 reported).
-    expect(existsSync(path.join(path.dirname(cast!), "governance_focus.cast"))).toBe(false);
+    // C5: per-test unique temp root, removed in finally.
+    const tempRoot = mkdtempSync(path.join(tmpdir(), "tui-chaos-f1f2-flood-"));
+    try {
+      const r = runHarness(["run", "--scenarios", "ansi_flood", "--out", tempRoot, "--json"]);
+      expect(r.exitCode).toBe(0);
+      const packet = parsePacket(r.stdout);
+      expect(packet.subject.fixture_flags).toContain("MADV_TUI_FIXTURE_STREAM=1");
+      const cast = packet.artifacts.asciinema;
+      expect(cast).not.toBeNull();
+      expect(cast!.endsWith("ansi_flood.cast")).toBe(true);
+      expect(existsSync(cast!)).toBe(true);
+      // The run never wrote governance_focus.cast — the packet must not point
+      // at it (the exact defect F2 reported).
+      expect(existsSync(path.join(path.dirname(cast!), "governance_focus.cast"))).toBe(false);
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
   });
 });
 
 describe("F1/F2: real run — ordinary fixture-only scenario", () => {
   test("layout_resize-only run records only the base fixture flag", () => {
-    const r = runHarness(["run", "--scenarios", "layout_resize", "--out", "/tmp/tui-chaos-f1f2/plain", "--json"]);
-    expect(r.exitCode).toBe(0);
-    const packet = parsePacket(r.stdout);
-    expect(packet.subject.fixture_flags).toEqual(["--fixture", "MADV_TUI_FIXTURE=1"]);
-    const cast = packet.artifacts.asciinema;
-    expect(cast).not.toBeNull();
-    expect(cast!.endsWith("layout_resize.cast")).toBe(true);
-    expect(existsSync(cast!)).toBe(true);
+    // C6: per-test unique temp root, removed in finally.
+    const tempRoot = mkdtempSync(path.join(tmpdir(), "tui-chaos-f1f2-plain-"));
+    try {
+      const r = runHarness(["run", "--scenarios", "layout_resize", "--out", tempRoot, "--json"]);
+      expect(r.exitCode).toBe(0);
+      const packet = parsePacket(r.stdout);
+      expect(packet.subject.fixture_flags).toEqual(["--fixture", "MADV_TUI_FIXTURE=1"]);
+      const cast = packet.artifacts.asciinema;
+      expect(cast).not.toBeNull();
+      expect(cast!.endsWith("layout_resize.cast")).toBe(true);
+      expect(existsSync(cast!)).toBe(true);
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
   });
 });
 

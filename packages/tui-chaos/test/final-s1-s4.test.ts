@@ -12,7 +12,8 @@
 // TUI_ACCEPTANCE — NOT PHASE_0 — NOT OCCUPANCY_PROOF.
 
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -36,8 +37,11 @@ describe("S1: bridgePath resolves through percent-escaped filesystem paths", () 
     // must be REAL COPIES (Bun realpaths through symlinked directories,
     // which would rewrite import.meta.url back to the original location);
     // only node_modules stays symlinked (it does not affect this URL).
-    const spaceRoot = "/tmp/tui-chaos-s1/space dir";
-    rmSync("/tmp/tui-chaos-s1", { recursive: true, force: true });
+    // C2: per-test unique temp root (mkdtempSync under os.tmpdir()), cleaned
+    // in finally — no process-global fixed /tmp path, so parallel or
+    // interrupted runs cannot interfere.
+    const tempRoot = mkdtempSync(path.join(tmpdir(), "tui-chaos-s1-"));
+    const spaceRoot = path.join(tempRoot, "space dir");
     const dstPkg = path.join(spaceRoot, "packages/tui-chaos");
     mkdirSync(dstPkg, { recursive: true });
     Bun.spawnSync({
@@ -65,7 +69,7 @@ describe("S1: bridgePath resolves through percent-escaped filesystem paths", () 
       expect(p.includes("space dir")).toBe(true);
       expect(existsSync(p)).toBe(true);
     } finally {
-      rmSync("/tmp/tui-chaos-s1", { recursive: true, force: true });
+      rmSync(tempRoot, { recursive: true, force: true });
     }
   });
 });

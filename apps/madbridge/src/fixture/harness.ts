@@ -50,6 +50,13 @@ export function withHarnessApprovalQueue(snapshot: BrokerSnapshot): BrokerSnapsh
 /**
  * Seam 2: colorized in-process fixture stream behind
  * MADV_TUI_FIXTURE_STREAM=1. In-process data only — NOT a Gateway feed.
+ *
+ * C1 (bounded-memory): the retained streamed-entry window is capped at
+ * RETAINED_STREAM_WINDOW — consistent with the visible event-log window —
+ * so retained memory is O(1) with respect to run duration. A separate
+ * monotonic emitted-count preserves the synthetic queueDepth semantics
+ * (total stream progression, exactly as the unbounded array length did
+ * before), so no external fixture behavior changes.
  */
 export function makeStreamingFixtureSubscribe(
   base: BrokerSnapshot,
@@ -61,12 +68,15 @@ export function makeStreamingFixtureSubscribe(
     "transfer-request",
     "interrupt",
   ] as const;
+  const RETAINED_STREAM_WINDOW = 60;
   return (listener: (snapshot: BrokerSnapshot) => void): (() => void) => {
     listener(base);
     let seq = base.eventLog.length > 0 ? Math.max(...base.eventLog.map((e) => e.seq)) : 0;
     const streamed: LedgerEntryProjection[] = [];
+    let streamedCount = 0;
     const timer = setInterval(() => {
       seq += 1;
+      streamedCount += 1;
       streamed.push({
         seq,
         type: STREAM_TYPES[seq % STREAM_TYPES.length]!,
@@ -75,10 +85,13 @@ export function makeStreamingFixtureSubscribe(
         hash: `h${seq.toString(16).padStart(12, "0")}`,
         timestamp: "2026-08-08T12:00:00Z",
       });
+      if (streamed.length > RETAINED_STREAM_WINDOW) {
+        streamed.shift(); // discard the oldest retained entry — window stays bounded
+      }
       listener({
         ...base,
         eventLog: [...base.eventLog, ...streamed].slice(-60),
-        queueDepth: streamed.length,
+        queueDepth: streamedCount,
       });
     }, 40);
     // Never keep the process alive just for the stream.
