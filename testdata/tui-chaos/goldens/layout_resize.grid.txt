@@ -1,0 +1,41 @@
+# golden grid for tui-chaos — sha256:d93cad77aaad9d9b0315b6abb65c7df7dd46ece5b0384b179de11787d1cf6c18
+┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ Event Log (hash-chained ledger)                                                                                      │
+│ #3 ownership_accept exec-claude-code tok:3 ghi345def678                                                              │
+│ #2 message exec-claude-code tok:1 def789abc012                                                                       │
+│ #1 session-start claude-code tok:1 abc123def456                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+│                                                                                                                      │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+CLAUDE CODE | docked | WRITER tok#3 | builder | claude-sonnet-4 | 0 buffered
+ANTIGRAVITY | docked | independent-reviewer | gemini-2.5-pro | 0 buffered
+╔══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╗
+║ FOUNDER DECISION (1 of 2) — PENDING — awaiting Founder decision                                                      ║
+║ Type: command_approval | Task: task-fixture-001                                                                      ║
+║ A:exec-claude-code | S:./src | ID:fixture-approval-001                                                               ║
+║ Repo fingerprint: commit:aaaaaaaaaaaaaaaa (git abcdef123456)                                                         ║
+║ Requested at: 2026-08-08T12:20:00Z                                                                                   ║
+║ FOCUS GOV TO DECIDE                                                                                                  ║
+╚══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
+FIXTURE DATA — NOT A LIVE SESSION
+CONNECTED | session active | writer exec-claude-code #3 | pending 2 | focus EVENTS | ledger #3

@@ -1,0 +1,96 @@
+name: tui-chaos
+
+# PILLAR-1 — Headless TUI Acceptance & Chaos Explorer.
+#
+# TERMINAL QA of the TUI process:
+#   TUI_ACCEPTANCE — NOT PHASE_0 — NOT OCCUPANCY_PROOF
+#
+# This workflow ONLY calls `tui-chaos` (via the `test:tui-chaos` package
+# script). It runs the real TUI entrypoint (apps/madbridge/src/tui/main.tsx
+# --fixture) inside a headless PTY in fixture mode and emits a REP-v1-tui
+# evidence packet. It never touches a broker, Gateway, or any live surface.
+#
+# Lane duplication (not a matrix) mirrors verify.yml: a matrix would rename
+# the existing check names and silently unenforce branch protection.
+
+on:
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tui-chaos:
+    name: tui-chaos (ubuntu-24.04)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: MADVenturesLLC/madventures-tui/.github/actions/setup-qualified-bun@d057994a6663a7b56f5603f109b33d79bef333ef
+        with:
+          custody-token: ${{ secrets.ARTIFACTS_READ_TOKEN }}
+
+      # The PTY transport (node-pty) runs inside a small Node subprocess.
+      # On Linux there are no node-pty prebuilds, so the install script
+      # compiles it (trustedDependencies already whitelists node-pty for
+      # Bun lifecycle scripts).
+      - name: Show PTY bridge runtime
+        run: node --version
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run tui-chaos scenarios
+        run: bun run test:tui-chaos
+
+      - name: Upload evidence packet
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: tui-chaos-evidence-ubuntu
+          path: testdata/tui-chaos/runs/
+          if-no-files-found: warn
+
+  tui-chaos-macos:
+    name: tui-chaos (macOS)
+    runs-on: macos-14
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: MADVenturesLLC/madventures-tui/.github/actions/setup-qualified-bun@d057994a6663a7b56f5603f109b33d79bef333ef
+        with:
+          custody-token: ${{ secrets.ARTIFACTS_READ_TOKEN }}
+
+      - name: Show PTY bridge runtime
+        run: node --version
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run tui-chaos scenarios
+        run: bun run test:tui-chaos
+
+      - name: Upload evidence packet
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: tui-chaos-evidence-macos
+          path: testdata/tui-chaos/runs/
+          if-no-files-found: warn
