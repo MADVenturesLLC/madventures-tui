@@ -23,6 +23,7 @@
       "name": "@madventures/madbridge",
       "version": "0.1.0",
       "dependencies": {
+        "@mad/claim-boundary": "workspace:*",
         "@madventures/adapter-antigravity": "workspace:*",
         "@madventures/adapter-claude-code": "workspace:*",
         "@madventures/artifact-store": "workspace:*",
