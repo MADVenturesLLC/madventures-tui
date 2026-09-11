@@ -1,14 +1,14 @@
 // packages/broker/src/broker.ts
 // MadBridge broker: dispatch ordering, subscription, lifecycle.
-// Extended with fail-closed session recovery: interruption, reconciliation, resume.
+// Extended with fail-closed session recovery: interruption and reconciliation.
 
 import type { Credential } from "./credentials";
 import { validateCredential } from "./credentials";
 import { McpServer, MCP_TOOLS } from "./mcp-server";
 import type { McpToolDef } from "./mcp-server";
 import { BrokerSocket, MADV_RUNTIME_DIR, MADV_SOCKET_PATH } from "./socket";
-import { interruptSession, reconcileRepository, resumeSession, rebuildBrokerState } from "./reconciliation";
-import type { InterruptReason, ReconcileInput, ReconcileResult, ResumeApproval } from "./reconciliation";
+import { interruptSession, reconcileRepository, rebuildBrokerState } from "./reconciliation";
+import type { InterruptReason, ReconcileInput, ReconcileResult } from "./reconciliation";
 import { transitionSession } from "./session-machine";
 import type { SessionState } from "./session-machine";
 import type { BridgeEventV1 } from "@madventures/protocol";
@@ -34,7 +34,6 @@ export interface InMemoryBroker {
   subscribe(listener: (event: any) => void): () => void;
   interrupt(reason: InterruptReason, detail?: string): void;
   reconcile(input: ReconcileInput): ReconcileResult;
-  resume(approval: ResumeApproval): { resumed: boolean; newToken: number; detail: string };
 }
 
 export async function createInMemoryBrokerForTest(): Promise<InMemoryBroker> {
@@ -117,27 +116,11 @@ export async function createInMemoryBrokerForTest(): Promise<InMemoryBroker> {
     reconcile(input: ReconcileInput): ReconcileResult {
       return reconcileRepository(input);
     },
-
-    resume(approval: ResumeApproval): { resumed: boolean; newToken: number; detail: string } {
-      const result = resumeSession({
-        ...approval,
-        sessionState,
-      });
-      if (result.resumed) {
-        sessionState = result.state;
-        fencingToken = result.newFencingToken;
-        tokenUsable = true;
-        broker.sessionState = sessionState;
-        broker.fencingToken = fencingToken;
-        broker.tokenUsable = tokenUsable;
-      }
-      return { resumed: result.resumed, newToken: result.newFencingToken, detail: result.detail };
-    },
   };
 
   return broker;
 }
 
 // Re-export reconciliation utilities
-export { interruptSession, reconcileRepository, resumeSession, rebuildBrokerState };
-export type { InterruptReason, ReconcileInput, ReconcileResult, ResumeApproval };
+export { interruptSession, reconcileRepository, rebuildBrokerState };
+export type { InterruptReason, ReconcileInput, ReconcileResult };
