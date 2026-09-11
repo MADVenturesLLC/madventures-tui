@@ -1089,3 +1089,50 @@ describe("Phase 3A surface cardinality", () => {
     }
   });
 });
+
+// ── Phase 3A lifecycle transition authority (spec sections 9.6 and 9.14.2) ──
+
+/**
+ * Spec section 9.6: one function decides every lifecycle transition. Task 15
+ * deletes the broker's duplicate reducer and its resume path, so production
+ * source carries exactly one canonical `reduceLedgerEvent` and no
+ * `resumeSession`. The broker cannot disagree with replay because it has no
+ * second lifecycle transition table.
+ */
+const REDUCER_EXPORT = "export function reduceLedgerEvent";
+const RESUME_EXPORT = "export function resumeSession";
+
+/** Concatenate every production .ts/.tsx source under packages/ and apps/. */
+function readProductionSource(root: string): string {
+  return enumerateProductionFiles(root)
+    .map((file) => readFileSync(file, "utf8"))
+    .join("\n");
+}
+
+function countOccurrences(haystack: string, needle: string): number {
+  return haystack.split(needle).length - 1;
+}
+
+describe("Phase 3A lifecycle transition authority", () => {
+  test("only one production module defines a lifecycle transition table", () => {
+    const source = readProductionSource(REPO_ROOT);
+    expect(countOccurrences(source, REDUCER_EXPORT)).toBe(1);
+    expect(countOccurrences(source, RESUME_EXPORT)).toBe(0);
+  });
+
+  test("the authority scan counts a planted second reducer and a planted resumeSession", () => {
+    const root = makeTempRoot();
+    writeTempFile(root, "packages/ledger/src/rebuild.ts", `${REDUCER_EXPORT}() {}\n`);
+    writeTempFile(
+      root,
+      "packages/broker/src/reconciliation.ts",
+      `${REDUCER_EXPORT}() {}\n${RESUME_EXPORT}() {}\n`,
+    );
+    // Test files are not production source and must not count.
+    writeTempFile(root, "packages/broker/test/planted.test.ts", `${RESUME_EXPORT}() {}\n`);
+
+    const source = readProductionSource(root);
+    expect(countOccurrences(source, REDUCER_EXPORT)).toBe(2);
+    expect(countOccurrences(source, RESUME_EXPORT)).toBe(1);
+  });
+});

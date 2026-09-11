@@ -2,9 +2,12 @@
 // Acceptance tests: interruption and recovery.
 //
 // Kill each managed CLI and the broker in separate cases, verify fail-closed
-// interruption, restart, re-attestation, reconciliation, typed resume,
-// complete hash-chain verification, and final manifest equality with the
-// actual repository state.
+// interruption, restart, re-attestation, reconciliation, complete hash-chain
+// verification, and final manifest equality with the actual repository state.
+//
+// Phase 3A Task 15: there is no same-session resume authority. `interrupted`
+// is terminal-bound, and lifecycle state on rebuild comes only from the
+// canonical reduceLedgerEvent.
 //
 // Uses the in-memory broker — no real CLI processes are spawned.
 
@@ -15,7 +18,6 @@ import { createCredential } from "@madventures/broker";
 import {
   interruptSession,
   reconcileRepository,
-  resumeSession,
   rebuildBrokerState,
 } from "@madventures/broker";
 import type { InterruptReason, RepositorySnapshot, ReconcileInput } from "@madventures/broker";
@@ -96,15 +98,65 @@ function makeLedgerRows(events: BridgeEventV1[]): LedgerRow[] {
   return rows;
 }
 
-function makeResumeFounderEvent(): BridgeEventV1 {
-  return makeEvent("resume", {
-    sender_execution_id: "exec-founder",
-    sender_role: "founder",
-    sender_surface: "claude-code",
-    sender_model: "claude-sonnet-4",
-    sender_provider: "anthropic",
-  });
+let lifecycleSequence = 1;
+
+/** A madbridge-authored typed lifecycle record as a ledger row. */
+function lifecycleRow(
+  eventType: string,
+  payload: unknown,
+  overrides: Record<string, unknown> = {},
+): LedgerRow {
+  const sequence = lifecycleSequence++;
+  const event = {
+    protocol_version: PROTOCOL_VERSION,
+    event_id: `evt-${eventType}-${sequence}`,
+    session_id: "sess-interrupt-001",
+    event_type: eventType,
+    actor: "madbridge",
+    task_envelope_hash: "a".repeat(64),
+    repository_fingerprint: makeFingerprint("b"),
+    fencing_token: null,
+    reason_code: null,
+    created_at: "2026-09-11T00:00:00.000Z",
+    previous_event_hash: "c".repeat(64),
+    payload,
+    ...overrides,
+  };
+  return {
+    sequence,
+    event_id: event.event_id,
+    event_json: JSON.stringify(event),
+    previous_hash: "c".repeat(64),
+    event_hash: `${sequence}`.padStart(64, "e"),
+    created_at: event.created_at,
+  };
 }
+
+const openRow = () =>
+  lifecycleRow("session_open", {
+    authorization_reference: "FOUNDER-20260911-01",
+    execution_ids: ["exec-claude", "exec-agy"],
+  });
+const tokenRow = (token: number) =>
+  lifecycleRow("fencing_token_issued", { writer_execution_id: "exec-claude" }, { fencing_token: token });
+const activatedRow = () =>
+  lifecycleRow("session_activated", { execution_ids: ["exec-claude", "exec-agy"], readiness_snapshot_seq: 7 });
+const pausedRow = () =>
+  lifecycleRow("session_paused", { command_id: "cmd-1", authorized_by: "founder" });
+const resumedRow = () =>
+  lifecycleRow("session_resumed", { command_id: "cmd-2", authorized_by: "founder" });
+const interruptedRow = () =>
+  lifecycleRow(
+    "session_interrupted",
+    {
+      incident_id: "incident-1",
+      reason: "cli exited",
+      severity: "high",
+      source_event_id: null,
+      reported_by_execution_id: null,
+    },
+    { reason_code: "child_failure" },
+  );
 
 function makeReconcileInput(
   expectedSha: string,
@@ -307,90 +359,48 @@ describe("restart and re-attestation", () => {
   });
 });
 
-// ─── Typed resume ───
+// ─── No same-session resume authority (Phase 3A Task 15) ───
 
-describe("typed resume", () => {
-  test("resume succeeds with typed Founder resume event and reconciled outcome", () => {
-    const reconcileResult = reconcileRepository(
-      makeReconcileInput("match", "match", "match"),
-    );
-    expect(reconcileResult.outcome).toBe("reconciled");
-
-    const result = resumeSession({
-      founderEvent: makeResumeFounderEvent(),
-      reconcileResult,
-      sessionState: { kind: "interrupted" },
-    });
-
-    expect(result.resumed).toBe(true);
-    expect(result.state.kind).toBe("active");
-    expect(result.newFencingToken).toBeGreaterThan(0);
-  });
-
-  test("resume fails without typed Founder resume event", () => {
-    const reconcileResult = reconcileRepository(
-      makeReconcileInput("match", "match", "match"),
-    );
-
-    const wrongEvent = makeEvent("message", {
-      sender_execution_id: "exec-founder",
-      sender_role: "founder",
-    });
-
-    const result = resumeSession({
-      founderEvent: wrongEvent,
-      reconcileResult,
-      sessionState: { kind: "interrupted" },
-    });
-
-    expect(result.resumed).toBe(false);
-    expect(result.state.kind).toBe("interrupted");
-  });
-
-  test("resume fails when reconciliation is ambiguous", () => {
-    const reconcileResult = reconcileRepository(
-      makeReconcileInput("expected", "diff1", "diff2"),
-    );
-    expect(reconcileResult.outcome).toBe("ambiguous");
-
-    const result = resumeSession({
-      founderEvent: makeResumeFounderEvent(),
-      reconcileResult,
-      sessionState: { kind: "interrupted" },
-    });
-
-    expect(result.resumed).toBe(false);
-  });
-
-  test("resume through broker issues new fencing token", async () => {
+describe("no same-session resume authority", () => {
+  test("the in-memory broker exposes no resume surface", async () => {
     const broker = await createInMemoryBrokerForTest();
     try {
-      const oldToken = broker.fencingToken;
+      expect(Object.keys(broker)).not.toContain("resume");
 
-      // Interrupt
       broker.interrupt("cli_exit", "test");
-      expect(broker.tokenUsable).toBe(false);
-
-      // Reconcile
-      const reconcileResult = broker.reconcile(
-        makeReconcileInput("match", "match", "match"),
-      );
+      const reconcileResult = broker.reconcile(makeReconcileInput("match", "match", "match"));
       expect(reconcileResult.outcome).toBe("reconciled");
 
-      // Resume
-      const resumeResult = broker.resume({
-        founderEvent: makeResumeFounderEvent(),
-        reconcileResult,
-        sessionState: broker.sessionState,
-      });
-
-      expect(resumeResult.resumed).toBe(true);
-      expect(resumeResult.newToken).not.toBe(oldToken);
-      expect(broker.tokenUsable).toBe(true);
-      expect(broker.sessionState.kind).toBe("active");
+      // A reconciled repository is not a resume: nothing on the broker returns
+      // an interrupted session to active or re-validates its token.
+      expect(broker.sessionState.kind).toBe("interrupted");
+      expect(broker.tokenUsable).toBe(false);
     } finally {
       broker.stop();
     }
+  });
+
+  test("session_resumed replay restores active from paused without minting a fencing token", () => {
+    const state = rebuildBrokerState([openRow(), tokenRow(4), activatedRow(), pausedRow(), resumedRow()]);
+    expect(state.phase).toBe("active");
+    expect(state.fencingToken).toBe(4);
+    expect(state.tokenUsable).toBe(true);
+  });
+
+  test("an interrupted session is not returned to active by activity or legacy resume records", () => {
+    const rows = [
+      openRow(),
+      tokenRow(4),
+      activatedRow(),
+      interruptedRow(),
+      ...makeLedgerRows([makeEvent("message"), makeEvent("resume")]),
+    ];
+
+    const state = rebuildBrokerState(rows);
+    expect(state.phase).toBe("interrupted");
+    expect(state.tokenUsable).toBe(false);
+    expect(state.fencingToken).toBe(4);
+    expect(state.incident?.id).toBe("incident-1");
   });
 });
 
@@ -522,18 +532,20 @@ describe("complete hash-chain verification", () => {
   });
 
   test("deterministic state rebuild from verified ledger events", () => {
-    const rows = makeLedgerRows([
-      makeEvent("message"),
-      makeEvent("action_request"),
-      makeEvent("incident"),
-      makeEvent("resume"),
-    ]);
+    const rows = [
+      openRow(),
+      tokenRow(1),
+      activatedRow(),
+      ...makeLedgerRows([makeEvent("message"), makeEvent("action_request")]),
+      interruptedRow(),
+    ];
 
     const state = rebuildBrokerState(rows);
-    expect(state.count).toBe(4);
-    expect(state.hasIncident).toBe(true);
-    expect(state.tokenUsable).toBe(true);
-    expect(state.sessionState.kind).toBe("active");
-    expect(state.currentFencingToken).not.toBeNull();
+    expect(state.count).toBe(6);
+    expect(state.lastEventHash).toBe(rows[5]!.event_hash);
+    expect(state.phase).toBe("interrupted");
+    expect(state.incident?.id).toBe("incident-1");
+    expect(state.tokenUsable).toBe(false);
+    expect(state.fencingToken).toBe(1);
   });
 });

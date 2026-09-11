@@ -1,5 +1,5 @@
 // packages/broker/src/reconciliation.ts
-// Fail-closed session recovery: interruption, reconciliation, resume.
+// Fail-closed session recovery: interruption and repository reconciliation.
 //
 // On any monitored process or adapter disconnect, the session atomically
 // appends an `incident` event and moves to `interrupted`. The current writer
@@ -7,15 +7,21 @@
 //
 // Reconciliation compares actual repository/worktree identity and fingerprint
 // with the last committed event, records changed paths (without unrestricted
-// file contents), re-attests both executions, and produces one of
-// `reconciled`, `ambiguous`, or `mismatch`. Only `reconciled` plus a matching
-// typed Founder resume event returns the session to `active`.
+// file contents), and re-attests both executions, producing one of
+// `reconciled`, `ambiguous`, or `mismatch`.
+//
+// Lifecycle truth is never derived here. `rebuildBrokerState` is a fold of the
+// canonical `reduceLedgerEvent` (specification section 9.6); this module has no
+// lifecycle transition table of its own, so the broker cannot disagree with
+// replay. Same-session resume-after-interrupt is gone with it: `interrupted` is
+// terminal-bound and next-start prefix completion (section 9.5) owns recovery.
 
-import type { BridgeEventV1, RepositoryFingerprint } from "@madventures/protocol";
+import type { BridgeEventV1, LedgerEventV1, RepositoryFingerprint } from "@madventures/protocol";
 import { canonicalJson } from "@madventures/protocol";
 import { transitionSession } from "./session-machine";
 import type { SessionState } from "./session-machine";
-import type { LedgerRow } from "@madventures/ledger";
+import type { LedgerRow, LifecycleState } from "@madventures/ledger";
+import { GENESIS_HASH, INITIAL_LIFECYCLE_STATE, reduceLedgerEvent } from "@madventures/ledger";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -78,161 +84,37 @@ export interface ReconcileResult {
   detail: string;
 }
 
-export interface ResumeApproval {
-  /** Must be a typed Founder resume event. */
-  founderEvent: BridgeEventV1;
-  reconcileResult: ReconcileResult;
-  sessionState: SessionState;
-}
-
-export interface ResumeResult {
-  state: SessionState;
-  newFencingToken: number;
-  resumed: boolean;
-  detail: string;
-}
-
 // ---------------------------------------------------------------------------
 // Deterministic broker-state reconstruction
 // ---------------------------------------------------------------------------
 
-export interface RebuiltBrokerState {
-  count: number;
-  lastEventHash: string;
-  events: LedgerRow[];
-  sessionState: SessionState;
-  currentFencingToken: number | null;
-  lastFingerprint: RepositoryFingerprint | null;
-  hasIncident: boolean;
-  tokenUsable: boolean;
-}
-
 /**
  * Deterministically reconstruct broker state from verified ledger events.
- * Replays the event stream to derive session state, fencing token, and
- * last known repository fingerprint.
  *
- * When the stream has no explicit start event, the first normal activity
- * event synthesizes starting -> active (same set as ledger rebuild.ts) so
- * durable broker and ledger replay stay aligned.
+ * Implemented only as a fold of the canonical `reduceLedgerEvent` from
+ * `INITIAL_LIFECYCLE_STATE`. Every lifecycle decision is made by that one
+ * function; this wrapper adds only the row-level bookkeeping (count, chain
+ * head, event rows) that is not lifecycle state.
+ *
+ * Ordinary `BridgeEventV1` traffic is lifecycle-inert: nothing here synthesizes
+ * `active` from activity, and legacy execution-authored `resume` records mint
+ * no fencing token. Replay is fail-closed by rejection: an illegal or malformed
+ * lifecycle record raises the reducer's typed error, and a row whose
+ * `event_json` does not parse raises rather than being skipped.
  */
-export function rebuildBrokerState(rows: readonly LedgerRow[]): RebuiltBrokerState {
-  if (rows.length === 0) {
-    return {
-      count: 0,
-      lastEventHash: "0".repeat(64),
-      events: [],
-      sessionState: { kind: "starting" },
-      currentFencingToken: null,
-      lastFingerprint: null,
-      hasIncident: false,
-      tokenUsable: false,
-    };
-  }
-
-  let state: SessionState = { kind: "starting" };
-  let fencingToken: number | null = null;
-  let lastFingerprint: RepositoryFingerprint | null = null;
-  let hasIncident = false;
-  let tokenUsable = true;
-
-  for (const row of rows) {
-    let event: BridgeEventV1;
-    try {
-      event = JSON.parse(row.event_json) as BridgeEventV1;
-    } catch {
-      // Corrupt event — can't replay
-      continue;
-    }
-
-    // Track fingerprint
-    if (event.repository_fingerprint) {
-      lastFingerprint = event.repository_fingerprint;
-    }
-
-    switch (event.event_type) {
-      case "message":
-      case "action_request":
-      case "action_accept":
-      case "action_reject":
-      case "artifact_publish":
-      case "ownership_request":
-      case "ownership_release":
-      case "ownership_accept":
-      case "ownership_reject":
-      case "verification_result":
-      case "review_verdict":
-        // First normal activity synthesizes starting -> active when the ledger
-        // stream has no explicit start event (parity with ledger rebuild.ts).
-        // Only applies while still starting; interrupted/paused/etc. are unchanged.
-        if (state.kind === "starting") {
-          try {
-            state = transitionSession(state, { type: "start" });
-          } catch {
-            // ignore illegal start (should not occur from starting)
-          }
-        }
-        break;
-
-      case "pause":
-        try {
-          state = transitionSession(state, { type: "pause" });
-        } catch {
-          // ignore if already paused or invalid
-        }
-        break;
-
-      case "resume":
-        try {
-          // If interrupted, transition through reconciling first
-          if (state.kind === "interrupted") {
-            state = transitionSession(state, { type: "reconcile" });
-          }
-          state = transitionSession(state, { type: "resume" });
-          // Resume after reconciliation issues a new fencing token
-          fencingToken = (fencingToken ?? 0) + 1;
-          tokenUsable = true;
-        } catch {
-          // ignore if invalid
-        }
-        break;
-
-      case "incident":
-        hasIncident = true;
-        tokenUsable = false;
-        try {
-          state = transitionSession(state, { type: "interrupt" });
-        } catch {
-          // Invalid transition (e.g. session already closed) — keep the
-          // machine-derived state. Never force-set interrupted; the incident
-          // is still recorded via hasIncident and tokenUsable above.
-        }
-        break;
-
-      case "session_close":
-        try {
-          state = transitionSession(state, { type: "close" });
-          state = transitionSession(state, { type: "complete" });
-        } catch {
-          // ignore
-        }
-        break;
-
-      default:
-        break;
-    }
-  }
-
-  const last = rows[rows.length - 1]!;
+export function rebuildBrokerState(
+  rows: readonly LedgerRow[],
+): LifecycleState & { count: number; lastEventHash: string; events: LedgerRow[] } {
+  const lifecycle = rows.reduce<LifecycleState>(
+    (state, row) => reduceLedgerEvent(state, JSON.parse(row.event_json) as LedgerEventV1),
+    INITIAL_LIFECYCLE_STATE,
+  );
+  const last = rows[rows.length - 1];
   return {
+    ...lifecycle,
     count: rows.length,
-    lastEventHash: last.event_hash,
+    lastEventHash: last?.event_hash ?? GENESIS_HASH,
     events: [...rows],
-    sessionState: state,
-    currentFencingToken: fencingToken,
-    lastFingerprint,
-    hasIncident,
-    tokenUsable,
   };
 }
 
@@ -385,75 +267,5 @@ export function reconcileRepository(input: ReconcileInput): ReconcileResult {
     reattested,
     fingerprintMatch,
     detail,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Resume session
-// ---------------------------------------------------------------------------
-
-/**
- * Resume a session only after reconciliation produced `reconciled` AND
- * a typed Founder resume event is provided. Issues a new fencing token.
- */
-export function resumeSession(approval: ResumeApproval): ResumeResult {
-  const { founderEvent, reconcileResult, sessionState } = approval;
-
-  // The Founder event must be a typed resume event
-  if (founderEvent.event_type !== "resume") {
-    return {
-      state: sessionState,
-      newFencingToken: 0,
-      resumed: false,
-      detail: "resume requires a typed Founder resume event",
-    };
-  }
-
-  // Reconciliation must have produced `reconciled`
-  if (reconcileResult.outcome !== "reconciled") {
-    return {
-      state: sessionState,
-      newFencingToken: 0,
-      resumed: false,
-      detail: `cannot resume: reconciliation outcome is ${reconcileResult.outcome}`,
-    };
-  }
-
-  // Both re-attestations must be present
-  if (!reconcileResult.reattested) {
-    return {
-      state: sessionState,
-      newFencingToken: 0,
-      resumed: false,
-      detail: "cannot resume: re-attestation incomplete",
-    };
-  }
-
-  // Move from interrupted → reconciling → active
-  let state = sessionState;
-  try {
-    // If interrupted, move to reconciling first
-    if (state.kind === "interrupted") {
-      state = transitionSession(state, { type: "reconcile" });
-    }
-    // Now resume from reconciling to active
-    state = transitionSession(state, { type: "resume" });
-  } catch (err) {
-    return {
-      state: sessionState,
-      newFencingToken: 0,
-      resumed: false,
-      detail: `resume transition failed: ${String(err)}`,
-    };
-  }
-
-  // Issue a new fencing token
-  const newToken = crypto.getRandomValues(new Uint32Array(1))[0]!;
-
-  return {
-    state,
-    newFencingToken: newToken,
-    resumed: true,
-    detail: "session resumed with new fencing token",
   };
 }

@@ -1,18 +1,28 @@
 // packages/broker/test/reconciliation.test.ts
 // Disconnect and restart recovery tests — fail-closed session recovery.
+//
+// Phase 3A Task 15: the broker has no lifecycle transition table of its own.
+// rebuildBrokerState is a fold of the canonical reduceLedgerEvent, so the
+// broker cannot disagree with ledger replay.
 
 import { expect, test, describe } from "bun:test";
 import {
   interruptSession,
   reconcileRepository,
-  resumeSession,
   rebuildBrokerState,
 } from "../src/reconciliation";
 import type { InterruptReason, RepositorySnapshot, ReconcileInput } from "../src/reconciliation";
 import { InvalidTransitionError } from "../src/session-machine";
 import type { BridgeEventV1, RepositoryFingerprint } from "@madventures/protocol";
 import { PROTOCOL_VERSION, sha256Hex } from "@madventures/protocol";
-import type { LedgerRow } from "@madventures/ledger";
+import type { LedgerRow, LifecycleState } from "@madventures/ledger";
+import {
+  GENESIS_HASH,
+  INITIAL_LIFECYCLE_STATE,
+  ReducerError,
+  reduceLedgerEvent,
+  rebuildBrokerState as replayLedger,
+} from "@madventures/ledger";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -83,16 +93,6 @@ function makeLedgerRows(events: BridgeEventV1[]): LedgerRow[] {
     prevHash = row.event_hash;
   });
   return rows;
-}
-
-function makeResumeFounderEvent(): BridgeEventV1 {
-  return makeEvent("resume", {
-    sender_execution_id: "exec-founder",
-    sender_role: "founder",
-    sender_surface: "claude-code",
-    sender_model: "claude-sonnet-4",
-    sender_provider: "anthropic",
-  });
 }
 
 function makeReconcileInput(
@@ -426,239 +426,97 @@ describe("Founder-visible reconciliation", () => {
   });
 });
 
-describe("resume session", () => {
-  test("new token only after valid resume — reconciled + typed Founder event", () => {
-    const reconcileResult = reconcileRepository(
-      makeReconcileInput("match", "match", "match"),
-    );
-    expect(reconcileResult.outcome).toBe("reconciled");
+// ---------------------------------------------------------------------------
+// Task 15: lifecycle truth comes from the canonical reducer
+// ---------------------------------------------------------------------------
 
-    const resumeResult = resumeSession({
-      founderEvent: makeResumeFounderEvent(),
-      reconcileResult,
-      sessionState: { kind: "interrupted" },
-    });
+let lifecycleSequence = 1;
 
-    expect(resumeResult.resumed).toBe(true);
-    expect(resumeResult.state.kind).toBe("active");
-    expect(resumeResult.newFencingToken).toBeGreaterThan(0);
+/** A madbridge-authored typed lifecycle record as a ledger row. */
+function lifecycleRow(
+  eventType: string,
+  payload: unknown,
+  overrides: Record<string, unknown> = {},
+): LedgerRow {
+  const sequence = lifecycleSequence++;
+  const event = {
+    protocol_version: PROTOCOL_VERSION,
+    event_id: `evt-${eventType}-${sequence}`,
+    session_id: "ses-task15",
+    event_type: eventType,
+    actor: "madbridge",
+    task_envelope_hash: "a".repeat(64),
+    repository_fingerprint: makeFingerprint("b"),
+    fencing_token: null,
+    reason_code: null,
+    created_at: "2026-09-11T00:00:00.000Z",
+    previous_event_hash: "c".repeat(64),
+    payload,
+    ...overrides,
+  };
+  return {
+    sequence,
+    event_id: event.event_id,
+    event_json: JSON.stringify(event),
+    previous_hash: "c".repeat(64),
+    event_hash: `${sequence}`.padStart(64, "e"),
+    created_at: event.created_at,
+  };
+}
+
+const openRow = () =>
+  lifecycleRow("session_open", {
+    authorization_reference: "FOUNDER-20260911-01",
+    execution_ids: ["exec-builder", "exec-reviewer"],
   });
-
-  test("resume rejected when reconciliation is ambiguous", () => {
-    const reconcileResult = reconcileRepository(
-      makeReconcileInput("expected", "diff1", "diff2"),
-    );
-    expect(reconcileResult.outcome).toBe("ambiguous");
-
-    const resumeResult = resumeSession({
-      founderEvent: makeResumeFounderEvent(),
-      reconcileResult,
-      sessionState: { kind: "interrupted" },
-    });
-
-    expect(resumeResult.resumed).toBe(false);
-    expect(resumeResult.state.kind).toBe("interrupted");
-    expect(resumeResult.newFencingToken).toBe(0);
+const tokenRow = (token: number) =>
+  lifecycleRow("fencing_token_issued", { writer_execution_id: "exec-builder" }, { fencing_token: token });
+const activatedRow = () =>
+  lifecycleRow("session_activated", {
+    execution_ids: ["exec-builder", "exec-reviewer"],
+    readiness_snapshot_seq: 7,
   });
+const pausedRow = () =>
+  lifecycleRow("session_paused", { command_id: "cmd-1", authorized_by: "founder" });
+const resumedRow = () =>
+  lifecycleRow("session_resumed", { command_id: "cmd-2", authorized_by: "founder" });
+const interruptedRow = () =>
+  lifecycleRow(
+    "session_interrupted",
+    {
+      incident_id: "incident-1",
+      reason: "child exited non-zero",
+      severity: "high",
+      source_event_id: null,
+      reported_by_execution_id: null,
+    },
+    { reason_code: "child_failure" },
+  );
 
-  test("resume rejected when reconciliation is mismatch", () => {
-    const reconcileResult = reconcileRepository(
-      makeReconcileInput("expected", "same", "same"),
-    );
-    expect(reconcileResult.outcome).toBe("mismatch");
+/** The lifecycle fields of a rebuilt state, without the row metadata. */
+function lifecycleOf(state: LifecycleState): LifecycleState {
+  const { sessionId, phase, fencingToken, tokenState, tokenUsable, incident, reasonCode, readyExecutionIds, closureKind } = state;
+  return { sessionId, phase, fencingToken, tokenState, tokenUsable, incident, reasonCode, readyExecutionIds, closureKind };
+}
 
-    const resumeResult = resumeSession({
-      founderEvent: makeResumeFounderEvent(),
-      reconcileResult,
-      sessionState: { kind: "interrupted" },
-    });
-
-    expect(resumeResult.resumed).toBe(false);
-    expect(resumeResult.state.kind).toBe("interrupted");
-  });
-
-  test("resume rejected without typed Founder resume event", () => {
-    const reconcileResult = reconcileRepository(
-      makeReconcileInput("match", "match", "match"),
-    );
-
-    // Use a message event instead of a resume event
-    const wrongEvent = makeEvent("message", {
-      sender_execution_id: "exec-founder",
-      sender_role: "founder",
-    });
-
-    const resumeResult = resumeSession({
-      founderEvent: wrongEvent,
-      reconcileResult,
-      sessionState: { kind: "interrupted" },
-    });
-
-    expect(resumeResult.resumed).toBe(false);
-    expect(resumeResult.state.kind).toBe("interrupted");
-  });
-
-  test("resume rejected when re-attestation is incomplete", () => {
-    const reconcileResult = reconcileRepository(
-      makeReconcileInput("match", "match", "match", [], false),
-    );
-
-    const resumeResult = resumeSession({
-      founderEvent: makeResumeFounderEvent(),
-      reconcileResult,
-      sessionState: { kind: "interrupted" },
-    });
-
-    expect(resumeResult.resumed).toBe(false);
-  });
-});
-
-describe("rebuildBrokerState — deterministic reconstruction", () => {
-  test("reconstructs from normal events", () => {
-    const rows = makeLedgerRows([
-      makeEvent("message"),
-      makeEvent("action_request"),
-    ]);
-
-    const state = rebuildBrokerState(rows);
-    expect(state.count).toBe(2);
-    expect(state.hasIncident).toBe(false);
+describe("rebuildBrokerState delegates to reduceLedgerEvent", () => {
+  test("session_resumed does not increment the fencing token", () => {
+    const state = rebuildBrokerState([openRow(), tokenRow(7), activatedRow(), pausedRow(), resumedRow()]);
+    expect(state.phase).toBe("active");
+    expect(state.fencingToken).toBe(7);
+    expect(state.tokenState).toBe("valid");
     expect(state.tokenUsable).toBe(true);
-    // First normal activity synthesizes starting -> active (no explicit start).
-    expect(state.sessionState.kind).toBe("active");
   });
 
-  test("reconstructs incident and marks token unusable", () => {
-    const rows = makeLedgerRows([
-      makeEvent("message"),
-      makeEvent("incident"),
-    ]);
-
-    const state = rebuildBrokerState(rows);
-    expect(state.count).toBe(2);
-    expect(state.hasIncident).toBe(true);
-    expect(state.tokenUsable).toBe(false);
-    expect(state.sessionState.kind).toBe("interrupted");
-  });
-
-  test("reconstructs resume after incident with new token", () => {
-    const rows = makeLedgerRows([
-      makeEvent("message"),
-      makeEvent("incident"),
-      makeEvent("resume"),
-    ]);
-
-    const state = rebuildBrokerState(rows);
-    expect(state.hasIncident).toBe(true);
-    expect(state.tokenUsable).toBe(true);
-    expect(state.sessionState.kind).toBe("active");
-    expect(state.currentFencingToken).not.toBeNull();
-  });
-
-  test("persists last fingerprint from events", () => {
-    const fp1 = makeFingerprint("aaa");
-    const fp2 = makeFingerprint("bbb");
-    const rows = makeLedgerRows([
-      makeEvent("message", { repository_fingerprint: fp1 }),
-      makeEvent("message", { repository_fingerprint: fp2 }),
-    ]);
-
-    const state = rebuildBrokerState(rows);
-    expect(state.lastFingerprint?.sha256).toBe(fp2.sha256);
-  });
-
-  test("empty events return starting state", () => {
+  test("empty rows return the initial lifecycle state with genesis metadata", () => {
     const state = rebuildBrokerState([]);
+    expect(lifecycleOf(state)).toEqual(INITIAL_LIFECYCLE_STATE);
     expect(state.count).toBe(0);
-    expect(state.sessionState.kind).toBe("starting");
-    expect(state.tokenUsable).toBe(false);
-    expect(state.currentFencingToken).toBeNull();
+    expect(state.lastEventHash).toBe(GENESIS_HASH);
+    expect(state.events).toEqual([]);
   });
 
-  test("incident after close does not force-set interrupted", () => {
-    // Regression: the old rebuild catch forced { kind: "interrupted" } when
-    // the machine rejected the transition. Replay legitimately reaches
-    // `closed` via interrupt → resume → session_close, and closed ->
-    // interrupted is not a legal transition, so the trailing incident must
-    // keep `closed` while still recording the fail-closed signals.
-    const rows = makeLedgerRows([
-      makeEvent("message"),
-      makeEvent("incident"),
-      makeEvent("resume"),
-      makeEvent("session_close"),
-      makeEvent("incident"),
-    ]);
-
-    const state = rebuildBrokerState(rows);
-    expect(state.sessionState.kind).toBe("closed");
-    // Fail-closed signals still apply: incident recorded, token unusable.
-    expect(state.hasIncident).toBe(true);
-    expect(state.tokenUsable).toBe(false);
-  });
-
-  test("rebuild routes paused interruption through the state machine", () => {
-    // Replay reaches `paused` via interrupt → resume → pause, then a second
-    // incident interrupts the paused session through the machine (paused ->
-    // interrupted is now a legal transition, not a forced fallback).
-    const rows = makeLedgerRows([
-      makeEvent("message"),
-      makeEvent("incident"),
-      makeEvent("resume"),
-      makeEvent("pause"),
-      makeEvent("incident"),
-    ]);
-
-    const state = rebuildBrokerState(rows);
-    expect(state.sessionState.kind).toBe("interrupted");
-    expect(state.hasIncident).toBe(true);
-    expect(state.tokenUsable).toBe(false);
-  });
-
-  test("normal activity then session_close replays to closed", () => {
-    // Follow-up defect 7: without start synthesis, [message, session_close]
-    // left the session at starting because close is only legal from active.
-    const rows = makeLedgerRows([
-      makeEvent("message"),
-      makeEvent("session_close"),
-    ]);
-
-    const state = rebuildBrokerState(rows);
-    expect(state.sessionState.kind).toBe("closed");
-    expect(state.hasIncident).toBe(false);
-    expect(state.tokenUsable).toBe(true);
-  });
-
-  test("normal activity then incident produces interrupted through legal transition", () => {
-    // message synthesizes start -> active, then incident: active -> interrupted.
-    const rows = makeLedgerRows([
-      makeEvent("message"),
-      makeEvent("incident"),
-    ]);
-
-    const state = rebuildBrokerState(rows);
-    expect(state.sessionState.kind).toBe("interrupted");
-    expect(state.hasIncident).toBe(true);
-    expect(state.tokenUsable).toBe(false);
-  });
-
-  test("interrupted plus normal activity does not become active without reconciliation", () => {
-    // After incident, further messages must not re-activate the session.
-    // Start synthesis only applies while state is starting.
-    const rows = makeLedgerRows([
-      makeEvent("message"),
-      makeEvent("incident"),
-      makeEvent("message"),
-      makeEvent("action_request"),
-    ]);
-
-    const state = rebuildBrokerState(rows);
-    expect(state.sessionState.kind).toBe("interrupted");
-    expect(state.hasIncident).toBe(true);
-    expect(state.tokenUsable).toBe(false);
-    expect(state.currentFencingToken).toBeNull();
-  });
-
-  test("start synthesis is a no-op when already active (second normal event)", () => {
+  test("ordinary bridge traffic does not synthesize active", () => {
     const rows = makeLedgerRows([
       makeEvent("message"),
       makeEvent("action_request"),
@@ -666,6 +524,95 @@ describe("rebuildBrokerState — deterministic reconstruction", () => {
     ]);
 
     const state = rebuildBrokerState(rows);
-    expect(state.sessionState.kind).toBe("active");
+    expect(state.count).toBe(3);
+    expect(state.phase).toBe("starting");
+    expect(state.fencingToken).toBeNull();
+    expect(state.tokenUsable).toBe(false);
+    expect(state.incident).toBeNull();
+  });
+
+  test("legacy resume and incident bridge records are lifecycle-inert and mint no token", () => {
+    const rows = [
+      openRow(),
+      tokenRow(3),
+      activatedRow(),
+      ...makeLedgerRows([makeEvent("message"), makeEvent("incident"), makeEvent("resume")]),
+    ];
+
+    const state = rebuildBrokerState(rows);
+    expect(state.phase).toBe("active");
+    expect(state.fencingToken).toBe(3);
+    expect(state.tokenUsable).toBe(true);
+    expect(state.incident).toBeNull();
+  });
+
+  test("an interrupted session is not returned to active by ordinary activity", () => {
+    const rows = [
+      openRow(),
+      tokenRow(1),
+      activatedRow(),
+      interruptedRow(),
+      ...makeLedgerRows([makeEvent("message"), makeEvent("action_request"), makeEvent("resume")]),
+    ];
+
+    const state = rebuildBrokerState(rows);
+    expect(state.phase).toBe("interrupted");
+    expect(state.incident?.id).toBe("incident-1");
+    expect(state.reasonCode).toBe("child_failure");
+    expect(state.tokenUsable).toBe(false);
+    expect(state.fencingToken).toBe(1);
+  });
+
+  test("broker rebuild cannot diverge from ledger replay", () => {
+    const histories: LedgerRow[][] = [
+      [],
+      makeLedgerRows([makeEvent("message"), makeEvent("resume")]),
+      [openRow(), tokenRow(2), activatedRow()],
+      [openRow(), tokenRow(2), activatedRow(), pausedRow(), resumedRow()],
+      [openRow(), tokenRow(2), activatedRow(), interruptedRow(), ...makeLedgerRows([makeEvent("message")])],
+    ];
+
+    for (const rows of histories) {
+      const broker = rebuildBrokerState(rows);
+      const ledger = replayLedger(rows);
+      const direct = rows.reduce<LifecycleState>(
+        (state, row) => reduceLedgerEvent(state, JSON.parse(row.event_json)),
+        INITIAL_LIFECYCLE_STATE,
+      );
+
+      expect(lifecycleOf(broker)).toEqual(direct);
+      expect(broker.phase).toBe(ledger.sessionState);
+      expect(broker.fencingToken).toBe(ledger.currentFencingToken);
+      expect(broker.tokenUsable).toBe(ledger.tokenUsable);
+      expect(broker.incident !== null).toBe(ledger.hasIncident);
+      expect(broker.count).toBe(ledger.count);
+      expect(broker.lastEventHash).toBe(ledger.lastEventHash);
+    }
+  });
+
+  test("replay is fail-closed by rejection: an impossible order raises the reducer's typed error", () => {
+    expect(() => rebuildBrokerState([openRow(), resumedRow()])).toThrow(ReducerError);
+    try {
+      rebuildBrokerState([openRow(), resumedRow()]);
+    } catch (error) {
+      expect(error).toBeInstanceOf(ReducerError);
+      expect((error as ReducerError).kind).toBe("invalid_phase_precondition");
+    }
+  });
+
+  test("a row whose event_json does not parse is rejected, not skipped", () => {
+    const [row] = makeLedgerRows([makeEvent("message")]);
+    const corrupt: LedgerRow = { ...row!, event_json: "{not json" };
+    expect(() => rebuildBrokerState([corrupt])).toThrow();
+  });
+
+  test("row metadata comes from the rows, not from lifecycle state", () => {
+    const rows = [openRow(), tokenRow(5), activatedRow()];
+
+    const state = rebuildBrokerState(rows);
+    expect(state.count).toBe(3);
+    expect(state.lastEventHash).toBe(rows[2]!.event_hash);
+    expect(state.events).toEqual(rows);
+    expect(state.events).not.toBe(rows);
   });
 });
