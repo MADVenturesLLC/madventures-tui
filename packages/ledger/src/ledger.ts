@@ -3,7 +3,7 @@
 // Uses bun:sqlite for atomic transactions.
 
 import { Database } from "bun:sqlite";
-import type { BridgeEventV1 } from "@madventures/protocol";
+import type { LedgerEventV1 } from "@madventures/protocol";
 import { canonicalJson } from "@madventures/protocol";
 import { computeEventHash, GENESIS_HASH } from "./hash-chain";
 import { SCHEMA_SQL } from "./schema";
@@ -32,7 +32,7 @@ export class Ledger {
     this.db.run(SCHEMA_SQL);
   }
 
-  append(event: BridgeEventV1): LedgerRow {
+  append(event: LedgerEventV1): LedgerRow {
     const eventJson = canonicalJson(event);
     const prevHash = this.getHeadHash();
     const eventHash = computeEventHash(prevHash, eventJson);
