@@ -33,23 +33,53 @@ export class Ledger {
   }
 
   append(event: LedgerEventV1): LedgerRow {
-    const eventJson = canonicalJson(event);
-    const prevHash = this.getHeadHash();
-    const eventHash = computeEventHash(prevHash, eventJson);
-    const createdAt = event.created_at;
-    const sequence = this.getNextSequence();
+    // A single append is a batch of one. There is one chain algorithm.
+    const [row] = this.appendMany([event]);
+    if (row === undefined) {
+      throw new Error("append: the one-event batch produced no row");
+    }
+    return row;
+  }
 
-    // Atomic transaction: insert event + update chain head
+  /**
+   * Append every event in one transaction, in order, or none of them.
+   *
+   * The incident pair (an original BridgeEventV1 plus its derived
+   * session_interrupted lifecycle record) must be indivisible: one
+   * BEGIN IMMEDIATE, ordered inserts that chain within the batch, one final
+   * chain_head update, and a complete ROLLBACK on any failure. No snapshot or
+   * callback can observe a partially written batch. Returned rows preserve
+   * input order.
+   */
+  appendMany(events: readonly LedgerEventV1[]): readonly LedgerRow[] {
+    if (events.length === 0) return [];
+
+    const rows: LedgerRow[] = [];
     this.db.run("BEGIN IMMEDIATE");
     try {
-      this.db.run(
-        `INSERT INTO events (sequence, event_id, event_json, previous_hash, event_hash, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [sequence, event.event_id, eventJson, prevHash, eventHash, createdAt],
-      );
+      // Read the committed head inside the transaction so the first record in
+      // the batch chains from it and nothing can advance the head in between.
+      let prevHash = this.getHeadHash();
+      let sequence = this.getNextSequence();
+
+      for (const event of events) {
+        const eventJson = canonicalJson(event);
+        const eventHash = computeEventHash(prevHash, eventJson);
+        const createdAt = event.created_at;
+        this.db.run(
+          `INSERT INTO events (sequence, event_id, event_json, previous_hash, event_hash, created_at)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [sequence, event.event_id, eventJson, prevHash, eventHash, createdAt],
+        );
+        rows.push({ sequence, event_id: event.event_id, event_json: eventJson, previous_hash: prevHash, event_hash: eventHash, created_at: createdAt });
+        prevHash = eventHash;
+        sequence += 1;
+      }
+
+      // One chain_head update: the last record's sequence and hash.
       this.db.run(
         `UPDATE chain_head SET sequence = ?, hash = ? WHERE id = 1`,
-        [sequence, eventHash],
+        [sequence - 1, prevHash],
       );
       this.db.run("COMMIT");
     } catch (err) {
@@ -57,7 +87,7 @@ export class Ledger {
       throw err;
     }
 
-    return { sequence, event_id: event.event_id, event_json: eventJson, previous_hash: prevHash, event_hash: eventHash, created_at: createdAt };
+    return rows;
   }
 
   verify(): VerifyResult {
