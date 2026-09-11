@@ -20,4 +20,6 @@ CREATE TABLE IF NOT EXISTS chain_head (
 );
 
 INSERT OR IGNORE INTO chain_head (id, sequence, hash) VALUES (1, 0, '${GENESIS_HASH}');
+
+CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at);
 `;
