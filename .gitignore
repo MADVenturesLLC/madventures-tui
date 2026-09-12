@@ -35,3 +35,6 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 # runtime data
 ~/Library/Application Support/MADVentures/
+
+# Mimosa security-scan hook artifacts (local audit state, never committed)
+.mimosa/

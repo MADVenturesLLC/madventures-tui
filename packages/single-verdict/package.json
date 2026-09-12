@@ -1,0 +1,14 @@
+{
+  "name": "@mad/single-verdict",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "description": "Single Verdict v0: one closed-enum Founder-facing ship/hold verdict per subject. Mission Control may only DISPLAY it. Fail-closed factory gates: no SHIP on stale memory, no SHIP for a claim a rung forbids.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@mad/build-memory": "workspace:*",
+    "@mad/claim-boundary": "workspace:*"
+  }
+}

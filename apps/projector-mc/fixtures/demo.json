@@ -1,0 +1,293 @@
+{
+  "schema": "mad.projector-demo/v0",
+  "generated_at": "2026-09-12T12:00:00.000Z",
+  "note": "SYNTHETIC DEMO DATA — every subject, SHA, and evidence ref is fabricated for the projector demo; the seals and verdicts are produced by the real libraries.",
+  "rooms": [
+    {
+      "id": "plane:ledger",
+      "label": "Ledger Plane",
+      "subjects": [
+        "@madventures/ledger"
+      ]
+    },
+    {
+      "id": "plane:broker",
+      "label": "Broker Plane",
+      "subjects": [
+        "@madventures/broker"
+      ]
+    },
+    {
+      "id": "plane:claim",
+      "label": "Claim Boundary",
+      "subjects": [
+        "@mad/claim-boundary"
+      ]
+    },
+    {
+      "id": "spine:projector",
+      "label": "Projector Spine",
+      "subjects": [
+        "@mad/build-memory",
+        "@mad/single-verdict",
+        "apps/projector-mc"
+      ]
+    }
+  ],
+  "current": {
+    "@madventures/ledger": {
+      "head_sha": "deadbeef10000000000000000000000000000000",
+      "index_tree": "cafed00d10000000000000000000000000000000000000000000000000000000"
+    },
+    "@madventures/broker": {
+      "head_sha": "feedface10000000000000000000000000000000"
+    },
+    "@mad/claim-boundary": {
+      "head_sha": "facade1100000000000000000000000000000000",
+      "index_tree": "cabba9e000000000000000000000000000000000000000000000000000000000"
+    },
+    "@mad/build-memory": {
+      "head_sha": "d00dfeed10000000000000000000000000000000"
+    },
+    "@mad/single-verdict": {
+      "head_sha": "abcdef0110000000000000000000000000000000"
+    },
+    "apps/projector-mc": {
+      "head_sha": "0abcdef010000000000000000000000000000000",
+      "index_tree": "0dd5eed100000000000000000000000000000000000000000000000000000000"
+    }
+  },
+  "memory_fixture": {
+    "format": "mad.build-memory-fixture/v0",
+    "sealed_sha256": "8a1abc33beba8f79531aaab74bd8084ed4d2bd0296ea1c6777daea6d2c584d31",
+    "records": {
+      "@madventures/ledger": {
+        "record": {
+          "subject": "@madventures/ledger",
+          "head_sha": "deadbeef10000000000000000000000000000000",
+          "verified_at": "2026-09-12T12:00:00.000Z",
+          "evidence_refs": [
+            {
+              "path": "docs/verification/demo-ledger-run.json",
+              "sha256": "a11ce5d000000000000000000000000000000000000000000000000000000000",
+              "kind": "argus_packet"
+            },
+            {
+              "path": "packages/ledger/test/goldens/rebuild.json",
+              "sha256": "b0b5e5d000000000000000000000000000000000000000000000000000000000",
+              "kind": "golden"
+            }
+          ],
+          "index_tree": "cafed00d10000000000000000000000000000000000000000000000000000000"
+        }
+      },
+      "@madventures/broker": {
+        "record": {
+          "subject": "@madventures/broker",
+          "head_sha": "beefcafe10000000000000000000000000000000",
+          "verified_at": "2026-09-12T12:00:00.000Z",
+          "evidence_refs": [
+            {
+              "path": "docs/verification/demo-broker-run.json",
+              "sha256": "c0ffee0000000000000000000000000000000000000000000000000000000000",
+              "kind": "argus_packet"
+            }
+          ]
+        }
+      },
+      "@mad/claim-boundary": {
+        "record": {
+          "subject": "@mad/claim-boundary",
+          "head_sha": "facade1100000000000000000000000000000000",
+          "verified_at": "2026-09-12T12:00:00.000Z",
+          "evidence_refs": [
+            {
+              "path": "docs/verification/demo-claim-run.json",
+              "sha256": "ba5eba1100000000000000000000000000000000000000000000000000000000",
+              "kind": "argus_packet"
+            },
+            {
+              "path": "docs/verification/demo-claim-review.md",
+              "sha256": "f00dc0de00000000000000000000000000000000000000000000000000000000",
+              "kind": "log"
+            }
+          ],
+          "index_tree": "cabba9e000000000000000000000000000000000000000000000000000000000"
+        }
+      },
+      "@mad/build-memory": {
+        "record": {
+          "subject": "@mad/build-memory",
+          "head_sha": "d00dfeed10000000000000000000000000000000",
+          "verified_at": "2026-09-12T12:00:00.000Z",
+          "evidence_refs": [
+            {
+              "path": "packages/build-memory/test/build-memory.test.ts",
+              "sha256": "deadf00d00000000000000000000000000000000000000000000000000000000",
+              "kind": "golden"
+            }
+          ]
+        },
+        "invalidated": {
+          "reason": "demo: evidence retracted by operator",
+          "at": "2026-09-12T12:00:00.000Z"
+        }
+      },
+      "apps/projector-mc": {
+        "record": {
+          "subject": "apps/projector-mc",
+          "head_sha": "0abcdef010000000000000000000000000000000",
+          "verified_at": "2026-09-12T12:00:00.000Z",
+          "evidence_refs": [
+            {
+              "path": "apps/projector-mc/test/render-model.test.ts",
+              "sha256": "fade5eed00000000000000000000000000000000000000000000000000000000",
+              "kind": "golden"
+            }
+          ],
+          "index_tree": "0dd5eed100000000000000000000000000000000000000000000000000000000"
+        }
+      }
+    }
+  },
+  "verdicts": {
+    "@madventures/ledger": {
+      "schema": "mad.single-verdict/v0",
+      "verdict": "VERIFY_PASS",
+      "subject": {
+        "name": "@madventures/ledger",
+        "sha": "deadbeef10000000000000000000000000000000"
+      },
+      "reason_code": "EVIDENCE_FRESH",
+      "produced_by": "builder:hephaestus-br",
+      "produced_at": "2026-09-12T12:00:00.000Z",
+      "evidence_refs": [
+        {
+          "ref": {
+            "path": "docs/verification/demo-ledger-run.json",
+            "sha256": "a11ce5d000000000000000000000000000000000000000000000000000000000",
+            "kind": "argus_packet"
+          },
+          "boundary": {
+            "rung": "verified",
+            "not_evidence_of": [
+              "review",
+              "ci",
+              "merge"
+            ]
+          }
+        }
+      ]
+    },
+    "@madventures/broker": {
+      "schema": "mad.single-verdict/v0",
+      "verdict": "STALE_EVIDENCE",
+      "subject": {
+        "name": "@madventures/broker",
+        "sha": "feedface10000000000000000000000000000000"
+      },
+      "reason_code": "EVIDENCE_STALE",
+      "produced_by": "builder:hephaestus-br",
+      "produced_at": "2026-09-12T12:00:00.000Z",
+      "evidence_refs": [
+        {
+          "ref": {
+            "path": "docs/verification/demo-broker-run.json",
+            "sha256": "c0ffee0000000000000000000000000000000000000000000000000000000000",
+            "kind": "argus_packet"
+          }
+        }
+      ]
+    },
+    "@mad/claim-boundary": {
+      "schema": "mad.single-verdict/v0",
+      "verdict": "SHIP",
+      "subject": {
+        "name": "@mad/claim-boundary",
+        "sha": "facade1100000000000000000000000000000000"
+      },
+      "reason_code": "EVIDENCE_FRESH",
+      "produced_by": "builder:hephaestus-br",
+      "produced_at": "2026-09-12T12:00:00.000Z",
+      "evidence_refs": [
+        {
+          "ref": {
+            "path": "docs/verification/demo-claim-run.json",
+            "sha256": "ba5eba1100000000000000000000000000000000000000000000000000000000",
+            "kind": "argus_packet"
+          },
+          "boundary": {
+            "rung": "merged",
+            "not_evidence_of": []
+          }
+        }
+      ]
+    },
+    "@mad/build-memory": {
+      "schema": "mad.single-verdict/v0",
+      "verdict": "HOLD",
+      "subject": {
+        "name": "@mad/build-memory",
+        "sha": "d00dfeed10000000000000000000000000000000"
+      },
+      "reason_code": "FOUNDER_HOLD",
+      "produced_by": "builder:hephaestus-br",
+      "produced_at": "2026-09-12T12:00:00.000Z",
+      "evidence_refs": [
+        {
+          "ref": {
+            "path": "packages/build-memory/test/build-memory.test.ts",
+            "sha256": "deadf00d00000000000000000000000000000000000000000000000000000000",
+            "kind": "golden"
+          }
+        }
+      ]
+    },
+    "@mad/single-verdict": {
+      "schema": "mad.single-verdict/v0",
+      "verdict": "SPEC_ONLY",
+      "subject": {
+        "name": "@mad/single-verdict",
+        "sha": "abcdef0110000000000000000000000000000000"
+      },
+      "reason_code": "SPEC_ONLY_NO_IMPLEMENTATION",
+      "produced_by": "builder:hephaestus-br",
+      "produced_at": "2026-09-12T12:00:00.000Z",
+      "evidence_refs": [
+        {
+          "ref": {
+            "path": "docs/superpowers/specs/demo-single-verdict.md",
+            "sha256": "5eedf00d00000000000000000000000000000000000000000000000000000000",
+            "kind": "log"
+          }
+        }
+      ]
+    },
+    "apps/projector-mc": {
+      "schema": "mad.single-verdict/v0",
+      "verdict": "VERIFY_FAIL",
+      "subject": {
+        "name": "apps/projector-mc",
+        "sha": "0abcdef010000000000000000000000000000000"
+      },
+      "reason_code": "VERIFY_FAILED",
+      "produced_by": "builder:hephaestus-br",
+      "produced_at": "2026-09-12T12:00:00.000Z",
+      "evidence_refs": [
+        {
+          "ref": {
+            "path": "apps/projector-mc/test/render-model.test.ts",
+            "sha256": "fade5eed00000000000000000000000000000000000000000000000000000000",
+            "kind": "golden"
+          }
+        }
+      ],
+      "findings": [
+        {
+          "code": "DEMO_FAIL",
+          "message": "synthetic failure — demonstrates the rose path"
+        }
+      ]
+    }
+  }
+}
