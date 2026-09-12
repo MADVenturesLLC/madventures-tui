@@ -18,6 +18,13 @@ export type {
   ReconcileResult,
   RepositorySnapshot,
 } from "./reconciliation";
+export {
+  classifyDurablePrefix,
+  planPrefixCompletion,
+  replayDurablePrefix,
+  ReconciliationOrderError,
+} from "./next-start-reconciliation";
+export type { PrefixKind, PrefixContext } from "./next-start-reconciliation";
 export { transitionSession, InvalidTransitionError } from "./session-machine";
 export type { SessionState, SessionEvent } from "./session-machine";
 export { spawnPtyHost } from "./pty-host-supervisor";
