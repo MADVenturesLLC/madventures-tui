@@ -1,0 +1,34 @@
+{
+  "schema": "mad.single-verdict/v0",
+  "verdict": "VERIFY_PASS_WITH_FINDINGS",
+  "subject": {
+    "name": "@madventures/ledger",
+    "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "reason_code": "EVIDENCE_FRESH",
+  "produced_by": "builder:test",
+  "produced_at": "2026-09-12T00:00:00.000Z",
+  "evidence_refs": [
+    {
+      "ref": {
+        "path": "docs/verification/example.md",
+        "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "kind": "log"
+      },
+      "boundary": {
+        "rung": "verified",
+        "not_evidence_of": [
+          "review",
+          "ci",
+          "merge"
+        ]
+      }
+    }
+  ],
+  "findings": [
+    {
+      "code": "MINOR_GAP",
+      "message": "one golden pending"
+    }
+  ]
+}

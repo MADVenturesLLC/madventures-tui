@@ -1,0 +1,25 @@
+{
+  "name": "@mad/projector-mc",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "description": "Founder Mission Control — thin-client projector UI. Fixture-first: every pixel binds to build-memory status or a single-verdict record. No live network, no merge authority.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "bunx tsc --noEmit"
+  },
+  "dependencies": {
+    "@mad/build-memory": "workspace:*",
+    "@mad/claim-boundary": "workspace:*",
+    "@mad/single-verdict": "workspace:*",
+    "react": "19.2.6",
+    "react-dom": "19.2.6"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.3",
+    "vite": "^7.1.11"
+  }
+}

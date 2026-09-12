@@ -1,0 +1,20 @@
+{
+  "schema": "mad.single-verdict/v0",
+  "verdict": "STALE_EVIDENCE",
+  "subject": {
+    "name": "@madventures/ledger",
+    "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "reason_code": "EVIDENCE_STALE",
+  "produced_by": "builder:test",
+  "produced_at": "2026-09-12T00:00:00.000Z",
+  "evidence_refs": [
+    {
+      "ref": {
+        "path": "docs/verification/example.md",
+        "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "kind": "log"
+      }
+    }
+  ]
+}

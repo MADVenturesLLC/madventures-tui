@@ -1,0 +1,14 @@
+{
+  "name": "@mad/build-memory",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "description": "Verified Build Memory v0: durable, SHA-hard memory of what was verified and what is stale. Hard invalidation — a moved head SHA is STALE, never silently 'still pass'.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./node": "./src/node-store.ts"
+  },
+  "bin": {
+    "mad-build-memory": "./src/cli.ts"
+  }
+}
