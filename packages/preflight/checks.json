@@ -1,0 +1,24 @@
+{
+  "$comment": "packages/preflight/checks.json — check command table (data, not code). The orchestrator runs these as argv arrays via Bun.spawn; a shell is never invoked. Elements are trusted repo-owned configuration, not user input; the single CLI-supplied argv element (the build-memory subject appended after 'status') is validated by isValidMemorySubject() before use. 'requires' names a path that must exist under the repo root or the check SKIPs with an explicit reason.",
+  "checks": {
+    "tsc": {
+      "cmd": ["bunx", "tsc", "--noEmit"],
+      "doc": "the repo's own verify-backbone typecheck; root tsconfig covers packages + apps"
+    },
+    "test": {
+      "cmd": ["bun", "test"],
+      "doc": "full bun test at the repo root — same backbone as verify"
+    },
+    "tui-chaos": {
+      "cmd": ["bun", "packages/tui-chaos/src/cli.ts", "run"],
+      "requires": "packages/tui-chaos",
+      "doc": "tui-chaos's supported fixture/chaos entry, reused verbatim"
+    },
+    "memory": {
+      "cmd": ["bun", "packages/build-memory/src/cli.ts", "status"],
+      "requires": "packages/build-memory",
+      "appends_subject": true,
+      "doc": "mad-build-memory status <subject>; exit 0 VALID, 1 not VALID (STALE/UNKNOWN/INVALIDATED), 2 contract error"
+    }
+  }
+}

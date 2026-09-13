@@ -38,3 +38,5 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 # Mimosa security-scan hook artifacts (local audit state, never committed)
 .mimosa/
+# mad preflight run artifacts (local logs + reports, never committed)
+.mad/preflight/
