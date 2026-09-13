@@ -1,0 +1,16 @@
+{
+  "name": "@mad/preflight",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "description": "mad preflight — local fail-on-machine-before-push bug catcher. Exit nonzero on any failed check; a silent pass is not a feature.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "bin": {
+    "mad-preflight": "./src/cli.ts"
+  },
+  "dependencies": {
+    "@mad/claim-boundary": "workspace:*"
+  }
+}

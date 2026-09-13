@@ -15,7 +15,8 @@
     "madv-tui": "bun run apps/madbridge/src/cli.ts",
     "broker": "bun run packages/broker/src/broker.ts",
     "mcp": "bun run packages/broker/src/mcp-server.ts",
-    "test:tui-chaos": "bun packages/tui-chaos/src/cli.ts run"
+    "test:tui-chaos": "bun packages/tui-chaos/src/cli.ts run",
+    "preflight": "bun packages/preflight/src/cli.ts"
   },
   "trustedDependencies": [
     "node-pty"

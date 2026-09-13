@@ -131,6 +131,13 @@ packages/broker/               # ownership, sessions, supervisor, reconciliation
 packages/adapter-claude-code/  # Claude Code adapter
 packages/adapter-antigravity/  # Antigravity (agy) adapter
 packages/pty-host/             # per-child PTY host (present on main; omitted from README)
+packages/preflight/            # `mad preflight` — local fail-on-machine bug catcher (v0,
+                               #   Founder-authorized off-roadmap build). Runs local
+                               #   checks (typecheck, tests, tui-chaos, forbidden-import
+                               #   scan, optional build-memory gate), exits nonzero on
+                               #   failure, writes only .mad/preflight/. Makes no
+                               #   network calls and claims no authority: NOT Phase 0,
+                               #   NOT occupancy, NOT Gateway honesty, NOT a merge gate.
 apps/madbridge/                # CLI (`madv-tui`) + TUI
 docs/superpowers/              # Phase 3A spec and plan
 docs/decisions/                # PLAN-OPEN rulings and DEC-20260812-01
