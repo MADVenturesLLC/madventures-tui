@@ -1002,16 +1002,106 @@ Tasks 38–39 depend on M1 — they are early, not dependency-free. Only Task 60
 - Create: `packages/broker/src/fencing.ts`
 - Test: `packages/broker/test/fencing.test.ts`
 
+> **Founder ruling (2026-09-13) — event-construction context.** The interface
+> block below supersedes this task's previously written producing-helper
+> signatures. Those signatures could not truthfully construct a complete
+> `SessionLifecycleEventV1`: `event_id`, `task_envelope_hash`,
+> `repository_fingerprint`, `created_at`, and `previous_event_hash` are required
+> by `SessionLifecycleEventBaseV1` (`packages/protocol/src/lifecycle-events.ts`)
+> and are not derivable from the declared arguments. The Founder adopts an
+> explicit immutable context carrier rather than permitting any of those five
+> values to be fabricated, discovered implicitly, or generated ambiently. This
+> ruling changes only the interface, the failure contract, and the `tokenKey`
+> separator interpretation. It changes no behavioral requirement of this task,
+> no protocol type, no ledger implementation, and nothing in Task 19.
+
 **Interfaces:**
-- Consumes: `LifecycleState`, `SessionLifecycleEventV1`.
+- Consumes: `LifecycleState`, `SessionLifecycleEventV1`, `RepositoryFingerprint`.
 - Produces:
   ```ts
+  import type {
+    RepositoryFingerprint,
+    SessionLifecycleEventV1,
+  } from "@madventures/protocol";
+  import type { LifecycleState } from "@madventures/ledger";
+
+  export interface FencingRecordContext {
+    readonly taskEnvelopeHash: string;
+    readonly repositoryFingerprint: RepositoryFingerprint;
+    readonly previousEventHash: string;
+    readonly createdAt: string;
+    readonly eventId: string;
+  }
+
+  export class FencingError extends Error {
+    constructor(
+      public readonly kind:
+        | "missing_session_id"
+        | "invalid_phase"
+        | "missing_fencing_token"
+        | "invalid_token_state",
+      message?: string,
+    );
+  }
+
   export const INITIAL_FENCING_TOKEN = 1 as const;
-  export function issueInitialToken(sessionId: string, writerExecutionId: string): SessionLifecycleEventV1;   // fencing_token_issued, value 1
-  export function issueTransferToken(state: LifecycleState, writerExecutionId: string): SessionLifecycleEventV1; // value = current + 1
-  export function invalidateToken(state: LifecycleState, reason: "interruption" | "founder_close" | "rollback", incidentId: string | null): SessionLifecycleEventV1;
-  export function tokenKey(sessionId: string, token: number): string; // `${sessionId}\u0000${token}`
+
+  export function issueInitialToken(
+    sessionId: string,
+    writerExecutionId: string,
+    ctx: FencingRecordContext,
+  ): SessionLifecycleEventV1;   // fencing_token_issued, value 1
+
+  export function issueTransferToken(
+    state: LifecycleState,
+    writerExecutionId: string,
+    ctx: FencingRecordContext,
+  ): SessionLifecycleEventV1;   // value = current + 1
+
+  export function invalidateToken(
+    state: LifecycleState,
+    reason: "interruption" | "founder_close" | "rollback",
+    incidentId: string | null,
+    ctx: FencingRecordContext,
+  ): SessionLifecycleEventV1;
+
+  export function tokenKey(
+    sessionId: string,
+    token: number,
+  ): string;   // `${sessionId}\x00${token}` — exactly one NUL byte (U+0000)
   ```
+
+**Context carrier is mechanical, not an authority.** `FencingRecordContext` carries
+already-established values into the record; it grants `fencing.ts` no authority to
+discover or generate them. `fencing.ts` performs **zero** clock reads, **zero** UUID
+generation, **zero** repository fingerprinting, **zero** ledger reads, and **zero**
+environment discovery. Every carried value originates with the caller.
+
+**Live-session context ownership.** For the live-session path the architectural owner
+of the values carried by `FencingRecordContext` is `RuntimeBroker`, consistent with its
+existing ownership of live-session state, fencing decisions, and durable ledger writes
+(§3, specification §§9.5–9.6). **Task 18 does not implement `RuntimeBroker`** — it
+defines the context type and consumes caller-supplied values only. Task 19 remains
+responsible for its own authorized runtime integration when separately commissioned and
+must not re-derive or relocate this boundary. `next-start-reconciliation.ts` and
+`PrefixContext` remain the next-start path and are **not** repurposed as live-session
+authority.
+
+**Fail closed on a missing session identity.** When a helper that requires an existing
+session receives a `LifecycleState` whose `state.sessionId === null`, it throws
+`FencingError` with `kind === "missing_session_id"`. This applies at minimum to
+`issueTransferToken` and `invalidateToken`. Do **not** substitute an empty string,
+`"unknown"`, a generated session ID, or a context-derived session ID: the lifecycle
+state remains authoritative for the existing session identity. The remaining
+`FencingError` kinds may be used only for the Task 18 preconditions necessary to enforce
+the approved fencing contract; this task creates no general broker error taxonomy.
+
+**Token-key separator.** `tokenKey` joins its two components with one actual NUL byte
+(U+0000), matching the repository's existing canonical-key separator precedent
+(`PAIR_KEY_SEPARATOR` in `packages/protocol/src/pair-constraints.ts`). The six literal
+characters `\u0000` must not appear in the resulting key as six characters. The key is a
+deterministic formatting surface; it neither creates nor substitutes for a database
+uniqueness constraint.
 
 **Preconditions:**
 - Task 17 committed.
