@@ -36,10 +36,7 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 # runtime data
 ~/Library/Application Support/MADVentures/
 
-<<<<<<< HEAD
 # Mimosa security-scan hook artifacts (local audit state, never committed)
 .mimosa/
-=======
 # mad preflight run artifacts (local logs + reports, never committed)
 .mad/preflight/
->>>>>>> 8f37eb5 (feat(preflight): add @mad/preflight local fail-before-push gate (v0))
