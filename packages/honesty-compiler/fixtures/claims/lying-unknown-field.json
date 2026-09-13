@@ -1,0 +1,27 @@
+{
+  "schema": "HONESTY_COMPILER_V0",
+  "claims": [
+    {
+      "id": "lying-unknown-field-1",
+      "text": "example-subject typechecks and its test suite passes at the recorded head.",
+      "kind": "verify",
+      "subject": "example-subject",
+      "rung": "verified",
+      "confidence": "high",
+      "requires": [
+        { "kind": "build_memory", "subject": "example-subject", "headSha": "5eedcafe5eedcafe5eedcafe5eedcafe5eedcafe" }
+      ],
+      "not_evidence_of": [
+        "review",
+        "ci",
+        "merge",
+        "PHASE_0",
+        "OCCUPANCY_PROOF",
+        "GATEWAY_HONESTY",
+        "ROOM_RUNTIME",
+        "AE01_FIX",
+        "PRODUCTION_MERGE_AUTHORITY"
+      ]
+    }
+  ]
+}

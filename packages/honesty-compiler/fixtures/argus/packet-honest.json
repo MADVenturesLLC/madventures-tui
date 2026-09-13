@@ -1,0 +1,6 @@
+{
+  "format": "mad.argus-packet-fixture/v0",
+  "subject": "example-subject",
+  "head_sha": "5eedcafe5eedcafe5eedcafe5eedcafe5eedcafe",
+  "note": "sealed sample packet for honesty-compiler fixture mode; synthetic content, no live system data"
+}

@@ -1,0 +1,48 @@
+{
+  "schema": "honesty-compiler/v0",
+  "claim": "HONESTY_COMPILER_V0",
+  "mode": "fixture",
+  "exit_code": 1,
+  "input": "packages/honesty-compiler/fixtures/claims/lying-forbidden-token.json",
+  "subject": {
+    "name": "claims-input",
+    "sha": "5eedcafe5eedcafe5eedcafe5eedcafe5eedcafe"
+  },
+  "head_sha": null,
+  "verdict": {
+    "schema": "mad.single-verdict/v0",
+    "verdict": "VERIFY_FAIL",
+    "subject": {
+      "name": "claims-input",
+      "sha": "5eedcafe5eedcafe5eedcafe5eedcafe5eedcafe"
+    },
+    "reason_code": "VERIFY_FAILED",
+    "produced_by": "mad-honesty-compiler/v0",
+    "produced_at": "2026-09-13T12:00:00.000Z",
+    "evidence_refs": [],
+    "findings": [
+      {
+        "code": "FORBIDDEN_TOKEN",
+        "message": "claims[0].text: claim text asserts forbidden token \"phase 0\""
+      }
+    ]
+  },
+  "claims": [],
+  "failures": [
+    {
+      "code": "FORBIDDEN_TOKEN",
+      "message": "claim text asserts forbidden token \"phase 0\"",
+      "path": "claims[0].text"
+    }
+  ],
+  "skips": [],
+  "not_evidence_of": [
+    "PHASE_0",
+    "OCCUPANCY_PROOF",
+    "GATEWAY_HONESTY",
+    "ROOM_RUNTIME",
+    "AE01_FIX",
+    "PRODUCTION_MERGE_AUTHORITY",
+    "merge"
+  ]
+}

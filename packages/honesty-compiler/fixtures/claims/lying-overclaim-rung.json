@@ -1,0 +1,29 @@
+{
+  "schema": "HONESTY_COMPILER_V0",
+  "claims": [
+    {
+      "id": "lying-overclaim-1",
+      "text": "example-subject is ready to merge.",
+      "kind": "ship",
+      "subject": "example-subject",
+      "rung": "executed",
+      "requires": [
+        { "kind": "build_memory", "subject": "example-subject", "headSha": "5eedcafe5eedcafe5eedcafe5eedcafe5eedcafe" },
+        { "kind": "argus_packet", "path": "../argus/packet-honest.json", "sha256": "b3e3778aa19ddc912b7b03f80908247bbf252b2e81cd8cc4bc017d3a5666c4fd" }
+      ],
+      "not_evidence_of": [
+        "attestation",
+        "verification",
+        "review",
+        "ci",
+        "merge",
+        "PHASE_0",
+        "OCCUPANCY_PROOF",
+        "GATEWAY_HONESTY",
+        "ROOM_RUNTIME",
+        "AE01_FIX",
+        "PRODUCTION_MERGE_AUTHORITY"
+      ]
+    }
+  ]
+}

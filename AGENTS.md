@@ -147,6 +147,14 @@ packages/founder-act/          # `mad founder-act` — sealed, content-addressed
                                #   attestation, NOT Phase 0, NOT occupancy, NOT a merge
                                #   itself — a merge act names a head SHA and the human
                                #   Founder still performs the merge.
+packages/honesty-compiler/     # `mad-honesty-compile` — honesty IR + compiler gate (v0,
+                               #   Founder-authorized off-roadmap build). Parses a closed
+                               #   ClaimIR (honesty/claims.json or a handoff "Declared
+                               #   claims" block), rung-typechecks via @mad/claim-boundary,
+                               #   binds evidence (build-memory, argus packets,
+                               #   proving-ground ids, test suites), emits one
+                               #   @mad/single-verdict verdict or fails closed. NOT merge
+                               #   authority, NOT Phase 0, NOT Gateway honesty.
 apps/madbridge/                # CLI (`madv-tui`) + TUI
 docs/superpowers/              # Phase 3A spec and plan
 docs/decisions/                # PLAN-OPEN rulings and DEC-20260812-01

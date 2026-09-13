@@ -108,6 +108,18 @@
         "mad-founder-act": "./src/main.ts",
       },
     },
+    "packages/honesty-compiler": {
+      "name": "@mad/honesty-compiler",
+      "version": "0.1.0",
+      "bin": {
+        "mad-honesty-compile": "./src/cli.ts",
+      },
+      "dependencies": {
+        "@mad/build-memory": "workspace:*",
+        "@mad/claim-boundary": "workspace:*",
+        "@mad/single-verdict": "workspace:*",
+      },
+    },
     "packages/ledger": {
       "name": "@madventures/ledger",
       "version": "0.1.0",
@@ -225,6 +237,7 @@
     "@mad/claim-boundary": ["@mad/claim-boundary@workspace:packages/claim-boundary"],
 
     "@mad/founder-act": ["@mad/founder-act@workspace:packages/founder-act"],
+    "@mad/honesty-compiler": ["@mad/honesty-compiler@workspace:packages/honesty-compiler"],
 
     "@mad/preflight": ["@mad/preflight@workspace:packages/preflight"],
 

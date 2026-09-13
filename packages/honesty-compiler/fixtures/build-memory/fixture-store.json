@@ -1,0 +1,20 @@
+{
+  "format": "mad.build-memory-fixture/v0",
+  "sealed_sha256": "19be4048b0aa545744c311412fa0e1192140efa419326a04f5ccfa9993145301",
+  "records": {
+    "example-subject": {
+      "record": {
+        "subject": "example-subject",
+        "head_sha": "5eedcafe5eedcafe5eedcafe5eedcafe5eedcafe",
+        "verified_at": "2026-09-13T00:00:00.000Z",
+        "evidence_refs": [
+          {
+            "path": "packages/honesty-compiler/fixtures/argus/packet-honest.json",
+            "sha256": "b3e3778aa19ddc912b7b03f80908247bbf252b2e81cd8cc4bc017d3a5666c4fd",
+            "kind": "argus_packet"
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "schema": "honesty-compiler/v0",
+  "claim": "HONESTY_COMPILER_V0",
+  "mode": "fixture",
+  "exit_code": 0,
+  "input": "packages/honesty-compiler/fixtures/claims/pass-proving-ground-skip.json",
+  "subject": {
+    "name": "example-subject",
+    "sha": "5eedcafe5eedcafe5eedcafe5eedcafe5eedcafe"
+  },
+  "head_sha": null,
+  "verdict": {
+    "schema": "mad.single-verdict/v0",
+    "verdict": "VERIFY_PASS",
+    "subject": {
+      "name": "example-subject",
+      "sha": "5eedcafe5eedcafe5eedcafe5eedcafe5eedcafe"
+    },
+    "reason_code": "EVIDENCE_FRESH",
+    "produced_by": "mad-honesty-compiler/v0",
+    "produced_at": "2026-09-13T12:00:00.000Z",
+    "evidence_refs": [
+      {
+        "ref": {
+          "path": "packages/honesty-compiler/fixtures/build-memory/fixture-store.json",
+          "sha256": "b4c93e685f66d8f35585631a851ae1b217176b73b806e165561141f0ad3edbb6",
+          "kind": "claim"
+        },
+        "boundary": {
+          "rung": "verified",
+          "not_evidence_of": [
+            "review",
+            "ci",
+            "merge"
+          ]
+        }
+      },
+      {
+        "ref": {
+          "path": "../argus/packet-honest.json",
+          "sha256": "b3e3778aa19ddc912b7b03f80908247bbf252b2e81cd8cc4bc017d3a5666c4fd",
+          "kind": "argus_packet"
+        },
+        "boundary": {
+          "rung": "verified",
+          "not_evidence_of": [
+            "review",
+            "ci",
+            "merge"
+          ]
+        }
+      }
+    ]
+  },
+  "claims": [
+    {
+      "id": "example-verify-proving-1",
+      "kind": "verify",
+      "status": "OK",
+      "issues": []
+    }
+  ],
+  "failures": [],
+  "skips": [
+    {
+      "claimId": "example-verify-proving-1",
+      "refIndex": 1,
+      "kind": "proving_ground",
+      "reason": "PROVING_GROUND_PACKAGE_ABSENT"
+    }
+  ],
+  "not_evidence_of": [
+    "PHASE_0",
+    "OCCUPANCY_PROOF",
+    "GATEWAY_HONESTY",
+    "ROOM_RUNTIME",
+    "AE01_FIX",
+    "PRODUCTION_MERGE_AUTHORITY",
+    "merge"
+  ]
+}

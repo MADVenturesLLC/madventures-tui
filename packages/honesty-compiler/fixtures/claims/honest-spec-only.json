@@ -1,0 +1,20 @@
+{
+  "schema": "HONESTY_COMPILER_V0",
+  "claims": [
+    {
+      "id": "example-spec-only-1",
+      "text": "The honesty gate design is specified in the linked document; nothing is implemented.",
+      "kind": "spec_only",
+      "subject": "example-subject",
+      "requires": [],
+      "not_evidence_of": [
+        "execution",
+        "attestation",
+        "verification",
+        "review",
+        "ci",
+        "merge"
+      ]
+    }
+  ]
+}

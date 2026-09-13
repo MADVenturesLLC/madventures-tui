@@ -1,0 +1,19 @@
+{
+  "schema": "HONESTY_COMPILER_V0",
+  "claims": [
+    {
+      "id": "lying-forbidden-token-1",
+      "text": "This wraps up phase 0 of the honesty system.",
+      "kind": "spec_only",
+      "requires": [],
+      "not_evidence_of": [
+        "execution",
+        "attestation",
+        "verification",
+        "review",
+        "ci",
+        "merge"
+      ]
+    }
+  ]
+}
