@@ -30,7 +30,9 @@ flags:
   --json            print the machine summary as the LAST stdout line
   --json-only       suppress the human summary; JSON only
   --bail            stop at the first FAIL (default: run all, aggregate)
-  --subjects <list> build-memory subjects to gate on (comma-separated)
+  --subjects <list> override the default spine subjects (comma-separated);
+                    defaults gate on @mad/build-memory, @mad/single-verdict,
+                    apps/projector-mc when the store is bound
   --cwd <path>      repo root (default: current working directory)
   --help            this text
 

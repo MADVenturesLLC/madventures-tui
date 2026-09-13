@@ -47,13 +47,30 @@ export function parseSuiteCounts(stdout: string): { pass: number; fail: number }
 }
 
 /**
+ * Default build-memory subjects, applied automatically when the memory gate
+ * is enabled (packages/build-memory resolvable) and --subjects is absent.
+ * These are the projector spine subjects — the same set the projector's
+ * spine room displays — so `bun run preflight` exercises the memory gate
+ * for shipped spine packages with no extra flags. --subjects always
+ * overrides. Subjects without a record evaluate UNKNOWN by the library's
+ * contract and FAIL the gate (MEMORY_STALE) — preflight never invents
+ * VALID/SHIP for them.
+ */
+export const DEFAULT_MEMORY_SUBJECTS: readonly string[] = [
+  "@mad/build-memory",
+  "@mad/single-verdict",
+  "apps/projector-mc",
+];
+
+/**
  * The one CLI-supplied value that can reach a subprocess argv is the
  * build-memory subject. This gate confines it to a strict charset with no
  * leading dash, so it can neither carry metacharacters (moot — no shell —
- * but defense in depth) nor be mistaken for a CLI flag.
+ * but defense in depth) nor be mistaken for a CLI flag. Scoped package
+ * names start with "@" (e.g. @mad/build-memory).
  */
 export function isValidMemorySubject(subject: string): boolean {
-  return /^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$/.test(subject);
+  return /^[A-Za-z0-9@][A-Za-z0-9._@/-]{0,127}$/.test(subject);
 }
 
 // ─── 1. typecheck ────────────────────────────────────────────────────────────
@@ -196,14 +213,21 @@ export type MemorySubjectOutcome = {
 };
 
 /**
- * Optional build-memory gate. ON only when @mad/build-memory is resolvable
- * on the base AND subjects are configured (--subjects). Any non-VALID status
- * (STALE / UNKNOWN / INVALIDATED) fails with code MEMORY_STALE — preflight
- * never invents a SHIP verdict from memory state. Exit 1 from the memory
- * CLI means "not VALID"; exit 2 is a usage/contract error.
+ * Optional build-memory gate. ON by default for the spine subjects when
+ * @mad/build-memory is resolvable on the base (--subjects overrides the
+ * list). Semantics, per the library contract — nothing invented:
+ *   - packages/build-memory absent            → SKIP with explicit reason
+ *   - no subjects at all                      → SKIP with explicit reason
+ *   - invalid subject charset                 → FAIL (MEMORY_SUBJECT_INVALID)
+ *   - store absent (.mad/build-memory.json)   → SKIP "nothing bound yet"
+ *   - subject with no record                  → library says UNKNOWN → FAIL
+ *                                               (MEMORY_STALE) — never VALID
+ *   - STALE / UNKNOWN / INVALIDATED           → FAIL (MEMORY_STALE)
+ * Exit 1 from the memory CLI means "not VALID"; exit 2 is a contract error.
  */
 export function evalMemory(
   presentOnBase: boolean,
+  storePresent: boolean,
   subjects: readonly string[],
   subjectOutcomes: readonly MemorySubjectOutcome[] | null,
 ): CheckResult {
@@ -216,16 +240,6 @@ export function evalMemory(
       reason: "packages/build-memory does not exist on this base",
     };
   }
-  const invalid = subjects.filter((s) => !isValidMemorySubject(s));
-  if (invalid.length > 0) {
-    return {
-      name: "memory",
-      status: "FAIL",
-      ms: 0,
-      summary: "invalid memory subject (allowed: [A-Za-z0-9] start, then [A-Za-z0-9._/-], max 128)",
-      code: "MEMORY_SUBJECT_INVALID",
-    };
-  }
   if (subjects.length === 0) {
     return {
       name: "memory",
@@ -233,6 +247,25 @@ export function evalMemory(
       ms: 0,
       summary: "no memory subjects configured",
       reason: "pass --subjects <a,b,c> to gate on build-memory records",
+    };
+  }
+  const invalid = subjects.filter((s) => !isValidMemorySubject(s));
+  if (invalid.length > 0) {
+    return {
+      name: "memory",
+      status: "FAIL",
+      ms: 0,
+      summary: "invalid memory subject (allowed: [A-Za-z0-9@] start, then [A-Za-z0-9._@/-], max 128)",
+      code: "MEMORY_SUBJECT_INVALID",
+    };
+  }
+  if (!storePresent) {
+    return {
+      name: "memory",
+      status: "SKIP",
+      ms: 0,
+      summary: "no memory store bound yet",
+      reason: ".mad/build-memory.json does not exist — bind subjects first (mad-build-memory record …) or pass --subjects with an existing store",
     };
   }
   const failures: string[] = [];

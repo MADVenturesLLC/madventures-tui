@@ -20,7 +20,7 @@ import {
   renderJson,
   type CheckResult,
 } from "../src/index";
-import { evalMemory, isValidMemorySubject, parseSuiteCounts } from "../src/checks";
+import { DEFAULT_MEMORY_SUBJECTS, evalMemory, isValidMemorySubject, parseSuiteCounts } from "../src/checks";
 import { loadCheckConfig, PreflightConfigError, runPreflight } from "../src/runner";
 import type { CommandOutcome, RunCommand } from "../src/spawn";
 
@@ -152,6 +152,7 @@ describe("evaluators", () => {
   test("memory gate: STALE status fails with MEMORY_STALE, never a SHIP claim", () => {
     const r = evalMemory(
       true,
+      true,
       ["builder-x"],
       [{ subject: "builder-x", outcome: { exit_code: 1, stdout: "", stderr: "STALE head moved", duration_ms: 5 } }],
     );
@@ -163,6 +164,7 @@ describe("evaluators", () => {
   test("memory gate: VALID passes", () => {
     const r = evalMemory(
       true,
+      true,
       ["builder-x"],
       [{ subject: "builder-x", outcome: { exit_code: 0, stdout: "VALID", stderr: "", duration_ms: 5 } }],
     );
@@ -170,17 +172,42 @@ describe("evaluators", () => {
   });
 
   test("memory gate: absent package skips with reason; no subjects skips", () => {
-    const absent = evalMemory(false, ["x"], null);
+    const absent = evalMemory(false, true, ["x"], null);
     expect(absent.status).toBe("SKIP");
     expect(absent.reason).toContain("does not exist on this base");
-    const noSubjects = evalMemory(true, [], null);
+    const noSubjects = evalMemory(true, true, [], null);
     expect(noSubjects.status).toBe("SKIP");
   });
 
-  test("memory subject charset gate rejects flag-shaped subjects", () => {
+  test("memory gate: an absent store skips with an explicit bind hint — nothing invented", () => {
+    const r = evalMemory(true, false, ["@mad/build-memory"], null);
+    expect(r.status).toBe("SKIP");
+    expect(r.reason).toContain(".mad/build-memory.json does not exist");
+  });
+
+  test("memory gate: a subject with no record (UNKNOWN) FAILS — never invented VALID", () => {
+    const r = evalMemory(
+      true,
+      true,
+      ["apps/projector-mc"],
+      [{ subject: "apps/projector-mc", outcome: { exit_code: 1, stdout: "", stderr: "UNKNOWN\nRECORD_MISSING", duration_ms: 4 } }],
+    );
+    expect(r.status).toBe("FAIL");
+    expect(r.code).toBe("MEMORY_STALE");
+    expect(r.summary).toContain("UNKNOWN");
+    expect(r.summary).not.toContain("VALID for");
+  });
+
+  test("memory subject charset gate accepts scoped names, rejects flag-shaped subjects", () => {
     expect(isValidMemorySubject("builder-1")).toBe(true);
+    expect(isValidMemorySubject("@mad/build-memory")).toBe(true);
+    expect(isValidMemorySubject("apps/projector-mc")).toBe(true);
     expect(isValidMemorySubject("--store")).toBe(false);
     expect(isValidMemorySubject("a b")).toBe(false);
+  });
+
+  test("DEFAULT_MEMORY_SUBJECTS are exactly the projector spine subjects", () => {
+    expect(DEFAULT_MEMORY_SUBJECTS).toEqual(["@mad/build-memory", "@mad/single-verdict", "apps/projector-mc"]);
   });
 
   test("claim boundary section: rung executed excludes everything above it", () => {
@@ -295,6 +322,7 @@ describe("runPreflight with injected runners", () => {
     try {
       writeP(dir, "package.json", '{"name":"fake-repo","type":"module"}');
       writeP(dir, "packages/build-memory/package.json", '{"name":"@mad/build-memory","type":"module"}');
+      writeP(dir, join(".mad", "build-memory.json"), '{"format":"mad.build-memory/v0","records":{}}');
       const { run } = fakeRunner({});
       const report = await runPreflight({
         repoRoot: dir,
@@ -320,6 +348,77 @@ describe("runPreflight with injected runners", () => {
       expect(memory2?.status).toBe("FAIL");
       expect(memory2?.code).toBe("MEMORY_STALE");
       expect(report2.exit_code).toBe(1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("default spine subjects apply WITHOUT --subjects when the store is bound", async () => {
+    const dir = tmpRepo();
+    try {
+      writeP(dir, "package.json", '{"name":"fake-repo","type":"module"}');
+      writeP(dir, "packages/build-memory/package.json", '{"name":"@mad/build-memory","type":"module"}');
+      writeP(dir, join(".mad", "build-memory.json"), '{"format":"mad.build-memory/v0","records":{}}');
+      const { run, calls } = fakeRunner({});
+      const report = await runPreflight({
+        repoRoot: dir,
+        runCommand: run,
+        only: ["memory"],
+        claimBoundaryModule: null,
+      });
+      const memory = report.checks.find((c) => c.name === "memory");
+      expect(memory?.status).toBe("PASS");
+      for (const subject of DEFAULT_MEMORY_SUBJECTS) {
+        expect(memory?.summary).toContain(subject);
+        expect(calls.some((cmd) => cmd[cmd.length - 1] === subject)).toBe(true);
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("--subjects overrides the default spine subjects", async () => {
+    const dir = tmpRepo();
+    try {
+      writeP(dir, "package.json", '{"name":"fake-repo","type":"module"}');
+      writeP(dir, "packages/build-memory/package.json", '{"name":"@mad/build-memory","type":"module"}');
+      writeP(dir, join(".mad", "build-memory.json"), '{"format":"mad.build-memory/v0","records":{}}');
+      const { run, calls } = fakeRunner({});
+      const report = await runPreflight({
+        repoRoot: dir,
+        runCommand: run,
+        only: ["memory"],
+        subjects: ["custom-x"],
+        claimBoundaryModule: null,
+      });
+      const memory = report.checks.find((c) => c.name === "memory");
+      expect(memory?.status).toBe("PASS");
+      expect(memory?.summary).toContain("custom-x");
+      expect(memory?.summary).not.toContain("@mad/build-memory");
+      expect(calls.some((cmd) => cmd[cmd.length - 1] === "custom-x")).toBe(true);
+      expect(calls.some((cmd) => cmd[cmd.length - 1] === "@mad/build-memory")).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("store absent → memory SKIP with explicit reason, even with defaults", async () => {
+    const dir = tmpRepo();
+    try {
+      writeP(dir, "package.json", '{"name":"fake-repo","type":"module"}');
+      writeP(dir, "packages/build-memory/package.json", '{"name":"@mad/build-memory","type":"module"}');
+      // no .mad/build-memory.json — nothing bound yet
+      const { run, calls } = fakeRunner({});
+      const report = await runPreflight({
+        repoRoot: dir,
+        runCommand: run,
+        only: ["memory"],
+        claimBoundaryModule: null,
+      });
+      const memory = report.checks.find((c) => c.name === "memory");
+      expect(memory?.status).toBe("SKIP");
+      expect(memory?.reason).toContain(".mad/build-memory.json does not exist");
+      expect(calls.length).toBe(0); // no status runs before anything is bound
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

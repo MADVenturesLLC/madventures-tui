@@ -111,6 +111,8 @@ bun install --frozen-lockfile
 bunx tsc --noEmit          # hard gate: must exit 0
 bun test                   # do not cite README or docs/STATUS.md counts
 bun run verify             # typecheck + tests
+bun run preflight          # local pre-push gate: typecheck + tests + tui-chaos +
+                           #   forbidden-import scan + spine memory gate
 git diff --check
 ```
 
@@ -131,14 +133,28 @@ packages/broker/               # ownership, sessions, supervisor, reconciliation
 packages/adapter-claude-code/  # Claude Code adapter
 packages/adapter-antigravity/  # Antigravity (agy) adapter
 packages/pty-host/             # per-child PTY host (present on main; omitted from README)
+packages/build-memory/         # Verified Build Memory v0 — SHA-hard memory of what was
+                               #   verified and what is stale; a moved head is STALE,
+                               #   never silently "still pass". A memory row is NOT a
+                               #   SHIP verdict and NOT a merge authority.
+packages/single-verdict/       # One sealed verdict per subject (SHIP/HOLD/VERIFY_*/…).
+                               #   makeVerdict refuses any positive verdict while
+                               #   build-memory is not VALID. A verdict is NOT a merge
+                               #   authorization — that remains a Founder act.
 packages/preflight/            # `mad preflight` — local fail-on-machine bug catcher (v0,
                                #   Founder-authorized off-roadmap build). Runs local
                                #   checks (typecheck, tests, tui-chaos, forbidden-import
-                               #   scan, optional build-memory gate), exits nonzero on
-                               #   failure, writes only .mad/preflight/. Makes no
-                               #   network calls and claims no authority: NOT Phase 0,
-                               #   NOT occupancy, NOT Gateway honesty, NOT a merge gate.
+                               #   scan, build-memory gate on the spine subjects by
+                               #   default), exits nonzero on failure, writes only
+                               #   .mad/preflight/. Makes no network calls and claims
+                               #   no authority: NOT Phase 0, NOT occupancy, NOT
+                               #   Gateway honesty, NOT a merge gate.
 apps/madbridge/                # CLI (`madv-tui`) + TUI
+apps/projector-mc/             # Founder Mission Control thin-client projector (v0):
+                               #   fixture-first display surface bound to build-memory
+                               #   statuses and single-verdict records. NOT a live
+                               #   backend, NOT Gateway, NO merge authority; founder-act
+                               #   buttons emit typed intent events only.
 docs/superpowers/              # Phase 3A spec and plan
 docs/decisions/                # PLAN-OPEN rulings and DEC-20260812-01
 docs/verification/             # verification records

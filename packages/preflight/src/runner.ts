@@ -30,6 +30,7 @@ import {
   evalMemory,
   evalTests,
   evalTypecheck,
+  DEFAULT_MEMORY_SUBJECTS,
   isValidMemorySubject,
   renderImportHits,
 } from "./checks";
@@ -318,15 +319,20 @@ export async function runPreflight(opts: PreflightRunOptions): Promise<Preflight
         result = toolingFail(name, 0, "checks.json has no memory entry", "TOOLING_CONFIG");
       } else {
         const present = entry.requires !== undefined && existsSync(join(opts.repoRoot, entry.requires));
-        const subjects = opts.subjects ?? [];
+        // --subjects overrides; absent flag → the spine defaults (see checks.ts)
+        const subjects =
+          opts.subjects !== undefined && opts.subjects.length > 0 ? opts.subjects : DEFAULT_MEMORY_SUBJECTS;
+        // The memory CLI evaluates against its default store .mad/build-memory.json
+        // in the repo root; nothing bound yet → honest SKIP, never a guess.
+        const storePresent = existsSync(join(opts.repoRoot, ".mad", "build-memory.json"));
         if (!present) {
-          result = evalMemory(false, [], null);
+          result = evalMemory(false, storePresent, [], null);
         } else if (subjects.some((s) => !isValidMemorySubject(s))) {
           // never append a non-conforming subject to an argv — let the
           // evaluator fail the check with MEMORY_SUBJECT_INVALID
-          result = evalMemory(true, subjects, null);
-        } else if (subjects.length === 0) {
-          result = evalMemory(true, [], null);
+          result = evalMemory(true, storePresent, subjects, null);
+        } else if (!storePresent) {
+          result = evalMemory(true, false, subjects, null);
         } else {
           const t0 = clock();
           try {
@@ -344,7 +350,7 @@ export async function runPreflight(opts: PreflightRunOptions): Promise<Preflight
               last?.outcome.stderr ?? "",
               last?.outcome.exit_code ?? null,
             );
-            const base = evalMemory(true, subjects, outcomes);
+            const base = evalMemory(true, true, subjects, outcomes);
             result = base.status === "SKIP" ? base : { ...base, evidence: rel };
           } catch (err) {
             result = toTooling(name, clock() - t0, err);

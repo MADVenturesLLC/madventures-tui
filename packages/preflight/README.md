@@ -42,7 +42,7 @@ are spelled out literally.
 | 2 | `test` | `bun test` | The full suite at the repo root — the same backbone `verify` uses. |
 | 3 | `tui-chaos` | `bun packages/tui-chaos/src/cli.ts run` | tui-chaos's supported fixture/chaos entry, reused verbatim — never rewritten. SKIPs with an explicit reason if the package is absent on the base. |
 | 4 | `imports` | pure scan, no process | Fails on any import statement in **production source** (`packages/*/src`, `apps/*/src`) whose specifier hits the denylist below. Prose never matches (statement-leading import/export-from/require pattern — the repo convention from claim-boundary's purity test). Test files are out of scope: boundary tests legitimately import governed packages to exercise them. |
-| 5 | `memory` | `mad-build-memory status <subject>` | Optional gate. ON only when `@mad/build-memory` exists on the base **and** subjects are passed (`--subjects`). `STALE`/`UNKNOWN`/`INVALIDATED` → fail with code `MEMORY_STALE`. Preflight never invents a SHIP verdict. |
+| 5 | `memory` | `mad-build-memory status <subject>` | **ON by default for the spine subjects** (`@mad/build-memory`, `@mad/single-verdict`, `apps/projector-mc`) whenever `@mad/build-memory` exists on the base. `--subjects a,b` overrides the list. `STALE`/`UNKNOWN`/`INVALIDATED` → fail with code `MEMORY_STALE`; a subject with no record is UNKNOWN by the library contract and FAILS — preflight never invents a VALID/SHIP. A bound store is required: if `.mad/build-memory.json` does not exist, the check SKIPs with an explicit "no memory store bound yet" reason. |
 
 **Why full `bun test` instead of changed-package scoping:** a change to
 `packages/protocol` can break `packages/broker` tests without protocol's own
