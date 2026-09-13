@@ -138,6 +138,15 @@ packages/preflight/            # `mad preflight` — local fail-on-machine bug c
                                #   failure, writes only .mad/preflight/. Makes no
                                #   network calls and claims no authority: NOT Phase 0,
                                #   NOT occupancy, NOT Gateway honesty, NOT a merge gate.
+packages/founder-act/          # `mad founder-act` — sealed, content-addressed FounderAct
+                               #   authorization objects (v0, Founder-authorized
+                               #   off-roadmap build). JSON acts for merge, commission,
+                               #   hold, freeze, reopen, authorize_review; sha256
+                               #   integrity seal only (NOT a signature). Chat is not
+                               #   authority; the CLI is the only writer. NOT Gateway
+                               #   attestation, NOT Phase 0, NOT occupancy, NOT a merge
+                               #   itself — a merge act names a head SHA and the human
+                               #   Founder still performs the merge.
 apps/madbridge/                # CLI (`madv-tui`) + TUI
 docs/superpowers/              # Phase 3A spec and plan
 docs/decisions/                # PLAN-OPEN rulings and DEC-20260812-01

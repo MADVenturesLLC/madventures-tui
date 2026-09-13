@@ -1,0 +1,13 @@
+{
+  "name": "@mad/founder-act",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "description": "mad founder-act — sealed, content-addressed FounderAct authorization objects (v0). Integrity seal (hash), not a signature. Chat is not authority.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "bin": {
+    "mad-founder-act": "./src/main.ts"
+  }
+}

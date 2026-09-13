@@ -16,7 +16,8 @@
     "broker": "bun run packages/broker/src/broker.ts",
     "mcp": "bun run packages/broker/src/mcp-server.ts",
     "test:tui-chaos": "bun packages/tui-chaos/src/cli.ts run",
-    "preflight": "bun packages/preflight/src/cli.ts"
+    "preflight": "bun packages/preflight/src/cli.ts",
+    "founder-act": "bun packages/founder-act/src/main.ts"
   },
   "trustedDependencies": [
     "node-pty"

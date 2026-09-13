@@ -40,3 +40,6 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 .mimosa/
 # mad preflight run artifacts (local logs + reports, never committed)
 .mad/preflight/
+# founder-act sealed acts (repo-local authorization objects, never committed;
+# golden fixtures live in packages/founder-act/fixtures/ and ARE committed)
+.mad/founder-acts/
