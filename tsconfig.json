@@ -24,6 +24,7 @@
       "@mad/claim-boundary": ["./packages/claim-boundary/src/index.ts"],
       "@mad/build-memory": ["./packages/build-memory/src/index.ts"],
       "@mad/single-verdict": ["./packages/single-verdict/src/index.ts"],
+      "@mad/founder-act": ["./packages/founder-act/src/index.ts"],
       "@madventures/protocol": ["./packages/protocol/src/index.ts"],
       "@madventures/policy": ["./packages/policy/src/index.ts"],
       "@madventures/ledger": ["./packages/ledger/src/index.ts"],
@@ -35,5 +36,5 @@
       "@madventures/storage": ["./packages/storage/src/index.ts"]
     }
   },
-  "exclude": ["apps/projector-mc"]
+  "exclude": ["apps/projector-mc", "apps/seal-studio"]
 }

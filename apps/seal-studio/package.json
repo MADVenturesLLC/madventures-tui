@@ -1,0 +1,23 @@
+{
+  "name": "@mad/seal-studio",
+  "version": "0.0.0",
+  "type": "module",
+  "private": true,
+  "description": "Seal Studio v0 \u2014 the Founder joy surface for the moment of commitment. Compose a FounderAct, watch its integrity hash settle as you type, seal it through the real mad-founder-act CLI. Hash seal only; chat is not authorization, the file is the act.",
+  "scripts": {
+    "dev": "bun --bun vite",
+    "build": "bun --bun vite build",
+    "preview": "bun --bun vite preview",
+    "typecheck": "bunx tsc --noEmit"
+  },
+  "dependencies": {
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@mad/founder-act": "workspace:*",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.3",
+    "vite": "^7.1.11"
+  }
+}
