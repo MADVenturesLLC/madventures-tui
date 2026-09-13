@@ -12,6 +12,7 @@
     "verify": "bunx tsc --noEmit && bunx tsc --noEmit -p apps/projector-mc && bun test",
     "projector": "bun run --cwd apps/projector-mc dev",
     "projector:build": "bun run --cwd apps/projector-mc build",
+    "projector:bind-demo": "bun apps/projector-mc/scripts/bind-live.ts",
     "madv-tui": "bun run apps/madbridge/src/cli.ts",
     "broker": "bun run packages/broker/src/broker.ts",
     "mcp": "bun run packages/broker/src/mcp-server.ts",

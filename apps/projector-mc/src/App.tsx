@@ -7,32 +7,36 @@ import { emitFounderIntent, type FounderIntent } from "./lib/intent";
 import { EvidenceDrawer } from "./components/EvidenceDrawer";
 import { HelpOverlay } from "./components/HelpOverlay";
 import { HeroVerdict } from "./components/HeroVerdict";
+import { LiveEmptyState, LiveErrorState, LiveLoadingState, useLiveState } from "./components/LiveView";
 import { RoomRail } from "./components/RoomRail";
 import { StatusBar } from "./components/StatusBar";
 
-type Mode = "fixture" | "live-unavailable";
+type Mode = "fixture" | "live";
 
 function readMode(): Mode {
-  // Fixture mode is the default for demos. There is no live backend in v0 —
-  // MADV_PROJECTOR_FIXTURE=0 shows an intentional "not available" state
-  // rather than pretending otherwise.
+  // Fixture mode is the default for demos. Live mode (MADV_PROJECTOR_FIXTURE=0)
+  // reads the local live-state snapshot written by `projector:bind-demo` —
+  // statuses computed by @mad/build-memory, verdicts from a sealed local file,
+  // all bound to the repo's current HEAD. No live backend, no network.
   const flag = import.meta.env.MADV_PROJECTOR_FIXTURE;
-  return flag === "0" ? "live-unavailable" : "fixture";
+  return flag === "0" ? "live" : "fixture";
 }
 
 export function App() {
   const mode = readMode();
+  const live = useLiveState(mode);
 
   const [loadError, setLoadError] = useState<string | null>(null);
+  const liveModel = live.phase === "ready" ? live.model : null;
   const model: ProjectorModel | null = useMemo(() => {
-    if (mode !== "fixture") return null;
+    if (mode === "live") return liveModel;
     try {
       return loadProjectorDemo(demoJson);
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : String(err));
       return null;
     }
-  }, [mode]);
+  }, [mode, liveModel]);
 
   const [filter, setFilter] = useState<VerdictFilter>("ALL");
   const [selectedIdx, setSelectedIdx] = useState(0);
@@ -92,17 +96,14 @@ export function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [visible.length, helpOpen, model, selected]);
 
-  if (mode === "live-unavailable") {
-    return (
-      <div className="shell">
-        <div className="empty-state">
-          <div>
-            <div className="headline">Live mode is not available in v0</div>
-            <p>The projector runs on sealed fixtures only. Set MADV_PROJECTOR_FIXTURE=1 (or unset it) and reload.</p>
-          </div>
-        </div>
-      </div>
-    );
+  if (mode === "live" && live.phase === "loading") {
+    return <LiveLoadingState />;
+  }
+  if (mode === "live" && live.phase === "empty") {
+    return <LiveEmptyState />;
+  }
+  if (mode === "live" && live.phase === "error") {
+    return <LiveErrorState error={live.error} />;
   }
 
   if (model === null) {
@@ -122,6 +123,7 @@ export function App() {
   return (
     <div className="shell">
       <StatusBar
+        mode={mode}
         seal={shortSha(model.seal)}
         generatedAt={model.generatedAt}
         counts={model.counts}

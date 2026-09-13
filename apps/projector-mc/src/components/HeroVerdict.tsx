@@ -34,8 +34,8 @@ export function HeroVerdict(props: {
 
       <div className="sha-row">
         <span className="label">head</span>
-        <span className="sha" title={currentSha}>{currentSha}</span>
-        <button onClick={props.onCopySha}>copy SHA</button>
+        <span className="sha" title={`${currentSha} — press c or click copy`}>{currentSha}</span>
+        <button className="copy-sha" onClick={props.onCopySha} aria-label="Copy head SHA">⧉ copy SHA</button>
         <button onClick={props.onOpenEvidence}>evidence ⏎</button>
       </div>
 

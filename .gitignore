@@ -38,3 +38,9 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 # Mimosa security-scan hook artifacts (local audit state, never committed)
 .mimosa/
+
+# local build-memory store + projector verdicts (Founder-local state, never committed)
+.mad/
+
+# projector live-bind snapshot (generated locally by projector:bind-demo; never committed)
+apps/projector-mc/public/live-state.json

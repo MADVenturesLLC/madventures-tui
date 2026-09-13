@@ -22,5 +22,5 @@
       "@mad/claim-boundary": ["../../packages/claim-boundary/src/index.ts"]
     }
   },
-  "include": ["src", "test", "vite.config.ts", "fixtures/generate-demo.ts"]
+  "include": ["src", "test", "scripts", "vite.config.ts", "fixtures/generate-demo.ts"]
 }

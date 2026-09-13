@@ -25,15 +25,18 @@ export function RoomRail(props: {
               disabled={!props.visibleSubjects.has(view.subject)}
               style={props.visibleSubjects.has(view.subject) ? undefined : { opacity: 0.35 }}
             >
+              {/* two-line row: full subject name on top (never truncated), chips below */}
               <span className="name">{view.subject}</span>
-              {view.gateBreach ? (
-                <Chip label="GATE_BREACH" tone="rose" title="positive verdict while memory is not VALID — this must never render" />
-              ) : view.verdict !== null ? (
-                <Chip label={view.verdict.verdict} tone={VERDICT_TONE[view.verdict.verdict]} title={view.verdict.reason_code} />
-              ) : (
-                <Chip label="NO VERDICT" tone="zinc" title="no verdict on record for this subject" />
-              )}
-              <MemoryChip status={view.memory.status} reason={view.memory.reason_code} />
+              <span className="row2">
+                {view.gateBreach ? (
+                  <Chip label="GATE_BREACH" tone="rose" title="positive verdict while memory is not VALID — this must never render" />
+                ) : view.verdict !== null ? (
+                  <Chip label={view.verdict.verdict} tone={VERDICT_TONE[view.verdict.verdict]} title={view.verdict.reason_code} />
+                ) : (
+                  <Chip label="NO VERDICT" tone="zinc" title="no verdict on record for this subject" />
+                )}
+                <MemoryChip status={view.memory.status} reason={view.memory.reason_code} />
+              </span>
             </button>
           ))}
         </section>

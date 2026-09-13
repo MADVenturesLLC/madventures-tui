@@ -20,9 +20,51 @@ host (`http://<host-ip>:5180`) as a thin client. Production-static variant:
 bun run projector:build  # → apps/projector-mc/dist, serve with any static server
 ```
 
-Fixture mode is the default (`MADV_PROJECTOR_FIXTURE=1` or unset). Setting
-`MADV_PROJECTOR_FIXTURE=0` shows an intentional "live mode not available in
-v0" state — there is no live backend, and the app does not pretend otherwise.
+Fixture mode is the default (`MADV_PROJECTOR_FIXTURE=1` or unset): the app
+renders the sealed `fixtures/demo.json` demo. Setting `MADV_PROJECTOR_FIXTURE=0`
+switches to **live bind** mode (below).
+
+## Live bind (v0.1) — real evidence, no invented green
+
+Live mode reads the local snapshot `apps/projector-mc/public/live-state.json`
+(gitignored), written by the bind script from the REAL `@mad/build-memory`
+store. The browser never reads the store directly and never makes a network
+call — the snapshot is the only live data path.
+
+```bash
+# first bind on a fresh store (one CLI record creates it):
+bun packages/build-memory/src/cli.ts record "@mad/build-memory" \
+  --evidence "argus_packet:/abs/path/to/argus-packet.md:<sha256-of-packet>"
+
+# bind the spine subjects and write the snapshot:
+MADV_ARGUS_PACKET=/abs/path/to/argus-packet.md \
+MADV_ARGUS_SHA256=<sha256-of-packet> \
+bun run projector:bind-demo
+
+# later: re-snapshot only (after a head move), never fabricating:
+bun run projector:bind-demo --refresh
+```
+
+Rules the bind path enforces:
+
+- A missing packet, missing sha, or **sha mismatch exits 1** — nothing is
+  recorded, nothing is fabricated.
+- Statuses shown in live mode are computed by `evaluateMemoryStatus`
+  (build-memory) at snapshot time and displayed verbatim, stamped with
+  `generated_at` and the evaluated HEAD.
+- Verdicts come only from a **local verdicts file** (`.mad/projector/verdicts.json`),
+  and only records bound to the **current HEAD** are displayed — a verdict at
+  an older head is stale evidence and renders as `NO VERDICT` with the memory
+  row telling the truth.
+- `makeVerdict`'s factory gate still governs anything positive: a positive
+  verdict on non-VALID memory is refused at the factory and, if a file ever
+  carried one, the UI renders `GATE_BREACH` — never a clean SHIP.
+- An empty store or a missing snapshot renders the **honest empty state**
+  ("No bound memory — run bind or use fixture"), never a fake ledger row.
+
+Claim vocabulary for live mode: `PROJECTOR_V0_1`, `BUILD_MEMORY_BIND`.
+Not evidence of: `PHASE_0`, `OCCUPANCY_PROOF`, `GATEWAY_HONESTY`,
+`ROOM_RUNTIME`, `PRODUCTION_MERGE_AUTHORITY`.
 
 ## Honesty contract (enforced, not aspirational)
 

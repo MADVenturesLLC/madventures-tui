@@ -24,6 +24,7 @@ export function Chip(props: { label: string; tone: string; title?: string }) {
 }
 
 export function StatusBar(props: {
+  mode: "fixture" | "live";
   seal: string;
   generatedAt: string;
   counts: Record<"VALID" | "STALE" | "UNKNOWN" | "INVALIDATED", number>;
@@ -35,9 +36,16 @@ export function StatusBar(props: {
   const total = counts.VALID + counts.STALE + counts.UNKNOWN + counts.INVALIDATED;
   return (
     <header className="statusbar">
-      <span className="mode">Fixture v0</span>
-      <span className="mono" title="sha256 seal of the sealed memory fixture">
-        seal {props.seal}…
+      <span className="mode">{props.mode === "live" ? "Live bind" : "Fixture v0"}</span>
+      <span
+        className="mono"
+        title={
+          props.mode === "live"
+            ? "current git HEAD the live memory store was evaluated against"
+            : "sha256 seal of the sealed memory fixture"
+        }
+      >
+        {props.mode === "live" ? "head" : "seal"} {props.seal}…
       </span>
       <span>
         {String(total)} subjects ·{" "}

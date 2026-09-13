@@ -5,9 +5,9 @@
 // node:crypto so the isomorphic implementation cannot silently drift).
 
 import { createHash } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { afterAll, describe, expect, test } from "bun:test";
 
@@ -199,6 +199,18 @@ describe("JsonFileMemoryStore", () => {
   test("refuses to invalidate an unknown subject", () => {
     const store = new JsonFileMemoryStore(join(dir, "empty.json"));
     expect(() => store.invalidate("ghost", "reason")).toThrow(BuildMemoryError);
+  });
+
+  test("first-run bootstrap: writing creates a missing parent directory", () => {
+    // REGRESSION: a fresh checkout has no .mad/ — the very first record must
+    // succeed instead of failing on the atomic tmp-file write (found during
+    // the projector live-bind smoke).
+    const nested = join(dir, "fresh", "nested", "build-memory.json");
+    expect(existsSync(dirname(nested))).toBe(false);
+    const store = new JsonFileMemoryStore(nested);
+    store.write(parseBuildMemoryRecord(record({ subject: "fresh/subject" })));
+    expect(store.lookup("fresh/subject")?.record.head_sha).toBe(SHA_A);
+    expect(new JsonFileMemoryStore(nested).lookup("fresh/subject")?.record.head_sha).toBe(SHA_A);
   });
 
   test("refuses an invalid record", () => {

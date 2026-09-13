@@ -148,22 +148,41 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
 }
 .room-subject {
   display: flex;
-  align-items: center;
-  gap: var(--s-2);
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
   width: 100%;
-  min-height: 52px;
-  padding: 0 var(--s-2);
+  min-height: 64px;
+  padding: 10px var(--s-2);
   border: 1px solid transparent;
+  border-left: 3px solid transparent;
   border-radius: var(--radius-sm);
   text-align: left;
-  transition: background var(--dur) ease, border-color var(--dur) ease;
+  transition: background var(--dur) ease, border-color var(--dur) ease, transform var(--dur) ease, box-shadow var(--dur) ease;
 }
 .room-subject:hover { background: rgba(255, 255, 255, 0.04); }
 .room-subject[aria-selected="true"] {
-  background: rgba(255, 255, 255, 0.06);
+  /* selection is an interaction state: neutral strength only, never a status tone */
+  background: var(--panel-raised);
   border-color: var(--hairline);
+  border-left-color: rgba(255, 255, 255, 0.38);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
 }
-.room-subject .name { flex: 1; font-family: var(--font-mono); font-size: 13px; color: var(--text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.room-subject .name {
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  line-height: 1.35;
+  color: var(--text-1);
+  overflow-wrap: anywhere;   /* full name, wrapped — never truncated */
+  text-align: left;
+}
+.room-subject .row2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
 
 /* verdict + status chips */
 .chip {
@@ -198,7 +217,7 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   margin: 0;
 }
 .hero-subject { font-family: var(--font-mono); font-size: 20px; color: var(--text-2); }
-.hero-meta { font-size: 13px; color: var(--text-2); font-family: var(--font-mono); }
+.hero-meta { margin-top: 12px; font-size: 13px; color: var(--text-2); font-family: var(--font-mono); }
 .sha-row {
   display: flex;
   align-items: center;
@@ -207,7 +226,25 @@ button:disabled { opacity: 0.4; cursor: not-allowed; }
   font-size: 14px;
   color: var(--text-2);
 }
-.sha-row .sha { color: var(--text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sha-row .sha {
+  color: var(--text-1);
+  overflow-wrap: anywhere;          /* the full SHA is always readable */
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.3);
+  padding-bottom: 2px;
+  cursor: copy;
+}
+.sha-row button.copy-sha {
+  min-height: 36px;
+  border-color: rgba(255, 255, 255, 0.22);
+  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+.sha-row button.copy-sha:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.4);
+}
 
 .evidence-strip {
   display: flex;

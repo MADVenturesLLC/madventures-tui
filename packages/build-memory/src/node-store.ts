@@ -8,8 +8,8 @@
 // Atomic single-file durability for v0: one JSON file, human-readable,
 // diffable. NOT a ledger and NOT append-only.
 
-import { readFileSync, renameSync, writeFileSync } from "node:fs";
-import { resolve, sep } from "node:path";
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { dirname, resolve, sep } from "node:path";
 
 import {
   BuildMemoryError,
@@ -142,6 +142,9 @@ export class JsonFileMemoryStore implements MemoryStore {
   }
 
   #save(): void {
+    // First-run bootstrap: a fresh store's parent directory (e.g. .mad/)
+    // may not exist yet — create it so the very first record succeeds.
+    mkdirSync(dirname(this.#filePath), { recursive: true });
     const tmp = `${this.#filePath}.tmp-${String(process.pid)}`;
     writeFileSync(tmp, `${JSON.stringify(this.#load(), null, 2)}\n`, "utf8");
     renameSync(tmp, this.#filePath);
