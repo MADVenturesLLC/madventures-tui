@@ -1626,7 +1626,7 @@ The reducer leaves phase `starting` after the first record and changes it to
 `active` only when it reduces the second. The first `active` snapshot is
 published only after both records are durable. If token issuance fails, no
 token becomes valid. If activation append fails after token issuance, rollback
-appends `fencing_token_invalidated` and `session_abort`; no `active`
+appends `session_abort` then `fencing_token_invalidated`; no `active`
 snapshot is ever exposed.
 
 Every ownership transfer increments the token and appends a new
@@ -1657,7 +1657,7 @@ Next-start reconciliation completes durable prefixes deterministically:
 
 | Durable prior tail | Required next-start completion |
 | --- | --- |
-| `session_open` with no activation | append `session_abort`; if a token was issued, append `fencing_token_invalidated` first |
+| `session_open` with no activation | append `session_abort`, then append `fencing_token_invalidated` if a token was issued |
 | `session_interrupted` only | append `fencing_token_invalidated` when a valid token existed, then `session_closing`, then `session_closed` |
 | `session_interrupted → fencing_token_invalidated` | append `session_closing`, then `session_closed` |
 | interruption prefix through `session_closing` | verify no governed process remains, then append `session_closed` |

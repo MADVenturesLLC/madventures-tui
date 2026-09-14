@@ -1121,39 +1121,44 @@ uniqueness constraint.
 - §2.5 (interruption sequence `session_interrupted → fencing_token_invalidated → session_closing → session_closed`; governed process-group termination after `session_closing` and before `session_closed`; client streams close with the terminal transition)
 - §9.5 (Founder-close order `session_closing → fencing_token_invalidated → session_closed`; `session_closed` appended only after governed processes are gone; the first `active` snapshot only after both startup records are durable; if activation append fails after issuance, rollback appends `session_abort` then `fencing_token_invalidated` and no `active` snapshot is ever exposed)
 
-> **Founder ruling (2026-09-13) — RuntimeBroker dependency, ordering, and
-> failure-injection correction.** This task's previously written `Interfaces`
-> block declared no constructor and therefore no dependency surface at all: no
-> `Ledger` instance, no lifecycle projection, no session identity, no
-> deterministic event-id or clock source, no terminator, and no observer were
-> reachable from the task's two-file scope. Three of the four declared method
-> signatures additionally could not construct a protocol-valid
-> `SessionLifecycleEventV1`: `session_activated` requires
-> `readiness_snapshot_seq`, `session_interrupted` requires `severity`, and the
-> founder-kind `SessionTerminalPayloadV1` has no field a free-form `reason` could
-> occupy. Finally, the previously written failed-activation rollback order
-> (`fencing_token_invalidated` then `session_abort`) is refused by the canonical
-> reducer from `starting`. The Founder adopts explicit constructor injection, the
-> corrected signatures, injected post-`session_open` provenance, and the
-> reducer-legal compensation order below. The ruling changes no behavioral
-> objective of this task: durable order remains observable order, no `active`
-> state is observable before activation durability, both terminal orders are
-> unchanged and independently proven reducer-legal, and canonical derivation and
-> durability remain owned by `reduceLedgerEvent` and the existing `Ledger`.
+> **Founder rulings (2026-09-13) — RuntimeBroker dependency, ordering, and
+> failure-injection contract.** This task's previously written `Interfaces` block
+> declared no constructor and therefore no dependency surface at all: no `Ledger`
+> instance, no lifecycle projection, no session identity, no deterministic
+> event-id or clock source, no terminator, and no observer were reachable from the
+> task's two-file scope. Three of the four declared method signatures additionally
+> could not construct a protocol-valid `SessionLifecycleEventV1`:
+> `session_activated` requires `readiness_snapshot_seq`, `session_interrupted`
+> requires `severity`, and the founder-kind `SessionTerminalPayloadV1` has no field
+> a free-form `reason` could occupy. The previously written failed-activation
+> rollback order (`fencing_token_invalidated` then `session_abort`) is refused by
+> the canonical reducer from `starting`. Finally, the previously considered
+> `ledger.close()` failure trigger was rejected: it makes the required
+> compensation unreachable on the same `Ledger` instance, so the Founder accepted
+> the verified seam-free duplicate-`event_id` trigger instead. The adopted
+> contract is explicit constructor injection, derived (never injected) lifecycle
+> state and session identity, required terminator and observer dependencies, the
+> corrected signatures, sequential durable prefixes, and the reducer-legal
+> compensation order. No behavioral objective changes: durable order remains
+> observable order, no `active` state is observable before activation durability,
+> both terminal orders are unchanged and independently proven reducer-legal, and
+> canonical derivation and durability remain owned by `reduceLedgerEvent` and the
+> existing `Ledger`.
 
 **Files:**
 - Create: `packages/broker/src/runtime-broker.ts`
 - Test: `packages/broker/test/fencing.test.ts`
 
 > **Scope is not Builder discretion.** `packages/broker/src/index.ts` is **not**
-> modified by this task; `RuntimeBroker` stays directly imported by its test.
-> No change is authorized to `Ledger`, `packages/protocol/**`,
+> modified by this task; `RuntimeBroker` stays directly imported by its test. No
+> change is authorized to `Ledger`, `packages/protocol/**`,
 > `packages/broker/package.json`, `bun.lock`, any process or snapshot module, or
-> `fencing.ts`. If a correct implementation later proves to require a third path,
-> stop and report `TASK 19 SCOPE DECISION REQUIRED`.
+> `fencing.ts`. This task's implementation remains exactly two files. If a correct
+> implementation later proves to require a third path, stop and report
+> `TASK 19 SCOPE DECISION REQUIRED`.
 
 **Interfaces:**
-- Consumes: `fencing.ts` (`issueInitialToken`, `invalidateToken`, `FencingRecordContext`), `reduceLedgerEvent`, `LifecycleState`, and the injected `Ledger` instance's own `append`/`appendMany` plus the `LedgerRow` they return.
+- Consumes: `fencing.ts` (`issueInitialToken`, `invalidateToken`, `FencingRecordContext`), `INITIAL_LIFECYCLE_STATE`, `reduceLedgerEvent`, `LifecycleState`, and the injected `Ledger` instance's own `append`/`appendMany`/`readAfter` plus the `LedgerRow` values they return.
 - Produces:
   ```ts
   import type { Ledger, LedgerRow, LifecyclePhase, LifecycleState } from "@madventures/ledger";
@@ -1163,22 +1168,23 @@ uniqueness constraint.
   } from "@madventures/protocol";
 
   /**
-   * Immutable, already-established live-session provenance. Values are supplied
-   * once and never re-derived, discovered, or generated by this task.
+   * Immutable, already-established session provenance. Neither the session
+   * identity nor the durable head is carried here: both are derived from the
+   * ledger at construction.
    */
-  export interface SessionProvenance {
-    readonly sessionId: string;
+  export interface RuntimeBrokerProvenance {
     readonly taskEnvelopeHash: string;
     readonly repositoryFingerprint: RepositoryFingerprint;
-    /** The durable chain head at construction: the last durable row's event_hash. */
-    readonly previousEventHash: string;
   }
 
   /** Deterministic per-record sources. Injected; never ambient. */
-  export interface RuntimeRecordSources {
-    readonly nextEventId: () => string;
+  export interface RuntimeBrokerSources {
     readonly now: () => string;
+    readonly nextEventId: () => string;
   }
+
+  /** The narrow governed-process authority boundary. */
+  export type GovernedProcessTerminator = () => Promise<void>;
 
   /**
    * M8-local lifecycle observation. NOT the M9 `BrokerSnapshot` contract and
@@ -1188,49 +1194,36 @@ uniqueness constraint.
    */
   export interface LifecycleObservation {
     readonly snapshotSeq: number;
-    readonly ledgerSeq: number;
     readonly phase: LifecyclePhase;
-    readonly fencingToken: number | null;
-    readonly tokenState: LifecycleState["tokenState"];
-    readonly closureKind: LifecycleState["closureKind"];
+    readonly ledgerSeq: number;
   }
 
-  export interface RuntimeBrokerDependencies {
+  export interface RuntimeBrokerDeps {
     /** The one ledger and the one hash chain. Never constructed by this task. */
     readonly ledger: Ledger;
+    readonly provenance: RuntimeBrokerProvenance;
+    readonly sources: RuntimeBrokerSources;
     /**
-     * The canonical lifecycle projection at construction. Necessarily
-     * post-`session_open`: `LifecycleState.sessionId` is set only by
-     * `session_open`, and every landed fencing helper fails closed with
-     * `missing_session_id` without it.
+     * Required. Awaited after durable `session_closing` and before
+     * `session_closed` is appended.
      */
-    readonly initialState: LifecycleState;
-    readonly provenance: SessionProvenance;
-    readonly recordSources: RuntimeRecordSources;
-    /**
-     * The narrow M8 governed-process authority boundary. Awaited after durable
-     * `session_closing` and before durable `session_closed`. When absent, a
-     * terminal closure fails closed rather than claiming governed processes are
-     * gone.
-     */
-    readonly terminateGovernedProcesses?: () => Promise<void>;
-    /** Optional M8-local observation sink. Absent means no observations. */
-    readonly observe?: (observation: LifecycleObservation) => void;
+    readonly terminateGovernedProcesses: GovernedProcessTerminator;
+    /** Required M8-local observation sink. */
+    readonly observe: (observation: LifecycleObservation) => void;
   }
 
   export class RuntimeBroker {
-    constructor(dependencies: RuntimeBrokerDependencies);
+    constructor(deps: RuntimeBrokerDeps);
 
     activate(
       writerExecutionId: string,
       readyExecutionIds: readonly string[],
-      readinessSnapshotSeq: number,
     ): Promise<void>;
 
     interrupt(
       reason: InterruptionReasonCodeV1,
-      severity: "low" | "medium" | "high",
       detail: string,
+      severity: "low" | "medium" | "high",
       incidentId: string,
       sourceEventId: string | null,
       reportedBy: string | null,
@@ -1246,101 +1239,124 @@ uniqueness constraint.
   mutable registry. No ambient clock, randomness, environment, or filesystem
   discovery. No broadening of the semantic surface.
 
-**Post-`session_open` state and provenance ownership.** This task does **not**
-append `session_open` and must not create a parallel session-opening path.
-`RuntimeBroker` receives an already-established post-`session_open` projection in
-`initialState` and a `provenance` that must correspond to that same live session.
-It must not fabricate a session id, substitute an empty string or `"unknown"`, or
-derive one from context. It may fail closed when `initialState.sessionId` and
-`provenance.sessionId` disagree.
+**Derived lifecycle state and durable head — no injected projection.**
+`RuntimeBroker` does **not** receive an `initialState`. Construction derives both
+the initial lifecycle projection and the durable chain head from the injected
+`Ledger`:
+
+1. read the durable rows with `ledger.readAfter(0)`;
+2. fold them through `reduceLedgerEvent` starting from
+   `INITIAL_LIFECYCLE_STATE`; a typed reducer rejection is an impossible durable
+   order and propagates rather than being normalized;
+3. derive the head from those same rows: **no rows** → the canonical genesis hash
+   (`GENESIS_HASH`); **otherwise** → the last durable `LedgerRow.event_hash`.
+
+Construction assumes the injected `Ledger` represents a session whose
+`session_open` is already durable — this task does not append `session_open` and
+must not create a parallel session-opening path. Session identity is therefore
+**derived, never injected or fabricated**: if the replayed
+`state.sessionId === null`, construction fails closed. Do not substitute an empty
+string, `"unknown"`, a generated id, or a provenance-derived id.
+
+After construction, `RuntimeBroker` tracks the head **only** from the actual rows
+returned by its own `Ledger` appends, seeded from the derived head. Do not
+introduce a `Ledger` head accessor. Do not trust a lifecycle event's own
+`previous_event_hash` field as durable-chain proof.
 
 **`FencingRecordContext` ownership.** `RuntimeBroker` remains the live-session
-owner of the values carried into `FencingRecordContext`. It constructs each
-context from the injected `provenance`, its own tracked latest durable event
-hash, `recordSources.nextEventId()`, and `recordSources.now()`. It must not ask
-`fencing.ts` to discover any of them. It must update its tracked durable head
-**only** from the `LedgerRow.event_hash` returned by its own canonical `Ledger`
-append operations, seeded from `provenance.previousEventHash`; it must not treat
-a lifecycle event's own `previous_event_hash` field as proof of chain position,
-and no new `Ledger` head accessor is authorized.
+owner of the values carried into `FencingRecordContext`, and builds each context
+**internally** from the injected `provenance`, its internally tracked durable
+head, `sources.nextEventId()`, and `sources.now()`. Pre-built contexts are never
+injected, and `fencing.ts` must never be asked to discover any of these values.
 
 **Durable orders and durability boundaries.**
 
-- *Activation.* (1) append `fencing_token_issued`; (2) fold the returned row;
-  (3) append `session_activated` **separately**; (4) fold the returned row;
-  (5) publish an `active` observation only after step 4. These are **two durable
-  transactions**, not one `appendMany([issuance, activation])`, because the
-  approved rollback requirement presupposes a durable issuance followed by a
-  failed activation append. `readinessSnapshotSeq` is supplied by the caller; it
-  is neither an invented literal nor this task's local observation counter.
-- *Interruption.* `session_interrupted` (its own append) →
-  `fencing_token_invalidated` + `session_closing` (may be persisted together with
-  canonical `appendMany` in that order) → await governed process termination
-  after durable `session_closing` → `session_closed` (a separate append, only
-  after termination succeeds).
-- *Founder close.* `session_closing` + `fencing_token_invalidated` (may use
-  canonical `appendMany` in that order) → await governed process termination →
-  `session_closed` (a separate append).
+- *Activation — two sequential appends.* (1) append `fencing_token_issued`;
+  (2) fold the returned durable row and update the head; (3) append
+  `session_activated` **separately**; (4) fold the returned durable row and update
+  the head; (5) publish an `active` observation only after step 4. These are two
+  sequential durable appends, never one
+  `appendMany([fencing_token_issued, session_activated])`, because the approved
+  rollback requirement presupposes a durable issuance followed by a failed
+  activation append. `activate(...)` takes no readiness-snapshot argument: the
+  `session_activated` payload's `readiness_snapshot_seq` is populated from this
+  task's own local monotonic `snapshotSeq`. That is an M8-local value only; it
+  does **not** establish the final M9/M10 public snapshot-sequence contract.
+- *Interruption — sequential durable prefixes.*
+  `session_interrupted` → `fencing_token_invalidated` → `session_closing` →
+  await `terminateGovernedProcesses()` → `session_closed`. Each flow step is a
+  separate `append`/fold/observe: (1) append/fold/observe `session_interrupted`;
+  (2) append/fold/observe `fencing_token_invalidated`; (3) append/fold/observe
+  `session_closing`; (4) await the terminator; (5) append/fold/observe
+  `session_closed`. **Do not batch** invalidation with closing. The separate
+  durable prefixes are intentional and correspond to the next-start recovery
+  states of §9.5.
+- *Founder close — sequential durable prefixes.*
+  `session_closing` → `fencing_token_invalidated` →
+  await `terminateGovernedProcesses()` → `session_closed`. Use separate sequential
+  append/fold/observe operations for closing and invalidation. **Do not batch**
+  them. Then terminate, then append/fold/observe `session_closed`.
 
 No `session_closed` is ever appended before termination. The interruption and
-Founder-close orders above are unchanged by this correction and were
-independently proven reducer-legal from the post-activation projection; do not
-reverse them.
+Founder-close orders above were independently proven reducer-legal from the
+post-activation projection; do not reverse them.
 
-**Failed-activation compensation — corrected order.** The previously written
-order `fencing_token_invalidated → session_abort` is reducer-illegal from
-`starting`: the canonical reducer accepts `fencing_token_invalidated` only in
-`interrupted`, `closing`, or `closed`, and the landed `invalidateToken` helper
-excludes `starting` from `INVALIDATION_PHASES`. It is superseded by:
+**Termination failure behaviour.** If `terminateGovernedProcesses()` rejects:
+append no `session_closed`, make no false process-gone claim, and propagate the
+containment failure. The session remains at `closing`, which next-start
+reconciliation completes.
 
-1. `session_abort` — appended and folded first; it is the only record that moves
-   `starting` to `closed`;
-2. `fencing_token_invalidated` — appended and folded second, from the resulting
-   `closed` projection, with `invalidation_reason: "rollback"` and
-   `incident_id: null`;
-3. both records persisted as one atomic `appendMany([session_abort,
-   fencing_token_invalidated])`, folded in durable order afterwards;
-4. no `active` observation is ever published.
+**Failed-activation compensation — corrected order and approved trigger.** The
+previously written order `fencing_token_invalidated → session_abort` is
+reducer-illegal from `starting`: the canonical reducer accepts
+`fencing_token_invalidated` only in `interrupted`, `closing`, or `closed`, and the
+landed `invalidateToken` helper excludes `starting` from `INVALIDATION_PHASES`. On
+an activation append failure after successful issuance:
 
-The reused canonical `session_abort` payload literal is exactly
-`{ abort_reason: "next_start_open_without_activation" }`, taken verbatim from the
-already-landed and already-ratified M7 open-no-activation prefix
+1. construct `session_abort` then `fencing_token_invalidated` using canonical
+   record construction;
+2. persist them in one atomic `ledger.appendMany([sessionAbort,
+   fencingInvalidated])`;
+3. fold the returned rows in their actual durable order and update the head;
+4. publish no `active` observation at any point.
+
+The `session_abort` payload uses the canonical abort reason
+`next_start_open_without_activation`, taken verbatim from the already-landed and
+already-ratified M7 open-no-activation prefix
 (`packages/broker/src/next-start-reconciliation.ts:194`). No new abort-reason
 vocabulary is introduced.
 
-**Failure injection.** No production failure seam is authorized. Do not add a
-test-only method to `RuntimeBroker`, do not add a failure hook to `Ledger`, and do
-not construct a fake `Ledger`. The intended mechanism for the failed-activation
-test is a **real** `Ledger` failure on the same open ledger instance, followed by
-successful compensation on that same instance; the specific trigger is reserved
-(see the unresolved item below) and must not be invented by the implementer.
+**Approved failure-injection mechanism — duplicate `event_id`.** The
+failed-activation test uses the real injected `Ledger` and injects **no** failure
+seam. No fake ledger, no `Ledger` abstraction layer, no production failure hook,
+no Task-19-only test seam, and no database mutation outside the normal `Ledger`
+API. The mechanism is exactly:
 
-> **UNRESOLVED — FOUNDER DECISION REQUIRED — Task 19 failed-activation
-> failure-injection trigger.** The Founder ruling of 2026-09-13 §16 identifies
-> the trigger as closing the injected `Ledger` before the activation append. An
-> empirical test against the landed `Ledger` establishes that this literal
-> mechanism **cannot** satisfy the compensation requirement: with the instance
-> closed, the activation append fails (`Error: Database has closed`) **and** the
-> required `appendMany([session_abort, fencing_token_invalidated])` compensation
-> on that same instance fails identically, so steps 1–4 above are unreachable and
-> `TASK 19 FAILURE-INJECTION CONTRACT CONFLICT` applies. Two truthful seam-free
-> triggers were verified to fail the activation append while leaving the same
-> open instance able to append the compensation: (a) making
-> `recordSources.nextEventId()` return the already-durable issuance `event_id`,
-> forcing the schema's real `UNIQUE` constraint on `events.event_id` (this is the
-> mechanism the landed M7 lifecycle-append test used for the same purpose, and it
-> requires no new authority); (b) an equivalent real open-instance append
-> failure. The Founder must confirm (a), name another trigger, or amend §16.
-> Until then this task's rollback test must not be implemented, and the
-> implementer must **not** silently substitute a fake ledger, a seam, or an
-> unstated trigger.
+1. `RuntimeBroker` uses the real injected `Ledger`.
+2. Token issuance receives a fresh deterministic `event_id`.
+3. `fencing_token_issued` appends successfully and becomes durable.
+4. Activation receives an `event_id` already present in the same `Ledger`; the
+   test's `sources.nextEventId()` yields the already-durable issuance `event_id`
+   for the activation record.
+5. The real `events.event_id` `UNIQUE` constraint rejects the activation append.
+6. The `Ledger` instance remains open.
+7. Ledger head and durable rows are unchanged by the failed activation append.
+8. `RuntimeBroker` appends the compensation atomically (`session_abort`, then
+   `fencing_token_invalidated`).
+9. Both compensation records fold successfully through the canonical reducer.
+10. No `active` observation is emitted at any point.
+11. Ledger verification remains valid.
+
+The `ledger.close()` trigger is **rejected** for this task: with the instance
+closed, the activation append and the required compensation on that same instance
+both fail, so the compensating records are unreachable.
 
 **Preconditions:**
 - Task 18 committed.
 
-- [ ] Step 1: Write the named failing test — add `test("startup appends fencing_token_issued then session_activated in that order")`; `test("no active snapshot is exposed until both startup records are durable")` asserting the observed snapshot sequence contains no `phase === "active"` entry whose `ledgerSeq` precedes the activation row; `test("interruption appends the four records in the specified order")`; `test("Founder close appends closing, invalidation, then closed")`; `test("a failed activation append rolls back to session_abort then fencing_token_invalidated with no active snapshot")`. Do not author the fifth test until the reserved failure-injection trigger above is settled by the Founder.
+- [ ] Step 1: Write the named failing test — add `test("startup appends fencing_token_issued then session_activated in that order")`; `test("no active snapshot is exposed until both startup records are durable")` asserting the observed snapshot sequence contains no `phase === "active"` entry whose `ledgerSeq` precedes the activation row; `test("interruption appends the four records in the specified order")`; `test("Founder close appends closing, invalidation, then closed")`; `test("a failed activation append compensates atomically with session_abort then fencing_token_invalidated and never publishes active")`. The fifth test must use the approved duplicate-`event_id` mechanism above and must prove: issuance durable first; activation rejected by the real `UNIQUE` constraint; the failed activation consumes no durable ledger position; the rollback compensation lands atomically; the final projection is `phase === "closed"`, `closureKind === "abort"`, and fencing token invalidated; chain verification remains valid; and no `active` observation was published.
 - [ ] Step 2: Run `bun test packages/broker/test/fencing.test.ts -t "interruption appends the four records in the specified order"` — expected RED: `Cannot find module "../src/runtime-broker"`.
-- [ ] Step 3: Implement the minimum authorized behavior — implement the three methods and the constructor, appending through the injected `Ledger`'s `append`/`appendMany`, folding each returned row through `reduceLedgerEvent` in durable order before publishing any observation, and refusing a terminal `session_closed` when `terminateGovernedProcesses` is absent.
+- [ ] Step 3: Implement the minimum authorized behavior — implement the constructor and the three methods; derive the projection and head from `ledger.readAfter(0)`; fail closed when the replayed `sessionId` is null; append through the injected `Ledger`'s `append`/`appendMany`; fold each returned row through `reduceLedgerEvent` in durable order before publishing any observation; await `terminateGovernedProcesses()` between durable `session_closing` and `session_closed` and append no `session_closed` if it rejects.
 - [ ] Step 4: Run `bun test packages/broker/test/fencing.test.ts` — expected GREEN: the five named tests plus their surrounding coverage. Invariant established: **durable order is the observable order, and no `active` state is ever visible before it is durable.**
 - [ ] Step 5: Run `bun test packages/broker packages/ledger` and `bunx tsc --noEmit`.
 - [ ] Step 6: Inspect the diff; confirm `packages/broker/src/index.ts` is unmodified and no path outside the two listed above changed.
