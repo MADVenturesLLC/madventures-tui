@@ -1626,8 +1626,13 @@ The reducer leaves phase `starting` after the first record and changes it to
 `active` only when it reduces the second. The first `active` snapshot is
 published only after both records are durable. If token issuance fails, no
 token becomes valid. If activation append fails after token issuance, rollback
-appends `session_abort` then `fencing_token_invalidated`; no `active`
-snapshot is ever exposed.
+appends `session_abort` then `fencing_token_invalidated` as one atomic
+transaction; no `active` snapshot is ever exposed. That order is fixed by the
+canonical reducer, which accepts `fencing_token_invalidated` only from
+`interrupted`, `closing`, or `closed`: `session_abort` moves the incomplete
+`starting` session to `closed`, and the rollback invalidation is legal from
+there. The two records are indivisible, so no crash can leave a valid fencing
+token behind a session the prefix table already classifies as complete.
 
 Every ownership transfer increments the token and appends a new
 `fencing_token_issued` event before the successor writer may send bytes. A
@@ -1642,9 +1647,10 @@ not required.
 
 Token invalidation does not itself imply a single phase. A valid replay may
 contain an invalidated token only in `interrupted`, `closing`, or `closed`.
-It is invalid in `starting`, `active`, or `paused`, except for the
-recognized incomplete-start rollback prefix described below. The reducer never
-infers closure merely from token state.
+It is invalid in `starting`, `active`, or `paused`, with no exception: the
+incomplete-start rollback prefix appends `session_abort` first precisely so its
+invalidation lands in `closed`. The reducer never infers closure merely from
+token state.
 
 For interruption, the in-memory token becomes unusable before the broker
 attempts the durable sequence. The durable order is
@@ -1657,7 +1663,7 @@ Next-start reconciliation completes durable prefixes deterministically:
 
 | Durable prior tail | Required next-start completion |
 | --- | --- |
-| `session_open` with no activation | append `session_abort`, then append `fencing_token_invalidated` if a token was issued |
+| `session_open` with no activation | append `session_abort`; if a token was issued, append `fencing_token_invalidated` after it, in one atomic transaction |
 | `session_interrupted` only | append `fencing_token_invalidated` when a valid token existed, then `session_closing`, then `session_closed` |
 | `session_interrupted → fencing_token_invalidated` | append `session_closing`, then `session_closed` |
 | interruption prefix through `session_closing` | verify no governed process remains, then append `session_closed` |
