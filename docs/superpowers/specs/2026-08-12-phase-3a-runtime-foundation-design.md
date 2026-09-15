@@ -1486,6 +1486,8 @@ interface BrokerSnapshot {
   readonly pendingApprovals: readonly PendingApprovalSnapshot[];
   readonly pendingTransfers: readonly PendingTransferSnapshot[];
   readonly permissionSummary: PermissionSummarySnapshot;
+  // Existing Phase 2 broker ownership-state type, declared in
+  // packages/broker/src/ownership-machine.ts. Consumed, never redeclared.
   readonly ownershipState: OwnershipState;
   readonly verification: VerificationSnapshot | null;
   readonly review: ReviewSnapshot | null;
@@ -1592,19 +1594,27 @@ initial startup or `session_resumed` from `paused`. `phase ===
 governance command is accepted during `interrupted` or `closing`.
 `"reconciling"` is not a Phase 3A command or snapshot phase.
 
-```ts
-type OwnershipState =
-  | "free"
-  | "owned"
-  | "transfer-requested"
-  | "sender-released"
-  | "receiver-validating"
-  | "rejected";
+`ownershipState` is the existing Phase 2 broker ownership-state type, unmodified.
+
+Its single authoritative declaration is:
+
+```text
+packages/broker/src/ownership-machine.ts
+export type OwnershipState
 ```
 
-`ownershipState` is the existing Phase 2 closed union, unmodified. There is no
-`transferPhase` field. Any display label is derived by the consumer from
-`ownershipState`.
+That type is a discriminated union carrying state-specific payloads; it is the
+only broker ownership-state authority in the tree. M9 Task 20 **consumes** it.
+Task 20 declares no second ownership-state union, and no renamed or
+equivalent ownership-state union may be introduced anywhere. The earlier
+six-member string union written in this subsection was stale contract text: it
+changed the shape from the landed object union, and it named
+`receiver-validating`, which is not a broker ownership state in the existing
+Phase 2 authority. It is withdrawn and is not a declaration. The retained
+broker type is not modified by this correction.
+
+There is no `transferPhase` field on `BrokerSnapshot` and none may be added. Any
+display label is derived by the consumer from `ownershipState`.
 
 These projections deliberately preserve the Phase 2 truth fields while adding
 session identity, sequencing, launch facts, and explicit token state. They are

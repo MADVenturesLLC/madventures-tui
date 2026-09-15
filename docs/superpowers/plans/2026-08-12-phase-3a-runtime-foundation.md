@@ -1331,7 +1331,7 @@ observation was ever published.
 
 **Requirement coverage:**
 - §9.3 (`ClientPrincipal`, `BrokerClient`, the seven `BrokerCommand` variants, the fourteen `BrokerErrorCode` values, `BrokerResult`; `executionId` is the identity key and `surfaceId` is not a parallel key; every command carries `commandId` and `sessionId`; `BrokerResult.detail` is sanitized)
-- §9.4 (the complete minimum snapshot contract, `ExecutionSnapshot`, `OutputFrame`, and the six supporting snapshot interfaces; `ownershipState` is the existing Phase 2 closed union with no `transferPhase` field)
+- §9.4 (the complete minimum snapshot contract, `ExecutionSnapshot`, `OutputFrame`, and the seven supporting snapshot interfaces; `ownershipState` references the existing Phase 2 broker `OwnershipState` declared in `packages/broker/src/ownership-machine.ts` — consumed, never redeclared — with no `transferPhase` field)
 - §4.1 (`close()` releases only that client’s subscriptions and does not terminate the session)
 
 **Files:**
@@ -1340,8 +1340,20 @@ observation was ever published.
 - Test: `packages/broker/test/broker-client-contract.test.ts`
 
 **Interfaces:**
-- Consumes: `TaskEnvelopeV1`, `ExecutionIdentity`, `RepositoryFingerprint`, `BridgeEventV1`.
+- Consumes: `TaskEnvelopeV1`, `ExecutionIdentity`, `RepositoryFingerprint`, `BridgeEventV1`, and the existing Phase 2 broker `OwnershipState`.
 - Produces: exactly the declarations quoted in §§9.3–9.4 of the specification, plus runtime tuples `BROKER_COMMAND_KINDS` (7 members) and `BROKER_ERROR_CODES` (14 members) so the closure is assertable.
+
+**Ownership authority — consumed, never declared.** `BrokerSnapshot.ownershipState` references the
+existing Phase 2 broker ownership-state type. Its single authoritative declaration is
+`packages/broker/src/ownership-machine.ts` (`export type OwnershipState`), which is a discriminated
+union carrying state-specific payloads. Task 20 imports that type from `./ownership-machine.ts`; it
+does not redeclare `OwnershipState` in `client.ts`, does not create a renamed or equivalent
+ownership-state union, and does not add a second ownership-state authority. There remains exactly one
+broker ownership-state authority. `receiver-validating` is not a broker ownership state and is not
+added to `ownership-machine.ts`. This task adds no new public export of `OwnershipState` through
+`packages/broker/src/index.ts`; that file's Task 20 change stays limited to the client-contract
+exports named above. `packages/broker/src/ownership-machine.ts` is outside this task's implementation
+set and remains retained and unmodified. There is no `transferPhase` field on `BrokerSnapshot`.
 
 **Preconditions:**
 - M8 reviewed.
@@ -1351,7 +1363,7 @@ observation was ever published.
 - [ ] Step 3: Implement the minimum authorized behavior — create `client.ts` with the type declarations and the two runtime tuples. Types only; no implementation.
 - [ ] Step 4: Run the same command — expected GREEN: 4 pass. Invariant established: **the client boundary is a closed, enumerable, plain-data contract with no parallel identity key.**
 - [ ] Step 5: Run `bun test packages/broker` and `bunx tsc --noEmit` (the `@ts-expect-error` assertion is verified by `tsc`, not by `bun test`).
-- [ ] Step 6: Inspect the diff; confirm no PTY descriptor, subprocess handle, or ledger handle appears in any exported type.
+- [ ] Step 6: Inspect the diff; confirm no PTY descriptor, subprocess handle, or ledger handle appears in any exported type; confirm `client.ts` imports the existing `OwnershipState` from `./ownership-machine.ts` rather than declaring an ownership-state union; and confirm `ownership-machine.ts` is untouched.
 - [ ] Step 7: Commit the listed files with message: `feat(broker): declare the closed BrokerClient command and snapshot contract`
 - [ ] Step 8: Stop for the M9 review checkpoint.
 
