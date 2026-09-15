@@ -1,0 +1,15 @@
+{
+  "note": "Vocabulary drift pin for the vendored RoomStatus mirror (apps/projector-mc/src/lib/room-status.ts). Captured verbatim from the Lane 1 source named in provenance. test/room-status.test.ts fails if the vendored arrays and this pin disagree — a conscious vocabulary update must re-pin from a new Lane 1 head.",
+  "provenance": {
+    "source_repo": "MADVenturesLLC/founder-os-build-room",
+    "source_file": "packages/room-status/src/vocabulary.ts",
+    "source_branch": "build/room-status-ir-v0",
+    "source_head": "81d1203e6c0c5382bcf2773d61eed5f0dde4f8ee",
+    "mode": "fixture-only vendored mirror; live IR bind is FOUNDER_DECISION_REQUIRED"
+  },
+  "ROOM_STATUS_IR_VERSIONS": [1],
+  "ROOM_OCCUPANCY": ["empty", "occupied", "closed"],
+  "AGENT_PHASES": ["idle", "running", "waiting_approval", "blocked", "verifying", "completed", "failed", "unknown"],
+  "ROOM_BLOCK_REASONS": ["policy_deny", "completion_gap", "backpressure", "hook_error", "human_hold", "other_named"],
+  "EVIDENCE_REF_KINDS": ["path", "sha", "handoff", "receipt"]
+}

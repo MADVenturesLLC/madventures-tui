@@ -1,0 +1,110 @@
+{
+  "schema": "mad.roomstatus-fixture/v0",
+  "note": "Synthetic RoomStatus replay scenarios for the projector (Lane 3, fixture-only). Every roomId is fixture-prefixed; nothing here claims production occupancy or a live Gateway. Scenario 7 is DELIBERATELY ILLEGAL under Lane 1 strict (completed with no evidence_refs) and must render as verifying + IR_FAULT, never as success.",
+  "provenance": {
+    "mode": "fixture-only",
+    "ir_source_branch": "build/room-status-ir-v0",
+    "ir_source_head": "81d1203e6c0c5382bcf2773d61eed5f0dde4f8ee"
+  },
+  "scenarios": [
+    {
+      "name": "idle-prepared",
+      "status": {
+        "irVersion": 1,
+        "roomId": "fixture-room-s1",
+        "occupancy": "empty",
+        "agentPhase": "idle",
+        "evidenceRefs": [],
+        "observedSeq": 3
+      }
+    },
+    {
+      "name": "running",
+      "status": {
+        "irVersion": 1,
+        "roomId": "fixture-room-s2",
+        "occupancy": "occupied",
+        "agentPhase": "running",
+        "slotPhases": [{ "slotId": "slot-a", "phase": "running" }],
+        "evidenceRefs": [],
+        "observedSeq": 41
+      }
+    },
+    {
+      "name": "waiting-approval",
+      "status": {
+        "irVersion": 1,
+        "roomId": "fixture-room-s3",
+        "occupancy": "occupied",
+        "agentPhase": "waiting_approval",
+        "evidenceRefs": [],
+        "observedSeq": 57
+      }
+    },
+    {
+      "name": "blocked-completion-gap",
+      "status": {
+        "irVersion": 1,
+        "roomId": "fixture-room-s4",
+        "occupancy": "occupied",
+        "agentPhase": "blocked",
+        "blockReason": "completion_gap",
+        "slotPhases": [{ "slotId": "slot-a", "phase": "blocked", "blockReason": "completion_gap" }],
+        "evidenceRefs": [
+          { "kind": "path", "ref": "docs/planning/superlogical-evolve-v0/HANDOFF-room-status-ir.md" },
+          { "kind": "sha", "ref": "81d1203e6c0c5382bcf2773d61eed5f0dde4f8ee" }
+        ],
+        "observedSeq": 88
+      }
+    },
+    {
+      "name": "verifying-exited",
+      "status": {
+        "irVersion": 1,
+        "roomId": "fixture-room-s5",
+        "occupancy": "occupied",
+        "agentPhase": "verifying",
+        "slotPhases": [{ "slotId": "slot-a", "phase": "verifying" }],
+        "evidenceRefs": [],
+        "observedSeq": 77
+      }
+    },
+    {
+      "name": "completed-evidenced",
+      "status": {
+        "irVersion": 1,
+        "roomId": "fixture-room-s6",
+        "occupancy": "occupied",
+        "agentPhase": "completed",
+        "slotPhases": [{ "slotId": "slot-a", "phase": "completed" }],
+        "evidenceRefs": [
+          { "kind": "handoff", "ref": "HANDOFF-room-status-ir" },
+          { "kind": "sha", "ref": "0123456789abcdef0123456789abcdef01234567" }
+        ],
+        "observedSeq": 120
+      }
+    },
+    {
+      "name": "completed-no-evidence-FAULT",
+      "status": {
+        "irVersion": 1,
+        "roomId": "fixture-room-s7",
+        "occupancy": "occupied",
+        "agentPhase": "completed",
+        "evidenceRefs": [],
+        "observedSeq": 130
+      }
+    },
+    {
+      "name": "closed-room",
+      "status": {
+        "irVersion": 1,
+        "roomId": "fixture-room-s8",
+        "occupancy": "closed",
+        "agentPhase": "idle",
+        "evidenceRefs": [],
+        "observedSeq": 200
+      }
+    }
+  ]
+}

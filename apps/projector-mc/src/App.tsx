@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 
 import demoJson from "../fixtures/demo.json";
+import roomStatusFixtureJson from "../fixtures/room-status-fixture.json";
 import { loadProjectorDemo } from "./lib/fixture";
+import { loadRoomStatusFixture, type RoomStatusScenario } from "./lib/room-status-fixture";
 import { filterSubjects, nextFilter, shortSha, type ProjectorModel, type SubjectView, type VerdictFilter } from "./lib/render-model";
 import { emitFounderIntent, type FounderIntent } from "./lib/intent";
 import { EvidenceDrawer } from "./components/EvidenceDrawer";
 import { HelpOverlay } from "./components/HelpOverlay";
 import { HeroVerdict } from "./components/HeroVerdict";
 import { RoomRail } from "./components/RoomRail";
+import { RoomStatusPanel } from "./components/RoomStatusPanel";
 import { StatusBar } from "./components/StatusBar";
 
 type Mode = "fixture" | "live-unavailable";
@@ -40,6 +43,21 @@ export function App() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [intents, setIntents] = useState<FounderIntent[]>([]);
   const [copied, setCopied] = useState(false);
+
+  // Lane 3: RoomStatus replay scenarios — validated through the vendored IR
+  // parser at load; a rejected record is an intentional error state.
+  const [rsError, setRsError] = useState<string | null>(null);
+  const roomScenarios: RoomStatusScenario[] = useMemo(() => {
+    if (mode !== "fixture") return [];
+    try {
+      return loadRoomStatusFixture(roomStatusFixtureJson).scenarios;
+    } catch (err) {
+      setRsError(err instanceof Error ? err.message : String(err));
+      return [];
+    }
+  }, [mode]);
+  const [rsIdx, setRsIdx] = useState(0);
+  const rsScenario: RoomStatusScenario | null = roomScenarios[rsIdx] ?? null;
 
   const visible: SubjectView[] = useMemo(
     () => (model === null ? [] : filterSubjects(model.subjects, filter)),
@@ -77,6 +95,9 @@ export function App() {
       } else if (e.key === "f") {
         e.preventDefault();
         setFilter(nextFilter);
+      } else if (e.key === "r" && roomScenarios.length > 0) {
+        e.preventDefault();
+        setRsIdx((i) => (i + 1) % roomScenarios.length);
       } else if (e.key === "c" && selected !== null) {
         e.preventDefault();
         void navigator.clipboard?.writeText(selected.memory.current_head_sha ?? "").then(
@@ -90,7 +111,7 @@ export function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [visible.length, helpOpen, model, selected]);
+  }, [visible.length, helpOpen, model, selected, roomScenarios.length]);
 
   if (mode === "live-unavailable") {
     return (
@@ -168,6 +189,22 @@ export function App() {
                 setIntents((list) => [...list, emitFounderIntent(name, verdict)]);
               }}
             />
+          )}
+          {rsError !== null ? (
+            <section className="roomstatus-panel panel" aria-label="Room status (fixture replay)">
+              <div className="roomstatus-fault" role="alert">
+                room-status fixture rejected: {rsError}
+              </div>
+            </section>
+          ) : (
+            rsScenario !== null && (
+              <RoomStatusPanel
+                scenario={rsScenario}
+                scenarioIdx={rsIdx}
+                total={roomScenarios.length}
+                onNext={() => setRsIdx((i) => (i + 1) % roomScenarios.length)}
+              />
+            )
           )}
         </main>
       </div>
