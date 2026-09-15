@@ -29,3 +29,26 @@ export { transitionSession, InvalidTransitionError } from "./session-machine";
 export type { SessionState, SessionEvent } from "./session-machine";
 export { spawnPtyHost } from "./pty-host-supervisor";
 export type { PtyHostHandle, HostLaunchDescriptor } from "./pty-host-supervisor";
+
+// Phase 3A M9 Task 20: the closed BrokerClient contract (specification
+// sections 9.3-9.4). Types plus the two closure tuples; no behavior.
+// OwnershipState is deliberately NOT re-exported here: its single public
+// authority remains packages/broker/src/ownership-machine.ts.
+export { BROKER_COMMAND_KINDS, BROKER_ERROR_CODES } from "./client";
+export type {
+  ClientPrincipal,
+  BrokerClient,
+  BrokerCommand,
+  BrokerErrorCode,
+  BrokerResult,
+  BrokerSnapshot,
+  ExecutionSnapshot,
+  OutputFrame,
+  PendingApprovalSnapshot,
+  PendingTransferSnapshot,
+  PermissionSummarySnapshot,
+  VerificationSnapshot,
+  ReviewSnapshot,
+  IncidentSnapshot,
+  LedgerEntrySnapshot,
+} from "./client";
