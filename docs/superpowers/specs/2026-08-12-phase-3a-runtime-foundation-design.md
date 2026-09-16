@@ -1509,6 +1509,27 @@ secret-marked environment value.
 
 ### 9.4 Required snapshot and output fields
 
+**Phase 3A deferral — `pendingApprovals` projection (D9.2, Founder, 2026-09-16).**
+`pendingApprovals` remains a required member of the `BrokerSnapshot` contract and is **not**
+removed from the type. However, its production **projection is deferred** for Phase 3A until a
+separately authorized approval-request record type exists, because neither closed event
+vocabulary contains an event that *creates* a pending approval: `EVENT_TYPES`
+(`packages/protocol/src/events.ts`) has no approval member, and
+`SESSION_LIFECYCLE_EVENT_TYPES` (`packages/protocol/src/lifecycle-events.ts`) contains only
+`approval_resolved`, whose semantics are to *remove* a matching pending approval. The contract
+nonetheless presumes pending approvals exist — `BrokerCommand.approval_resolve` carries an
+`approvalId`, and the error union carries `approval_not_pending`.
+
+Consequently, for Phase 3A and until that record type is separately authorized:
+
+- Task 21b does **not** project `pendingApprovals`.
+- Defining the approval-request record type (event, payload, durability, and store) is its own
+  future Founder-authorized task. It is not authorized by the D8/D9.2 instrument, and it may
+  not be added by a plan correction.
+
+This deferral scopes only Task 21b's projection obligation. It does not weaken the Task 20
+`BrokerSnapshot` contract for any other member.
+
 The complete minimum snapshot contract is:
 
 ```ts
