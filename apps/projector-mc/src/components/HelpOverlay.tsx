@@ -10,6 +10,7 @@ export function HelpOverlay(props: { onClose: () => void }) {
             <tr><td>Enter</td><td>open evidence drawer</td></tr>
             <tr><td>Esc</td><td>close drawer / help</td></tr>
             <tr><td>f</td><td>cycle verdict filter</td></tr>
+            <tr><td>r</td><td>cycle RoomStatus fixture scenario</td></tr>
             <tr><td>c</td><td>copy selected subject SHA</td></tr>
             <tr><td>?</td><td>toggle this help</td></tr>
           </tbody>
@@ -17,7 +18,10 @@ export function HelpOverlay(props: { onClose: () => void }) {
         <p className="reason" style={{ marginTop: "16px" }}>
           Status color comes only from the verdict / memory tone maps. A green
           chip exists only where a verified verdict object and a VALID memory
-          record exist behind it.
+          record exist behind it. RoomStatus chips obey the same rule: a
+          completed phase renders green only with evidence refs, and an
+          illegal record is shown as verifying with an IR_FAULT banner — never
+          painted success.
         </p>
       </div>
     </div>
