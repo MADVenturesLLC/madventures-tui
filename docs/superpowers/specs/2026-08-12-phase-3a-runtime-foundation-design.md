@@ -469,8 +469,9 @@ typed invariant failure. In the in-process client, an unexplained gap
 interrupts the session rather than being hidden. Replay and reconnect are
 deferred with the external transport.
 
-Input and resize bind to `sessionId`, `executionId`, and the current fencing
-token so stale clients cannot write.
+Input and resize bind to `sessionId`, `executionId`, the active writer, and the
+current fencing token so stale clients cannot write and a non-writer execution
+cannot acquire write authority by presenting the current token.
 
 `BrokerClient.close()` releases only that client's subscriptions and resources.
 It does not terminate the governed session. Session termination is a separate
@@ -1341,8 +1342,10 @@ type BrokerResult =
 ```
 
 `pty_input` and `pty_resize` are legal only when the session phase is
-`active`, the incident is null, the target execution state is `ready`, and
-the exact current positive fencing token is supplied. In `starting`,
+`active`, the incident is null, the target execution state is `ready`, the
+issuing execution is the session's active writer
+(`command.executionId` equals `snapshot.activeWriterExecutionId`), and the
+exact current positive fencing token is supplied. In `starting`,
 `paused`, `interrupted`, `closing`, or `closed`, they fail with
 `session_not_writable`; an `active` snapshot carrying a non-null incident is
 an invariant-visible incident state and fails with `incident_active`. A paused
@@ -1389,6 +1392,50 @@ The command error policy is therefore pinned, not an or-choice:
 | `session_resume` | paused | any other phase | `session_not_writable` |
 | `session_close` | active + no incident | active + incident | `incident_active` |
 | `session_close` | active + no incident | any other phase | `session_not_writable` |
+
+The matrix above pins phase and incident outcomes only. Eight predicates are evaluated
+in this fixed order, and no other order is permitted:
+
+1. **Command shape.** An unknown variant or unknown field fails with
+   `invalid_command`; there is no default coercion. This is the first predicate on
+   both `request()` and `publish()`.
+2. **Principal authorization.** An `execution` principal issuing `approval_resolve`,
+   `session_pause`, `session_resume`, or `session_close` fails with `unauthorized`.
+   Only the Founder TUI principal may issue the four governance commands.
+3. **Session identity.** A command whose `sessionId` is not the snapshot's
+   `sessionId` fails with `session_mismatch`.
+4. **Execution existence.** A command naming an `executionId` that is absent from
+   `snapshot.executions` fails with `execution_not_found`.
+5. **Active-writer identity.** `pty_input` and `pty_resize` are writer-only. The
+   issuing execution must be the session's active writer: `command.executionId` must
+   equal `snapshot.activeWriterExecutionId`. A current positive fencing token is
+   necessary but not sufficient. An execution that exists but is not the active
+   writer fails with `unauthorized`, whatever token it presents — this covers a
+   non-writer execution such as a reviewer surface, and a previous writer after an
+   ownership transfer or release. It applies to `pty_input` and `pty_resize` only.
+   `pty_terminate` remains the mechanical fail-closed command and is never gated on
+   writer identity, so teardown cannot be blocked by this check.
+   A null `activeWriterExecutionId` fails predicate 5 for writer-only commands: no
+   execution is then the active writer, so no writer-only command is legal.
+   Consequence for the matrix rows: every fixture for a legal `pty_input` or
+   `pty_resize` must set `activeWriterExecutionId` to the command's own
+   `executionId` and that execution must be present in `snapshot.executions`;
+   otherwise predicates 4 or 5 fire first and the row's own error is never reached.
+6. **Phase and incident.** The ten-row matrix above.
+7. **Fencing token.** In an otherwise legal state, a supplied token that is not the
+   snapshot's current positive token fails with `stale_fencing_token`. Pause neither
+   invalidates nor increments the token, so a paused session retains it and still
+   fails at row 1 with `session_not_writable`.
+8. **Dimensions.** `pty_resize` carries `cols` and `rows`; each required value must
+   satisfy the exact predicate
+   `typeof v === "number" && Number.isSafeInteger(v) && v > 0`. Any other value
+   fails with `invalid_dimensions`. This is deliberately the same rule the PTY host
+   and broker codecs already apply as `isDimension`, so command legality and codec
+   validation cannot diverge. Either dimension being invalid is sufficient.
+
+No predicate below a failing predicate is evaluated, and exactly one error is
+returned. `request()` and `publish()` share predicates 1 and 3; the remaining
+predicates are path-specific as stated.
 
 The `publish()` path has its own closed event/phase contract:
 
