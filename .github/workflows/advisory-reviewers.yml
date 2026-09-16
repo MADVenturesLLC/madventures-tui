@@ -9,7 +9,7 @@ name: advisory-reviewers
 # (no model binding, no model-hosting responsibility).
 #
 # Two jobs, split so the model never holds a write channel and a secret at
-# the same time (the same rule claude-code-review.yml documents):
+# the same time (the same rule code-review.yml documents):
 #   - `review` holds the model credentials, has read-only permissions, and
 #     produces the review bodies as job outputs; it mints no App token.
 #   - `post` holds `pull-requests: write`, mints the App installation
