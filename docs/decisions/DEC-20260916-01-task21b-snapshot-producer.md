@@ -167,7 +167,8 @@ here as the motivation for D9 and D9.2 and do not carry Founder authority.
   that creates a pending approval. `EVENT_TYPES` (`packages/protocol/src/events.ts`) has no
   approval member, and `SESSION_LIFECYCLE_EVENT_TYPES`
   (`packages/protocol/src/lifecycle-events.ts`) contains only `approval_resolved`, whose
-  semantics are to remove a matching pending approval (specification line 1902). The contract
+  semantics are to remove a matching pending approval (specification §9.6 lifecycle table;
+  line 1923 at this head). The contract
   nonetheless presumes pending approvals exist: `BrokerCommand.approval_resolve` carries an
   `approvalId`, and the error union carries `approval_not_pending`. This is a specification
   gap, not a scheduling one, which is why it is disposed of by D9.2 rather than reserved under

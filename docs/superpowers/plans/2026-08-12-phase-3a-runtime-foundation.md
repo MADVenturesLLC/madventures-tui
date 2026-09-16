@@ -12,7 +12,7 @@
 
 **Implementation status:** Plan APPROVED — Founder approval occurred at PR #10 head `1b46856a646266d3c7eb9882cc74f0c5f9f4cfb5`, merged as `70c6a2359feb88cc4e3cc21301e18221313f6f8e`. Confirmed by [`DEC-20260831-01`](../../decisions/DEC-20260831-01-phase-3a-authority-drift-reconciliation.md) clause 2 (2026-08-31); the prior "NOT AUTHORIZED" wording was stale metadata. Plan approval is **not** blanket implementation authority — each task still requires separate Founder authorization at its own exact base SHA (see the gating in the paragraph below).
 
-**Approval status:** The plan-SHA gate is COMPLETE — Tier-2 approval and Founder approval of this exact plan SHA both occurred at PR #10's head (`DEC-20260831-01` clause 2). Task authorization remains CONDITIONAL: all 61 tasks are specified and reviewable now, but **plan approval alone starts nothing.** A third gate — separate Founder authorization of the specific task, at its own exact base SHA — still applies before any task begins. The Stage 0 execution path contains 8 tasks (Task 60, Tasks 1–5, and the M17 dual-host spike, 38–39), but Stage 0 membership is **not** simultaneous eligibility — only **Task 60 and Task 1** are initially eligible, and only after `IMPLEMENTATION_BASE_SHA` is recorded per §0A. The other six unlock through their own written preconditions, in order. The remaining 53 tasks are additionally blocked behind Tasks 6, 34, 35, and 37 — which need the six `PLAN-OPEN-*` Founder rulings in §1A — and behind the M17 gate. `PLAN-OPEN-1` alone unblocks 16 of the 53; the M10–Task 33 chain (13 tasks) additionally requires `PLAN-OPEN-7`. See §13.9 for the staged execution map.
+**Approval status:** The plan-SHA gate is COMPLETE — Tier-2 approval and Founder approval of this exact plan SHA both occurred at PR #10's head (`DEC-20260831-01` clause 2). Task authorization remains CONDITIONAL: all 61 tasks are specified and reviewable now, but **plan approval alone starts nothing.** A third gate — separate Founder authorization of the specific task, at its own exact base SHA — still applies before any task begins. The Stage 0 execution path contains 8 tasks (Task 60, Tasks 1–5, and the M17 dual-host spike, 38–39), but Stage 0 membership is **not** simultaneous eligibility — only **Task 60 and Task 1** are initially eligible, and only after `IMPLEMENTATION_BASE_SHA` is recorded per §0A. The other six unlock through their own written preconditions, in order. The remaining 53 tasks are additionally blocked behind Tasks 6, 34, 35, and 37 — which need the six `PLAN-OPEN-*` Founder rulings in §1A — and behind the M17 gate. `PLAN-OPEN-1` alone unblocks 16 of the 53; the M10–Task 33 chain (13 tasks: Task 21b and Tasks 22–33) additionally requires `PLAN-OPEN-7` before any task in it may start, because `PLAN-OPEN-7` blocks Task 21b and Task 22 only. M11–M14 are **not** behind the M10 review and **not** behind `PLAN-OPEN-7`: the §4 milestone table records M11 and M13 as depending on M1, `DEC-20260903-01` waives Task 26's "M10 reviewed" precondition, and `DEC-20260903-02` waives the "M12 reviewed" and "M13 reviewed" preconditions on the named Task 30 → 31 → 32 → 33 → 34 chain. See §13.9 for the staged execution map.
 
 ---
 
@@ -321,15 +321,6 @@ Tasks 38–39 depend on M1 — they are early, not dependency-free. Only Task 60
 | M8 | Fencing-token issuance, activation, pause/resume, interruption, closing, closure | 8 | M5, M6, M7 | Full durable lifecycle orders |
 | M9 | Closed `BrokerCommand` / `BrokerResult` / snapshot / output-frame contracts | 7 | M3, M4, M8 | §§9.3–9.4 types and the pinned error matrix |
 | M10 | `InProcessBrokerClient`, publish legality, incident atomicity | 7 | M9 | Bound principal; atomic incident pair |
-
-> **Task 21 / Task 21b dependency (D8, 2026-09-16).** Task 21 and Task 21b are **INDEPENDENT SIBLINGS** off Task 20. Task 21 **consumes** a `BrokerSnapshot` (it takes one as a parameter and never constructs one), so no ordering edge exists between them and either may land first:
->
-> `Task 20 ──┬──> Task 21 (legality — consumes a snapshot)`
-> `          └──> Task 21b (projection — produces a snapshot)`
->
-> `(Task 21 + Task 21b) ──> Task 22`
->
-> Task 22 therefore depends on **both**. Its precondition is amended accordingly.
 | M11 | Storage-root resolution, validation, permissions, rollback, retention | 4 | M1 | One validator, no relaxed test path |
 | M12 | `init` replacement | 4, 9 | M11 | Host-storage initializer |
 | M13 | CLI placeholders, live-start gate, help truth | 9 | M1 | Exact text, JSON, exit codes |
@@ -346,6 +337,15 @@ Tasks 38–39 depend on M1 — they are early, not dependency-free. Only Task 60
 | M24 | Fixture-driven `verify-ledger` and `export-evidence` | 10 | M22 | Production tools consume fixture output |
 | M25 | Antigravity and alternative-surface investigations | 1 | M15, M16 | Dated records, pass or fail |
 | M26 | Dual-host certification evidence and final merge gate | 2, 10 | M23, M24, M25 | Both checksummed reports; gate still closed |
+
+> **Task 21 / Task 21b dependency (D8, 2026-09-16).** Task 21 and Task 21b are **INDEPENDENT SIBLINGS** off Task 20. Task 21 **consumes** a `BrokerSnapshot` (it takes one as a parameter and never constructs one), so no ordering edge exists between them and either may land first:
+>
+> `Task 20 ──┬──> Task 21 (legality — consumes a snapshot)`
+> `          └──> Task 21b (projection — produces a snapshot)`
+>
+> `(Task 21 + Task 21b) ──> Task 22`
+>
+> Task 22 therefore depends on **both**. Its precondition is amended accordingly.
 
 **Gate note:** M17 is a hard gate. If any §3.6 criterion fails on either Founder Mac, M18–M19, M21, and M23 stop and the phase escalates under §10. FFI, `node-pty`, another native dependency, and any pipe fallback are not available responses.
 
@@ -1452,7 +1452,7 @@ Task 21b never projects to, imports, aliases, or treats the legacy TUI `BrokerSn
 
 **Preconditions:**
 - Task 20 committed.
-- **D9 values ruled.** The Projection Contract Requirement's item 2 — "the authoritative source for every required `BrokerSnapshot` field/group" — is **not dischargeable at the D8 base**. Eight non-nullable members have no authoritative source anywhere (`task`, `permissionSummary`, `executions`, `pendingApprovals`, `pendingTransfers`, `ownershipState`, `queueDepth`, `connected`), and five more need a ruling despite an existing source (`sessionId` null-handling, `snapshotSeq` sequencing, `activeWriterExecutionId` recovery, plus the nullable `verification` and `review`). Until those are ruled, the implementer may build every slot, type, test, and validator, but may not populate a `FOUNDER-RATIFICATION-REQUIRED` value. See §1A `PLAN-OPEN-7` and the FIELD-SOURCE TABLE below.
+- **D9 values ruled — currently UNMET; see `PLAN-OPEN-7`.** The Projection Contract Requirement's item 2 — "the authoritative source for every required `BrokerSnapshot` field/group" — is **not dischargeable at the D8 base**. Eight non-nullable members have no authoritative source anywhere (`task`, `permissionSummary`, `executions`, `pendingApprovals`, `pendingTransfers`, `ownershipState`, `queueDepth`, `connected`), and five more need a ruling despite an existing source (`sessionId` null-handling, `snapshotSeq` sequencing, `activeWriterExecutionId` recovery, plus the nullable `verification` and `review`). Until those are ruled, the implementer may build every slot, type, test, and validator, but may not populate a `FOUNDER-RATIFICATION-REQUIRED` value. See §1A `PLAN-OPEN-7` and the FIELD-SOURCE TABLE below.
 - `pendingApprovals` is **deferred** from this task's projection obligation by D9.2. It remains a member of the Task 20 contract and is not removed from the type.
 
 **Projection Contract Requirement (D8 item 1–7).** Before Task 21b implementation may be authorized, the controlling plan/spec must define:
@@ -1479,11 +1479,11 @@ No Builder discretion is granted to invent missing projection sources.
 - [ ] Step 5: Run `bun test packages/broker` and `bunx tsc --noEmit`.
 - [ ] Step 6: Inspect the diff. Confirm exactly two paths; confirm no lifecycle, ownership, fencing, ledger, command, PTY, or storage authority; confirm no TUI-state, fixture, cache, or fabricated-default source; confirm `BrokerSnapshot` is not redeclared.
 - [ ] Step 7: Commit the listed files with message: `feat(broker): add the BrokerSnapshot production projection`
-- [ ] Step 8: Stop for the M9 review checkpoint.
+- [ ] Step 8: Stop for the M10 review checkpoint.
 
 ##### FIELD-SOURCE TABLE — the 21 `BrokerSnapshot` members (D8 requirement 2)
 
-Authoritative source, or the milestone at which one exists, or `FOUNDER-RATIFICATION-REQUIRED`. Accounting: 8 ready + 5 ruling-needed + 8 no-source = 21.
+Authoritative source, or the milestone at which one exists, or `FOUNDER-RATIFICATION-REQUIRED`. Accounting: 8 ready + 5 ruling-needed + 7 no-source + 1 deferred (D9.2) = 21.
 
 | # | Member | Authoritative source | Status |
 | --- | --- | --- | --- |
@@ -1504,7 +1504,7 @@ Authoritative source, or the milestone at which one exists, or `FOUNDER-RATIFICA
 | 15 | `permissionSummary` | mirrors `TaskEnvelopeV1.scope`, and the envelope is not retained | FOUNDER-RATIFICATION-REQUIRED (`PLAN-OPEN-7`) |
 | 16 | `executions` | launch facts are M18 (Tasks 40–41) and M19 (Tasks 42–44); `packages/supervisor` does not exist at the D8 base, and M10 precedes both | FOUNDER-RATIFICATION-REQUIRED (`PLAN-OPEN-7`) |
 | 17 | `pendingApprovals` | **DEFERRED from Task 21b** by D9.2: neither closed event vocabulary contains an event that CREATES a pending approval, while `approval_resolve` carries an `approvalId` and the error union carries `approval_not_pending`. Not reserved under `PLAN-OPEN-7` — §1A reserves values, and no value can make a non-existent record type projectable. | deferred (D9.2) |
-| 18 | `pendingTransfers` | ownership events exist in the vocabulary but nothing ingests them while `RuntimeBroker` has no `publish()` and `BridgeEventV1` never reaches the chain; `publish()` ingestion is Task 24 (M10) and Task 25 | FOUNDER-RATIFICATION-REQUIRED (`PLAN-OPEN-7`) |
+| 18 | `pendingTransfers` | ownership events exist in the vocabulary but nothing ingests them into broker state: `BridgeEventV1` does reach the shared `Ledger` through `packages/room-runtime-worker/src/worker.ts` (`ledger.append(event)` at lines 232–234), but what is absent is the `RuntimeBroker.publish()`/fold path, so no projected broker state can carry them; `publish()` ingestion is Task 24 (M10) and Task 25 | FOUNDER-RATIFICATION-REQUIRED (`PLAN-OPEN-7`) |
 | 19 | `ownershipState` | the Phase 2 machine has **no live call site** — `transitionOwnership` and `assertCurrentWriter` are called only from tests, and `broker.ts` does not import it | FOUNDER-RATIFICATION-REQUIRED (`PLAN-OPEN-7`) |
 | 20 | `queueDepth` | no definition: one reference in the specification, being the field declaration itself, and zero in this plan | FOUNDER-RATIFICATION-REQUIRED (`PLAN-OPEN-7`) |
 | 21 | `connected` | no definition; likely client-local (whether this client's subscription is live), which would make it a property of `InProcessBrokerClient`, not of broker state | FOUNDER-RATIFICATION-REQUIRED (`PLAN-OPEN-7`) |
@@ -3615,7 +3615,7 @@ Performed against this document before publication.
 | §6.9 Phase 3B evidence | Deliberately uncovered — out of scope; §10.7 makes any attempt a stop condition |
 | §7.1–7.8 builder qualification | §11.3, §11.4 |
 | §8 completion criteria | Task 59, §12.3 |
-| §9.1–9.16 binding addendum | Tasks 3–6, 8, 9, 10–14, 16, 18–21, 24, 25, 29–34, 38, 41, 43, 44, 48, 50, 56, **60** (§9.13 preliminary signal); §6.3 |
+| §9.1–9.16 binding addendum | Tasks 3–6, 8, 9, 10–14, 16, 18–21, **21b**, 24, 25, 29–34, 38, 41, 43, 44, 48, 50, 56, **60** (§9.13 preliminary signal); §6.3 |
 
 **Result: every normative section is covered by at least one task, except §6.9, which is explicitly out of Phase 3A scope and is guarded by stop condition 7.**
 
@@ -3687,7 +3687,7 @@ A fourth precondition applies to every task in the plan: `IMPLEMENTATION_BASE_SH
 | --- | --- |
 | **Specified and reviewable** — all 61 tasks | **Pass.** Complete, self-consistent, RED-first (with the Task 60 evidence-only exception recorded in §13.5), traceable. Tier-2 may review the whole document now. |
 | **Stage 0 execution path, no `PLAN-OPEN-*` ruling required** — 8 tasks | **Path open; not simultaneously eligible.** Only Task 60 and Task 1 are *initially* eligible after the three gates and §0A. Tasks 2–5 and 38–39 unlock through their own written preconditions, in order. |
-| **Gated** — 53 tasks, additionally blocked behind Tasks 6, 34, 35, 37, the M17 dual-host gate, and `PLAN-OPEN-7` (M10: Task 21b, Task 22) | **Not eligible.** Specified down to interfaces and tests, but blocked on rulings or on an upstream gate. |
+| **Gated** — 53 tasks, additionally blocked behind Tasks 6, 34, 35, 37, the M17 dual-host gate, and `PLAN-OPEN-7` (Task 21b and Task 22 only) | **Not eligible.** Specified down to interfaces and tests, but blocked on rulings or on an upstream gate. Accounting: 16 (Stage 1a) + 13 (Stage 1b) + 1 (Stage 2) + 2 (Stage 3) + 1 (Stage 4) + 20 (Stage 5) = 53. |
 
 **Stage 0 membership is not eligibility.** Being in Stage 0 means a task needs no `PLAN-OPEN-*` ruling — nothing more. The unlock order inside Stage 0 is: Task 60 and Task 1 first (independently of each other); Task 2 after Task 1 commits; Task 3 and Task 38 after M1 is reviewed; Task 4 after Task 3; Task 5 after Task 4; Task 39 after Task 38 commits and the same candidate has run on both Founder Macs. An implementer who reads "8 Stage 0 tasks" as "8 tasks I may start now" would begin Tasks 2–5 or 38–39 before their preconditions hold.
 
@@ -3699,7 +3699,7 @@ Every stage below is additionally subject to the three gates above. "Unblocked b
 | --- | --- | --- | --- |
 | **0 — post-authorization / no additional `PLAN-OPEN` ruling** | nothing beyond the three gates and §0A — but sequenced internally, not simultaneous | **Task 60** (outside M1–M26) and **Task 1** (M1) are initially eligible; then Task 2 (M1) → M1 review → Tasks 3 and 38 → Task 4 → Task 5 (M2) and Task 39 (M17) | 8 |
 | **1a** | `PLAN-OPEN-1` | Task 6 → M2 review completes → M3 (7–9), M4 (10–11), M5 (12), M6 (13–14), M7 (15–16), M8 (17–19), M9 (20–21) | 16 |
-| **1b** | `PLAN-OPEN-1` **and** `PLAN-OPEN-7` | M10 (21b, 22–25) → M10 review completes → M11 (26–28), M12 (29), M13 (30–32), M14 Task 33 | 13 |
+| **1b** | `PLAN-OPEN-1` **and** `PLAN-OPEN-7` | M10 (21b, 22–25) → M10 review completes → M11 (26–28), M12 (29), M13 (30–32), M14 Task 33. M11–M14 are sequenced behind the M10 review in this map, not behind `PLAN-OPEN-7`, which blocks Task 21b and Task 22 only — see `DEC-20260903-01` (Task 26) and `DEC-20260903-02` (Task 30 → 34) | 13 |
 | **2** | `PLAN-OPEN-4`, `PLAN-OPEN-6` | Task 34 → M14 review completes | 1 |
 | **3** | `PLAN-OPEN-3` | Tasks 35–36 → M15 review completes | 2 |
 | **4** | `PLAN-OPEN-2` | Task 37 → M16 review completes | 1 |
@@ -3710,7 +3710,7 @@ Every stage below is additionally subject to the three gates above. "Unblocked b
 
 **Why Task 60 is in Stage 0.** Specification §2.3 requires Antigravity to be investigated first, and the formal investigation (Task 56) cannot run until M15/M16 tooling exists behind `PLAN-OPEN-2` and `PLAN-OPEN-3`. The preliminary evidence pass has no technical precondition at all — it is the one task in the plan with none — so it satisfies the "investigated first" ordering at the cheapest possible moment without producing a capability record it is not entitled to produce. It is also the only task outside M1–M26. See the Founder deviation ruling in §4.
 
-**Critical-path consequence.** `PLAN-OPEN-1` alone unblocks 16 of the 53 gated tasks; the M10 through Task 33 chain (13 tasks) additionally requires `PLAN-OPEN-7` before it can start. Even so, `PLAN-OPEN-1` remains the single most unblocking ruling — more than every other ruling combined. If the rulings arrive serially, that one first.
+**Critical-path consequence.** `PLAN-OPEN-1` alone unblocks 16 of the 53 gated tasks — more than any other single ruling, though not more than the rest combined: `PLAN-OPEN-7`'s chain adds 13, and Stages 2–4 add 1 + 2 + 1. The M10 through Task 33 chain (13 tasks) additionally requires `PLAN-OPEN-7` before it can start. `PLAN-OPEN-7` blocks Task 21b and Task 22 only; the M11–M14 tasks in that chain are gated by `PLAN-OPEN-1` and by their own milestone preconditions (`DEC-20260903-01`, `DEC-20260903-02`), not by `PLAN-OPEN-7`. If the rulings arrive serially, `PLAN-OPEN-1` first.
 
 **Why this is not an unconditional pass.** Five of the six open items bear directly on authorization semantics:
 

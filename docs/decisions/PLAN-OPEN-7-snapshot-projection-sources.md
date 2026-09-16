@@ -17,9 +17,11 @@ define "the authoritative source for every required `BrokerSnapshot` field/group
 no Builder discretion to invent missing projection sources.
 
 That requirement is **not dischargeable at the D8 base**. Of the 21 `BrokerSnapshot` members,
-8 have a ready authoritative source, 5 need a Founder ruling despite an existing source, and 8
-have no source anywhere in the tree at the base on which Task 21b would be authorized. The
-field-by-field mapping is recorded as the FIELD-SOURCE TABLE in the Task 21b block of
+8 have a ready authoritative source, 5 need a Founder ruling despite an existing source, 7 have
+no source anywhere in the tree at the base on which Task 21b would be authorized, and 1 is
+deferred by D9.2 and is therefore not one of the unresolved values here — accounting: 8 ready +
+5 ruling-needed + 7 no-source + 1 deferred (D9.2) = 21. The field-by-field mapping is recorded
+as the FIELD-SOURCE TABLE in the Task 21b block of
 `docs/superpowers/plans/2026-08-12-phase-3a-runtime-foundation.md`.
 
 This item carries the unresolved **values**. It does not carry `pendingApprovals`, which is
@@ -33,7 +35,7 @@ reserves values, and no value can make a non-existent record type projectable.
 | (a) | **Scope.** Does Task 21b project all 21 members, or a defined sourceable subset — and if a subset, what does the contract do about members that are absent? `BrokerSnapshot` has no "unavailable" representation today. | If the full contract is required, Task 21b cannot precede M20 and Task 22 must move with it. If a subset, the contract must state which members are present when, or the projection must return a distinguishable partial — a contract-level change requiring a Founder ruling. |
 | (b) | **`queueDepth` and `connected` semantics.** Each has exactly one reference in the specification — the field declaration itself — and none in the plan. | `connected` describes *this client's* subscription, so it belongs to `InProcessBrokerClient` (Task 22) and should be excluded from a pure broker-state projector. `queueDepth` needs an explicit definition or removal; a number with no defined meaning cannot be projected truthfully. |
 | (c) | **`ownershipState`.** The Phase 2 ownership machine has no live call site — `transitionOwnership` and `assertCurrentWriter` are called only from tests. | Defer projection. Wiring the machine into the runtime is its own authority-bearing task (ownership transitions are named in plan stop condition 11). |
-| (d) | **`snapshotSeq` sequencing.** Contested: `RuntimeBroker` carries an M8 per-lifecycle counter whose own source annotates it "not the M9 snapshot contract", while §4.1 and the plan pin M9 `snapshotSeq` as per-published-snapshot starting at 1. Two similarly named counters exist and one is documented as not being the other. | The M9 per-published-snapshot sequence belongs to the client (Task 22; plan line 1436 pins "starts at 1, +1 per published snapshot"). The projector must not manufacture it. |
+| (d) | **`snapshotSeq` sequencing.** Contested: `RuntimeBroker` carries an M8 per-lifecycle counter whose own source annotates it "not the M9 snapshot contract", while §4.1 and the plan pin M9 `snapshotSeq` as per-published-snapshot starting at 1. Two similarly named counters exist and one is documented as not being the other. | The M9 per-published-snapshot sequence belongs to the client (Task 22; the "Pinned plan decisions" paragraph of the Task 22 block, plan line 1531 at this head, pins "starts at 1, +1 per published snapshot"). The projector must not manufacture it. |
 | (e) | **`task`, `permissionSummary`, `executions`.** Requires broker-side **retention** of the task envelope and execution identities, which does not exist — provenance keeps only the envelope hash, and launch facts are produced at M18/M19 while Task 21b sits in M10. | Defer projection, and record envelope-retention as a named precondition of whichever task first needs those members. Retaining the envelope is a broker-state decision, not a projector decision. |
 
 Additionally noted for the Founder: inserting Task 21b does not itself resolve the field gaps,
