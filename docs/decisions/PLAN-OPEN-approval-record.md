@@ -25,6 +25,7 @@ content of each decision as it stands with this record's pointer applied.
 | `PLAN-OPEN-4-node-pty-removal.md` | `e662936c0a2f91b25c4f9f38d791bb59182b22cc4ed19ce577afa81e34eeb460` |
 | `PLAN-OPEN-6-root-scripts.md` | `26270a7af4c932dd122bfd6ed3383e845bb655886a8d7efe8e152939ce7a957f` |
 | `2026-08-12-phase-3a-runtime-foundation.md` (Task 34, Task 35, Task 36, Task 45, and Task 48 amendments) | `cef6b9ec7d7fcf7830280089a1a49f9df0aca6021430c070eca3f54ba4ab5c0b` |
+| `PLAN-OPEN-7-snapshot-projection-sources.md` (new ratification, 2026-09-16) | Recorded in [Founder authorization artifact #18](https://github.com/MADVenturesLLC/madventures-tui/issues/18) — this row changes the record itself, so its content SHA-256 is recorded externally per the convention below |
 
 ## Scope and blocking scope
 
@@ -36,7 +37,7 @@ content of each decision as it stands with this record's pointer applied.
 | PLAN-OPEN-4 | Remove `node-pty`; regenerate the lockfile; remove orphaned `node-addon-api` when no remaining dependency requires it; and add no replacement native dependency | Task 34 (manifest edit) |
 | PLAN-OPEN-6 | Remove root `broker` and `mcp` scripts; recognize the four plan-required script names; defer their command bodies to Task 34; and authorize no file outside root `package.json` | Task 34 (script removal) |
 | Phase 3A plan | Task 34 amendment covering its file list, lockfile regeneration, README deletion instruction, and commit list; and Task 48 amendment adding the isolated fixture-harness no-socket runtime test; Revision 5.10 strengthens the Task 34 depth-bound test to cover both depth 6 (detected) and depth 7 (ignored) using two isolated disposable roots, strengthens the Task 34 native-dependency test to inspect all dependency-bearing manifest sections (`dependencies`, `devDependencies`, `peerDependencies`, `optionalDependencies`) in workspace and root manifests plus `bun.lock` and assert removal of the broker workspace dependency edge and resolved `node-pty` and `node-addon-api` entries, strengthens the Task 34 script test to assert the `broker` and `mcp` keys are absent regardless of value, and strengthens the three Task 48 harness-separation structural tests to a fail-closed AST structural analyzer using the TypeScript compiler API covering all six §9.11 reachability forms plus standalone logical gates with const, method-alias, and namespace-import resolution and seeded positive fixtures for every evasion class; Revision 5.11 requires every Task 34 CLI and TUI child and the Task 48 fixture-harness child to use a distinct disposable `MADV_RUNTIME_DIR` and to assert both `<MADV_RUNTIME_DIR>/broker.sock` and `/tmp/madv-broker-runtime/broker.sock` are absent at every assertion point, adds strict stored-timestamp parsing, canonical UTC round-trip validation, the exact 30-day relationship, and invalid-`now` rejection to Task 35, adds deterministic equal-`evaluated_at` selection by descending canonical filename and exclusive-create collision rejection to Task 36, and adds missing-`TERM`, missing-`TMPDIR`, caught `MissingRequiredVariableError`, execution-deadline, SIGTERM-cleanup, SIGKILL-escalation, successful-reap, and cleanup-budget-exhaustion tests to Task 45; Revision 5.12 states the Task 45 ordering explicitly — validate every environment-independent ambient and configuration input before `buildAllowlistedEnvironment()`, construct the allowlisted environment exactly once, then run the identity probe and the auth-readiness probe on that exact constructed environment with no governed launch until both succeed | Tasks 34, 35, 36, 45, and 48 (amended plan) |
-
+| PLAN-OPEN-7 | The `BrokerSnapshot` projection-source values that D9 leaves unresolved at the D8 base: full-contract vs sourceable-subset scope; `queueDepth` and `connected` semantics; whether `ownershipState` projection is deferred; which sequence `snapshotSeq` means and who increments it; and whether the broker must retain the task envelope and execution identities or defer projection to the milestone that creates each source. `pendingApprovals` is **excluded** — it is disposed of separately by D9.2 (deferred from Task 21b) and cannot be reserved under §1A, because §1A reserves values and no value can make a non-existent record type projectable | Task 21b implementation; Task 22 |
 ## Approval lineage
 
 | Stage | Patch SHA-256 | Bytes | Commit |
@@ -52,11 +53,18 @@ content of each decision as it stands with this record's pointer applied.
 | Revision 5.10 | Recorded in [Founder authorization artifact #18](https://github.com/MADVenturesLLC/madventures-tui/issues/18) | Recorded in issue #18 | Post-approval commit recorded in issue #18 |
 | Revision 5.11 | Recorded in [Founder authorization artifact #18](https://github.com/MADVenturesLLC/madventures-tui/issues/18) | Recorded in issue #18 | Post-approval commit recorded in issue #18 |
 | Revision 5.12 | Recorded in [Founder authorization artifact #18](https://github.com/MADVenturesLLC/madventures-tui/issues/18) | Recorded in issue #18 | Post-approval commit recorded in issue #18 |
+| Revision 6.0 — PLAN-OPEN-7 ratification (2026-09-16) | Recorded in [Founder authorization artifact #18](https://github.com/MADVenturesLLC/madventures-tui/issues/18) | Recorded in issue #18 | Post-approval commit recorded in issue #18 |
 
-Because Revisions 5.8, 5.9, 5.10, 5.11, and 5.12 change this approval record itself, their patch SHA-256 values,
-byte counts, resulting approval-record SHA-256, and commit identities are recorded
-externally in Founder authorization artifact #18 rather than embedded
-self-referentially in this file.
+Because Revisions 5.8, 5.9, 5.10, 5.11, 5.12, and 6.0 change this approval record
+itself, their patch SHA-256 values, byte counts, resulting approval-record
+SHA-256, and commit identities are recorded externally in Founder authorization
+artifact #18 rather than embedded self-referentially in this file.
+
+Revision 6.0 is a **new ratification**, not an extension of the five earlier
+PLAN-OPEN rulings. Adding `PLAN-OPEN-7` is not implied by those rulings and is
+not inferred from them. It was authorized by the Founder instrument *D8 durable
+transcription + D9.2 disposition + docs-correction authorization*, issued
+2026-09-16 at `main` @ `beb83f4b7e7abc7725457a5440e236269cb2035d`.
 
 ## Provenance note
 
