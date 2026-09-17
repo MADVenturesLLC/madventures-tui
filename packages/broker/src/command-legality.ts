@@ -4,7 +4,7 @@
 // I/O, no behavior beyond the matrix.
 //
 // Eight ordered predicates, first failure wins (spec §9.3, plan Task 21):
-//   1. command shape            -> invalid_command
+//   1. command shape            -> invalid_command (unknown kind OR unknown field)
 //   2. principal authorization  -> unauthorized
 //   3. session identity         -> session_mismatch
 //   4. execution existence      -> execution_not_found
@@ -35,6 +35,22 @@ const KNOWN_COMMAND_KINDS = new Set<string>([
   "session_resume",
   "session_close",
 ]);
+
+/**
+ * Predicate 1's per-kind closed field set, read directly from the
+ * BrokerCommand union in ./client (not invented, not loosened, not
+ * duplicated as a second doctrine). An unknown/extra field on an otherwise
+ * known command kind fails predicate 1 exactly as an unknown kind does.
+ */
+const ALLOWED_FIELDS_BY_KIND: Readonly<Record<string, ReadonlySet<string>>> = {
+  pty_input: new Set(["kind", "commandId", "sessionId", "executionId", "fencingToken", "bytes"]),
+  pty_resize: new Set(["kind", "commandId", "sessionId", "executionId", "fencingToken", "cols", "rows"]),
+  pty_terminate: new Set(["kind", "commandId", "sessionId", "executionId", "reason"]),
+  approval_resolve: new Set(["kind", "commandId", "sessionId", "approvalId", "decision"]),
+  session_pause: new Set(["kind", "commandId", "sessionId", "reason"]),
+  session_resume: new Set(["kind", "commandId", "sessionId"]),
+  session_close: new Set(["kind", "commandId", "sessionId", "reason"]),
+};
 
 /** Founder-governance commands: an `execution` principal may never issue these (predicate 2). */
 const GOVERNANCE_COMMAND_KINDS = new Set<string>([
@@ -78,6 +94,16 @@ export function evaluateCommandLegality(
   const kind = (command as { readonly kind?: unknown }).kind;
   if (typeof kind !== "string" || !KNOWN_COMMAND_KINDS.has(kind)) {
     return { ok: false, error: "invalid_command", detail: "unknown command variant" };
+  }
+  // A known kind carrying a field outside its own closed field set is
+  // equally malformed (spec §9.3: "unknown variant OR unknown field").
+  // kind is already validated against KNOWN_COMMAND_KINDS above, so it is
+  // always present as a key of ALLOWED_FIELDS_BY_KIND; the fallback empty
+  // set is unreachable defensive code, not a loosening of the check.
+  const allowedFields = ALLOWED_FIELDS_BY_KIND[kind] ?? new Set<string>();
+  const presentFields = Object.keys(command as Record<string, unknown>);
+  if (presentFields.some((field) => !allowedFields.has(field))) {
+    return { ok: false, error: "invalid_command", detail: "unknown field on command" };
   }
 
   // Predicate 2 — principal authorization. An `execution` principal may

@@ -378,3 +378,21 @@ test("a non-writer execution cannot send PTY input with the current session fenc
   );
   expect(result).toEqual({ ok: false, error: "unauthorized", detail: "execution is not the active writer" });
 });
+
+test("a known command kind carrying an unknown field fails with invalid_command before any other predicate", () => {
+  // Fixture is otherwise fully legal: correct sessionId, executionId present
+  // in snapshot.executions and equal to activeWriterExecutionId, active
+  // phase, no incident, current fencing token — so if predicate 1's field
+  // check did not fire, this command would legally succeed. One extra,
+  // unrecognized field is enough to trigger the rejection.
+  const withExtraField = {
+    ...ptyInput({ sessionId: SESSION_ID, executionId: EXECUTION_ID, fencingToken: CURRENT_TOKEN }),
+    extra: true,
+  } as unknown as BrokerCommand;
+  const result = evaluateCommandLegality(
+    withExtraField,
+    baseSnapshot({ sessionId: SESSION_ID, activeWriterExecutionId: EXECUTION_ID, fencingToken: CURRENT_TOKEN, phase: "active", incident: null }),
+    FOUNDER_PRINCIPAL,
+  );
+  expect(result).toEqual({ ok: false, error: "invalid_command", detail: "unknown field on command" });
+});
