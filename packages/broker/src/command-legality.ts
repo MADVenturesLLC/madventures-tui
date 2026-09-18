@@ -9,9 +9,19 @@
 //   3. session identity         -> session_mismatch
 //   4. execution existence      -> execution_not_found
 //   5. active-writer identity   -> unauthorized (pty_input/pty_resize only)
-//   6. phase / incident         -> session_not_writable | incident_active
-//   7. fencing token            -> stale_fencing_token
+//   6. phase, incident, and target-execution readiness
+//                                -> session_not_writable | incident_active | invariant_failure
+//   7. fencing token (current + positive) -> stale_fencing_token
 //   8. dimensions               -> invalid_dimensions (pty_resize only)
+//
+// Predicate 6's readiness limb and predicate 7's positivity limb are the
+// 2026-09-17 Founder amendment, clauses A and B (D6-R4). For pty_input and
+// pty_resize only: the target execution named by the command's executionId
+// must have state === "ready" (else invariant_failure — an EXISTING member
+// of the closed union, not a fifteenth code); pty_terminate is never
+// readiness-gated (mechanical fail-closed teardown must not be blockable).
+// The supplied fencing token must be a positive safe integer (else
+// stale_fencing_token, even when the snapshot carries the same value).
 //
 // No code outside the fourteen-member BrokerErrorCode union is returned.
 // `unauthorized` intentionally carries both the governance-authority refusal
@@ -73,6 +83,17 @@ const WRITER_ONLY_COMMAND_KINDS = new Set<string>(["pty_input", "pty_resize"]);
  * second doctrine of "valid dimension" is created.
  */
 function isValidDimension(value: unknown): boolean {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+}
+
+/**
+ * Predicate 7's clause B positivity limb (2026-09-17 Founder amendment,
+ * D6-R4). A fencing token must be a positive safe integer to be a "current
+ * positive token" at all — this rejects 0, negatives, fractions, NaN,
+ * Infinity, and values past Number.MAX_SAFE_INTEGER regardless of what the
+ * snapshot carries, so equality alone can never admit a degenerate value.
+ */
+function isPositiveFencingToken(value: unknown): boolean {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 }
 
@@ -148,12 +169,30 @@ export function evaluateCommandLegality(
   switch (kind) {
     case "pty_input":
     case "pty_resize": {
-      // Listed order: non-active phase first, then active + incident.
+      // Listed order: non-active phase first, then active + incident, then
+      // clause A's readiness limb (reachable only in an otherwise-legal
+      // active + no-incident state). executionId is known present in
+      // snapshot.executions by predicate 4, and equal to activeWriterExecutionId
+      // by predicate 5, so the lookup below always finds a match.
       if (phase !== "active") {
         return { ok: false, error: "session_not_writable", detail: "session phase does not accept PTY input" };
       }
       if (incidentActive) {
         return { ok: false, error: "incident_active", detail: "an incident is active" };
+      }
+      const executionId = (command as { readonly executionId: string }).executionId;
+      const targetExecution = snapshot.executions.find(
+        (execution) => execution.identity.execution_id === executionId,
+      );
+      // Clause A / clause B stop: the target execution's state cannot be
+      // resolved for a writer-only command. Predicates 4 and 5 already
+      // guarantee a match exists, so this branch is unreachable defensive
+      // code, not a loosening of the check — it never admits the command.
+      if (targetExecution === undefined) {
+        return { ok: false, error: "invariant_failure", detail: "target execution state cannot be resolved" };
+      }
+      if (targetExecution.state !== "ready") {
+        return { ok: false, error: "invariant_failure", detail: "target execution is not ready" };
       }
       break;
     }
@@ -192,9 +231,14 @@ export function evaluateCommandLegality(
   // Pause neither invalidates nor increments the token, so this predicate
   // fires identically whether the session is active or was paused and
   // resumed. Only writer-only commands carry a fencingToken to check.
+  // Clause B (2026-09-17 Founder amendment, D6-R4): the supplied token must
+  // itself be a positive safe integer — a non-positive, fractional, NaN,
+  // Infinity, or overflowing value is rejected even when the snapshot
+  // carries that exact same value, because such a value is not a "current
+  // positive token" under either reading of that phrase.
   if (WRITER_ONLY_COMMAND_KINDS.has(kind)) {
     const fencingToken = (command as { readonly fencingToken: number }).fencingToken;
-    if (fencingToken !== snapshot.fencingToken) {
+    if (!isPositiveFencingToken(fencingToken) || fencingToken !== snapshot.fencingToken) {
       return { ok: false, error: "stale_fencing_token", detail: "fencing token is not the current token" };
     }
   }

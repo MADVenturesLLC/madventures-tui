@@ -1,12 +1,15 @@
 // packages/broker/test/command-legality.test.ts
 // Phase 3A M9 Task 21: the pinned command legality matrix (specification
-// section 9.3; plan Task 21). Eighteen named tests: ten matrix rows, four
-// retained, four new (execution_not_found, invalid_dimensions,
-// invalid_command precedence, and the D7 non-writer negative proof).
+// section 9.3; plan Task 21). Twenty-one named tests: three added by the
+// 2026-09-17 Founder amendment (the F1 unknown-field closure, clause A's
+// readiness limb, clause B's fencing-token positivity limb), ten matrix
+// rows, four retained, four originally-new (execution_not_found,
+// invalid_dimensions, invalid_command precedence, and the D7 non-writer
+// negative proof).
 
 import { expect, test } from "bun:test";
 import { evaluateCommandLegality } from "../src/command-legality";
-import type { BrokerCommand, BrokerSnapshot, ClientPrincipal } from "../src/client";
+import type { BrokerCommand, BrokerSnapshot, ClientPrincipal, ExecutionSnapshot } from "../src/client";
 import { PROTOCOL_VERSION, parseSurfaceId } from "@madventures/protocol";
 import type { ExecutionIdentity, RepositoryFingerprint, TaskEnvelopeV1 } from "@madventures/protocol";
 
@@ -140,6 +143,21 @@ function baseSnapshot(overrides: Partial<BrokerSnapshot> = {}): BrokerSnapshot {
   };
 }
 
+/**
+ * Like baseSnapshot(), but with EXECUTION_ID's own ExecutionSnapshot entry
+ * state overridden — for clause A's readiness limb. Everything else stays
+ * fully legal (active, no incident, current positive token, active writer).
+ */
+function baseSnapshotWithExecutionState(state: ExecutionSnapshot["state"]): BrokerSnapshot {
+  const snapshot = baseSnapshot();
+  return {
+    ...snapshot,
+    executions: snapshot.executions.map((execution) =>
+      execution.identity.execution_id === EXECUTION_ID ? { ...execution, state } : execution,
+    ),
+  };
+}
+
 function ptyInput(overrides: Partial<Extract<BrokerCommand, { kind: "pty_input" }>> = {}): BrokerCommand {
   return {
     kind: "pty_input",
@@ -222,6 +240,74 @@ const ACTIVE_INCIDENT = {
   timestamp: "2026-09-17T00:00:00Z",
   severity: "high" as const,
 };
+
+// ─── Three added by the 2026-09-17 Founder amendment (lead the named order) ───
+
+test("a known command kind carrying an unknown field fails with invalid_command before any other predicate", () => {
+  // Fixture is otherwise fully legal: correct sessionId, executionId present
+  // in snapshot.executions and equal to activeWriterExecutionId, active
+  // phase, no incident, current fencing token — so if predicate 1's field
+  // check did not fire, this command would legally succeed. One extra,
+  // unrecognized field is enough to trigger the rejection.
+  const withExtraField = {
+    ...ptyInput({ sessionId: SESSION_ID, executionId: EXECUTION_ID, fencingToken: CURRENT_TOKEN }),
+    extra: true,
+  } as unknown as BrokerCommand;
+  const result = evaluateCommandLegality(
+    withExtraField,
+    baseSnapshot({ sessionId: SESSION_ID, activeWriterExecutionId: EXECUTION_ID, fencingToken: CURRENT_TOKEN, phase: "active", incident: null }),
+    FOUNDER_PRINCIPAL,
+  );
+  expect(result).toEqual({ ok: false, error: "invalid_command", detail: "unknown field on command" });
+});
+
+test("a writer-only command against a non-ready execution fails with invariant_failure", () => {
+  // Clause A. The table drives every non-ready member of the seven-member
+  // ExecutionSnapshot.state union, plus "ready" retained as the legal
+  // control that must still succeed. The fixture is otherwise fully legal
+  // AND carries the current positive fencing token, so that if the
+  // readiness check did not fire the command would legally succeed. A test
+  // that varies one unnamed non-ready state does not prove clause A.
+  const nonReadyStates: readonly ExecutionSnapshot["state"][] = [
+    "declared",
+    "host-starting",
+    "launching",
+    "attesting",
+    "exited",
+    "failed",
+  ];
+  for (const state of nonReadyStates) {
+    const result = evaluateCommandLegality(
+      ptyInput({ executionId: EXECUTION_ID, fencingToken: CURRENT_TOKEN }),
+      baseSnapshotWithExecutionState(state),
+      FOUNDER_PRINCIPAL,
+    );
+    expect(result).toEqual({ ok: false, error: "invariant_failure", detail: "target execution is not ready" });
+  }
+  // The legal control: "ready" must still succeed.
+  const ready = evaluateCommandLegality(
+    ptyInput({ executionId: EXECUTION_ID, fencingToken: CURRENT_TOKEN }),
+    baseSnapshotWithExecutionState("ready"),
+    FOUNDER_PRINCIPAL,
+  );
+  expect(ready).toEqual({ ok: true });
+});
+
+test("a non-positive supplied fencing token fails with stale_fencing_token", () => {
+  // Clause B. Every row presents its value on BOTH the command and the
+  // snapshot and is otherwise fully legal, so equality alone would let it
+  // pass; a table fixed at 0 alone would not prove the rule is
+  // Number.isSafeInteger(token) && token > 0.
+  const badTokens = [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1];
+  for (const badToken of badTokens) {
+    const result = evaluateCommandLegality(
+      ptyInput({ executionId: EXECUTION_ID, fencingToken: badToken }),
+      baseSnapshot({ activeWriterExecutionId: EXECUTION_ID, fencingToken: badToken }),
+      FOUNDER_PRINCIPAL,
+    );
+    expect(result).toEqual({ ok: false, error: "stale_fencing_token", detail: "fencing token is not the current token" });
+  }
+});
 
 // ─── Ten matrix rows ───
 
@@ -377,22 +463,4 @@ test("a non-writer execution cannot send PTY input with the current session fenc
     FOUNDER_PRINCIPAL,
   );
   expect(result).toEqual({ ok: false, error: "unauthorized", detail: "execution is not the active writer" });
-});
-
-test("a known command kind carrying an unknown field fails with invalid_command before any other predicate", () => {
-  // Fixture is otherwise fully legal: correct sessionId, executionId present
-  // in snapshot.executions and equal to activeWriterExecutionId, active
-  // phase, no incident, current fencing token — so if predicate 1's field
-  // check did not fire, this command would legally succeed. One extra,
-  // unrecognized field is enough to trigger the rejection.
-  const withExtraField = {
-    ...ptyInput({ sessionId: SESSION_ID, executionId: EXECUTION_ID, fencingToken: CURRENT_TOKEN }),
-    extra: true,
-  } as unknown as BrokerCommand;
-  const result = evaluateCommandLegality(
-    withExtraField,
-    baseSnapshot({ sessionId: SESSION_ID, activeWriterExecutionId: EXECUTION_ID, fencingToken: CURRENT_TOKEN, phase: "active", incident: null }),
-    FOUNDER_PRINCIPAL,
-  );
-  expect(result).toEqual({ ok: false, error: "invalid_command", detail: "unknown field on command" });
 });
