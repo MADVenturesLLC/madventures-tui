@@ -90,7 +90,18 @@ env:
   # and does not go red.
   GEMINI_MODEL: gemini-3.8-flash-medium
   GEMINI_EFFORT: medium
-  CLAUDE_MODEL: claude-opus-4.6
+  #
+  # The claude leg's pin is a retirement-sensitive literal, and unlike the
+  # gemini leg above it has NO fallback: it retries the same id twice and
+  # then fails closed, which takes `review` and `post` red on every PR in
+  # the repository at once rather than degrading with a named substitution.
+  # That is what happened here. The previous value, `claude-opus-4.6`, was
+  # retired 2026-06-15; the CLI answered `It may not exist or you may not
+  # have access to it` and exited nonzero on both attempts.
+  # Unlike the gemini spelling question recorded above, this value WAS
+  # executed before merge: `claude -p --model claude-opus-5` returned a
+  # normal response and the retired id reproduced the CI error verbatim.
+  CLAUDE_MODEL: claude-opus-5
 
 jobs:
   review:
