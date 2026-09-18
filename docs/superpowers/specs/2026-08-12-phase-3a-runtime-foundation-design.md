@@ -1421,9 +1421,24 @@ in this fixed order, and no other order is permitted:
    `pty_resize` must set `activeWriterExecutionId` to the command's own
    `executionId` and that execution must be present in `snapshot.executions`;
    otherwise predicates 4 or 5 fire first and the row's own error is never reached.
-6. **Phase and incident.** The ten-row matrix above.
+6. **Phase, incident, and target-execution readiness.** The ten-row matrix above, plus a
+   readiness limb for the writer-only commands only: for `pty_input` and `pty_resize`,
+   the execution named by `command.executionId` must have
+   `snapshot.executions[].state === "ready"`. Any other state (`declared`,
+   `host-starting`, `launching`, `attesting`, `exited`, `failed`) is an
+   invariant-visible state on an otherwise legal command and fails with
+   `invariant_failure`. This makes the Legal-state column's "`pty_input`,
+   `pty_resize` | active + ready + no incident + current token" row enforceable at
+   this predicate rather than assumed of a conforming snapshot. `pty_terminate` is
+   **never** gated on readiness, so teardown cannot be blocked by this check.
+   Founder amendment 2026-09-17, clause A.
 7. **Fencing token.** In an otherwise legal state, a supplied token that is not the
-   snapshot's current positive token fails with `stale_fencing_token`. Pause neither
+   snapshot's current positive token fails with `stale_fencing_token`. The supplied
+   token must itself be a positive safe integer (`Number.isSafeInteger(token) && token > 0`):
+   a non-positive supplied token fails with `stale_fencing_token` even when the
+   snapshot carries that same value, because a non-positive token is not a current
+   positive token under either reading of this sentence. Founder amendment
+   2026-09-17, clause B. Pause neither
    invalidates nor increments the token, so a paused session retains it and still
    fails at row 1 with `session_not_writable`.
 8. **Dimensions.** `pty_resize` carries `cols` and `rows`; each required value must
