@@ -4,6 +4,7 @@
 
 import { TextAttributes } from "@opentui/core";
 import type { LedgerEntryProjection } from "../types";
+import { POSEIDON } from "../theme";
 
 interface Props {
   entries: readonly LedgerEntryProjection[];
@@ -17,7 +18,7 @@ export function EventLog({ entries }: Props) {
       flexGrow={1}
       border={true}
       borderStyle="single"
-      borderColor="gray"
+      borderColor={POSEIDON.uiBorder}
       flexDirection="column"
       paddingLeft={1}
       paddingRight={1}
@@ -25,15 +26,15 @@ export function EventLog({ entries }: Props) {
       <text attributes={TextAttributes.UNDERLINE}>Event Log (hash-chained ledger)</text>
       {recent.map((entry) => (
         <box key={entry.seq} flexDirection="row">
-          <text fg="gray">#{entry.seq}</text>
+          <text fg={POSEIDON.dim}>#{entry.seq}</text>
           <text> </text>
-          <text fg={entry.type === "interrupt" ? "red" : entry.type.includes("transfer") ? "cyan" : "white"}>
+          <text fg={entry.type === "interrupt" ? POSEIDON.error : entry.type.includes("transfer") ? POSEIDON.accent : POSEIDON.text}>
             {entry.type}
           </text>
           <text> </text>
-          <text fg="magenta">{entry.actor}</text>
+          <text fg={POSEIDON.lightText}>{entry.actor}</text>
           <text> </text>
-          <text fg="blue">tok:{entry.fencingToken}</text>
+          <text fg={POSEIDON.cobalt}>tok:{entry.fencingToken}</text>
           <text> </text>
           <text attributes={TextAttributes.DIM}>
             {entry.hash.slice(0, 12)}

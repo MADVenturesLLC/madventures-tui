@@ -9,6 +9,7 @@
 // Existing Alt+1 through Alt+4 routing remains the only focus authority.
 
 import type { FocusTarget } from "../types";
+import { POSEIDON } from "../theme";
 
 export interface PaneTabsProps {
   /** The currently focused surface. */
@@ -28,6 +29,16 @@ const TABS: readonly TabSpec[] = [
 ];
 
 /**
+ * Build one tab cell as a pure function.
+ * Format: "[ GOV* ]" for the selected tab, "[ AGY  ]" otherwise
+ * (matching the historical PaneTabs spacing convention).
+ */
+export function buildTabCell(tab: TabSpec, focus: FocusTarget): string {
+  const marker = tab.target === focus ? "*" : " ";
+  return "[ " + tab.label + marker + " ]";
+}
+
+/**
  * Build the tab row text as a pure function.
  * Format: [ CLAUDE* ][ AGY ][ GOV ][ LOG ]
  * The selected tab carries a textual `*` marker.
@@ -43,9 +54,19 @@ export function buildTabRow(focus: FocusTarget): string {
 
 export function PaneTabs({ focus }: PaneTabsProps) {
   const line = buildTabRow(focus);
+  // Poseidon: selected tab in sky accent, others in sky mute — the textual
+  // `*` marker remains the authoritative selection indicator (color is
+  // supplementary, never the sole indicator).
   return (
-    <box paddingLeft={0} paddingRight={0}>
-      <text>{line}</text>
+    <box flexDirection="row" paddingLeft={0} paddingRight={0}>
+      {TABS.map((tab) => (
+        <text
+          key={tab.target}
+          fg={tab.target === focus ? POSEIDON.accent : POSEIDON.dim}
+        >
+          {buildTabCell(tab, focus)}
+        </text>
+      ))}
     </box>
   );
 }

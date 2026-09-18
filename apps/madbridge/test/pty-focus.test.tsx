@@ -52,20 +52,24 @@ describe("PTY focus and keyboard routing", () => {
   test("global actions require configured modifier/prefix", () => {
     const bindings = loadKeybindings();
 
+    // Updated per Founder commission GLM-20260918-FOUNDER-TUI-SEATS:
+    // Alt+1/2/3 are seat keys; antigravity moved to Alt+4, events to Alt+5.
     // alt+1 IS a global action (terminal-deliverable Alt+digit)
     expect(isGlobalAction("alt+1", bindings)).toBe(true);
     expect(isGlobalAction("alt+2", bindings)).toBe(true);
     expect(isGlobalAction("alt+3", bindings)).toBe(true);
     expect(isGlobalAction("alt+4", bindings)).toBe(true);
+    expect(isGlobalAction("alt+5", bindings)).toBe(true);
     expect(isGlobalAction("alt+y", bindings)).toBe(true);
     expect(isGlobalAction("alt+n", bindings)).toBe(true);
     expect(isGlobalAction("alt+q", bindings)).toBe(true);
 
     // resolveKey returns the action for alt+ prefixed keys
-    expect(resolveKey("alt+1", bindings)).toBe("focus-claude");
-    expect(resolveKey("alt+2", bindings)).toBe("focus-antigravity");
-    expect(resolveKey("alt+3", bindings)).toBe("focus-governance");
-    expect(resolveKey("alt+4", bindings)).toBe("focus-events");
+    expect(resolveKey("alt+1", bindings)).toBe("seat-builder");
+    expect(resolveKey("alt+2", bindings)).toBe("seat-architect");
+    expect(resolveKey("alt+3", bindings)).toBe("seat-operator");
+    expect(resolveKey("alt+4", bindings)).toBe("focus-antigravity");
+    expect(resolveKey("alt+5", bindings)).toBe("focus-events");
     expect(resolveKey("alt+y", bindings)).toBe("accept-approval");
     expect(resolveKey("alt+n", bindings)).toBe("reject-approval");
     expect(resolveKey("alt+q", bindings)).toBe("quit");
@@ -84,9 +88,13 @@ describe("PTY focus and keyboard routing", () => {
     process.env.FOUNDER_TUI_KEYS = origEnv;
   });
 
-  test("default keybindings all require alt+ prefix", () => {
+  test("default keybindings all require alt+ or ctrl+ prefix", () => {
+    // GLM-20260918-FOUNDER-TUI-SEATS adds Ctrl+P (model picker) — the one
+    // deliberate ctrl+ global alongside the alt+ set.
     for (const binding of DEFAULT_KEYBINDINGS) {
-      expect(binding.key.startsWith("alt+")).toBe(true);
+      const hasValidPrefix =
+        binding.key.startsWith("alt+") || binding.key.startsWith("ctrl+");
+      expect(hasValidPrefix).toBe(true);
     }
   });
 });
@@ -113,10 +121,11 @@ describe("KeyEvent-to-action translation", () => {
   test("translateKeyEvent round-trips through resolveKey for alt+ bindings", () => {
     const bindings = loadKeybindings();
 
-    // Simulate an Alt+1 keypress as OpenTUI delivers it
+    // Simulate an Alt+1 keypress as OpenTUI delivers it — now the
+    // seat-builder action per GLM-20260918-FOUNDER-TUI-SEATS.
     const translated = translateKeyEvent({ name: "1", ctrl: false, meta: true, shift: false });
     expect(translated).toBe("alt+1");
-    expect(resolveKey(translated, bindings)).toBe("focus-claude");
+    expect(resolveKey(translated, bindings)).toBe("seat-builder");
 
     // Bare digit translates to just "1" — not a global action
     const bareTranslated = translateKeyEvent({ name: "1", ctrl: false, meta: false, shift: false });

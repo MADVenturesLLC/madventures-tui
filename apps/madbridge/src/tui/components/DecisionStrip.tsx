@@ -36,6 +36,7 @@ import type { PendingApproval } from "../types";
 import type { RepositoryFingerprint } from "@madventures/protocol";
 import type { KeyBindingMap, KeyAction } from "../keybindings";
 import { truncateToWidth } from "./agent-identity";
+import { POSEIDON } from "../theme";
 
 export interface DecisionStripProps {
   /** The pending approval bound to this surface (looked up by stored ID). */
@@ -85,8 +86,16 @@ export function DecisionStrip({ approval, position, total, armed, keybindings }:
   return (
     <box
       borderStyle="double"
-      borderColor="yellow"
+      // Poseidon: the decision surface keeps its unique double-border
+      // vocabulary, now in cobalt (the palette's structural border color).
+      // Yellow does not exist in the Poseidon palette; the PENDING text
+      // carries the state, color is supplementary.
+      borderColor={POSEIDON.cobalt}
       flexDirection="column"
+      // The decision surface is a fixed-height truth band: it must NEVER be
+      // compressed when a short terminal cannot fit the whole stack — the
+      // flex stage yields instead. Shrinking this box corrupts its rows.
+      flexShrink={0}
       paddingLeft={1}
       paddingRight={1}
     >

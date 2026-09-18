@@ -22,6 +22,7 @@
 import { useTerminalDimensions } from "@opentui/react";
 import type { BrokerSnapshot } from "../types";
 import { truncateToWidth } from "../components/agent-identity";
+import { POSEIDON } from "../theme";
 
 export interface GovernancePaneProps {
   active: boolean;
@@ -49,7 +50,7 @@ export function GovernancePane({ active, state }: GovernancePaneProps) {
 
   if (!state || !state.connected) {
     return (
-      <box flexGrow={1} flexDirection="column" borderStyle="single" borderColor={active ? "cyan" : "white"} overflow="hidden">
+      <box flexGrow={1} flexDirection="column" borderStyle="single" borderColor={active ? POSEIDON.accent : POSEIDON.uiBorder} overflow="hidden">
         <text>{fit("GOVERNANCE | NOT CONNECTED")}</text>
         <text>{fit("No current permissions, verification, or review.")}</text>
       </box>
@@ -105,7 +106,7 @@ export function GovernancePane({ active, state }: GovernancePaneProps) {
   }
 
   return (
-    <box flexGrow={1} flexDirection="column" borderStyle="single" borderColor={active ? "cyan" : "white"} overflow="hidden">
+    <box flexGrow={1} flexDirection="column" borderStyle="single" borderColor={active ? POSEIDON.accent : POSEIDON.uiBorder} overflow="hidden">
       {rows.map((row, i) => (
         <text key={i}>{fit(row)}</text>
       ))}

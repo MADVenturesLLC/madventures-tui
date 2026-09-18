@@ -8,9 +8,32 @@
 // Presentation only — no authority decisions, no broker imports.
 
 import type { CliSurface } from "@madventures/protocol";
-import type { BrokerSnapshot } from "../types";
+import type { BrokerSnapshot, SeatId, SeatMode, FocusTarget } from "../types";
+import { SEATS } from "../types";
 
 export type AgentSurface = CliSurface; // "claude-code" | "antigravity"
+
+// ─── Seat resolution (LOCAL UI posture — no authority semantics) ───
+//
+// The seat contract is fixed in types.ts SEATS. These helpers surface the
+// facts the bars and router need. They are total lookups over a closed
+// union: an unknown seat id cannot exist at the type level, so there is no
+// "UNKNOWN" branch to invent.
+
+/** The seat's fixed honest mode: builder→APPLY, architect→PLAN, operator→READ. */
+export function seatMode(seat: SeatId): SeatMode {
+  return SEATS.find((s) => s.id === seat)!.mode;
+}
+
+/** The pane a seat focuses when selected. */
+export function seatDefaultFocus(seat: SeatId): FocusTarget {
+  return SEATS.find((s) => s.id === seat)!.focus;
+}
+
+/** The seat's uppercase display label. */
+export function seatLabel(seat: SeatId): string {
+  return SEATS.find((s) => s.id === seat)!.label;
+}
 
 /** Header label shown at the top of an agent pane or dock strip. */
 export function agentHeaderLabel(surface: AgentSurface): string {

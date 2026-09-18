@@ -898,20 +898,25 @@ describe("Defect 3: one resolution followed by unchanged snapshot cannot reopen 
 // ─── KeyEvent-to-action translation tests ───
 
 describe("KeyEvent-to-action translation", () => {
-  test("Alt+digit translates to focus action", () => {
+  test("Alt+digit translates to seat / focus action", () => {
+    // Updated per Founder commission GLM-20260918-FOUNDER-TUI-SEATS:
+    // Alt+1/2/3 switch seats; antigravity moved to Alt+4, events to Alt+5.
     const bindings = loadKeybindings();
     const alt1 = translateKeyEvent({ name: "1", ctrl: false, meta: true, shift: false });
     expect(alt1).toBe("alt+1");
-    expect(resolveKey(alt1, bindings)).toBe("focus-claude");
+    expect(resolveKey(alt1, bindings)).toBe("seat-builder");
 
     const alt2 = translateKeyEvent({ name: "2", ctrl: false, meta: true, shift: false });
-    expect(resolveKey(alt2, bindings)).toBe("focus-antigravity");
+    expect(resolveKey(alt2, bindings)).toBe("seat-architect");
 
     const alt3 = translateKeyEvent({ name: "3", ctrl: false, meta: true, shift: false });
-    expect(resolveKey(alt3, bindings)).toBe("focus-governance");
+    expect(resolveKey(alt3, bindings)).toBe("seat-operator");
 
     const alt4 = translateKeyEvent({ name: "4", ctrl: false, meta: true, shift: false });
-    expect(resolveKey(alt4, bindings)).toBe("focus-events");
+    expect(resolveKey(alt4, bindings)).toBe("focus-antigravity");
+
+    const alt5 = translateKeyEvent({ name: "5", ctrl: false, meta: true, shift: false });
+    expect(resolveKey(alt5, bindings)).toBe("focus-events");
   });
 
   test("Alt+y translates to accept-approval", () => {
@@ -1235,10 +1240,10 @@ describe("App lifecycle: approval dialog auto-open and resolution", () => {
       { width: 120, height: 34 },
     );
     try {
-      setup.mockInput.pressKey("3", { meta: true }); // governance
+      setup.mockInput.pressKey("3", { meta: true }); // Alt+3 = seat-operator → governance
       await setup.flush();
       await setup.flush();
-      setup.mockInput.pressKey("2", { meta: true }); // antigravity
+      setup.mockInput.pressKey("4", { meta: true }); // Alt+4 = focus-antigravity
       await setup.flush();
       setup.mockInput.pressKey("y", { meta: true }); // Alt+Y
       await setup.flush();
@@ -1258,10 +1263,10 @@ describe("App lifecycle: approval dialog auto-open and resolution", () => {
       { width: 120, height: 34 },
     );
     try {
-      setup.mockInput.pressKey("3", { meta: true }); // governance
+      setup.mockInput.pressKey("3", { meta: true }); // Alt+3 = seat-operator → governance
       await setup.flush();
       await setup.flush();
-      setup.mockInput.pressKey("4", { meta: true }); // events
+      setup.mockInput.pressKey("5", { meta: true }); // Alt+5 = focus-events
       await setup.flush();
       setup.mockInput.pressKey("y", { meta: true }); // Alt+Y
       await setup.flush();

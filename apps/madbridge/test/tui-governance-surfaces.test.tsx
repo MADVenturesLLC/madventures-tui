@@ -159,13 +159,20 @@ async function renderApp(
   if (subscribe) props.subscribe = subscribe;
   if (opts?.onApprovalResolve) props.onApprovalResolve = opts.onApprovalResolve;
   if (opts?.fixture) props.fixture = opts.fixture;
+  // Deterministic OMP catalog stub — tests must never shell out to omp.
+  // BISECT: never resolves — isolates whether the artifact is the async
+  // catalog state update or the row itself.
+  props.catalogLoader = async () => new Promise<never>(() => {});
   const setup = await testRender(<App {...props} />, { width, height });
   if (focus) {
+    // GLM-20260918-FOUNDER-TUI-SEATS keymap: Alt+1/2/3 are seat keys
+    // (builder/architect focus claude, operator focuses governance);
+    // antigravity is Alt+4 and events is Alt+5.
     const keyMap: Record<FocusTarget, string> = {
       claude: "1",
-      antigravity: "2",
+      antigravity: "4",
       governance: "3",
-      events: "4",
+      events: "5",
     };
     setup.mockInput.pressKey(keyMap[focus], { meta: true });
     await setup.flush();
@@ -488,15 +495,23 @@ describe("Focus and authority", () => {
     }
   });
 
-  test("16. No new focus target or global binding exists", () => {
+  test("16. Seat keys are the default Alt+1/2/3; pane focus moved to Alt+4/5", () => {
+    // Updated per Founder commission GLM-20260918-FOUNDER-TUI-SEATS:
+    // Alt+1/2/3 now switch seats (builder/architect/operator). The previous
+    // Alt+1..4 pane-focus map moved: antigravity → Alt+4, events → Alt+5.
+    // "focus-claude" and "focus-governance" remain valid actions reachable
+    // via the FOUNDER_TUI_KEYS override. Ctrl+P opens the model picker.
     const bindings = loadKeybindings();
-    // The four focus targets remain the only focus actions
-    expect(resolveKey("alt+1", bindings)).toBe("focus-claude");
-    expect(resolveKey("alt+2", bindings)).toBe("focus-antigravity");
-    expect(resolveKey("alt+3", bindings)).toBe("focus-governance");
-    expect(resolveKey("alt+4", bindings)).toBe("focus-events");
-    // No new default global shortcuts beyond the Phase 0/1 set
-    expect(DEFAULT_KEYBINDINGS.length).toBe(7);
+    expect(resolveKey("alt+1", bindings)).toBe("seat-builder");
+    expect(resolveKey("alt+2", bindings)).toBe("seat-architect");
+    expect(resolveKey("alt+3", bindings)).toBe("seat-operator");
+    expect(resolveKey("alt+4", bindings)).toBe("focus-antigravity");
+    expect(resolveKey("alt+5", bindings)).toBe("focus-events");
+    expect(resolveKey("alt+y", bindings)).toBe("accept-approval");
+    expect(resolveKey("alt+n", bindings)).toBe("reject-approval");
+    expect(resolveKey("alt+q", bindings)).toBe("quit");
+    expect(resolveKey("ctrl+p", bindings)).toBe("open-model-picker");
+    expect(DEFAULT_KEYBINDINGS.length).toBe(9);
   });
 });
 

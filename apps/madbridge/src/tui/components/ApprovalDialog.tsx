@@ -14,6 +14,7 @@ import { TextAttributes } from "@opentui/core";
 import type { PendingApproval, ApprovalRequestEvent } from "../types";
 import type { RepositoryFingerprint } from "@madventures/protocol";
 import type { KeyBindingMap, KeyAction } from "../keybindings";
+import { POSEIDON } from "../theme";
 
 interface Props {
   approval: PendingApproval;
@@ -45,11 +46,14 @@ export function ApprovalDialog({ approval, onResolve, onReject, keybindings }: P
   const { colorState } = approval;
 
   const colorText: string = colorState.text;
+  // Poseidon mapping: the palette has no green or yellow — approved uses the
+  // sky accent (the poseidon-black ui_ok role), pending uses light sky warn,
+  // rejected uses red, expired uses the sky mute.
   const colorFg: string =
-    colorState.kind === "approved" ? "green"
-    : colorState.kind === "rejected" ? "red"
-    : colorState.kind === "expired" ? "gray"
-    : "yellow";
+    colorState.kind === "approved" ? POSEIDON.accent
+    : colorState.kind === "rejected" ? POSEIDON.error
+    : colorState.kind === "expired" ? POSEIDON.dim
+    : POSEIDON.warn;
 
   const fingerprintStr = formatFingerprint(approval.repositoryFingerprint);
   const acceptKey = findKeyForAction("accept-approval", keybindings);
@@ -96,7 +100,7 @@ export function ApprovalDialog({ approval, onResolve, onReject, keybindings }: P
       width="60%"
       border={true}
       borderStyle="double"
-      borderColor="yellow"
+      borderColor={POSEIDON.cobalt}
       flexDirection="column"
       paddingLeft={2}
       paddingRight={2}
@@ -113,25 +117,25 @@ export function ApprovalDialog({ approval, onResolve, onReject, keybindings }: P
         <text>Task: {approval.taskId}</text>
       </box>
       <box paddingBottom={1}>
-        <text fg="gray">Actor: {approval.actor}</text>
+        <text fg={POSEIDON.dim}>Actor: {approval.actor}</text>
       </box>
       <box paddingBottom={1}>
-        <text fg="gray">Scope: {approval.scope}</text>
+        <text fg={POSEIDON.dim}>Scope: {approval.scope}</text>
       </box>
       <box paddingBottom={1}>
-        <text fg="gray">Repo fingerprint: {fingerprintStr}</text>
+        <text fg={POSEIDON.dim}>Repo fingerprint: {fingerprintStr}</text>
       </box>
       <box paddingBottom={1}>
-        <text fg="gray">Requested at: {approval.timestamp}</text>
+        <text fg={POSEIDON.dim}>Requested at: {approval.timestamp}</text>
       </box>
       <box paddingBottom={1}>
-        <text fg="gray">Event ID: {approval.id}</text>
+        <text fg={POSEIDON.dim}>Event ID: {approval.id}</text>
       </box>
       <box paddingTop={1}>
-        <text fg="green">[{acceptKey}] Accept — sends typed accept event to broker</text>
+        <text fg={POSEIDON.accent}>[{acceptKey}] Accept — sends typed accept event to broker</text>
       </box>
       <box>
-        <text fg="red">[{rejectKey}] Reject — sends typed reject event to broker</text>
+        <text fg={POSEIDON.error}>[{rejectKey}] Reject — sends typed reject event to broker</text>
       </box>
       <box paddingTop={1}>
         <text attributes={TextAttributes.DIM}>

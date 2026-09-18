@@ -138,17 +138,28 @@ async function renderApp(
   if (subscribe) props.subscribe = subscribe;
   if (opts?.onApprovalResolve) props.onApprovalResolve = opts.onApprovalResolve;
   if (opts?.fixture) props.fixture = opts.fixture;
+  // Deterministic OMP catalog stub — tests must never shell out to omp.
+  props.catalogLoader = async () => ({
+    status: "ok" as const,
+    models: [
+      { selector: "test-provider/model-a", name: "Model A", provider: "test-provider" },
+      { selector: "test-provider/model-b", name: "Model B", provider: "test-provider" },
+    ],
+  });
   const setup = await testRender(
     <App {...props} />,
     { width, height },
   );
   // If a specific focus is requested, press the corresponding Alt+digit key.
   if (focus) {
+    // GLM-20260918-FOUNDER-TUI-SEATS keymap: Alt+1/2/3 are seat keys
+    // (builder/architect focus claude, operator focuses governance);
+    // antigravity is Alt+4 and events is Alt+5.
     const keyMap: Record<FocusTarget, string> = {
       claude: "1",
-      antigravity: "2",
+      antigravity: "4",
       governance: "3",
-      events: "4",
+      events: "5",
     };
     setup.mockInput.pressKey(keyMap[focus], { meta: true });
     await setup.flush();
