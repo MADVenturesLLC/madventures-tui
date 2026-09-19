@@ -44,6 +44,7 @@ export function extractDeclaredClaimsJson(markdown: string): { json: string | nu
   let openIndex = -1;
   for (let i = headingIndex + 1; i < lines.length; i++) {
     const line = lines[i];
+    if (line !== undefined && /^\s{0,3}#{1,6}\s+/.test(line)) break;
     if (line !== undefined && FENCE_OPEN_RE.test(line)) {
       openIndex = i;
       break;
