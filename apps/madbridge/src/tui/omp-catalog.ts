@@ -50,7 +50,11 @@ const OMP_CATALOG_COMMAND: readonly string[] = Object.freeze([
   "--json",
 ]);
 
-const DEFAULT_TIMEOUT_MS = 5000;
+// 15s, not 5s: omp's cold start compiles its extensions and can exceed 5s
+// on a busy session (observed live), while warm runs take ~1s. The probe is
+// one-shot at mount and non-blocking — the ModelBar reads "catalog loading"
+// until it settles — so a generous budget costs nothing.
+const DEFAULT_TIMEOUT_MS = 15000;
 const MAX_STDOUT_BYTES = 8 * 1024 * 1024;
 
 /**
