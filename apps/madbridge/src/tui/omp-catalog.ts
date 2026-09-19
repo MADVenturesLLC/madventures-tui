@@ -93,6 +93,13 @@ export function parseOmpModelsJson(text: string): readonly OmpModelInfo[] {
 export async function loadOmpCatalog(
   options?: { bin?: string; timeoutMs?: number },
 ): Promise<Extract<SeatCatalogState, { status: "ok" | "unavailable" }>> {
+  // Deterministic-mode seam (used by the tui-chaos harness): the probe is
+  // environment-dependent, so harness runs disable it explicitly and the
+  // bars render the reason — golden grids stay identical on every machine.
+  if (process.env.MAD_TUI_CATALOG === "off") {
+    return { status: "unavailable", reason: "catalog disabled (MAD_TUI_CATALOG=off)" };
+  }
+
   const bin = options?.bin ?? resolveOmpBin();
   const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 

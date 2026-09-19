@@ -62,6 +62,11 @@ export async function launchTuiFixtureSession(opts: TuiLaunchOptions): Promise<T
     // ── Fixture gates (the ONLY env seams the harness sets) ──
     MADV_TUI_FIXTURE: "1",
     ...(opts.stream ? { MADV_TUI_FIXTURE_STREAM: "1" } : {}),
+    // Deterministic grids: the OMP catalog probe is environment-dependent
+    // (omp present locally, absent on CI), which would make the ModelBar
+    // note — and therefore the golden grids — differ per machine. The
+    // harness turns it off with an explicit, honest reason instead.
+    MAD_TUI_CATALOG: "off",
   };
   const fixtureFlags = opts.stream
     ? ["--fixture", "MADV_TUI_FIXTURE=1", "MADV_TUI_FIXTURE_STREAM=1"]

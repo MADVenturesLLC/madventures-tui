@@ -1,11 +1,11 @@
-# golden grid for tui-chaos — sha256:d93cad77aaad9d9b0315b6abb65c7df7dd46ece5b0384b179de11787d1cf6c18
+# golden grid for tui-chaos — sha256:69a4cb0547ba4f12844248093a69fd09afbe3170e4253922d44d7576f8fbf713
+[ BUILDER* ][ ARCHITECT ][ OPERATOR ]
+MODEL unpinned | PROFILE BUILDER | MODE APPLY | catalog unavailable (catalog disabled (MAD_TUI_CATALOG=off))
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
 │ Event Log (hash-chained ledger)                                                                                      │
 │ #3 ownership_accept exec-claude-code tok:3 ghi345def678                                                              │
 │ #2 message exec-claude-code tok:1 def789abc012                                                                       │
 │ #1 session-start claude-code tok:1 abc123def456                                                                      │
-│                                                                                                                      │
-│                                                                                                                      │
 │                                                                                                                      │
 │                                                                                                                      │
 │                                                                                                                      │
@@ -38,4 +38,4 @@ ANTIGRAVITY | docked | independent-reviewer | gemini-2.5-pro | 0 buffered
 ║ FOCUS GOV TO DECIDE                                                                                                  ║
 ╚══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════╝
 FIXTURE DATA — NOT A LIVE SESSION
-CONNECTED | session active | writer exec-claude-code #3 | pending 2 | focus EVENTS | ledger #3
+CONNECTED | session active | writer exec-claude-code #3 | pending 2 | focus EVENTS | seat BUILDER (APPLY) | ledger #3

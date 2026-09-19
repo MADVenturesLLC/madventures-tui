@@ -372,6 +372,21 @@ describe("OMP catalog parsing (omp models ls --json)", () => {
       else process.env.MAD_OMP_BIN = orig;
     }
   });
+
+  test("MAD_TUI_CATALOG=off disables the probe with an explicit reason", async () => {
+    const orig = process.env.MAD_TUI_CATALOG;
+    try {
+      process.env.MAD_TUI_CATALOG = "off";
+      const result = await loadOmpCatalog();
+      expect(result.status).toBe("unavailable");
+      if (result.status === "unavailable") {
+        expect(result.reason).toBe("catalog disabled (MAD_TUI_CATALOG=off)");
+      }
+    } finally {
+      if (orig === undefined) delete process.env.MAD_TUI_CATALOG;
+      else process.env.MAD_TUI_CATALOG = orig;
+    }
+  });
 });
 
 describe("ModelBar line", () => {
