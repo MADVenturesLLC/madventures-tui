@@ -658,6 +658,7 @@ jobs:
         timeout-minutes: 20
         env:
           ANTHROPIC_AUTH_TOKEN: ${{ secrets.ANTHROPIC_AUTH_TOKEN }}
+          ANTHROPIC_BASE_URL: https://api.z.ai/api/anthropic
         run: |
           set -euo pipefail
           if [ -z "${ANTHROPIC_AUTH_TOKEN:-}" ]; then
