@@ -24,6 +24,8 @@ export interface ModelPickerProps {
   pickerIndex: number;
   /** Override terminal width for testing. */
   widthOverride?: number;
+  /** Override terminal height for testing. */
+  heightOverride?: number;
 }
 
 /**
@@ -52,13 +54,61 @@ export function buildPickerRows(
 
 const PICKER_HEADER = "MODEL PICKER — j/k or up/down move · return pin · esc close";
 
-export function ModelPicker({ catalog, pickerIndex, widthOverride }: ModelPickerProps) {
-  const { width: termWidth } = useTerminalDimensions();
+/**
+ * The visible row window for a cursor position: the window slides so the
+ * cursor stays inside it, clamped to the catalog bounds. Non-windowed
+ * catalogs (len <= maxVisible) render in full.
+ */
+export function pickerWindow(
+  catalogLength: number,
+  pickerIndex: number,
+  maxVisible: number,
+): { start: number; end: number } {
+  if (maxVisible <= 0 || catalogLength <= maxVisible) {
+    return { start: 0, end: catalogLength };
+  }
+  const rawStart = pickerIndex - Math.floor(maxVisible / 2);
+  const start = Math.min(Math.max(0, rawStart), catalogLength - maxVisible);
+  return { start, end: start + maxVisible };
+}
+
+/**
+ * Honest position suffix for the header: "· 4–18 of 48" while windowed,
+ * "· 48 models" when everything fits, "" otherwise (loading/unavailable
+ * states carry their own reason rows).
+ */
+export function pickerPositionSuffix(
+  hasCursor: boolean,
+  window: { start: number; end: number },
+  catalog: SeatCatalogState,
+): string {
+  if (!hasCursor) return "";
+  const total = catalog.status === "ok" ? catalog.models.length : 0;
+  if (total === 0) return "";
+  if (window.end - window.start >= total) return " · " + String(total) + " models";
+  return " · " + String(window.start + 1) + "–" + String(window.end) + " of " + String(total);
+}
+
+export function ModelPicker({ catalog, pickerIndex, widthOverride, heightOverride }: ModelPickerProps) {
+  const { width: termWidth, height: termHeight } = useTerminalDimensions();
   const width = widthOverride ?? termWidth;
+  const height = heightOverride ?? termHeight;
   const innerWidth = Math.max(0, width - 4); // border + padding overhead
 
-  const rows = buildPickerRows(catalog, pickerIndex, innerWidth);
+  // Window the list: catalogs can be far taller than the terminal, so only
+  // maxVisible rows render and the window follows the cursor. The header
+  // carries the honest position (window + total).
+  const maxVisible = Math.max(3, Math.floor(height * 0.5) - 4);
+  const window = pickerWindow(
+    catalog.status === "ok" ? catalog.models.length : 0,
+    pickerIndex,
+    maxVisible,
+  );
   const hasCursor = catalog.status === "ok" && catalog.models.length > 0;
+  const allRows = buildPickerRows(catalog, pickerIndex, innerWidth);
+  const rows = hasCursor
+    ? allRows.slice(window.start, window.start + maxVisible)
+    : allRows;
 
   return (
     <box
@@ -73,16 +123,19 @@ export function ModelPicker({ catalog, pickerIndex, widthOverride }: ModelPicker
       paddingRight={1}
     >
       <text fg={POSEIDON.accent} attributes={TextAttributes.BOLD}>
-        {truncateToWidth(PICKER_HEADER, innerWidth)}
+        {truncateToWidth(PICKER_HEADER + pickerPositionSuffix(hasCursor, window, catalog), innerWidth)}
       </text>
-      {rows.map((row, i) => (
-        <text
-          key={i}
-          fg={hasCursor && i === pickerIndex ? POSEIDON.text : POSEIDON.dim}
-        >
-          {row}
-        </text>
-      ))}
+      {rows.map((row, i) => {
+        const modelIndex = window.start + i;
+        return (
+          <text
+            key={i}
+            fg={hasCursor && modelIndex === pickerIndex ? POSEIDON.text : POSEIDON.dim}
+          >
+            {row}
+          </text>
+        );
+      })}
     </box>
   );
 }

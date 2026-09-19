@@ -19,6 +19,7 @@ import { buildSeatRow, seatCell } from "../src/tui/components/SeatBar";
 import { buildStatusLine } from "../src/tui/components/StatusBar";
 import { buildModelLine, catalogNote, UNPINNED_WORD } from "../src/tui/components/ModelBar";
 import { buildPickerRows } from "../src/tui/components/ModelPicker";
+import { pickerWindow, pickerPositionSuffix } from "../src/tui/components/ModelPicker";
 import type { ModelPickerProps } from "../src/tui/components/ModelPicker";
 import {
   parseOmpModelsJson,
@@ -511,6 +512,40 @@ describe("ModelPicker rows", () => {
     const rows = buildPickerRows(OK_CATALOG, 1, 80);
     expect(rows[0]).toBe("  test-provider/model-a — Model A");
     expect(rows[1]).toBe("▸ test-provider/model-b — Model B");
+  });
+});
+
+describe("ModelPicker windowing (catalogs taller than the terminal)", () => {
+  test("short catalogs render in full with no window", () => {
+    expect(pickerWindow(2, 0, 10)).toEqual({ start: 0, end: 2 });
+    expect(pickerWindow(2, 1, 10)).toEqual({ start: 0, end: 2 });
+  });
+
+  test("the window slides to keep the cursor inside", () => {
+    // 48-model catalog, 10 visible: cursor 0 → top window.
+    expect(pickerWindow(48, 0, 10)).toEqual({ start: 0, end: 10 });
+    // Cursor 5 → still inside the first window.
+    expect(pickerWindow(48, 5, 10)).toEqual({ start: 0, end: 10 });
+    // Cursor 20 → centered-ish window contains it.
+    const w = pickerWindow(48, 20, 10);
+    expect(w.start).toBeLessThanOrEqual(20);
+    expect(w.end).toBeGreaterThan(20);
+    // Cursor at the end → last window, cursor inside.
+    const last = pickerWindow(48, 47, 10);
+    expect(last.end).toBe(48);
+    expect(last.start).toBeLessThanOrEqual(47);
+  });
+
+  test("empty and degenerate catalogs window to nothing", () => {
+    expect(pickerWindow(0, 0, 10)).toEqual({ start: 0, end: 0 });
+    expect(pickerWindow(5, 0, 0)).toEqual({ start: 0, end: 5 });
+  });
+
+  test("position suffix: full list vs windowed", () => {
+    const ok = { status: "ok" as const, models: OK_CATALOG.models };
+    expect(pickerPositionSuffix(true, { start: 0, end: 2 }, ok)).toBe(" · 2 models");
+    expect(pickerPositionSuffix(true, { start: 3, end: 13 }, { status: "ok", models: Array.from({ length: 48 }, (_, i) => ({ selector: "s/" + i, name: "m" + i, provider: "s" })) })).toBe(" · 4–13 of 48");
+    expect(pickerPositionSuffix(false, { start: 0, end: 0 }, ok)).toBe("");
   });
 });
 
