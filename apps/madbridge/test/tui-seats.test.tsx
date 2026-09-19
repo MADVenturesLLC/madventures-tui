@@ -23,6 +23,8 @@ import type { ModelPickerProps } from "../src/tui/components/ModelPicker";
 import {
   parseOmpModelsJson,
   loadOmpCatalog,
+  sanitizeReason,
+  resolveOmpBin,
 } from "../src/tui/omp-catalog";
 import { emptyProfiles, clampPickerIndex } from "../src/tui/hooks/useSeatState";
 import { routeKeyEvent } from "../src/tui/keyboard-router";
@@ -343,6 +345,31 @@ describe("OMP catalog parsing (omp models ls --json)", () => {
     expect(result.status).toBe("unavailable");
     if (result.status === "unavailable") {
       expect(result.reason).toContain("not found");
+    }
+  });
+
+  test("failure reasons collapse to ONE line (execFile stderr has newlines)", () => {
+    const messy = "Command failed: omp models ls --json\n1 | ◆◆◆◆\n    ^\nerror: Unexpected ◆\n    at /Users/michaeldaley/node_modules/...";
+    const clean = sanitizeReason(messy);
+    expect(clean).not.toContain("\n");
+    expect(clean).not.toContain("\t");
+    expect(clean.startsWith("Command failed: omp models ls --json 1 |")).toBe(true);
+  });
+
+  test("long reasons cap at 160 with an ellipsis", () => {
+    const clean = sanitizeReason("x".repeat(300));
+    expect(clean.length).toBeLessThanOrEqual(160);
+    expect(clean.endsWith("…")).toBe(true);
+  });
+
+  test("resolveOmpBin honors the MAD_OMP_BIN override", () => {
+    const orig = process.env.MAD_OMP_BIN;
+    try {
+      process.env.MAD_OMP_BIN = "/opt/custom/omp";
+      expect(resolveOmpBin()).toBe("/opt/custom/omp");
+    } finally {
+      if (orig === undefined) delete process.env.MAD_OMP_BIN;
+      else process.env.MAD_OMP_BIN = orig;
     }
   });
 });

@@ -9,6 +9,8 @@
 // reason ("omp not found on PATH", "timed out", "unparseable output") and
 // the UI must render that reason — never a fabricated model list.
 
+import { existsSync } from "node:fs";
+import { homedir } from "node:os";
 import type { SeatCatalogState } from "./hooks/useSeatState";
 
 export interface OmpModelInfo {
@@ -18,6 +20,23 @@ export interface OmpModelInfo {
   readonly name: string;
   /** Provider id, e.g. "alibaba-token-plan". */
   readonly provider: string;
+}
+
+/**
+ * Resolve the omp binary. PATH alone is not trustworthy inside a `bun run`
+ * process: bun prepends every ancestor node_modules/.bin directory to PATH,
+ * including a stray $HOME/node_modules/.bin — whose omp shim (pnpm
+ * pi-coding-agent 18.1.10) execs a Mach-O binary named cli.js that bun
+ * cannot parse ("Unexpected …"). Resolution order:
+ *   1. MAD_OMP_BIN env override
+ *   2. ~/.bun/bin/omp (the bun-installed omp)
+ *   3. plain "omp" (PATH)
+ */
+export function resolveOmpBin(): string {
+  if (process.env.MAD_OMP_BIN) return process.env.MAD_OMP_BIN;
+  const bunInstalled = homedir() + "/.bun/bin/omp";
+  if (existsSync(bunInstalled)) return bunInstalled;
+  return "omp";
 }
 
 /**
@@ -74,7 +93,7 @@ export function parseOmpModelsJson(text: string): readonly OmpModelInfo[] {
 export async function loadOmpCatalog(
   options?: { bin?: string; timeoutMs?: number },
 ): Promise<Extract<SeatCatalogState, { status: "ok" | "unavailable" }>> {
-  const bin = options?.bin ?? "omp";
+  const bin = options?.bin ?? resolveOmpBin();
   const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   let stdout: string;
@@ -97,7 +116,7 @@ export async function loadOmpCatalog(
     const detail = err instanceof Error ? err.message : String(err);
     return {
       status: "unavailable",
-      reason: "unparseable omp output (" + detail + ")",
+      reason: "unparseable omp output (" + sanitizeReason(detail) + ")",
     };
   }
 }
@@ -105,15 +124,21 @@ export async function loadOmpCatalog(
 function describeSpawnError(err: unknown, bin: string, timeoutMs: number): string {
   const errno = err as { code?: string; killed?: boolean; message?: string };
   if (errno?.code === "ENOENT") {
-    return "omp not found on PATH (looked for: " + bin + ")";
+    return "omp not found (looked for: " + bin + ")";
   }
   if (errno?.killed) {
     return "omp timed out after " + String(timeoutMs) + "ms";
   }
   const message = errno?.message ?? String(err);
-  return "omp failed: " + truncateReason(message);
+  return "omp failed: " + sanitizeReason(message);
 }
 
-function truncateReason(message: string): string {
-  return message.length > 160 ? message.slice(0, 157) + "…" : message;
+/**
+ * Collapse a failure reason to ONE line for single-row rendering: execFile
+ * embeds the child's multi-line stderr in err.message, and a newline inside
+ * a ModelBar/picker string corrupts the fixed row layout.
+ */
+export function sanitizeReason(message: string): string {
+  const collapsed = message.replace(/\s+/g, " ").trim();
+  return collapsed.length > 160 ? collapsed.slice(0, 157) + "…" : collapsed;
 }
