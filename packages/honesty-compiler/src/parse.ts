@@ -25,7 +25,7 @@ type ParsedDocument = {
 
 const FENCE_OPEN_RE = /^\s{0,3}```\S*\s*$/;
 const FENCE_CLOSE_RE = /^\s{0,3}```\s*$/;
-const DECLARED_CLAIMS_HEADING_RE = /^\s{0,3}#{1,6}\s+.*declared claims/i;
+const DECLARED_CLAIMS_HEADING_RE = /^\s{0,3}#{1,6}\s+declared claims(?:\s+#+)?\s*$/i;
 
 /** Extract the first fenced JSON block under a "Declared claims" heading. */
 export function extractDeclaredClaimsJson(markdown: string): { json: string | null; error?: string } {
