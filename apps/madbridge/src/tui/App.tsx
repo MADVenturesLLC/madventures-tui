@@ -34,12 +34,24 @@ import { FixtureBanner } from "./components/FixtureBanner";
 import { EventLog } from "./components/EventLog";
 import { DockStrip } from "./components/DockStrip";
 import { PaneTabs } from "./components/PaneTabs";
+import { SeatBar } from "./components/SeatBar";
+import { ModelBar, SeatModelRow } from "./components/ModelBar";
+import { ModelPicker } from "./components/ModelPicker";
 import { useBrokerState } from "./hooks/useBrokerState";
+import { useSeatState } from "./hooks/useSeatState";
 import { loadKeybindings, resolveKey, translateKeyEvent } from "./keybindings";
 import type { KeyAction } from "./keybindings";
-import type { FocusTarget, BrokerSnapshot, ApprovalRequestEvent, PendingApproval } from "./types";
+import type {
+  FocusTarget,
+  SeatId,
+  BrokerSnapshot,
+  ApprovalRequestEvent,
+  PendingApproval,
+} from "./types";
 import { routeKeyEvent, pruneResolvedIds } from "./keyboard-router";
 import type { KeyboardRouterState } from "./keyboard-router";
+import type { loadOmpCatalog } from "./omp-catalog";
+import { POSEIDON } from "./theme";
 
 // Wide mode threshold: terminal width >= 80 shows stage + dock composition.
 // Narrow mode (< 80) shows a tab row + a single selected surface.
@@ -47,6 +59,13 @@ const WIDE_MODE_MIN_WIDTH = 80;
 
 interface UIState {
   focus: FocusTarget;
+  /** Active Founder seat — LOCAL UI posture. Selecting a seat focuses the
+   * seat's pane and sets the mode label on the bars. It never touches
+   * broker authority, permissions, ownership, or approval semantics. */
+  seat: SeatId;
+  /** Whether the OMP model picker modal is open (LOCAL UI state). While
+   * open, the router captures navigation keys and nothing reaches PTYs. */
+  showModelPicker: boolean;
   showApprovalDialog: boolean;
   displayedApprovalId: string | null;
   /** IDs of approvals that have already been submitted (accept or reject).
@@ -59,6 +78,8 @@ interface UIState {
 
 type UIAction =
   | { type: "focus"; target: FocusTarget }
+  | { type: "seat"; seat: SeatId }
+  | { type: "show-model-picker"; show: boolean }
   | { type: "show-approval"; show: boolean; approvalId: string | null }
   | { type: "add-resolved"; id: string }
   | { type: "prune-resolved"; ids: ReadonlySet<string> }
@@ -68,6 +89,10 @@ function uiReducer(state: UIState, action: UIAction): UIState {
   switch (action.type) {
     case "focus":
       return { ...state, focus: action.target };
+    case "seat":
+      return { ...state, seat: action.seat };
+    case "show-model-picker":
+      return { ...state, showModelPicker: action.show };
     case "show-approval":
       return { ...state, showApprovalDialog: action.show, displayedApprovalId: action.approvalId };
     case "add-resolved": {
@@ -97,14 +122,22 @@ interface AppProps {
   onQuit?: () => void;
   /** Fixture mode — permanently labels the view as fixture data. */
   fixture?: boolean;
+  /** OMP catalog loader override (tests inject a deterministic stub; the
+   * production default shells out to the public `omp models ls --json`
+   * CLI once at mount). LOCAL UI data only. */
+  catalogLoader?: typeof loadOmpCatalog;
 }
 
-export function App({ subscribe, onPtyWrite, onApprovalResolve, onQuit, fixture = false }: AppProps) {
+export function App({ subscribe, onPtyWrite, onApprovalResolve, onQuit, fixture = false, catalogLoader }: AppProps) {
   const { state, connected } = useBrokerState(subscribe);
   const keybindings = useMemo(() => loadKeybindings(), []);
+  // Seat model-profile state — LOCAL UI only (pinned OMP profiles + catalog).
+  const seatState = useSeatState(catalogLoader ? { loadCatalog: catalogLoader } : undefined);
 
   const [ui, dispatch] = useReducer(uiReducer, {
     focus: "claude",
+    seat: "builder",
+    showModelPicker: false,
     showApprovalDialog: false,
     displayedApprovalId: null,
     resolvedApprovalIds: new Set<string>(),
@@ -133,6 +166,39 @@ export function App({ subscribe, onPtyWrite, onApprovalResolve, onQuit, fixture 
 
   const handleFocusChange = useCallback((target: FocusTarget) => {
     dispatchSync({ type: "focus", target });
+  }, [dispatchSync]);
+
+  const handleSeatSelect = useCallback((seat: SeatId) => {
+    dispatchSync({ type: "seat", seat });
+  }, [dispatchSync]);
+
+  const handleModelPickerOpen = useCallback(() => {
+    dispatchSync({ type: "show-model-picker", show: true });
+  }, [dispatchSync]);
+
+  const handleModelPickerClose = useCallback(() => {
+    dispatchSync({ type: "show-model-picker", show: false });
+  }, [dispatchSync]);
+
+  // The keyboard handler must see the latest catalog + cursor without
+  // re-registering; mirror them into a ref like uiRef/stateRef above.
+  const seatStateRef = useRef(seatState);
+  seatStateRef.current = seatState;
+
+  const handleModelPickerNav = useCallback((delta: number) => {
+    seatStateRef.current.movePicker(delta);
+  }, []);
+
+  const handleModelPickerConfirm = useCallback(() => {
+    // The modal closes on Return in EVERY catalog state — the router's
+    // contract is "Return confirms and closes", and App owns the UI state.
+    // Pinning only happens when a model is actually available to pin.
+    dispatchSync({ type: "show-model-picker", show: false });
+    const { catalog, pickerIndex } = seatStateRef.current;
+    if (catalog.status !== "ok") return; // honest no-op — nothing to pin
+    const model = catalog.models[pickerIndex];
+    if (!model) return;
+    seatStateRef.current.pinModel(uiRef.current.seat, model.selector);
   }, [dispatchSync]);
 
   const handleApprovalResolve = useCallback((event: ApprovalRequestEvent) => {
@@ -216,6 +282,8 @@ export function App({ subscribe, onPtyWrite, onApprovalResolve, onQuit, fixture 
 
     const routerState: KeyboardRouterState = {
       focus: uiRef.current.focus,
+      seat: uiRef.current.seat,
+      showModelPicker: uiRef.current.showModelPicker,
       showApprovalDialog: uiRef.current.showApprovalDialog,
       displayedApprovalId: uiRef.current.displayedApprovalId,
       resolvedApprovalIds: uiRef.current.resolvedApprovalIds,
@@ -230,6 +298,11 @@ export function App({ subscribe, onPtyWrite, onApprovalResolve, onQuit, fixture 
       snapshot: stateRef.current,
       callbacks: {
         onFocusChange: handleFocusChange,
+        onSeatSelect: handleSeatSelect,
+        onModelPickerOpen: handleModelPickerOpen,
+        onModelPickerNav: handleModelPickerNav,
+        onModelPickerConfirm: handleModelPickerConfirm,
+        onModelPickerClose: handleModelPickerClose,
         onApprovalResolve: (event) => {
           handleApprovalResolve(event);
           // Mark the approval as resolved to prevent duplicate submission.
@@ -300,12 +373,35 @@ export function App({ subscribe, onPtyWrite, onApprovalResolve, onQuit, fixture 
   const decisionArmed = decisionVisible && governanceFocused && !incident;
 
   return (
-    <box flexDirection="column" flexGrow={1}>
+    <box
+      flexDirection="column"
+      flexGrow={1}
+      // The mandated Poseidon background, enforced at the rendering root so
+      // the HUD carries the palette even on terminals with another theme.
+      backgroundColor={POSEIDON.background}
+    >
+      {/* ── Founder seat rows — always visible. Wide terminals get two
+          rows (SeatBar, then ModelBar). Narrow terminals share ONE row so
+          the whole stack still fits 24 lines without compressing any
+          truth band (a compressed box corrupts its children). ── */}
+      {wideMode ? (
+        <>
+          <SeatBar seat={ui.seat} />
+          <ModelBar seat={ui.seat} profile={seatState.profiles[ui.seat] ?? null} catalog={seatState.catalog} />
+        </>
+      ) : (
+        <SeatModelRow seat={ui.seat} profile={seatState.profiles[ui.seat] ?? null} catalog={seatState.catalog} />
+      )}
+
       {/* ── IncidentBand: before the stage area, takes precedence ── */}
       {incident && <IncidentBand state={state} />}
 
-      {/* ── Stage area (wrapped so bands/status bar get reserved space) ── */}
-      <box flexGrow={1} flexDirection="column">
+      {/* ── Stage area (wrapped so bands/status bar get reserved space) ──
+          flexShrink+minHeight=0+overflow=hidden make the stage the ONLY
+          region that yields when a short terminal (e.g. 60×24) cannot fit
+          the full pane content — the decision strip and status bar keep
+          their full geometry and never overlap. ── */}
+      <box flexGrow={1} flexShrink={1} minHeight={0} overflow="hidden" flexDirection="column">
         {wideMode ? (
           <>
             {/* Wide mode: focused surface is the full-width stage. */}
@@ -381,9 +477,15 @@ export function App({ subscribe, onPtyWrite, onApprovalResolve, onQuit, fixture 
         />
       )}
 
+      {/* ── ModelPicker: Ctrl+P modal overlay. Captures nav keys while
+          open (router-enforced); pinning sets the seat's LOCAL profile. ── */}
+      {ui.showModelPicker && (
+        <ModelPicker catalog={seatState.catalog} pickerIndex={seatState.pickerIndex} />
+      )}
+
       {/* Bottom: fixture banner (separate truth band) + status bar. */}
       {fixture && <FixtureBanner />}
-      <StatusBar state={state} connected={connected} focus={ui.focus} />
+      <StatusBar state={state} connected={connected} focus={ui.focus} seat={ui.seat} />
     </box>
   );
 }

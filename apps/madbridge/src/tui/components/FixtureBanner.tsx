@@ -5,6 +5,7 @@
 // StatusBar can always carry all six governance facts.
 
 import { useTerminalDimensions } from "@opentui/react";
+import { POSEIDON } from "../theme";
 
 interface Props {
   /** Override terminal width for testing. */
@@ -21,7 +22,7 @@ export function FixtureBanner({ widthOverride }: Props) {
 
   return (
     <box paddingLeft={0} paddingRight={0}>
-      <text>{line}</text>
+      <text fg={POSEIDON.warn}>{line}</text>
     </box>
   );
 }

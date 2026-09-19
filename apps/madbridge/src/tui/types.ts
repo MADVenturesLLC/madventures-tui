@@ -12,6 +12,62 @@ import type {
 
 export type FocusTarget = "claude" | "antigravity" | "governance" | "events";
 
+/**
+ * Founder seat — a named LOCAL posture. A seat chooses which pane gets focus
+ * and which mode label the bars show. It is UI state ONLY: it never changes
+ * broker authority, permissions, ownership, fencing tokens, or approval
+ * resolution.
+ */
+export type SeatId = "builder" | "architect" | "operator";
+
+/**
+ * Honest mode label for a seat. APPLY = authoring allowed, PLAN = planning
+ * posture (no silent apply), READ = observe/route only. The mode is part of
+ * the seat's fixed contract — it is derived from the seat, never invented
+ * and never independent of it.
+ */
+export type SeatMode = "APPLY" | "PLAN" | "READ";
+
+export interface SeatSpec {
+  readonly id: SeatId;
+  /** Uppercase display label used in SeatBar and the StatusBar. */
+  readonly label: string;
+  /** The seat's fixed mode. */
+  readonly mode: SeatMode;
+  /** The pane this seat focuses when selected. */
+  readonly focus: FocusTarget;
+  /** One-line role statement for the seat. */
+  readonly blurb: string;
+}
+
+/**
+ * The three seats and their fixed contracts. Single source of truth for
+ * SeatBar, ModelBar, StatusBar, and the keyboard router's seat actions.
+ */
+export const SEATS: readonly SeatSpec[] = [
+  {
+    id: "builder",
+    label: "BUILDER",
+    mode: "APPLY",
+    focus: "claude",
+    blurb: "implement approved slices",
+  },
+  {
+    id: "architect",
+    label: "ARCHITECT",
+    mode: "PLAN",
+    focus: "claude",
+    blurb: "plan / structure / options — no silent apply",
+  },
+  {
+    id: "operator",
+    label: "OPERATOR",
+    mode: "READ",
+    focus: "governance",
+    blurb: "run / monitor / route — no code authoring",
+  },
+] as const;
+
 /** Color states for approval — explicit text for every color state. */
 export type ApprovalColorState =
   | { kind: "pending"; text: "PENDING — awaiting Founder decision" }

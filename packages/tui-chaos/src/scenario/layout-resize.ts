@@ -95,7 +95,8 @@ export const layoutResize: ScenarioFn = async (ctx) => {
   artifacts.push(ctx.recordArtifact("layout-resize-120-after.txt", restored.text));
 
   // 4. Still responsive after two resizes: focus switch must repaint.
-  ctx.session.write(altKey("4"));
+  // GLM-20260918-FOUNDER-TUI-SEATS: events pane focus moved Alt+4 -> Alt+5.
+  ctx.session.write(altKey("5"));
   try {
     await waitGrid(ctx, (s) => gridHas(s, MARKERS.eventsHeader), 6000, "events pane after resize");
     invariants.push(invariant("responsive-after-resize", "events pane reachable after 120->70->120", true));

@@ -20,6 +20,7 @@ import {
   writerToken,
   livenessWord,
 } from "../components/agent-identity";
+import { POSEIDON } from "../theme";
 
 export interface ClaudePaneProps {
   active: boolean;
@@ -51,7 +52,7 @@ export function ClaudePane({ active, state, ptyOutput }: ClaudePaneProps) {
   const header = headerParts.join(" | ");
 
   return (
-    <box flexGrow={1} flexDirection="column" borderStyle="single" borderColor={active ? "cyan" : "white"}>
+    <box flexGrow={1} flexDirection="column" borderStyle="single" borderColor={active ? POSEIDON.accent : POSEIDON.uiBorder}>
       <box>
         <text><strong>{header}</strong></text>
       </box>

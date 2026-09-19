@@ -1,15 +1,20 @@
 // apps/madbridge/src/tui/components/StatusBar.tsx
-// Single-row status bar — always carries all six governance facts.
+// Single-row status bar — always carries the governance facts.
 // Read-only projection of broker state. No authority decisions.
 //
 // The status bar ALWAYS occupies exactly one physical row. At 60+ columns
-// all six governance facts are present using compact pipe-delimited tokens.
+// all governance facts are present using compact pipe-delimited tokens.
 // Below 60 columns, progressive dropping is documented and tested.
 //
-// Compact token format (narrow):
-//   CONN|S:active|W:exec-claude-code#3|P:1|F:CLAUDE|L:#3
-// Full format (wide):
-//   CONNECTED | session active | writer exec-claude-code #3 | pending 1 | focus CLAUDE | ledger #3
+// GLM-20260918-FOUNDER-TUI-SEATS: seat + mode joined as a seventh fact.
+// The seat is LOCAL UI posture; its mode label is fixed by the seat
+// contract (types.ts SEATS). When the App provides no seat, the fact is
+// omitted — never rendered as a placeholder that would fabricate a seat.
+//
+// Compact token format (narrow, with seat):
+//   CONN|S:active|W:exec-claude-code#3|P:1|F:CLAUDE|SEAT:BUILDER·APPLY|L:#3
+// Full format (wide, with seat):
+//   CONNECTED | session active | writer exec-claude-code #3 | pending 1 | focus CLAUDE | seat BUILDER (APPLY) | ledger #3
 //
 // Fencing tokens are 1-based. When no token has been issued the writer field
 // carries the explicit marker " T:none" instead of a fabricated "#0":
@@ -17,18 +22,21 @@
 // The marker is space-separated so the writer stays exactly ONE pipe field.
 
 import { useTerminalDimensions } from "@opentui/react";
-import type { BrokerSnapshot, FocusTarget } from "../types";
-import { displayWidth, sliceByDisplayWidth } from "./agent-identity";
+import type { BrokerSnapshot, FocusTarget, SeatId } from "../types";
+import { displayWidth, sliceByDisplayWidth, seatMode, seatLabel } from "./agent-identity";
 
 interface Props {
   state: BrokerSnapshot | null;
   connected: boolean;
   focus: FocusTarget;
+  /** The active Founder seat (LOCAL UI posture). When omitted, the seat
+   * fact is omitted from the line — never fabricated. */
+  seat?: SeatId;
   /** Override terminal width for testing. When omitted, uses useTerminalDimensions. */
   widthOverride?: number;
 }
 
-export function StatusBar({ state, connected, focus, widthOverride }: Props) {
+export function StatusBar({ state, connected, focus, seat, widthOverride }: Props) {
   const { width: termWidth } = useTerminalDimensions();
   const width = widthOverride ?? termWidth;
 
@@ -42,6 +50,11 @@ export function StatusBar({ state, connected, focus, widthOverride }: Props) {
     // bounded projection — it may not contain the entire ledger.
     ledgerSeq: computeLedgerSeq(state?.eventLog ?? []),
     focusWord: focus.toUpperCase(),
+    // exactOptionalPropertyTypes: the seat facts are spread in only when a
+    // seat is active — an explicit undefined would not typecheck.
+    ...(seat !== undefined
+      ? { seatWord: seatLabel(seat), modeWord: seatMode(seat) }
+      : {}),
     width,
   });
 
@@ -61,37 +74,55 @@ export interface StatusLineInput {
   pendingCount: number;
   ledgerSeq: number;
   focusWord: string;
+  /** Active seat label (e.g. "BUILDER"). When omitted the seat fact is
+   * omitted — never rendered as a fabricated placeholder. */
+  seatWord?: string;
+  /** The seat's fixed mode (e.g. "APPLY"). Required whenever seatWord is set. */
+  modeWord?: string;
   width: number;
 }
 
-// Six governance facts, always present at 60+ columns:
+// Governance facts, always present at 60+ columns:
 //   1. Connection state
 //   2. Session state
 //   3. Writer + fencing token
 //   4. Pending-decision count
 //   5. Focus
-//   6. Ledger sequence
+//   6. Seat + mode (when a seat is active — LOCAL UI posture)
+//   7. Ledger sequence
 //
 // Format tiers:
 //   wide  (>=100): full words with " | " separators
 //   med   (>=80):  compact labels with " | " separators
 //   narrow(>=60):  pipe-delimited compact tokens with "|" separators
-//   <60:          progressive dropping (ledger→pending→writer→session),
+//   <60:          progressive dropping (seat→ledger→pending→writer→session),
 //                 documented and tested
 
 export function buildStatusLine(input: StatusLineInput): string {
   const width = input.width;
+  const hasSeat = input.seatWord !== undefined && input.modeWord !== undefined;
 
-  // Build the six fact tokens.
+  // Build the fact tokens.
   const connToken = input.connected ? "CONNECTED" : "NOT CONNECTED";
   const sessToken = "session " + input.sessionWord;
   const writerToken = "writer " + input.ownerWord;
   const pendToken = "pending " + String(input.pendingCount);
   const focusToken = "focus " + input.focusWord;
+  const seatWideToken = hasSeat
+    ? "seat " + input.seatWord + " (" + input.modeWord + ")"
+    : null;
   const ledgerToken = "ledger #" + String(input.ledgerSeq);
 
   // ── Wide format (>=100): full words with " | " separators ──
-  const wideTokens = [connToken, sessToken, writerToken, pendToken, focusToken, ledgerToken];
+  const wideTokens = [
+    connToken,
+    sessToken,
+    writerToken,
+    pendToken,
+    focusToken,
+    ...(seatWideToken !== null ? [seatWideToken] : []),
+    ledgerToken,
+  ];
   const wideLine = wideTokens.join(" | ");
   if (displayWidth(wideLine) <= width) {
     return padToWidth(wideLine, width);
@@ -102,12 +133,23 @@ export function buildStatusLine(input: StatusLineInput): string {
   const sessCompact = "S:" + input.sessionWord;
   const pendCompact = "P:" + String(input.pendingCount);
   const focusCompact = "F:" + input.focusWord;
+  const seatCompact = hasSeat
+    ? "SEAT:" + input.seatWord + "·" + input.modeWord
+    : null;
   const ledgerCompact = "L:#" + String(input.ledgerSeq);
 
   // ── Medium format (>=80): compact labels with " | " separators ──
   // Use a generous writer budget — medium has room.
   const writerMedium = "W:" + abbreviateWriter(input.ownerWord, 30);
-  const medTokens = [connCompact, sessCompact, writerMedium, pendCompact, focusCompact, ledgerCompact];
+  const medTokens = [
+    connCompact,
+    sessCompact,
+    writerMedium,
+    pendCompact,
+    focusCompact,
+    ...(seatCompact !== null ? [seatCompact] : []),
+    ledgerCompact,
+  ];
   const medLine = medTokens.join(" | ");
   if (displayWidth(medLine) <= width) {
     return padToWidth(medLine, width);
@@ -115,15 +157,19 @@ export function buildStatusLine(input: StatusLineInput): string {
 
   // ── Narrow format (>=60): pipe-delimited, no spaces ──
   // Dynamic writer budget: calculate the remaining space after the
-  // five fixed tokens + separators, then abbreviate the writer to fit.
-  // This ensures all six facts ALWAYS fit at width >=60 regardless of
+  // non-writer tokens + separators, then abbreviate the writer to fit.
+  // This ensures all facts ALWAYS fit at width >=60 regardless of
   // session state, focus target, or numeric values.
   const SEP_NARROW = "|";
-  const sepCount = 5; // 6 tokens → 5 separators
+  // Non-writer tokens in display order (the writer slots in after session).
+  const fixedTokens = [connCompact, sessCompact, pendCompact, focusCompact];
+  if (seatCompact !== null) fixedTokens.push(seatCompact);
+  fixedTokens.push(ledgerCompact);
+  // Total tokens = fixed count + 1 (writer) → separators = fixed count.
+  const sepCount = fixedTokens.length;
 
-  // Fixed tokens (all except writer) — budget by display width
-  const fixedTokens = [connCompact, sessCompact, pendCompact, focusCompact, ledgerCompact];
-  const fixedLen = fixedTokens.reduce((sum, t) => sum + displayWidth(t), 0) + sepCount * displayWidth(SEP_NARROW);
+  const fixedLen =
+    fixedTokens.reduce((sum, t) => sum + displayWidth(t), 0) + sepCount * displayWidth(SEP_NARROW);
 
   // Writer budget = width - fixedLen - displayWidth("W:")
   // Must be at least 3 (for "#N" minimum) to preserve the fencing token.
@@ -131,7 +177,15 @@ export function buildStatusLine(input: StatusLineInput): string {
   const writerBudget = Math.max(3, width - fixedLen - displayWidth(writerPrefix));
 
   const writerNarrow = writerPrefix + abbreviateWriter(input.ownerWord, writerBudget);
-  const narrowTokens = [connCompact, sessCompact, writerNarrow, pendCompact, focusCompact, ledgerCompact];
+  const narrowTokens = [
+    connCompact,
+    sessCompact,
+    writerNarrow,
+    pendCompact,
+    focusCompact,
+    ...(seatCompact !== null ? [seatCompact] : []),
+    ledgerCompact,
+  ];
   const narrowLine = narrowTokens.join(SEP_NARROW);
 
   if (displayWidth(narrowLine) <= width) {
@@ -140,9 +194,19 @@ export function buildStatusLine(input: StatusLineInput): string {
 
   // If the dynamic abbreviation still doesn't fit (extremely long session
   // word or focus word at exactly 60 columns), try truncating the writer
-  // even more aggressively — down to just "#N" with no ID.
+  // even more aggressively — down to just "#N" with no ID. The seat token
+  // keeps its documented slot here too: the minimal fallback narrows the
+  // writer, it must NOT reorder the drop priority.
   const writerMinimal = writerPrefix + abbreviateWriter(input.ownerWord, 3);
-  const minimalTokens = [connCompact, sessCompact, writerMinimal, pendCompact, focusCompact, ledgerCompact];
+  const minimalTokens = [
+    connCompact,
+    sessCompact,
+    writerMinimal,
+    pendCompact,
+    focusCompact,
+    ...(seatCompact !== null ? [seatCompact] : []),
+    ledgerCompact,
+  ];
   const minimalLine = minimalTokens.join(SEP_NARROW);
 
   if (displayWidth(minimalLine) <= width) {
@@ -150,10 +214,22 @@ export function buildStatusLine(input: StatusLineInput): string {
   }
 
   // ── Below 60: progressive dropping (documented and tested) ──
-  // Keep connection + focus (mandatory), drop from lowest priority.
-  const dropOrder = [5, 3, 2, 1]; // ledger → pending → writer → session
+  // Keep connection + focus (mandatory), drop from lowest priority:
+  // seat → ledger → pending → writer → session.
+  // The seat fact drops FIRST: it is LOCAL UI posture and already visible
+  // on the SeatBar row directly above, while the ledger sequence is unique
+  // broker truth the status bar is the only place showing at this width.
+  const ledgerIdx = narrowTokens.length - 1;
+  const seatIdx = seatCompact !== null ? narrowTokens.length - 2 : -1;
+  const dropOrder = [
+    ...(seatIdx >= 0 ? [seatIdx] : []),
+    ledgerIdx,
+    3, // pending
+    2, // writer
+    1, // session
+  ];
 
-  for (const dropCount of [1, 2, 3, 4]) {
+  for (const dropCount of [1, 2, 3, 4, 5]) {
     const dropIndices = new Set(dropOrder.slice(0, dropCount));
     const kept = narrowTokens.filter((_, i) => !dropIndices.has(i));
     const line = kept.join("|");

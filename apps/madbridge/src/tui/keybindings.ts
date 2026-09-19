@@ -5,14 +5,27 @@
 //
 // Alt+digit is terminal-deliverable (ESC followed by digit) unlike Ctrl+digit
 // which many terminals intercept for tab-switching.
+//
+// Seat keys (Alt+1/2/3) were authorized by the Founder commission
+// GLM-20260918-FOUNDER-TUI-SEATS: a seat is a named posture that focuses the
+// seat's pane (builder/architect → Claude, operator → Governance) and sets
+// the mode label on the bars. The previous Alt+1..4 pane-focus map moved to
+// Alt+4 (antigravity) and Alt+5 (events); "focus-claude" and
+// "focus-governance" remain valid actions reachable via the FOUNDER_TUI_KEYS
+// override. Ctrl+P opens the model picker — a modal whose keys are captured
+// while open, which intentionally withholds Ctrl+P from the PTYs.
 
 export type KeyAction =
+  | "seat-builder"
+  | "seat-architect"
+  | "seat-operator"
   | "focus-claude"
   | "focus-antigravity"
   | "focus-governance"
   | "focus-events"
   | "accept-approval"
   | "reject-approval"
+  | "open-model-picker"
   | "quit";
 
 export interface KeyBinding {
@@ -21,12 +34,14 @@ export interface KeyBinding {
 }
 
 export const DEFAULT_KEYBINDINGS: readonly KeyBinding[] = [
-  { key: "alt+1", action: "focus-claude" },
-  { key: "alt+2", action: "focus-antigravity" },
-  { key: "alt+3", action: "focus-governance" },
-  { key: "alt+4", action: "focus-events" },
+  { key: "alt+1", action: "seat-builder" },
+  { key: "alt+2", action: "seat-architect" },
+  { key: "alt+3", action: "seat-operator" },
+  { key: "alt+4", action: "focus-antigravity" },
+  { key: "alt+5", action: "focus-events" },
   { key: "alt+y", action: "accept-approval" },
   { key: "alt+n", action: "reject-approval" },
+  { key: "ctrl+p", action: "open-model-picker" },
   { key: "alt+q", action: "quit" },
 ] as const;
 

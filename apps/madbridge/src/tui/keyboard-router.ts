@@ -7,7 +7,14 @@
 // behavioral tests observe the same logic the production App uses.
 
 import type { KeyAction } from "./keybindings";
-import type { FocusTarget, BrokerSnapshot, ApprovalRequestEvent, PendingApproval } from "./types";
+import type {
+  FocusTarget,
+  SeatId,
+  BrokerSnapshot,
+  ApprovalRequestEvent,
+  PendingApproval,
+} from "./types";
+import { SEATS } from "./types";
 
 export interface KeyboardRouterState {
   /** Current focus target. */
@@ -22,6 +29,13 @@ export interface KeyboardRouterState {
    * Once an approval ID is in this set, it cannot be resolved again or
    * auto-reopened while the broker snapshot still contains it. */
   resolvedApprovalIds: ReadonlySet<string>;
+  /** Current Founder seat (LOCAL UI posture — see types.ts SeatId).
+   * Optional for compatibility with pre-seat state literals. */
+  seat?: SeatId;
+  /** Whether the model picker modal is open. While open, navigation keys are
+   * captured by the picker and NEVER reach the PTYs. Optional for
+   * compatibility with pre-picker state literals. */
+  showModelPicker?: boolean;
 }
 
 export interface KeyboardRouterCallbacks {
@@ -31,6 +45,14 @@ export interface KeyboardRouterCallbacks {
   onQuit: () => void;
   /** Called to open/close the decision dialog. */
   onShowApprovalDialog: (show: boolean, approvalId: string | null) => void;
+  /** Called when a seat action selects a seat. The seat's pane focus change
+   * is ALSO emitted through onFocusChange by the router itself. */
+  onSeatSelect?: (seat: SeatId) => void;
+  /** Model picker modal callbacks (all optional — absent in pre-picker callers). */
+  onModelPickerOpen?: () => void;
+  onModelPickerNav?: (delta: number) => void;
+  onModelPickerConfirm?: () => void;
+  onModelPickerClose?: () => void;
 }
 
 export interface RouteKeyInput {
@@ -117,6 +139,25 @@ export function routeKeyEvent(input: RouteKeyInput): KeyboardRouterState {
   // ─── Global action ───
   if (action !== null) {
     switch (action) {
+      case "seat-builder":
+      case "seat-architect":
+      case "seat-operator": {
+        // A seat is a named posture: it selects the seat (mode label on the
+        // bars) AND focuses the seat's pane. LOCAL UI state only — no broker
+        // authority, permissions, ownership, or approval semantics change.
+        const seat: SeatId =
+          action === "seat-builder" ? "builder"
+          : action === "seat-architect" ? "architect"
+          : "operator";
+        const spec = SEATS.find((s) => s.id === seat);
+        callbacks.onSeatSelect?.(seat);
+        if (spec) {
+          callbacks.onFocusChange(spec.focus);
+          return { ...state, seat, focus: spec.focus };
+        }
+        return { ...state, seat };
+      }
+
       case "focus-claude":
         callbacks.onFocusChange("claude");
         return { ...state, focus: "claude" };
@@ -177,10 +218,40 @@ export function routeKeyEvent(input: RouteKeyInput): KeyboardRouterState {
         };
       }
 
+      case "open-model-picker":
+        callbacks.onModelPickerOpen?.();
+        return { ...state, showModelPicker: true };
+
       case "quit":
         callbacks.onQuit();
         return state;
     }
+  }
+
+  // ─── Model picker modal ───
+  // While the picker is open it captures navigation keys; NOTHING reaches
+  // the PTYs. Global actions above still run (quit, approval resolution —
+  // the latter still gated by validateApprovalResolution).
+  // Navigation accepts up/down AND vim-style k/j (plain characters that
+  // survive every terminal input path, including PTY-managed ones).
+  if (state.showModelPicker) {
+    if (name === "up" || name === "k") {
+      callbacks.onModelPickerNav?.(-1);
+      return state;
+    }
+    if (name === "down" || name === "j") {
+      callbacks.onModelPickerNav?.(1);
+      return state;
+    }
+    if (name === "return" || name === "enter") {
+      callbacks.onModelPickerConfirm?.();
+      return { ...state, showModelPicker: false };
+    }
+    if (name === "escape") {
+      callbacks.onModelPickerClose?.();
+      return { ...state, showModelPicker: false };
+    }
+    return state; // swallow other keys while the modal is open
   }
 
   // ─── Not a global action — pass through to PTY ───

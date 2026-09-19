@@ -1,4 +1,6 @@
-# golden grid for tui-chaos — sha256:99f715ae22cda325d7c8c1ed5cd553a24b4fc5565c55b9fb3eea7d3606c1ff0f
+# golden grid for tui-chaos — sha256:991bf9d04993ae105b37c7e356520f5f3c0498b58888ae29366c968fde1e6d14
+[ BUILDER ][ ARCHITECT ][ OPERATOR* ]
+MODEL unpinned | PROFILE OPERATOR | MODE READ | catalog unavailable (catalog disabled (MAD_TUI_CATALOG=off))
 ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
 │ Event Log (hash-chained ledger)                                                                                      │
 │ #3 ownership_accept exec-claude-code tok:3 ghi345def678                                                              │
@@ -32,10 +34,8 @@
 │                                                                                                                      │
 │                                                                                                                      │
 │                                                                                                                      │
-│                                                                                                                      │
-│                                                                                                                      │
 └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 CLAUDE CODE | docked | WRITER tok#3 | builder | claude-sonnet-4 | 0 buffered
 ANTIGRAVITY | docked | independent-reviewer | gemini-2.5-pro | 0 buffered
 FIXTURE DATA — NOT A LIVE SESSION
-CONNECTED | session active | writer exec-claude-code #3 | pending 2 | focus EVENTS | ledger #3
+CONNECTED | session active | writer exec-claude-code #3 | pending 2 | focus EVENTS | seat OPERATOR (READ) | ledger #3

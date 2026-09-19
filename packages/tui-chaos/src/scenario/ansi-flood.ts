@@ -35,7 +35,8 @@ export const ansiFlood: ScenarioFn = async (ctx) => {
 
   // 3. Switch to the Events pane — the pane the stream fills — and confirm
   //    it paints with ledger rows that include stream-generated types.
-  ctx.session.write(altKey("4"));
+  // GLM-20260918-FOUNDER-TUI-SEATS: events pane focus moved Alt+4 -> Alt+5.
+  ctx.session.write(altKey("5"));
   try {
     await withTimeout(
       waitGrid(

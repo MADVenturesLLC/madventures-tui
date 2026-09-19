@@ -26,6 +26,7 @@ import { useTerminalDimensions } from "@opentui/react";
 import { TextAttributes } from "@opentui/core";
 import type { BrokerSnapshot } from "../types";
 import { truncateToWidth } from "./agent-identity";
+import { POSEIDON } from "../theme";
 
 export interface IncidentBandProps {
   state: BrokerSnapshot | null;
@@ -62,12 +63,12 @@ export function IncidentBand({ state }: IncidentBandProps) {
   return (
     <box
       borderStyle="heavy"
-      borderColor="red"
+      borderColor={POSEIDON.error}
       flexDirection="column"
       paddingLeft={1}
       paddingRight={1}
     >
-      <text fg="red" attributes={TextAttributes.BOLD}>{fit(headline)}</text>
+      <text fg={POSEIDON.error} attributes={TextAttributes.BOLD}>{fit(headline)}</text>
       <text attributes={TextAttributes.DIM}>
         {fit("Severity: " + severity + " | Incident ID: " + incidentId + " | Timestamp: " + timestamp)}
       </text>

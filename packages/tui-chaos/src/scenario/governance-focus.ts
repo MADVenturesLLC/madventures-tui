@@ -146,7 +146,8 @@ export const governanceFocus: ScenarioFn = async (ctx) => {
   }
 
   // 7. App still responsive after the full decision cycle.
-  ctx.session.write(altKey("4"));
+  // GLM-20260918-FOUNDER-TUI-SEATS: events pane focus moved Alt+4 -> Alt+5.
+  ctx.session.write(altKey("5"));
   try {
     await waitGrid(ctx, (s) => gridHas(s, MARKERS.eventsHeader), 5000, "events pane reachable");
     invariants.push(
