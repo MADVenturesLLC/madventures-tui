@@ -95,7 +95,7 @@ export interface StatusLineInput {
 //   wide  (>=100): full words with " | " separators
 //   med   (>=80):  compact labels with " | " separators
 //   narrow(>=60):  pipe-delimited compact tokens with "|" separators
-//   <60:          progressive dropping (ledger→seat→pending→writer→session),
+//   <60:          progressive dropping (seat→ledger→pending→writer→session),
 //                 documented and tested
 
 export function buildStatusLine(input: StatusLineInput): string {
@@ -194,9 +194,19 @@ export function buildStatusLine(input: StatusLineInput): string {
 
   // If the dynamic abbreviation still doesn't fit (extremely long session
   // word or focus word at exactly 60 columns), try truncating the writer
-  // even more aggressively — down to just "#N" with no ID.
+  // even more aggressively — down to just "#N" with no ID. The seat token
+  // keeps its documented slot here too: the minimal fallback narrows the
+  // writer, it must NOT reorder the drop priority.
   const writerMinimal = writerPrefix + abbreviateWriter(input.ownerWord, 3);
-  const minimalTokens = [connCompact, sessCompact, writerMinimal, pendCompact, focusCompact, ledgerCompact];
+  const minimalTokens = [
+    connCompact,
+    sessCompact,
+    writerMinimal,
+    pendCompact,
+    focusCompact,
+    ...(seatCompact !== null ? [seatCompact] : []),
+    ledgerCompact,
+  ];
   const minimalLine = minimalTokens.join(SEP_NARROW);
 
   if (displayWidth(minimalLine) <= width) {
@@ -205,12 +215,15 @@ export function buildStatusLine(input: StatusLineInput): string {
 
   // ── Below 60: progressive dropping (documented and tested) ──
   // Keep connection + focus (mandatory), drop from lowest priority:
-  // ledger → seat → pending → writer → session.
+  // seat → ledger → pending → writer → session.
+  // The seat fact drops FIRST: it is LOCAL UI posture and already visible
+  // on the SeatBar row directly above, while the ledger sequence is unique
+  // broker truth the status bar is the only place showing at this width.
   const ledgerIdx = narrowTokens.length - 1;
   const seatIdx = seatCompact !== null ? narrowTokens.length - 2 : -1;
   const dropOrder = [
-    ledgerIdx,
     ...(seatIdx >= 0 ? [seatIdx] : []),
+    ledgerIdx,
     3, // pending
     2, // writer
     1, // session

@@ -51,6 +51,7 @@ import type {
 import { routeKeyEvent, pruneResolvedIds } from "./keyboard-router";
 import type { KeyboardRouterState } from "./keyboard-router";
 import type { loadOmpCatalog } from "./omp-catalog";
+import { POSEIDON } from "./theme";
 
 // Wide mode threshold: terminal width >= 80 shows stage + dock composition.
 // Narrow mode (< 80) shows a tab row + a single selected surface.
@@ -189,14 +190,15 @@ export function App({ subscribe, onPtyWrite, onApprovalResolve, onQuit, fixture 
   }, []);
 
   const handleModelPickerConfirm = useCallback(() => {
+    // The modal closes on Return in EVERY catalog state — the router's
+    // contract is "Return confirms and closes", and App owns the UI state.
+    // Pinning only happens when a model is actually available to pin.
+    dispatchSync({ type: "show-model-picker", show: false });
     const { catalog, pickerIndex } = seatStateRef.current;
     if (catalog.status !== "ok") return; // honest no-op — nothing to pin
     const model = catalog.models[pickerIndex];
     if (!model) return;
     seatStateRef.current.pinModel(uiRef.current.seat, model.selector);
-    // The router closed the modal in its own state; App's UI state closes
-    // through this callback.
-    dispatchSync({ type: "show-model-picker", show: false });
   }, [dispatchSync]);
 
   const handleApprovalResolve = useCallback((event: ApprovalRequestEvent) => {
@@ -371,7 +373,13 @@ export function App({ subscribe, onPtyWrite, onApprovalResolve, onQuit, fixture 
   const decisionArmed = decisionVisible && governanceFocused && !incident;
 
   return (
-    <box flexDirection="column" flexGrow={1}>
+    <box
+      flexDirection="column"
+      flexGrow={1}
+      // The mandated Poseidon background, enforced at the rendering root so
+      // the HUD carries the palette even on terminals with another theme.
+      backgroundColor={POSEIDON.background}
+    >
       {/* ── Founder seat rows — always visible. Wide terminals get two
           rows (SeatBar, then ModelBar). Narrow terminals share ONE row so
           the whole stack still fits 24 lines without compressing any

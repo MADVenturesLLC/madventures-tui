@@ -337,14 +337,39 @@ describe("OMP catalog parsing (omp models ls --json)", () => {
     expect(() => parseOmpModelsJson(JSON.stringify({ models: [{ name: "x", provider: "y" }] }))).toThrow(/selector/);
   });
 
+  test("control characters in catalog strings are stripped, never rendered", () => {
+    const models = parseOmpModelsJson(JSON.stringify({
+      models: [
+        { provider: "p", id: "i", selector: "p/mod\r\nel\x1b[31m", name: "Mo\ndel\tX" },
+      ],
+    }));
+    expect(models[0]!.selector).toBe("p/model[31m");
+    expect(models[0]!.name).toBe("ModelX");
+    expect(models[0]!.selector).not.toMatch(/[\n\r]/);
+  });
+
+  test("a selector that is all control characters throws — never an empty row identity", () => {
+    expect(() => parseOmpModelsJson(JSON.stringify({
+      models: [{ provider: "p", id: "i", selector: "\r\n\x1b", name: "x" }],
+    }))).toThrow(/empty after control-char strip/);
+  });
+
   test("loadOmpCatalog reports an honest reason for a missing binary", async () => {
-    const result = await loadOmpCatalog({
-      bin: "definitely-not-a-real-binary-glm-20260918",
-      timeoutMs: 500,
-    });
-    expect(result.status).toBe("unavailable");
-    if (result.status === "unavailable") {
-      expect(result.reason).toContain("not found");
+    // Other suite files may set MAD_TUI_CATALOG=off (module scope, shared
+    // process env) — clear it so THIS test exercises the real spawn path.
+    const origCat = process.env.MAD_TUI_CATALOG;
+    delete process.env.MAD_TUI_CATALOG;
+    try {
+      const result = await loadOmpCatalog({
+        bin: "definitely-not-a-real-binary-glm-20260918",
+        timeoutMs: 500,
+      });
+      expect(result.status).toBe("unavailable");
+      if (result.status === "unavailable") {
+        expect(result.reason).toContain("not found");
+      }
+    } finally {
+      if (origCat !== undefined) process.env.MAD_TUI_CATALOG = origCat;
     }
   });
 

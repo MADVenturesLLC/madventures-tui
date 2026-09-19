@@ -54,6 +54,16 @@ const DEFAULT_TIMEOUT_MS = 5000;
 const MAX_STDOUT_BYTES = 8 * 1024 * 1024;
 
 /**
+ * Strip C0/C1 control characters from catalog strings. These strings render
+ * verbatim inside fixed rows (ModelBar/ModelPicker), so a stray \r, \n, or
+ * escape byte from the CLI must never split a row or inject escape output.
+ */
+function stripControlChars(s: string): string {
+  // eslint-disable-next-line no-control-regex
+  return s.replace(/[\u0000-\u001f\u007f-\u009f]/g, "");
+}
+
+/**
  * Parse the stdout of `omp models ls --json` into model entries.
  * Throws on any shape deviation — the caller maps the throw to an honest
  * "unparseable output" reason instead of guessing a partial catalog.
@@ -78,10 +88,14 @@ export function parseOmpModelsJson(text: string): readonly OmpModelInfo[] {
     if (typeof rec.name !== "string" || typeof rec.provider !== "string") {
       throw new Error("model entry is missing name/provider");
     }
+    const selector = stripControlChars(rec.selector);
+    if (selector.length === 0) {
+      throw new Error("model entry selector is empty after control-char strip");
+    }
     return {
-      selector: rec.selector,
-      name: rec.name,
-      provider: rec.provider,
+      selector,
+      name: stripControlChars(rec.name),
+      provider: stripControlChars(rec.provider),
     };
   });
 }

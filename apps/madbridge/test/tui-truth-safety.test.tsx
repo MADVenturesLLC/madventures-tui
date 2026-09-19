@@ -46,6 +46,11 @@ import {
 import type { KeyboardRouterState, KeyboardRouterCallbacks } from "../src/tui/keyboard-router";
 import type { BrokerSnapshot, FocusTarget, ApprovalRequestEvent, PendingApproval, ApprovalColorState } from "../src/tui/types";
 
+// This file renders <App> directly (no catalogLoader prop) in many lifecycle
+// tests. The seam below keeps those renders hermetic: without it, every mount
+// would shell out to the real `omp` binary via the default catalog loader.
+process.env.MAD_TUI_CATALOG = "off";
+
 // ─── Fixtures ───
 
 function makeConnectedSnapshot(): BrokerSnapshot {
