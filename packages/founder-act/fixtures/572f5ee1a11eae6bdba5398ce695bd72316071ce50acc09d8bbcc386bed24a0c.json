@@ -1,0 +1,21 @@
+{
+  "schema": "founder_act_v0",
+  "id": "df55245e-f1e1-48fb-8261-7bf83c0436a2",
+  "kind": "commission",
+  "subject": "demo/repo:packages/demo",
+  "scope": [
+    "packages/demo",
+    "packages/demo/test"
+  ],
+  "actor": "demo",
+  "issued_at": "2026-09-13T00:00:00Z",
+  "reason_code": "DEMO_FIXTURE",
+  "evidence_refs": [
+    {
+      "kind": "demo",
+      "ref": "synthetic"
+    }
+  ],
+  "body_sha256": "15400de4719b3fafac3cba894a66d08c8ae698c766891d6d437206bf4a4d0f2c",
+  "act_sha256": "572f5ee1a11eae6bdba5398ce695bd72316071ce50acc09d8bbcc386bed24a0c"
+}

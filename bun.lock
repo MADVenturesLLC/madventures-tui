@@ -101,6 +101,13 @@
       "name": "@mad/claim-boundary",
       "version": "0.1.0",
     },
+    "packages/founder-act": {
+      "name": "@mad/founder-act",
+      "version": "0.1.0",
+      "bin": {
+        "mad-founder-act": "./src/main.ts",
+      },
+    },
     "packages/ledger": {
       "name": "@madventures/ledger",
       "version": "0.1.0",
@@ -216,6 +223,8 @@
     "@mad/build-memory": ["@mad/build-memory@workspace:packages/build-memory"],
 
     "@mad/claim-boundary": ["@mad/claim-boundary@workspace:packages/claim-boundary"],
+
+    "@mad/founder-act": ["@mad/founder-act@workspace:packages/founder-act"],
 
     "@mad/preflight": ["@mad/preflight@workspace:packages/preflight"],
 

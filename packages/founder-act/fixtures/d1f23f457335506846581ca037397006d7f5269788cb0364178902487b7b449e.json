@@ -1,0 +1,22 @@
+{
+  "schema": "founder_act_v0",
+  "id": "9ea6b591-f7e6-411a-9c55-1caa8b93501c",
+  "kind": "merge",
+  "subject": "demo/repo:build/demo-branch",
+  "scope": [
+    "packages/demo/src"
+  ],
+  "actor": "demo",
+  "issued_at": "2026-09-13T00:00:00Z",
+  "reason_code": "DEMO_FIXTURE",
+  "evidence_refs": [
+    {
+      "kind": "demo",
+      "ref": "synthetic"
+    }
+  ],
+  "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "base_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "body_sha256": "6b37b31781e0999c45aecc0df573868445c7f1a503495b475d53cb4d2263b8b5",
+  "act_sha256": "d1f23f457335506846581ca037397006d7f5269788cb0364178902487b7b449e"
+}
