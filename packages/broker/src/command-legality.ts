@@ -142,9 +142,22 @@ export function evaluateCommandLegality(
   // an executionId to check.
   if (EXECUTION_SCOPED_COMMAND_KINDS.has(kind)) {
     const executionId = (command as { readonly executionId: string }).executionId;
-    const exists = snapshot.executions.some((execution) => execution.identity.execution_id === executionId);
-    if (!exists) {
-      return { ok: false, error: "execution_not_found", detail: "named execution is absent from the snapshot" };
+    if (snapshot.executions === null) {
+      // D9 Part B item 12: `executions` is nullable, and `null` means the
+      // projection did not produce the collection — not that it is empty. A
+      // writer-only command cannot be adjudicated without it and fails closed
+      // here, before clause A's readiness limb. pty_terminate is deliberately
+      // NOT gated: it is execution-scoped but not writer-only, and mechanical
+      // fail-closed teardown must not become blockable by a missing
+      // projection. Gating the wider EXECUTION_SCOPED set would invert that.
+      if (WRITER_ONLY_COMMAND_KINDS.has(kind)) {
+        return { ok: false, error: "invariant_failure", detail: "executions not produced by the snapshot" };
+      }
+    } else {
+      const exists = snapshot.executions.some((execution) => execution.identity.execution_id === executionId);
+      if (!exists) {
+        return { ok: false, error: "execution_not_found", detail: "named execution is absent from the snapshot" };
+      }
     }
   }
 
@@ -181,13 +194,15 @@ export function evaluateCommandLegality(
         return { ok: false, error: "incident_active", detail: "an incident is active" };
       }
       const executionId = (command as { readonly executionId: string }).executionId;
-      const targetExecution = snapshot.executions.find(
+      const targetExecution = snapshot.executions?.find(
         (execution) => execution.identity.execution_id === executionId,
       );
       // Clause A / clause B stop: the target execution's state cannot be
       // resolved for a writer-only command. Predicates 4 and 5 already
-      // guarantee a match exists, so this branch is unreachable defensive
-      // code, not a loosening of the check — it never admits the command.
+      // guarantee a match exists when `executions` is non-null, so this branch
+      // is defensive code, not a loosening of the check — it never admits the
+      // command. It is also reachable when `executions` is `null`, which the
+      // optional chain above yields as `undefined`.
       if (targetExecution === undefined) {
         return { ok: false, error: "invariant_failure", detail: "target execution state cannot be resolved" };
       }

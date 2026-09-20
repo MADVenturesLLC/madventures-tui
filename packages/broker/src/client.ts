@@ -106,8 +106,8 @@ export type BrokerResult =
 /** The client-facing broker session projection (spec section 9.4). */
 export interface BrokerSnapshot {
   readonly sessionId: string;
-  readonly snapshotSeq: number;
-  readonly connected: boolean;
+  readonly snapshotSeq: number | null;
+  readonly connected: boolean | null;
   readonly phase:
     | "starting"
     | "active"
@@ -116,23 +116,23 @@ export interface BrokerSnapshot {
     | "closing"
     | "closed";
   readonly taskEnvelopeHash: string;
-  readonly task: TaskEnvelopeV1;
+  readonly task: TaskEnvelopeV1 | null;
   readonly repositoryFingerprint: RepositoryFingerprint;
-  readonly executions: readonly ExecutionSnapshot[];
+  readonly executions: readonly ExecutionSnapshot[] | null;
   readonly activeWriterExecutionId: string | null;
   readonly fencingToken: number | null;
   readonly tokenState: "not_issued" | "valid" | "invalidated";
   readonly pendingApprovals: readonly PendingApprovalSnapshot[];
-  readonly pendingTransfers: readonly PendingTransferSnapshot[];
-  readonly permissionSummary: PermissionSummarySnapshot;
+  readonly pendingTransfers: readonly PendingTransferSnapshot[] | null;
+  readonly permissionSummary: PermissionSummarySnapshot | null;
   // Existing Phase 2 broker ownership-state type, declared in
   // packages/broker/src/ownership-machine.ts. Consumed, never redeclared.
-  readonly ownershipState: OwnershipState;
+  readonly ownershipState: OwnershipState | null;
   readonly verification: VerificationSnapshot | null;
   readonly review: ReviewSnapshot | null;
   readonly incident: IncidentSnapshot | null;
   readonly eventLog: readonly LedgerEntrySnapshot[];
-  readonly queueDepth: number;
+  readonly queueDepth: number | null;
   readonly ledgerSeq: number;
 }
 
