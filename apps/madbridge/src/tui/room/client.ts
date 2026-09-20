@@ -101,6 +101,14 @@ export interface JoinResult {
   readonly input: "granted" | "input_held" | "unchanged";
 }
 
+/** CreateRoom result: the Gateway-minted live room (zero slots at birth). */
+export interface CreateResult {
+  readonly roomId: string;
+  /** Honesty label from the Gateway ack: false for a CreateRoom mint. */
+  readonly fixture: false;
+  readonly snapshot: RoomSnapshotBody;
+}
+
 export interface RoomClientEvents {
   /** Inbound VT patch frames (checkpoint or patch) per execution. */
   onPatch?: (patch: RoomVtPatch) => void;
@@ -219,6 +227,28 @@ export class RoomAttachClient {
       recoveryKind: String(ack["recovery_kind"]) as RoomRecoveryKind,
       snapshot: snapshot as RoomSnapshotBody,
       input: String(ack["input"]) as JoinResult["input"],
+    };
+  }
+
+  /**
+   * CreateRoom (2026-09-20 Founder amendment) — the Gateway MINTS the room;
+   * the client only requests. The minted room is born PREPARED with zero
+   * execution slots; `fixture: false` is the Gateway's own honesty label.
+   */
+  async create(idempotencyKey: string): Promise<CreateResult> {
+    const ack = await this.request({ op: "CreateRoom", idempotency_key: idempotencyKey });
+    if (ack["ok"] !== true) {
+      throw new RoomAttachError(String(ack["reason"] ?? "create_refused"), `CreateRoom refused: ${JSON.stringify(ack)}`);
+    }
+    const snapshot = ack["snapshot"];
+    const defects = validateRoomSnapshotBody(snapshot);
+    if (defects.length > 0) {
+      throw new RoomAttachError("protocol_defect", `Gateway snapshot failed consumer validation: ${defects.join("; ")}`);
+    }
+    return {
+      roomId: String(ack["room_id"]),
+      fixture: false,
+      snapshot: snapshot as RoomSnapshotBody,
     };
   }
 

@@ -141,6 +141,7 @@ export type RoomControlBody =
   | { readonly op: "JoinRoom"; readonly ok: true; readonly room_id: string; readonly viewer_id: string; readonly viewer_capability: string; readonly occupancy_epoch: number; readonly recovery_kind: RoomRecoveryKind; readonly snapshot: RoomSnapshotBody; readonly input: "granted" | "input_held" | "unchanged" }
   | { readonly op: "LeaveRoom"; readonly ok: true; readonly room_id: string; readonly viewer_id: string; readonly disconnect: RoomDisconnectReason }
   | { readonly op: "FollowRoom"; readonly ok: true; readonly target: string; readonly rooms?: readonly RoomSnapshotBody[]; readonly viewer_id?: string | null; readonly snapshot?: RoomSnapshotBody }
+  | { readonly op: "CreateRoom"; readonly ok: true; readonly room_id: string; readonly fixture: false; readonly created_via: "CreateRoom"; readonly snapshot: RoomSnapshotBody }
   | { readonly op: "TakeoverInput"; readonly ok: true; readonly room_id: string; readonly viewer_id: string; readonly input_epoch: number; readonly already_holder?: boolean }
   | { readonly op: "InputFrame"; readonly ok: true; readonly room_id: string; readonly viewer_id: string; readonly input_epoch: number; readonly accepted_bytes: number }
   | { readonly op: "ResizeFrame"; readonly ok: true; readonly room_id: string; readonly cols: number; readonly rows: number }
