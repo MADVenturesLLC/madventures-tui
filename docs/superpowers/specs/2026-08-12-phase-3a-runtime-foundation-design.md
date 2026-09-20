@@ -1558,17 +1558,16 @@ lacks the named execution still yields `execution_not_found`, unchanged. `pty_te
 **not** gated by a `null` collection — it is execution-scoped but not writer-only, and
 mechanical fail-closed teardown must not become blockable by a missing projection. Members not
 in the eight are unchanged; in particular `sessionId` stays `string`, because a null
-`LifecycleState.sessionId` is a projection *failure* rather than a null snapshot field. **The
-code block immediately below predates this amendment and shows the pre-amendment types for the
-eight members; where the two differ, D9 Part B item 12 governs.**
+`LifecycleState.sessionId` is a projection *failure* rather than a null snapshot field. **The code block below carries the
+amended types; it and `packages/broker/src/client.ts` must agree member for member.**
 
 The complete minimum snapshot contract is:
 
 ```ts
 interface BrokerSnapshot {
   readonly sessionId: string;
-  readonly snapshotSeq: number;
-  readonly connected: boolean;
+  readonly snapshotSeq: number | null;
+  readonly connected: boolean | null;
   readonly phase:
     | "starting"
     | "active"
@@ -1577,23 +1576,23 @@ interface BrokerSnapshot {
     | "closing"
     | "closed";
   readonly taskEnvelopeHash: string;
-  readonly task: TaskEnvelopeV1;
+  readonly task: TaskEnvelopeV1 | null;
   readonly repositoryFingerprint: RepositoryFingerprint;
-  readonly executions: readonly ExecutionSnapshot[];
+  readonly executions: readonly ExecutionSnapshot[] | null;
   readonly activeWriterExecutionId: string | null;
   readonly fencingToken: number | null;
   readonly tokenState: "not_issued" | "valid" | "invalidated";
   readonly pendingApprovals: readonly PendingApprovalSnapshot[];
-  readonly pendingTransfers: readonly PendingTransferSnapshot[];
-  readonly permissionSummary: PermissionSummarySnapshot;
+  readonly pendingTransfers: readonly PendingTransferSnapshot[] | null;
+  readonly permissionSummary: PermissionSummarySnapshot | null;
   // Existing Phase 2 broker ownership-state type, declared in
   // packages/broker/src/ownership-machine.ts. Consumed, never redeclared.
-  readonly ownershipState: OwnershipState;
+  readonly ownershipState: OwnershipState | null;
   readonly verification: VerificationSnapshot | null;
   readonly review: ReviewSnapshot | null;
   readonly incident: IncidentSnapshot | null;
   readonly eventLog: readonly LedgerEntrySnapshot[];
-  readonly queueDepth: number;
+  readonly queueDepth: number | null;
   readonly ledgerSeq: number;
 }
 
