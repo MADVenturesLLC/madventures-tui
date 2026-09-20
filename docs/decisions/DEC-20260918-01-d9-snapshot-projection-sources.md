@@ -1,6 +1,6 @@
 # DEC-20260918-01 — Founder Decision D9: BrokerSnapshot Projection Sources (closes PLAN-OPEN-7)
 
-**Status:** ISSUED — signed 2026-09-19T01:16Z; amended by D9-A1
+**Status:** ISSUED — signed 2026-09-19T01:16Z; amended by D9-A1 and D9-A2
 **Repository:** `MADVenturesLLC/madventures-tui`
 **Ruling head at time of issuance:** `origin/main` @
 `a8ecdc8a80559ca5e0ccfd169b65f653b0c7668c` (tree
@@ -11,6 +11,23 @@ signed instrument `m9/ISSUED-FOUNDER-D9-SNAPSHOT-SOURCES-a8ecdc8a.md`
 Transcribed verbatim into repository-local, citable provenance per the
 pattern established by
 [`DEC-20260916-01`](DEC-20260916-01-task21b-snapshot-producer.md).
+
+**Amendments — read before relying on any value in the ruling below.** The
+ruling is transcribed **verbatim** and therefore still carries the values D9
+carried when it was signed. Three of them have since been amended, and the
+amending instrument governs. The ruling text is not edited, because editing a
+signed instrument's transcription is the custody defect D9-A1 Part C1 exists to
+correct.
+
+| Ruling text below | Amended to | By |
+|---|---|---|
+| Item 9: Task 21's tests "must stay **21/21** GREEN" | **22/22** — D9-A1 adds exactly one test. A regression in any of the original 21 remains a stop, not a fix | D9-A2 Part B1 |
+| Item 18: branch from `a8ecdc8a80559ca5e0ccfd169b65f653b0c7668c` | `ea079827a585f8fd6d628f5f65faaea03af6df99` (tree `e3d5f476872b47afd40a363d58d90f8daace1fca`), every governing file byte-identical at both commits | D9-A2 Part A1 |
+| Item 18: "does NOT authorize … any change to … `command-legality.ts`" | Superseded **as to the two files D9-A1 Part A names** — `command-legality.ts` and `command-legality.test.ts`. Item 9 ruled the behaviour while item 18 barred the file that implements it; D9-A1 exists to resolve that | D9-A1 Part A |
+
+Item 9's substantive ruling is **unchanged** and governs: a writer-only command
+against an unresolvable target is `invariant_failure`, and `pty_terminate`
+remains ungated. Only the count limb moved.
 
 ## Ruling (verbatim)
 
