@@ -1,8 +1,9 @@
 // packages/broker/test/command-legality.test.ts
 // Phase 3A M9 Task 21: the pinned command legality matrix (specification
-// section 9.3; plan Task 21). Twenty-one named tests: three added by the
+// section 9.3; plan Task 21). Twenty-two named tests: three added by the
 // 2026-09-17 Founder amendment (the F1 unknown-field closure, clause A's
-// readiness limb, clause B's fencing-token positivity limb), ten matrix
+// readiness limb, clause B's fencing-token positivity limb), one added by
+// D9 Part B item 12 (the null-executions writer-only closure), ten matrix
 // rows, four retained, four originally-new (execution_not_found,
 // invalid_dimensions, invalid_command precedence, and the D7 non-writer
 // negative proof).
@@ -152,7 +153,7 @@ function baseSnapshotWithExecutionState(state: ExecutionSnapshot["state"]): Brok
   const snapshot = baseSnapshot();
   return {
     ...snapshot,
-    executions: snapshot.executions.map((execution) =>
+    executions: (snapshot.executions ?? []).map((execution) =>
       execution.identity.execution_id === EXECUTION_ID ? { ...execution, state } : execution,
     ),
   };
@@ -307,6 +308,35 @@ test("a non-positive supplied fencing token fails with stale_fencing_token", () 
     );
     expect(result).toEqual({ ok: false, error: "stale_fencing_token", detail: "fencing token is not the current token" });
   }
+});
+
+test("a writer-only command against executions: null fails with invariant_failure before readiness is evaluated", () => {
+  // D9 Part B item 12 makes `executions` nullable: `null` means the projection
+  // did not produce the collection, which is NOT the same as producing an empty
+  // one. A writer-only command cannot be adjudicated without it, so it fails
+  // closed at predicate 4 — before clause A's readiness limb is reached. The
+  // fixture is otherwise fully legal and carries the current positive token on
+  // both command and snapshot, so a command that reached readiness would
+  // succeed; only the null collection refuses it. pty_terminate is deliberately
+  // NOT exercised here: it stays ungated, and asserting it would invert the
+  // ruling.
+  const result = evaluateCommandLegality(
+    ptyInput({ executionId: EXECUTION_ID, fencingToken: CURRENT_TOKEN }),
+    baseSnapshot({
+      sessionId: SESSION_ID,
+      executions: null,
+      activeWriterExecutionId: EXECUTION_ID,
+      fencingToken: CURRENT_TOKEN,
+      phase: "active",
+      incident: null,
+    }),
+    FOUNDER_PRINCIPAL,
+  );
+  expect(result).toEqual({
+    ok: false,
+    error: "invariant_failure",
+    detail: "executions not produced by the snapshot",
+  });
 });
 
 // ─── Ten matrix rows ───
