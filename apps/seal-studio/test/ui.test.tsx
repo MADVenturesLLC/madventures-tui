@@ -7,7 +7,7 @@
 import { describe, expect, test } from "bun:test";
 import { create, act } from "react-test-renderer";
 
-import { App } from "../src/App";
+import { App, isoToLocalInput } from "../src/App";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -98,5 +98,20 @@ describe("ritual surface", () => {
     expect(text).toContain("(blocked");
     expect(text).toContain("--founder-confirm");
     expect(text).toContain("--actor founder");
+  });
+});
+
+describe("expiry picker round-trip (Bugbot 330e784a)", () => {
+  test("datetime-local display shows the local instant, not UTC clock time", () => {
+    // 2026-09-13T12:34:00Z — whatever the local offset, the displayed
+    // wall time must parse back to the same instant the Founder picked.
+    const local = isoToLocalInput("2026-09-13T12:34:00.000Z");
+    const roundTripped = new Date(local).toISOString();
+    expect(new Date(roundTripped).getTime()).toBe(new Date("2026-09-13T12:34:00.000Z").getTime());
+  });
+
+  test("empty and invalid ISO strings render as empty input", () => {
+    expect(isoToLocalInput("")).toBe("");
+    expect(isoToLocalInput("not-a-date")).toBe("");
   });
 });

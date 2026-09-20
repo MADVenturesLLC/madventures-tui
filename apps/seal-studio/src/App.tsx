@@ -39,8 +39,15 @@ const KIND_HELP: Record<SealableKind, string> = {
   authorize_review: "authorizes a review pass",
 };
 
-function isoToLocalInput(iso: string): string {
-  return iso === "" ? "" : iso.slice(0, 16);
+/** datetime-local display value for a stored UTC ISO instant: the local wall
+ * time of the same instant, so the picker shows what the Founder picked in
+ * any timezone (round-trips `new Date(localWall).toISOString()`). */
+export function isoToLocalInput(iso: string): string {
+  if (iso === "") return "";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (n: number): string => String(n).padStart(2, "0");
+  return `${String(date.getFullYear())}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 export function App(): React.JSX.Element {
@@ -48,7 +55,9 @@ export function App(): React.JSX.Element {
   const [draft, setDraft] = useState<DraftState>(() => ({
     ...(() => {
       const base = { kind: "commission", subject: "", scope: [], headSha: "", reasonCode: "", expiresAt: "", actor: "founder" } as DraftState;
-      if (typeof window === "undefined") return base;
+      // Headless test environments can expose a bare `window` without
+      // `location`; guard both so the initializer never dereferences undefined.
+      if (typeof window === "undefined" || window.location === undefined) return base;
       return { ...base, ...draftFromSearchParams(new URLSearchParams(window.location.search)) };
     })(),
   }));
@@ -124,7 +133,9 @@ export function App(): React.JSX.Element {
 
   // meta/ctrl+enter attempts the seal — and is still gated like every other path.
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    // Headless environments may expose a bare `window` without browser APIs;
+    // only attach when the full API surface is present.
+    if (typeof window === "undefined" || window.addEventListener === undefined || window.removeEventListener === undefined) return;
     const onKey = (e: KeyboardEvent): void => {
       if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
         e.preventDefault();

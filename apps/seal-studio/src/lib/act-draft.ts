@@ -51,19 +51,21 @@ export const EMPTY_DRAFT: DraftState = {
   actor: "founder",
 };
 
-/** Assemble the hash-coverable body. Empty optionals stay absent. */
+/** Assemble the hash-coverable body. Empty optionals stay absent. All
+ * user-entered fields are trimmed exactly as the CLI seals them, so the
+ * preview hash is always the hash the seal writes. */
 export function buildBody(draft: DraftState, identity: ActIdentity): Record<string, unknown> {
   return {
     schema: ACT_SCHEMA,
     id: identity.id,
     kind: draft.kind,
-    subject: draft.subject,
+    subject: draft.subject.trim(),
     ...(draft.headSha.trim() !== "" ? { head_sha: draft.headSha.trim() } : {}),
     scope: draft.scope,
     actor: draft.actor,
     issued_at: identity.issuedAt,
     ...(draft.expiresAt.trim() !== "" ? { expires_at: draft.expiresAt.trim() } : {}),
-    reason_code: draft.reasonCode,
+    reason_code: draft.reasonCode.trim(),
     evidence_refs: [],
   };
 }
@@ -149,11 +151,11 @@ export function equivalentCommand(draft: DraftState, identity: ActIdentity, conf
     "--kind",
     draft.kind,
     "--subject",
-    JSON.stringify(draft.subject),
+    JSON.stringify(draft.subject.trim()),
     "--scope",
     draft.scope.join(",") || '""',
     "--reason-code",
-    JSON.stringify(draft.reasonCode),
+    JSON.stringify(draft.reasonCode.trim()),
     "--id",
     identity.id,
     "--issued-at",

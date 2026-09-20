@@ -65,6 +65,23 @@ describe("preview hash === seal-core hash", () => {
     expect(draftErrors(commissionDraft({ kind: "merge", headSha: "" }))).toContain('kind "merge" requires head_sha');
     expect(draftErrors(commissionDraft({ kind: "merge", headSha: "a1".repeat(20) }))).toEqual([]);
   });
+
+  test("leading/trailing whitespace never changes the sealed hash (Bugbot a84ad9e9)", async () => {
+    const clean = await actHashes(commissionDraft(), IDENTITY);
+    const padded = await actHashes(
+      commissionDraft({ subject: "  madventures-tui/build/seal-studio-v0  ", reasonCode: "  SEAL_STUDIO_V0  " }),
+      IDENTITY,
+    );
+    // The preview must hash exactly what the seal writes: trimmed fields.
+    expect(padded.actSha256).toBe(clean.actSha256);
+    expect(padded.bodySha256).toBe(clean.bodySha256);
+    // The command preview must show the same trimmed fields the CLI receives.
+    const cmd = equivalentCommand(commissionDraft({ subject: "  x  ", reasonCode: "  y  " }), IDENTITY, true);
+    expect(cmd).toContain('"x"');
+    expect(cmd).toContain('"y"');
+    expect(cmd).not.toContain('"  x  "');
+    expect(cmd).not.toContain('"  y  "');
+  });
 });
 
 describe("draft validation mirrors the core rules", () => {
