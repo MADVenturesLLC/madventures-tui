@@ -43,6 +43,46 @@ because Task 21b sits inside M10 while the sources for `task`, `permissionSummar
 `executions` live at M18/M19/M20. The snapshot contract (M9) was declared ahead of the state it
 projects. This is a milestone-ordering fact, not a reason to reject D8.
 
+## Rulings (D9, 2026-09-18)
+
+D9 (`DEC-20260918-01-d9-snapshot-projection-sources.md`, signed 2026-09-19T01:16Z, transcribing
+the instrument `m9/ISSUED-FOUNDER-D9-SNAPSHOT-SOURCES-a8ecdc8a.md` sha256
+`55a8b16ae92cfba9aeea8cff65fb2b2117e30bbff1a0357723ef54b76927a44a`) rules each open value below.
+Its Part A is the authority; this section records the rulings against the items they answer.
+
+**The identifier stays OPEN, and that is deliberate.** D9's own title reads "closes
+`PLAN-OPEN-7`" and its Part C item 14 directs this status to `RATIFIED`. The later Consolidated
+B2 Execution Authorization rules otherwise at its §D2: `PLAN-OPEN-7` "remains open (it is not
+among the five)", and remaining open "is a deliberate instruction — B2 changes the contract it
+reserves; it does not close it." The Founder confirmed that reading on 2026-09-20. So the
+**values** below are ruled and binding; the **identifier** is not discharged, because B2 lands
+only the contract amendment and the records, never the Task 21b projection the item reserves.
+Closing it is a later act.
+
+| # | Ruling (D9 Part A) |
+| --- | --- |
+| (a) | **SUBSET.** Task 21b projects the *sourceable subset*. Every member with no authoritative source at the Task 21b base is projected as **`null`, meaning "not produced"** — never fabricated, never defaulted. The contract is amended so those members are typed `T \| null` (D9 Part B item 12). A `null` is a truthful statement that the projector had no source; it is not an error and not a placeholder. |
+| (b) | **`connected`** describes this client's subscription and is a property of `InProcessBrokerClient`, not of broker state: Task 21b projects `connected: null`, and Task 22 sets it. **`queueDepth`** has no definition; Task 21b projects `null` until a later ruling defines it. |
+| (c) | **`ownershipState` — DEFERRED.** The Phase 2 ownership machine has no live call site. Task 21b projects `null`. Wiring the machine is its own authority-bearing task. |
+| (d) | **`snapshotSeq`** is the M9 per-published-snapshot sequence (starts at 1, +1 per published snapshot) and belongs to the client (Task 22). Task 21b projects `null`; the projector never manufactures a sequence. The M8 per-lifecycle counter in `RuntimeBroker` is **not** this value. |
+| (e) | **`task`, `permissionSummary`, `executions` — DEFERRED.** Broker-side retention of the task envelope and execution identities does not exist at M10. Task 21b projects `null` for each; envelope retention is recorded as a named precondition of whichever task first needs these members. |
+
+Rulings D9 makes on members outside (a)–(e), recorded here because they bear on the same
+contract: `sessionId` stays typed `string` and a null `LifecycleState.sessionId` is a
+**projection failure** (fail closed — the projector refuses rather than emitting
+`sessionId: null`); `activeWriterExecutionId` MAY be recovered from the durable
+`fencing_token_issued.writer_execution_id` on the chain and is `null` when no such record
+exists, never inferred from any other source; `verification` and `review` stay `null` until
+`publish()` ingestion lands at Task 24; `pendingTransfers` is `null` until the same point and is
+the eighth member of the Part B item 12 amendment; and `pendingApprovals` is **not** ruled here,
+remaining as D9.2 and `DEC-20260916-01` record it.
+
+`executions: null` and command legality are ruled at D9 Part A item 9 and corrected by D9-A1:
+`evaluateCommandLegality` refuses a **writer-only** command (`pty_input`, `pty_resize`) against a
+null collection with `invariant_failure`, and **`pty_terminate` remains ungated**. That carve-out
+is load-bearing — mechanical fail-closed teardown must not become blockable by a missing
+projection.
+
 ## Rule (plan §1A, unchanged)
 
 The implementer may build every slot, type, test, and validator these items feed, but may not
