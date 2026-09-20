@@ -17,7 +17,8 @@
     "mcp": "bun run packages/broker/src/mcp-server.ts",
     "test:tui-chaos": "bun packages/tui-chaos/src/cli.ts run",
     "preflight": "bun packages/preflight/src/cli.ts",
-    "founder-act": "bun packages/founder-act/src/main.ts"
+    "founder-act": "bun packages/founder-act/src/main.ts",
+    "honesty-compile": "bun packages/honesty-compiler/src/cli.ts"
   },
   "trustedDependencies": [
     "node-pty"

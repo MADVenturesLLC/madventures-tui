@@ -1,0 +1,22 @@
+{
+  "schema": "HONESTY_COMPILER_V0",
+  "claims": [
+    {
+      "id": "example-fixture-suite-1",
+      "text": "example-subject passes its sealed fixture suite at execution rung.",
+      "kind": "fixture",
+      "subject": "example-subject",
+      "rung": "executed",
+      "requires": [
+        { "kind": "test_suite", "name": "example-subject:goldens", "exitCode": 0 }
+      ],
+      "not_evidence_of": [
+        "attestation",
+        "verification",
+        "review",
+        "ci",
+        "merge"
+      ]
+    }
+  ]
+}

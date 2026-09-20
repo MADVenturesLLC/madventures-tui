@@ -1,0 +1,23 @@
+{
+  "schema": "HONESTY_COMPILER_V0",
+  "claims": [
+    {
+      "id": "lying-stale-ship-1",
+      "text": "example-subject ships at a head build-memory no longer holds.",
+      "kind": "ship",
+      "subject": "example-subject",
+      "rung": "merged",
+      "requires": [
+        { "kind": "build_memory", "subject": "example-subject", "headSha": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef" }
+      ],
+      "not_evidence_of": [
+        "PHASE_0",
+        "OCCUPANCY_PROOF",
+        "GATEWAY_HONESTY",
+        "ROOM_RUNTIME",
+        "AE01_FIX",
+        "PRODUCTION_MERGE_AUTHORITY"
+      ]
+    }
+  ]
+}

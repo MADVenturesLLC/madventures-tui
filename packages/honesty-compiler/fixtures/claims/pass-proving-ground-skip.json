@@ -1,0 +1,28 @@
+{
+  "schema": "HONESTY_COMPILER_V0",
+  "claims": [
+    {
+      "id": "example-verify-proving-1",
+      "text": "example-subject verifies at the recorded head; the proving-ground ref is declared and skipped in v0.",
+      "kind": "verify",
+      "subject": "example-subject",
+      "rung": "verified",
+      "requires": [
+        { "kind": "build_memory", "subject": "example-subject", "headSha": "5eedcafe5eedcafe5eedcafe5eedcafe5eedcafe" },
+        { "kind": "proving_ground", "challengeId": "example-challenge-1" },
+        { "kind": "argus_packet", "path": "../argus/packet-honest.json", "sha256": "b3e3778aa19ddc912b7b03f80908247bbf252b2e81cd8cc4bc017d3a5666c4fd" }
+      ],
+      "not_evidence_of": [
+        "review",
+        "ci",
+        "merge",
+        "PHASE_0",
+        "OCCUPANCY_PROOF",
+        "GATEWAY_HONESTY",
+        "ROOM_RUNTIME",
+        "AE01_FIX",
+        "PRODUCTION_MERGE_AUTHORITY"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,75 @@
+{
+  "schema": "honesty-compiler/v0",
+  "claim": "HONESTY_COMPILER_V0",
+  "mode": "fixture",
+  "exit_code": 1,
+  "input": "packages/honesty-compiler/fixtures/claims/lying-stale-ship.json",
+  "subject": {
+    "name": "example-subject",
+    "sha": "5eedcafe5eedcafe5eedcafe5eedcafe5eedcafe"
+  },
+  "head_sha": null,
+  "verdict": {
+    "schema": "mad.single-verdict/v0",
+    "verdict": "VERIFY_FAIL",
+    "subject": {
+      "name": "example-subject",
+      "sha": "5eedcafe5eedcafe5eedcafe5eedcafe5eedcafe"
+    },
+    "reason_code": "VERIFY_FAILED",
+    "produced_by": "mad-honesty-compiler/v0",
+    "produced_at": "2026-09-13T12:00:00.000Z",
+    "evidence_refs": [],
+    "findings": [
+      {
+        "code": "EVIDENCE_MEMORY_NOT_VALID",
+        "message": "claims[0].requires[0]: build-memory for subject \"example-subject\" is STALE (SHA_MISMATCH) at claimed head deadbeefdeadbeefdeadbeefdeadbeefdeadbeef, recorded 5eedcafe5eedcafe5eedcafe5eedcafe5eedcafe — STALE memory cannot bind"
+      },
+      {
+        "code": "EVIDENCE_UNBOUND",
+        "message": "claims[0].requires: claim \"lying-stale-ship-1\" is kind \"ship\" but no evidence ref bound — under-claiming beats hallucination, unbinding beats neither"
+      }
+    ]
+  },
+  "claims": [
+    {
+      "id": "lying-stale-ship-1",
+      "kind": "ship",
+      "status": "FAIL",
+      "issues": [
+        {
+          "code": "EVIDENCE_MEMORY_NOT_VALID",
+          "message": "build-memory for subject \"example-subject\" is STALE (SHA_MISMATCH) at claimed head deadbeefdeadbeefdeadbeefdeadbeefdeadbeef, recorded 5eedcafe5eedcafe5eedcafe5eedcafe5eedcafe — STALE memory cannot bind",
+          "path": "claims[0].requires[0]"
+        },
+        {
+          "code": "EVIDENCE_UNBOUND",
+          "message": "claim \"lying-stale-ship-1\" is kind \"ship\" but no evidence ref bound — under-claiming beats hallucination, unbinding beats neither",
+          "path": "claims[0].requires"
+        }
+      ]
+    }
+  ],
+  "failures": [
+    {
+      "code": "EVIDENCE_MEMORY_NOT_VALID",
+      "message": "build-memory for subject \"example-subject\" is STALE (SHA_MISMATCH) at claimed head deadbeefdeadbeefdeadbeefdeadbeefdeadbeef, recorded 5eedcafe5eedcafe5eedcafe5eedcafe5eedcafe — STALE memory cannot bind",
+      "path": "claims[0].requires[0]"
+    },
+    {
+      "code": "EVIDENCE_UNBOUND",
+      "message": "claim \"lying-stale-ship-1\" is kind \"ship\" but no evidence ref bound — under-claiming beats hallucination, unbinding beats neither",
+      "path": "claims[0].requires"
+    }
+  ],
+  "skips": [],
+  "not_evidence_of": [
+    "PHASE_0",
+    "OCCUPANCY_PROOF",
+    "GATEWAY_HONESTY",
+    "ROOM_RUNTIME",
+    "AE01_FIX",
+    "PRODUCTION_MERGE_AUTHORITY",
+    "merge"
+  ]
+}
