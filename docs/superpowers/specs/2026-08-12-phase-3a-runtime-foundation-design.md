@@ -1545,6 +1545,23 @@ Consequently, for Phase 3A and until that record type is separately authorized:
 This deferral scopes only Task 21b's projection obligation. It does not weaken the Task 20
 `BrokerSnapshot` contract for any other member.
 
+**`T | null` means "not produced", not "empty" (D9 Part B item 12, Founder, 2026-09-19).**
+Eight `BrokerSnapshot` members are `T | null`: `snapshotSeq`, `connected`, `task`,
+`executions`, `pendingTransfers`, `permissionSummary`, `ownershipState`, and `queueDepth`.
+`null` on any of them means **the projection did not produce that value** — it is not a
+substitute for an empty collection, a zero, or a default, and a consumer must never coerce it
+into one. The distinction is load-bearing at `executions`: a `null` collection is not an
+absent execution. A writer-only command (`pty_input`, `pty_resize`) against `executions: null`
+fails closed with `invariant_failure` and detail `executions not produced by the snapshot`,
+decided at predicate 4 before clause A's readiness limb; a non-`null` collection that simply
+lacks the named execution still yields `execution_not_found`, unchanged. `pty_terminate` is
+**not** gated by a `null` collection — it is execution-scoped but not writer-only, and
+mechanical fail-closed teardown must not become blockable by a missing projection. Members not
+in the eight are unchanged; in particular `sessionId` stays `string`, because a null
+`LifecycleState.sessionId` is a projection *failure* rather than a null snapshot field. **The
+code block immediately below predates this amendment and shows the pre-amendment types for the
+eight members; where the two differ, D9 Part B item 12 governs.**
+
 The complete minimum snapshot contract is:
 
 ```ts
