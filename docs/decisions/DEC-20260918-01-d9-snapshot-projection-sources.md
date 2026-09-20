@@ -14,7 +14,7 @@ pattern established by
 
 ## Ruling (verbatim)
 
-#ISSUED — Founder Decision D9: `BrokerSnapshot` Projection Sources (closes `PLAN-OPEN-7`)
+  # ISSUED — Founder Decision D9: `BrokerSnapshot` Projection Sources (closes `PLAN-OPEN-7`)
 > **Status: ISSUED — signed 2026-09-19T01:16Z; amended by D9-A1**
 > **Repository:** `MADVenturesLLC/madventures-tui`
 > **Binding base at preparation:** `origin/main` = `a8ecdc8a80559ca5e0ccfd169b65f653b0c7668c`
