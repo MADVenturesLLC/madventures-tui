@@ -22,15 +22,33 @@ function fail(ctx: CommandContext, code: string, message: string, exitCode: numb
 
 const USAGE = "usage: madv-tui room create [--json] — the Gateway mints the room_id";
 
+/** Honesty labels: minting a room is construction, never occupancy evidence. */
+const NOT_EVIDENCE_OF = ["occupancy proof", "phase 0 evidence", "activation"] as const;
+
+/**
+ * Exactly one positional argument, `create`, is accepted. Missing, unknown,
+ * or additional positionals are usage errors (exit 2) decided BEFORE any
+ * Gateway connection or CreateRoom request (MT-20260920-ROOM-CREATE-90
+ * finding 2). Returns null when usage is valid.
+ */
+export function roomUsageError(positional: readonly string[]): { code: string; detail: string } | null {
+  const sub = positional[0];
+  if (sub === undefined) return { code: "unknown_subcommand", detail: USAGE };
+  if (sub !== "create") return { code: "unknown_subcommand", detail: `unknown subcommand '${sub}'; ${USAGE}` };
+  if (positional.length > 1) {
+    return { code: "unexpected_argument", detail: `unexpected argument '${positional[1] ?? ""}' after create; ${USAGE}` };
+  }
+  return null;
+}
+
 export async function roomCommand(
   flags: CommandFlags,
   positional: readonly string[],
   ctx: CommandContext,
 ): Promise<CommandResult> {
-  const sub = positional[0];
-  if (sub !== "create") {
-    const detail = sub === undefined ? USAGE : `unknown subcommand '${sub}'; ${USAGE}`;
-    return fail(ctx, "unknown_subcommand", detail, 2);
+  const usage = roomUsageError(positional);
+  if (usage !== null) {
+    return fail(ctx, usage.code, usage.detail, 2);
   }
 
   const client = new RoomAttachClient({}, clientOptionsFrom(flags));
@@ -43,18 +61,19 @@ export async function roomCommand(
       occupancy: created.snapshot.occupancy,
       block_reason: created.snapshot.block_reason,
       executions: created.snapshot.executions.length,
-      fixture: false,
+      // From the VALIDATED acknowledgement, never hardcoded.
+      fixture: created.fixture,
       // Honesty: minting a room is construction, never occupancy evidence.
-      not_evidence_of: ["occupancy proof", "phase 0 evidence", "activation"],
+      not_evidence_of: [...NOT_EVIDENCE_OF],
     };
     if (ctx.json) {
       return { exitCode: 0, stdout: JSON.stringify(body), stderr: "" };
     }
-    return {
-      exitCode: 0,
-      stdout: `created room ${created.roomId} occupancy=${created.snapshot.occupancy} executions=${String(created.snapshot.executions.length)} fixture=false\n`,
-      stderr: "",
-    };
+    const lines = [
+      `created room ${created.roomId} occupancy=${created.snapshot.occupancy} executions=${String(created.snapshot.executions.length)} fixture=${String(created.fixture)}`,
+      `not evidence of: ${NOT_EVIDENCE_OF.join(", ")}`,
+    ];
+    return { exitCode: 0, stdout: `${lines.join("\n")}\n`, stderr: "" };
   } catch (err) {
     if (err instanceof RoomAttachError) {
       return fail(ctx, err.code, err.message, err.code === "gateway_not_running" ? 3 : 1);
