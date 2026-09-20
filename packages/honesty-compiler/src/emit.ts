@@ -49,6 +49,20 @@ function subjectOf(bounds: readonly BoundClaim[]): string | null {
   return declared.size === 1 ? (declared.values().next().value ?? null) : null;
 }
 
+/**
+ * The memory record that selected the verdict: the build_memory bound by a
+ * ship/verify claim. `selectVerdict` gives HOLD / SPEC_ONLY no memory path,
+ * and an earlier fixture/spec_only claim must never supply the record — its
+ * subject may differ and would make makeVerdict refuse a legal document.
+ */
+function verdictMemory(bounds: readonly BoundClaim[]): BoundClaim["memory"] {
+  for (const bound of bounds) {
+    const kind = bound.claim.kind;
+    if ((kind === "ship" || kind === "verify") && bound.memory !== undefined) return bound.memory;
+  }
+  return undefined;
+}
+
 function evidenceLinksFor(selection: VerdictSelection, bounds: readonly BoundClaim[]): EvidenceLink[] {
   const links: EvidenceLink[] = [];
   if (selection.sourceKinds.length === 0) return links;
@@ -101,7 +115,7 @@ export function emitVerdict(
 ): VerdictRecord {
   const declaredSubject = subjectOf(bounds);
   const subjectName = declaredSubject ?? "claims-input";
-  const boundHead = bounds.find((b) => b.memory !== undefined)?.memory?.headSha;
+  const boundHead = verdictMemory(bounds)?.headSha;
   const subjectSha = ctx.mode === "live" ? (ctx.headSha ?? FIXTURE_HEAD_SHA) : (boundHead ?? FIXTURE_HEAD_SHA);
 
   if (compileIssues.length > 0) {
@@ -109,7 +123,7 @@ export function emitVerdict(
   }
 
   const selection = selectVerdict(bounds);
-  const memory = bounds.find((b) => b.memory !== undefined)?.memory;
+  const memory = verdictMemory(bounds);
   const input: VerdictInput = {
     verdict: selection.verdict,
     subject: { name: subjectName, sha: subjectSha },

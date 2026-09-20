@@ -197,6 +197,120 @@ describe("fail-closed behavior", () => {
   });
 });
 
+describe("bugbot findings (PR #83)", () => {
+  test("malformed live store is a tooling failure, never a crash (Bugbot 33c2c137)", async () => {
+    const head = Bun.spawnSync(["git", "rev-parse", "HEAD"], { cwd: REPO_ROOT, stdout: "pipe" }).stdout.toString().trim();
+    const tmp = mkdtempSync(resolve(REPO_ROOT, "packages/honesty-compiler/test/.tmp-store-"));
+    try {
+      const storePath = resolve(tmp, "build-memory.json");
+      // Present, parseable, but malformed: a good format line, records that
+      // are not objects (format checks out, records are the trap).
+      writeFileSync(storePath, JSON.stringify({ format: "mad.build-memory/v0", records: { "example-subject": "garbage" } }), "utf8");
+      const claimsText = JSON.stringify({
+        schema: "HONESTY_COMPILER_V0",
+        claims: [
+          {
+            id: "t-malformed-store",
+            text: "example-subject passes at this head.",
+            kind: "verify",
+            subject: "example-subject",
+            rung: "verified",
+            requires: [{ kind: "build_memory", subject: "example-subject", headSha: head }],
+            not_evidence_of: ["review", "ci", "merge"],
+          },
+        ],
+      });
+      const outcome = await compileClaims({
+        mode: "live",
+        rootDir: REPO_ROOT,
+        sourceLabel: "inline.json",
+        inputDir: CLAIMS_DIR,
+        claimsText,
+        storePath,
+        now: PINNED_NOW,
+      });
+      expect(outcome.ok).toBe(false);
+      if (outcome.ok) return;
+      expect(outcome.issue.code).toBe("STORE_MALFORMED");
+      expect(outcome.issue.message).toContain("example-subject");
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  test("verdict binds the ship/verify claim's memory, not an earlier claim's (Bugbot 98a1c5b4)", async () => {
+    const head = Bun.spawnSync(["git", "rev-parse", "HEAD"], { cwd: REPO_ROOT, stdout: "pipe" }).stdout.toString().trim();
+    const tmp = mkdtempSync(resolve(REPO_ROOT, "packages/honesty-compiler/test/.tmp-memory-"));
+    try {
+      const storePath = resolve(tmp, "build-memory.json");
+      // Two VALID records; the earlier fixture claim binds other-subject, the
+      // later verify claim binds example-subject. The verdict must take the
+      // verify claim's memory or makeVerdict refuses subject mismatch.
+      const records = {
+        "other-subject": {
+          record: {
+            subject: "other-subject",
+            head_sha: head,
+            verified_at: "2026-09-13T00:00:00.000Z",
+            evidence_refs: [],
+          },
+        },
+        "example-subject": {
+          record: {
+            subject: "example-subject",
+            head_sha: head,
+            verified_at: "2026-09-13T00:00:00.000Z",
+            evidence_refs: [],
+          },
+        },
+      };
+      writeFileSync(storePath, JSON.stringify({ format: "mad.build-memory/v0", records }), "utf8");
+      const claimsText = JSON.stringify({
+        schema: "HONESTY_COMPILER_V0",
+        claims: [
+          {
+            id: "t-early-fixture",
+            text: "other-subject passes its fixture suite.",
+            kind: "fixture",
+            subject: "other-subject",
+            rung: "executed",
+            requires: [{ kind: "build_memory", subject: "other-subject", headSha: head }],
+            not_evidence_of: ["attestation", "verification", "review", "ci", "merge"],
+          },
+          {
+            id: "t-verify",
+            text: "example-subject typechecks and its test suite passes at the recorded head.",
+            kind: "verify",
+            subject: "example-subject",
+            rung: "verified",
+            requires: [{ kind: "build_memory", subject: "example-subject", headSha: head }],
+            not_evidence_of: ["review", "ci", "merge", "PHASE_0", "OCCUPANCY_PROOF", "GATEWAY_HONESTY", "ROOM_RUNTIME", "AE01_FIX", "PRODUCTION_MERGE_AUTHORITY"],
+          },
+        ],
+      });
+      const outcome = await compileClaims({
+        mode: "live",
+        rootDir: REPO_ROOT,
+        sourceLabel: "inline.json",
+        inputDir: CLAIMS_DIR,
+        claimsText,
+        storePath,
+        now: PINNED_NOW,
+      });
+      expect(outcome.ok).toBe(true);
+      if (!outcome.ok) return;
+      // Before the fix the first bound memory (other-subject) was used and
+      // makeVerdict refused the verdict; now the verify claim's own record
+      // selects the verdict and the compile passes.
+      expect(outcome.result.exit_code).toBe(0);
+      expect(outcome.result.verdict.verdict).toBe("VERIFY_PASS");
+      expect(outcome.result.verdict.subject.name).toBe("example-subject");
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("P0 parse", () => {
   test("forbidden token probes catch underscore, spaced, and cost-ceiling variants", () => {
     expect(forbiddenTokenIn("completes PHASE_0")).toBe("phase_0");

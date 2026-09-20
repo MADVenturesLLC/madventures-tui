@@ -6,7 +6,7 @@
 // tooling error (the compiler could not run honestly) and is returned as
 // { ok: false } here — no verdict is invented for a broken tooling world.
 
-import { FixtureMemoryStore, sha256Hex, type MemoryStore } from "@mad/build-memory";
+import { FixtureMemoryStore, MEMORY_STORE_FORMAT, sha256Hex, validateBuildMemoryRecord, type MemoryStore } from "@mad/build-memory";
 // bun cannot resolve the "@mad/build-memory/node" subpath export through the
 // workspace symlink, so the fs-backed store is imported by path — same
 // module, same semantics, read-only reuse.
@@ -101,12 +101,50 @@ function loadLiveStore(options: CompileOptions): { store: MemoryStore; path: str
   if ("issue" in confined) return confined;
   const path = confined.path;
   const file = readTextFile(path, "build-memory store");
-  const text = "text" in file ? file.text : "{}";
   if ("issue" in file && file.issue.code !== "FILE_UNREADABLE") return file;
+  // A missing store is a legal state: every subject is UNKNOWN and claims
+  // fail closed at bind. Only a present-but-malformed store is a tooling
+  // failure — validated here so it never crashes later during bind.
+  if ("issue" in file) {
+    return { store: new JsonFileMemoryStore(path), path: confined.display, sha256: sha256Hex("{}") };
+  }
+  const text = file.text;
+  let parsed: unknown;
   try {
-    JSON.parse(text) as unknown;
+    parsed = JSON.parse(text) as unknown;
   } catch (err) {
     return { issue: { code: "STORE_UNPARSEABLE", message: `build-memory store ${confined.display} is not JSON: ${err instanceof Error ? err.message : String(err)}` } };
+  }
+  if (typeof parsed !== "object" || parsed === null) {
+    return { issue: { code: "STORE_MALFORMED", message: `build-memory store ${confined.display} is not an object` } };
+  }
+  const fileObj = parsed as Record<string, unknown>;
+  if (fileObj["format"] !== MEMORY_STORE_FORMAT) {
+    return {
+      issue: {
+        code: "STORE_MALFORMED",
+        message: `build-memory store ${confined.display} has format ${JSON.stringify(fileObj["format"])} — expected ${MEMORY_STORE_FORMAT}`,
+      },
+    };
+  }
+  const recordsRaw = fileObj["records"];
+  if (typeof recordsRaw !== "object" || recordsRaw === null) {
+    return { issue: { code: "STORE_MALFORMED", message: `build-memory store ${confined.display} has no records object` } };
+  }
+  for (const [subject, entry] of Object.entries(recordsRaw as Record<string, unknown>)) {
+    if (typeof entry !== "object" || entry === null) {
+      return { issue: { code: "STORE_MALFORMED", message: `build-memory store ${confined.display} entry for ${JSON.stringify(subject)} is not an object` } };
+    }
+    const record = (entry as Record<string, unknown>)["record"];
+    const issues = validateBuildMemoryRecord(record);
+    if (issues.length > 0) {
+      return {
+        issue: {
+          code: "STORE_MALFORMED",
+          message: `build-memory store ${confined.display} record for ${JSON.stringify(subject)} is invalid: ${issues.map((i: { code: string; message: string; path?: string }) => `${i.code}${i.path ? `@${i.path}` : ""} (${i.message})`).join("; ")}`,
+        },
+      };
+    }
   }
   return { store: new JsonFileMemoryStore(path), path: confined.display, sha256: sha256Hex(text) };
 }
