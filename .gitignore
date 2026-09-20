@@ -42,4 +42,5 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 .mad/preflight/
 # founder-act sealed acts (repo-local authorization objects, never committed;
 # golden fixtures live in packages/founder-act/fixtures/ and ARE committed)
+# Founder acts — sealed locally, never committed (Seal Studio / mad-founder-act)
 .mad/founder-acts/

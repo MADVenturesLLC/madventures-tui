@@ -156,6 +156,12 @@ packages/honesty-compiler/     # `mad-honesty-compile` — honesty IR + compiler
                                #   @mad/single-verdict verdict or fails closed. NOT merge
                                #   authority, NOT Phase 0, NOT Gateway honesty.
 apps/madbridge/                # CLI (`madv-tui`) + TUI
+apps/seal-studio/              # Seal Studio (v0, Founder-authorized off-roadmap
+                               #   joy surface): compose a FounderAct draft, watch its
+                               #   integrity hash settle live, seal via the two-step
+                               #   ritual. Hash seal only — never claims more. Seal
+                               #   endpoint is dev-server-only (`bun run seal-studio`,
+                               #   :5183); built output ships none.
 docs/superpowers/              # Phase 3A spec and plan
 docs/decisions/                # PLAN-OPEN rulings and DEC-20260812-01
 docs/verification/             # verification records
