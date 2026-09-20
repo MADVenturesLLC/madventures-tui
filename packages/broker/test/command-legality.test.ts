@@ -1,8 +1,9 @@
 // packages/broker/test/command-legality.test.ts
 // Phase 3A M9 Task 21: the pinned command legality matrix (specification
-// section 9.3; plan Task 21). Twenty-one named tests: three added by the
+// section 9.3; plan Task 21). Twenty-two named tests: three added by the
 // 2026-09-17 Founder amendment (the F1 unknown-field closure, clause A's
-// readiness limb, clause B's fencing-token positivity limb), ten matrix
+// readiness limb, clause B's fencing-token positivity limb), one added by
+// D9 Part B item 12 (the null-executions writer-only closure), ten matrix
 // rows, four retained, four originally-new (execution_not_found,
 // invalid_dimensions, invalid_command precedence, and the D7 non-writer
 // negative proof).
