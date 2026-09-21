@@ -1,0 +1,297 @@
+# Attribution Shape Check — madventures-tui
+#
+# Layer 2 shape-only attribution gate (DEC-20260718-05 clause 19, hardened by
+# DEC-20260721-01). Adapted from the FounderOS workflow of the same name; the
+# checker itself is vendored BYTE-IDENTICALLY at
+# .github/scripts/attribution-shape-check.sh — see .github/scripts/README.md
+# for provenance and the rule that it is never edited in place.
+#
+# SHAPE-ONLY (DEC-20260718-05 clause 20): this check validates the FORM of the
+# Attribution block. It never asserts that an attested Role-Id is true, who
+# authored a PR body, or which surface a branch was. A fabricated block that is
+# well-formed passes; that is a governance violation, not a gate failure.
+#
+# Untrusted-input handling: every PR-controlled value (branch name, PR body)
+# reaches the checker through env mappings only — never inline shell
+# interpolation — and on pull_request events the checker is executed from the
+# TRUSTED BASE REVISION, so a pull request cannot weaken the gate that judges
+# it. Residual: edits to this workflow file itself, which are covered by
+# founder approval (same rule class as DEC-20260718-02 clause 4).
+#
+# ---------------------------------------------------------------------------
+# DELIBERATE DIVERGENCES FROM THE FounderOS WORKFLOW — each is repository
+# adaptation, not a relaxation of the gate:
+#
+#   1. Checker path is .github/scripts/ rather than 00-system/scripts/ —
+#      this repository has no 00-system tree.
+#   2. Actions are pinned by commit SHA and the runner is ubuntu-24.04, both
+#      matching this repository's existing workflows rather than FounderOS's
+#      tag-pinned, ubuntu-latest style.
+#   3. NO `branches:` filter on `pull_request`, unlike every other workflow
+#      here. Intentional: the other workflows are builds, this one is a gate,
+#      and a gate that only watches `main` is escapable by retargeting the
+#      base branch.
+#   4. NO `concurrency` group, unlike the other workflows here. A cancelled
+#      run is not a success, so cancel-in-progress on a required check can
+#      strand it red — and bot edits to a PR body (see below) fire `edited`
+#      repeatedly. This job is bash-only with no dependency install, so
+#      letting every run finish is cheap.
+#
+#   5. NOTHING is stripped from the PR body before the gate reads it. The
+#      FounderOS workflow sanitizes Cursor Cloud Agent chrome out of the body
+#      first; that is a bypass, found by Cursor Security Agent and reproduced
+#      here — GitHub pre-fills the merge-commit message from the RAW body, so
+#      any region the gate removes is content it never judged and the merge
+#      commit still carries. The body-gate step records the measurement.
+#
+# CURSOR BUGBOT, on this repository specifically: Bugbot writes its review
+# summary into the PR *body field* as a <!-- CURSOR_SUMMARY --> block, and its
+# placement relative to the Attribution trailers is unstable. It is NOT
+# stripped, for the same reason nothing else is. When it lands beneath the
+# trailers it is a REAL failure, not noise: the PR body is what GitHub
+# pre-fills as the merge-commit message, and trailers are only trailers if
+# nothing follows them. Catching that is the point of the end-anchored prbody
+# mode, and the fix is to move the block above the trailers, never to hide it
+# from the check.
+# ---------------------------------------------------------------------------
+
+name: Attribution Shape Check
+
+on:
+  pull_request:
+    # `edited` included so a body-only change re-runs the PR-body gate
+    # (independent review, 2026-07-21).
+    types: [opened, synchronize, reopened, edited]
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  attribution-shape:
+    name: attribution-shape
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout (full history for range + historical-branch checks)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Select trusted checker (base revision on pull requests)
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          # Three outcomes, distinguished deliberately. Testing only whether
+          # `git show` succeeded treated EVERY read failure as "the checker is
+          # absent at base" and fell through to the pull request's own copy —
+          # a corrupt checkout or an unreadable base object would silently
+          # hand the gate to PR-controlled code. Same fail-open class the
+          # checker itself no longer has. Ported from FounderOS PR #353.
+          # The bootstrap fallback copies PR-CONTROLLED code into the
+          # trusted slot, so it must be reachable ONLY when the checker is
+          # provably not recorded at the base revision. An earlier revision
+          # of this step keyed on `git cat-file -e`, which conflates "this
+          # path is not in the tree" with "this blob could not be read" —
+          # a readable tree with a missing or corrupt blob still took the
+          # bootstrap path and handed the gate to the pull request. That is
+          # a narrower version of the fail-open this step exists to close,
+          # not the absence of one.
+          #
+          # `git ls-tree` reads the TREE, so it separates the three cases
+          # cleanly, verified against this repository:
+          #   non-zero exit      -> base revision unreadable   -> exit 1
+          #   exit 0, no entry   -> path genuinely not present -> bootstrap
+          #   exit 0, with entry -> path IS recorded at base   -> extract or die
+          P=.github/scripts/attribution-shape-check.sh
+          if ! entry="$(git ls-tree --full-tree "$BASE_SHA" -- "$P" 2>/dev/null)"; then
+            echo "cannot read base revision $BASE_SHA — failing closed"
+            exit 1
+          fi
+          if [[ -n "$entry" ]]; then
+            case "$entry" in
+              *" blob "*) : ;;
+              *) echo "base entry for $P is not a regular file — failing closed"; exit 1 ;;
+            esac
+            # Recorded at base, so it MUST extract. `bash -e` aborts the step
+            # if the blob is unreadable, which is the fail-closed outcome and
+            # is exactly the case that previously fell through to the copy.
+            git show "$BASE_SHA:$P" > "$RUNNER_TEMP/attribution-shape-check.sh"
+            echo "using trusted base-revision checker ($BASE_SHA)"
+          else
+            # The base revision reads fine and does not record the checker:
+            # the documented bootstrap path, which this repository is on
+            # until this pull request merges.
+            echo "checker not recorded at base — using PR revision (bootstrap)"
+            cp "$P" "$RUNNER_TEMP/attribution-shape-check.sh"
+          fi
+
+      - name: Run attribution shape check (pull request)
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          bash "$RUNNER_TEMP/attribution-shape-check.sh" pr \
+            "$BASE_SHA" "$HEAD_SHA" "$BRANCH"
+
+      - name: Run checker self-test (prbody parser regression cases)
+        if: github.event_name == 'pull_request'
+        run: |
+          if bash "$RUNNER_TEMP/attribution-shape-check.sh" selftest; then
+            echo "selftest mode present and green"
+          else
+            rc=$?
+            if [[ "$rc" -eq 2 ]]; then
+              echo "base-revision checker predates selftest mode — skipping"
+            else
+              exit "$rc"
+            fi
+          fi
+
+      - name: Re-materialize the trusted checker before the body gate
+        # Defence in depth for the trust boundary. $RUNNER_TEMP is writable by
+        # anything this job runs, so any step that executes PR-controlled code
+        # could overwrite the trusted checker and have a later step run the
+        # replacement. The PR's own self-test is ordered last for that reason;
+        # this step makes the invariant hold even if that order is ever
+        # changed, by restoring the base-revision copy right before the gate
+        # that depends on it.
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          # Three outcomes, distinguished deliberately. Testing only whether
+          # `git show` succeeded treated EVERY read failure as "the checker is
+          # absent at base" and fell through to the pull request's own copy —
+          # a corrupt checkout or an unreadable base object would silently
+          # hand the gate to PR-controlled code. Same fail-open class the
+          # checker itself no longer has. Ported from FounderOS PR #353.
+          # The bootstrap fallback copies PR-CONTROLLED code into the
+          # trusted slot, so it must be reachable ONLY when the checker is
+          # provably not recorded at the base revision. An earlier revision
+          # of this step keyed on `git cat-file -e`, which conflates "this
+          # path is not in the tree" with "this blob could not be read" —
+          # a readable tree with a missing or corrupt blob still took the
+          # bootstrap path and handed the gate to the pull request. That is
+          # a narrower version of the fail-open this step exists to close,
+          # not the absence of one.
+          #
+          # `git ls-tree` reads the TREE, so it separates the three cases
+          # cleanly, verified against this repository:
+          #   non-zero exit      -> base revision unreadable   -> exit 1
+          #   exit 0, no entry   -> path genuinely not present -> bootstrap
+          #   exit 0, with entry -> path IS recorded at base   -> extract or die
+          P=.github/scripts/attribution-shape-check.sh
+          if ! entry="$(git ls-tree --full-tree "$BASE_SHA" -- "$P" 2>/dev/null)"; then
+            echo "cannot read base revision $BASE_SHA — failing closed"
+            exit 1
+          fi
+          if [[ -n "$entry" ]]; then
+            case "$entry" in
+              *" blob "*) : ;;
+              *) echo "base entry for $P is not a regular file — failing closed"; exit 1 ;;
+            esac
+            # Recorded at base, so it MUST extract. `bash -e` aborts the step
+            # if the blob is unreadable, which is the fail-closed outcome and
+            # is exactly the case that previously fell through to the copy.
+            git show "$BASE_SHA:$P" > "$RUNNER_TEMP/attribution-shape-check.sh"
+            echo "restored trusted base-revision checker ($BASE_SHA)"
+          else
+            # The base revision reads fine and does not record the checker:
+            # the documented bootstrap path, which this repository is on
+            # until this pull request merges.
+            echo "checker not recorded at base — using PR revision (bootstrap)"
+            cp "$P" "$RUNNER_TEMP/attribution-shape-check.sh"
+          fi
+
+      - name: Run attribution shape check (pull request body — DEC-20260721-01 item 1)
+        # The body is passed RAW and UNMODIFIED. Nothing is stripped from it
+        # before the gate sees it, and that is the security property, not an
+        # omission.
+        #
+        # This workflow previously carried the FounderOS sanitizer, which
+        # removes a trailing <div><a href="https://cursor.com/agents…"></div>
+        # footer before the check. Cursor Security Agent found the hole and it
+        # reproduces: GitHub pre-fills the merge-commit message from the RAW
+        # body, so anything the gate strips is content the gate never judged
+        # but the merge commit still gets. A pull request author could put
+        # valid trailers, then hide arbitrary content — prose, a second
+        # Role-Id, a bare `---` — inside that footer pattern. The sanitizer
+        # removed it, prbody end-anchored on an apparently clean trailer block
+        # and passed, and the merge message still had content after the
+        # trailers. Measured: one body, exit 1 raw and exit 0 sanitized.
+        #
+        # The strip was dead code here regardless — Cursor Cloud Agent opens no
+        # pull requests on this repository — so removing it costs nothing and
+        # closes the bypass. The rule now holds without exception: the gate
+        # judges exactly the bytes GitHub will use as the merge message.
+        if: github.event_name == 'pull_request'
+        env:
+          # Untrusted input. It reaches the checker ONLY through this
+          # environment variable, never through shell interpolation. The
+          # checker strips CRs from web-authored bodies itself.
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          if bash "$RUNNER_TEMP/attribution-shape-check.sh" prbody; then
+            exit 0
+          else
+            rc=$?
+            if [[ "$rc" -eq 2 ]]; then
+              echo "base-revision checker predates prbody mode — skipping"
+            else
+              exit "$rc"
+            fi
+          fi
+
+      - name: Verify the vendored checker matches its recorded provenance hash
+        # Mechanically enforces the rule stated in .github/scripts/README.md:
+        # this copy is byte-identical to the canonical FounderOS checker and is
+        # never edited in place. It compares the file against the sha256 the
+        # README records, so an in-place edit that leaves the provenance table
+        # stale fails here.
+        #
+        # SCOPE, stated plainly: this catches drift and accident, not a
+        # determined edit — a change that updates both the file and the README
+        # passes, by construction. The control for that is human review of
+        # .github/** plus branch protection, which is a repository-admin
+        # setting and not something a workflow can assert.
+        run: |
+          # Anchored to the provenance table's own row, NOT "the first
+          # 64-hex in the file". The README also records superseded hashes
+          # in its re-vendor history, so a positional selector would pin the
+          # wrong value the moment a history row is added above the table —
+          # and would do it silently, comparing the checker against an old
+          # hash and passing or failing for the wrong reason.
+          recorded="$(grep -E '^\| `sha256` \|' .github/scripts/README.md | grep -oE '[0-9a-f]{64}' | head -n 1)"
+          actual="$(sha256sum .github/scripts/attribution-shape-check.sh | cut -d' ' -f1)"
+          if [[ -z "$recorded" ]]; then
+            echo "no sha256 recorded in .github/scripts/README.md"
+            exit 1
+          fi
+          if [[ "$recorded" != "$actual" ]]; then
+            echo "vendored checker does not match its recorded provenance hash"
+            echo "  README:   $recorded"
+            echo "  on disk:  $actual"
+            echo "Re-vendor from FounderOS and update the provenance table, or revert an in-place edit."
+            exit 1
+          fi
+          echo "vendored checker matches recorded provenance hash ($actual)"
+
+      - name: Run proposed-revision self-test (the PR's own parser must pass its own cases)
+        # LAST among the pull_request steps, deliberately. This is the only
+        # step that executes PR-controlled code, so nothing the gate relies on
+        # runs after it.
+        if: github.event_name == 'pull_request'
+        run: bash .github/scripts/attribution-shape-check.sh selftest
+
+      - name: Run attribution shape check (final merged commit on main)
+        if: github.event_name == 'push'
+        run: >
+          bash .github/scripts/attribution-shape-check.sh main
+          "${{ github.sha }}"
