@@ -92,21 +92,42 @@ jobs:
           # a corrupt checkout or an unreadable base object would silently
           # hand the gate to PR-controlled code. Same fail-open class the
           # checker itself no longer has. Ported from FounderOS PR #353.
+          # The bootstrap fallback copies PR-CONTROLLED code into the
+          # trusted slot, so it must be reachable ONLY when the checker is
+          # provably not recorded at the base revision. An earlier revision
+          # of this step keyed on `git cat-file -e`, which conflates "this
+          # path is not in the tree" with "this blob could not be read" —
+          # a readable tree with a missing or corrupt blob still took the
+          # bootstrap path and handed the gate to the pull request. That is
+          # a narrower version of the fail-open this step exists to close,
+          # not the absence of one.
+          #
+          # `git ls-tree` reads the TREE, so it separates the three cases
+          # cleanly, verified against this repository:
+          #   non-zero exit      -> base revision unreadable   -> exit 1
+          #   exit 0, no entry   -> path genuinely not present -> bootstrap
+          #   exit 0, with entry -> path IS recorded at base   -> extract or die
           P=.github/scripts/attribution-shape-check.sh
-          if git cat-file -e "$BASE_SHA:$P" 2>/dev/null; then
-            # Present at base: it must extract cleanly. `bash -e` aborts the
-            # step if it does not, which is the fail-closed outcome.
-            git show "$BASE_SHA:$P" > "$RUNNER_TEMP/attribution-shape-check.sh"
-            echo "using trusted base-revision checker ($BASE_SHA)"
-          elif git rev-parse --verify --quiet "$BASE_SHA^{tree}" >/dev/null; then
-            # Base revision reads fine and genuinely does not carry the
-            # checker: the documented bootstrap path, which this repository
-            # is still on until this pull request merges.
-            echo "checker genuinely absent at base — using PR revision (bootstrap)"
-            cp "$P" "$RUNNER_TEMP/attribution-shape-check.sh"
-          else
+          if ! entry="$(git ls-tree --full-tree "$BASE_SHA" -- "$P" 2>/dev/null)"; then
             echo "cannot read base revision $BASE_SHA — failing closed"
             exit 1
+          fi
+          if [[ -n "$entry" ]]; then
+            case "$entry" in
+              *" blob "*) : ;;
+              *) echo "base entry for $P is not a regular file — failing closed"; exit 1 ;;
+            esac
+            # Recorded at base, so it MUST extract. `bash -e` aborts the step
+            # if the blob is unreadable, which is the fail-closed outcome and
+            # is exactly the case that previously fell through to the copy.
+            git show "$BASE_SHA:$P" > "$RUNNER_TEMP/attribution-shape-check.sh"
+            echo "using trusted base-revision checker ($BASE_SHA)"
+          else
+            # The base revision reads fine and does not record the checker:
+            # the documented bootstrap path, which this repository is on
+            # until this pull request merges.
+            echo "checker not recorded at base — using PR revision (bootstrap)"
+            cp "$P" "$RUNNER_TEMP/attribution-shape-check.sh"
           fi
 
       - name: Run attribution shape check (pull request)
@@ -151,21 +172,42 @@ jobs:
           # a corrupt checkout or an unreadable base object would silently
           # hand the gate to PR-controlled code. Same fail-open class the
           # checker itself no longer has. Ported from FounderOS PR #353.
+          # The bootstrap fallback copies PR-CONTROLLED code into the
+          # trusted slot, so it must be reachable ONLY when the checker is
+          # provably not recorded at the base revision. An earlier revision
+          # of this step keyed on `git cat-file -e`, which conflates "this
+          # path is not in the tree" with "this blob could not be read" —
+          # a readable tree with a missing or corrupt blob still took the
+          # bootstrap path and handed the gate to the pull request. That is
+          # a narrower version of the fail-open this step exists to close,
+          # not the absence of one.
+          #
+          # `git ls-tree` reads the TREE, so it separates the three cases
+          # cleanly, verified against this repository:
+          #   non-zero exit      -> base revision unreadable   -> exit 1
+          #   exit 0, no entry   -> path genuinely not present -> bootstrap
+          #   exit 0, with entry -> path IS recorded at base   -> extract or die
           P=.github/scripts/attribution-shape-check.sh
-          if git cat-file -e "$BASE_SHA:$P" 2>/dev/null; then
-            # Present at base: it must extract cleanly. `bash -e` aborts the
-            # step if it does not, which is the fail-closed outcome.
-            git show "$BASE_SHA:$P" > "$RUNNER_TEMP/attribution-shape-check.sh"
-            echo "restored trusted base-revision checker ($BASE_SHA)"
-          elif git rev-parse --verify --quiet "$BASE_SHA^{tree}" >/dev/null; then
-            # Base revision reads fine and genuinely does not carry the
-            # checker: the documented bootstrap path, which this repository
-            # is still on until this pull request merges.
-            echo "checker genuinely absent at base — using PR revision (bootstrap)"
-            cp "$P" "$RUNNER_TEMP/attribution-shape-check.sh"
-          else
+          if ! entry="$(git ls-tree --full-tree "$BASE_SHA" -- "$P" 2>/dev/null)"; then
             echo "cannot read base revision $BASE_SHA — failing closed"
             exit 1
+          fi
+          if [[ -n "$entry" ]]; then
+            case "$entry" in
+              *" blob "*) : ;;
+              *) echo "base entry for $P is not a regular file — failing closed"; exit 1 ;;
+            esac
+            # Recorded at base, so it MUST extract. `bash -e` aborts the step
+            # if the blob is unreadable, which is the fail-closed outcome and
+            # is exactly the case that previously fell through to the copy.
+            git show "$BASE_SHA:$P" > "$RUNNER_TEMP/attribution-shape-check.sh"
+            echo "restored trusted base-revision checker ($BASE_SHA)"
+          else
+            # The base revision reads fine and does not record the checker:
+            # the documented bootstrap path, which this repository is on
+            # until this pull request merges.
+            echo "checker not recorded at base — using PR revision (bootstrap)"
+            cp "$P" "$RUNNER_TEMP/attribution-shape-check.sh"
           fi
 
       - name: Run attribution shape check (pull request body — DEC-20260721-01 item 1)
@@ -220,7 +262,13 @@ jobs:
         # .github/** plus branch protection, which is a repository-admin
         # setting and not something a workflow can assert.
         run: |
-          recorded="$(grep -oE '`[0-9a-f]{64}`' .github/scripts/README.md | head -n 1 | tr -d '`')"
+          # Anchored to the provenance table's own row, NOT "the first
+          # 64-hex in the file". The README also records superseded hashes
+          # in its re-vendor history, so a positional selector would pin the
+          # wrong value the moment a history row is added above the table —
+          # and would do it silently, comparing the checker against an old
+          # hash and passing or failing for the wrong reason.
+          recorded="$(grep -E '^\| `sha256` \|' .github/scripts/README.md | grep -oE '[0-9a-f]{64}' | head -n 1)"
           actual="$(sha256sum .github/scripts/attribution-shape-check.sh | cut -d' ' -f1)"
           if [[ -z "$recorded" ]]; then
             echo "no sha256 recorded in .github/scripts/README.md"

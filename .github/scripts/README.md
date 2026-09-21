@@ -16,7 +16,7 @@ checker. It is not maintained here.
 
 | Date | From | To | Why |
 |---|---|---|---|
-| 2026-09-21 | `5f257ec4…` | `ebda0fa2…` | FounderOS PR #353 closed four fail-opens in the checker and its workflow: an unenumerable commit range reported PASS having examined nothing; `Role-Id-Secondary` was unvalidated on commits in `pr` and `main` mode, including on non-applicable commits; the PR-body sanitizer was itself a bypass; and the PR's own self-test ran before the body gate. Selftests 26 to 41. Merged as `9d4ab79` after an independent Tier-2 review at the exact head. This is the first exercise of the re-vendor procedure below, and it worked as intended: the defect was fixed canonically, merged, then copied down. |
+| 2026-09-21 | `5f257ec45b2afae101f2d3350d12ee7b2bad8f9c604bec744a7031241f6379e9` | `ebda0fa2c0fa52e3b946fa3aa8b25d3f0096ae32bdc5e0471eba41718c20494e` | FounderOS PR #353 closed four fail-opens in the checker and its workflow: an unenumerable commit range reported PASS having examined nothing; `Role-Id-Secondary` was unvalidated on commits in `pr` and `main` mode, including on non-applicable commits; the PR-body sanitizer was itself a bypass; and the PR's own self-test ran before the body gate. Selftests 26 to 41. Merged as `9d4ab792b64daf4ea909fcda30fbbc04677a68ad` after an independent Tier-2 review at the exact head. This is the first exercise of the re-vendor procedure below, and it worked as intended: the defect was fixed canonically, merged, then copied down. |
 
 ### Rules
 
