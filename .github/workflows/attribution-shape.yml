@@ -37,16 +37,22 @@
 #      repeatedly. This job is bash-only with no dependency install, so
 #      letting every run finish is cheap.
 #
+#   5. NOTHING is stripped from the PR body before the gate reads it. The
+#      FounderOS workflow sanitizes Cursor Cloud Agent chrome out of the body
+#      first; that is a bypass, found by Cursor Security Agent and reproduced
+#      here — GitHub pre-fills the merge-commit message from the RAW body, so
+#      any region the gate removes is content it never judged and the merge
+#      commit still carries. The body-gate step records the measurement.
+#
 # CURSOR BUGBOT, on this repository specifically: Bugbot writes its review
 # summary into the PR *body field* as a <!-- CURSOR_SUMMARY --> block, and its
-# placement relative to the Attribution trailers is unstable. That block is
-# DELIBERATELY NOT STRIPPED below. When it lands beneath the trailers it is a
-# REAL failure, not noise: the PR body is what GitHub pre-fills as the
-# merge-commit message, and trailers are only trailers if nothing follows
-# them. Catching that is the point of the end-anchored prbody mode. The
-# Cursor *Cloud Agent* chrome that IS stripped below is a different artifact
-# (platform markers plus an agent-link footer), stripped for parity with the
-# FounderOS workflow.
+# placement relative to the Attribution trailers is unstable. It is NOT
+# stripped, for the same reason nothing else is. When it lands beneath the
+# trailers it is a REAL failure, not noise: the PR body is what GitHub
+# pre-fills as the merge-commit message, and trailers are only trailers if
+# nothing follows them. Catching that is the point of the end-anchored prbody
+# mode, and the fix is to move the block above the trailers, never to hide it
+# from the check.
 # ---------------------------------------------------------------------------
 
 name: Attribution Shape Check
@@ -131,31 +137,33 @@ jobs:
           fi
 
       - name: Run attribution shape check (pull request body — DEC-20260721-01 item 1)
+        # The body is passed RAW and UNMODIFIED. Nothing is stripped from it
+        # before the gate sees it, and that is the security property, not an
+        # omission.
+        #
+        # This workflow previously carried the FounderOS sanitizer, which
+        # removes a trailing <div><a href="https://cursor.com/agents…"></div>
+        # footer before the check. Cursor Security Agent found the hole and it
+        # reproduces: GitHub pre-fills the merge-commit message from the RAW
+        # body, so anything the gate strips is content the gate never judged
+        # but the merge commit still gets. A pull request author could put
+        # valid trailers, then hide arbitrary content — prose, a second
+        # Role-Id, a bare `---` — inside that footer pattern. The sanitizer
+        # removed it, prbody end-anchored on an apparently clean trailer block
+        # and passed, and the merge message still had content after the
+        # trailers. Measured: one body, exit 1 raw and exit 0 sanitized.
+        #
+        # The strip was dead code here regardless — Cursor Cloud Agent opens no
+        # pull requests on this repository — so removing it costs nothing and
+        # closes the bypass. The rule now holds without exception: the gate
+        # judges exactly the bytes GitHub will use as the merge message.
         if: github.event_name == 'pull_request'
         env:
-          # The PR body is untrusted input: it reaches the sanitizer and the
-          # checker ONLY via environment variables, never shell interpolation.
-          PR_BODY_RAW: ${{ github.event.pull_request.body }}
+          # Untrusted input. It reaches the checker ONLY through this
+          # environment variable, never through shell interpolation. The
+          # checker strips CRs from web-authored bodies itself.
+          PR_BODY: ${{ github.event.pull_request.body }}
         run: |
-          PR_BODY="$(python3 -c '
-          import os, re
-          raw = os.environ.get("PR_BODY_RAW", "")
-          # Drop wrapper marker comment lines only (keep surrounding content).
-          body = re.sub(
-              r"^[ \t]*<!--\s*CURSOR_AGENT_PR_BODY_(?:BEGIN|END)\s*-->[ \t]*\n?",
-              "",
-              raw,
-              flags=re.M,
-          )
-          # Drop trailing Cursor agent-link footer <div> (agents / background-agent).
-          body = re.sub(
-              r"\n*<div>\s*<a href=\"https://cursor\.com/(?:agents|background-agent)[\s\S]*?</div>\s*$",
-              "\n",
-              body,
-          )
-          print(body, end="")
-          ')"
-          export PR_BODY
           if bash "$RUNNER_TEMP/attribution-shape-check.sh" prbody; then
             exit 0
           else
