@@ -135,9 +135,13 @@ orders (M8 Task 19).
 One pure mapper, `clientSnapshotToProjection`, with a pinned test table:
 connected/sessionState/ownership/activeWriter/fencingToken/pending approvals/
 transfers/permission summary/verification/review/incident/eventLog/queueDepth
-map field-for-field; absent client facts map to the honest words. The mapper
-is total and throws on unknown shapes (fail closed), matching the
-truth-safety doctrine.
+map field-for-field; absent client facts map to the honest words.
+`BrokerSnapshot` members ruled by `PLAN-OPEN-7` / D9 project `null` meaning
+*not produced* (D9 Part A: sourceable subset; `connected`, `queueDepth`,
+`ownershipState`, `task`, `permissionSummary`, `executions` deferred). The
+mapper passes a ruled-absent `null` through as honest absence; it throws only
+on an unknown *shape* (fail closed), matching the truth-safety doctrine.
+`PLAN-OPEN-7`'s identifier remains OPEN; its values are ruled and binding.
 
 ### 2.3 Output frames and retention
 
@@ -187,8 +191,10 @@ automatically.
 
 The certification commit replaces the `start` placeholder with the certified
 composition and includes, in the same commit: the architecture test asserting
-the 3A gate deliberately changed, the §6.9 evidence citations, and the exact
-certification SHA for the Tier-2 verdict. Until that commit merges, every
+the 3A gate deliberately changed and the §6.9 evidence citations. The
+resulting commit SHA is recorded in the M7 Tier-2 verdict and the Founder
+authorization — a commit cannot contain its own final SHA. Until that commit
+merges, every
 production entry keeps the 3A behavior.
 
 ## 6. Completion criteria

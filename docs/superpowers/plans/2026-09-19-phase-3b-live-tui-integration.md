@@ -11,14 +11,37 @@ plan adds no scope.
 
 ## Plan provenance and verified baseline facts
 
-- Baseline: `main` at `ea079827…` plus #86 (`a0cbecb`); suite 1385 pass /
-  0 fail across 84 files; `bunx tsc --noEmit` clean.
+- Baseline: `main` at `ea079827a585f8fd6d628f5f65faaea03af6df99` plus #86
+  (`a0cbecbefe31a470008acf4e22dec49f750e3261`); suite 1385 pass / 0 fail
+  across 84 files; `bunx tsc --noEmit` clean.
 - The TUI console (seats, ModelBar/ModelPicker, Poseidon HUD, decision
   surfaces) is merged and live in fixture mode.
 - The runtime foundation is Phase 3A-complete behind the `start` gate
-  (`commands/start.ts` exits 78 `live_runtime_not_certified`).
+  (`apps/madbridge/src/commands/start.ts` exits 78
+  `live_runtime_not_certified`).
 - `BrokerClient` boundary verified at `packages/broker/src/client.ts`
   (snapshot/output/request/publish/close; closed command and error sets).
+
+### Source rebind (reviewed 2026-09-21)
+
+The following sources were checked at
+`a0cbecbefe31a470008acf4e22dec49f750e3261`, a direct descendant of
+`ea079827a585f8fd6d628f5f65faaea03af6df99`. They remain in their owning
+locations; this plan references them and does not duplicate code or historical
+evidence into the plan directory.
+
+| Source | Bound location | Rebound finding |
+| --- | --- | --- |
+| Phase 3A design | `docs/superpowers/specs/2026-08-12-phase-3a-runtime-foundation-design.md` | Governs the Phase 3B boundary and §6.9 evidence list. |
+| Broker client contract | `packages/broker/src/client.ts` | Defines the closed snapshot/output/request/publish/close boundary. |
+| TUI projection type | `apps/madbridge/src/tui/types.ts` | Is a distinct presentation projection; it is not the broker contract. |
+| Production start gate | `apps/madbridge/src/commands/start.ts` | Returns exit 78 with `live_runtime_not_certified`; only M6 may change it. |
+| Historical dual-host records | `docs/verification/2026-08-22-m17-step8-dualhost-imac.md` and `docs/verification/2026-08-22-m17-step8-dualhost-macbook.md` | M17 evidence only, not the required 3A M26 reports; Track 0 remains outstanding. |
+| FounderOS surface registry | External host source `FounderOS/04-agents/execution-surface-registry.md` (SHA-256 `4054e58dd0f5e053436cfacfa09ed779a668a822cfe435f4a4038cd16417b060`) | ZCode CLI is not registered; that registration remains a Founder item. |
+
+New Phase 3B evidence belongs in `docs/verification/` as sanitized,
+human-readable packets. Raw run artifacts remain external and are cited by run
+identifier; they are not copied into this repository.
 
 ## 0A. Execution base semantics
 
@@ -44,13 +67,15 @@ qualification record for GLM (§2C); terminal conditions restated in §3.
 
 ## 1. Global constraints
 
-1. File scope per milestone is exactly the file map in §3; anything outside
+1. File scope per milestone is exactly the disposition map in §2; anything outside
    requires a Founder amendment to this plan.
 2. The `start` placeholder is touched ONLY in milestone M6.
 3. No new dependency without a ratified exception in this plan.
-4. Every slice lands with tests green and the evidence artifact committed
-   under `testdata/phase3b/` (runs may also live in CI artifacts, cited by
-   run id).
+4. Every slice lands with tests green and its evidence recorded as a sanitized
+   human-readable packet committed under `docs/verification/` (3A §5.5: the
+   runtime never writes into the governed repository; source transcripts are
+   retained as submitted evidence, not committed). Raw live-run artifacts stay
+   outside the governed repository and are cited by run id.
 5. Honest-status doctrine applies to every new surface: no invented state.
 
 ## 2. Existing-state disposition map
@@ -58,10 +83,12 @@ qualification record for GLM (§2C); terminal conditions restated in §3.
 - Preserved untouched: broker authority modules (session-machine,
   ownership-machine, fencing, command-legality, ledger, storage), adapters,
   the 3A harnesses, the entire Phase 3A test corpus.
-- Modified: `apps/madbridge/src/tui/main.tsx` (composition, M1), 
-  `App.tsx` (client wiring props, M2–M4), `commands/start.ts` (M6 ONLY),
-  `keyboard-router.ts` (NONE — reused as-is; its PTY emit becomes the
-  `pty_input` source), `theme.ts`/components (NONE expected).
+- Modified: `apps/madbridge/src/tui/main.tsx` (composition, M1),
+  `apps/madbridge/src/tui/App.tsx` (client wiring props, M2–M4),
+  `apps/madbridge/src/commands/start.ts` (M6 ONLY),
+  `apps/madbridge/src/tui/keyboard-router.ts` (NONE — reused as-is; its PTY
+  emit becomes the `pty_input` source),
+  `apps/madbridge/src/tui/theme.ts` / TUI components (NONE expected).
 - Created: `apps/madbridge/src/tui/live/` (composition + client
   adapter + projection mapper + retention buffer), evidence scripts under
   `scripts/phase3b/`, architecture tests under `test/phase3b/`, plus the
@@ -170,7 +197,8 @@ Open §7.7 gates before any qualification ruling:
 
 - The §4 negative-control suite from the spec, scripted, with packets.
 - Full-dress single-host run: start → session → decisions → clean close,
-  all artifacts under `testdata/phase3b/`.
+  evidence recorded per global constraint 4 (sanitized packet under
+  `docs/verification/`; raw artifacts external).
 
 ### M6 — Gate removal (certification commit)
 
