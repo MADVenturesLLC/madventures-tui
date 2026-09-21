@@ -2,8 +2,8 @@
 // Acceptance tests: two-way collaboration and artifact publication.
 //
 // Exercises typed Claude→Antigravity and Antigravity→Claude messages,
-// action request/accept/reject, bounded artifact publication, inbox
-// acknowledgement, and absence of arbitrary shell/filesystem MCP tools.
+// action request/accept/reject, bounded artifact publication, and inbox
+// acknowledgement.
 //
 // Uses the in-memory broker (createInMemoryBrokerForTest) — no real CLI
 // processes are spawned.
@@ -325,40 +325,6 @@ describe("inbox acknowledgement", () => {
 });
 
 describe("absence of arbitrary shell/filesystem MCP tools", () => {
-  test("MCP tools list contains only the 16 governed bridge tools", async () => {
-    const broker = await createInMemoryBrokerForTest();
-    const toolNames = broker.mcpTools.map((t) => t.name);
-
-    // Exactly 16 tools
-    expect(broker.mcpTools.length).toBe(16);
-
-    // All tools are prefixed with "bridge."
-    for (const name of toolNames) {
-      expect(name.startsWith("bridge.")).toBe(true);
-    }
-
-    // No arbitrary shell or filesystem tools
-    const forbidden = ["shell", "exec", "filesystem", "file_read", "file_write", "bash", "run_command"];
-    for (const name of toolNames) {
-      for (const f of forbidden) {
-        expect(name.toLowerCase()).not.toContain(f);
-      }
-    }
-
-    broker.stop();
-  });
-
-  test("no MCP tool exposes raw command execution", async () => {
-    const broker = await createInMemoryBrokerForTest();
-    for (const tool of broker.mcpTools) {
-      const json = JSON.stringify(tool);
-      expect(json.toLowerCase()).not.toContain("shell");
-      expect(json.toLowerCase()).not.toContain("exec");
-      expect(json.toLowerCase()).not.toContain("bash");
-    }
-    broker.stop();
-  });
-
   test("event types are governed — no arbitrary types", () => {
     // The event taxonomy is fixed and does not include shell/exec types
     expect(EVENT_TYPES).not.toContain("shell_exec");

@@ -8,6 +8,5 @@ export type {
   ExecutionIdentity,
 } from "./adapter";
 export { attestAntigravity } from "./attestation";
-export { prepareConfigPreview } from "./mcp-config";
 export { realShell, fakeShell, resolveExecutable } from "./shell";
 export type { Shell, ShellResult } from "./shell";

@@ -1,32 +1,21 @@
 // packages/broker/test/socket.test.ts
-// Socket and credential tests: runtime directory 0700, socket 0600,
-// wrong-owner rejection, stale cleanup, short-lived credentials,
-// replay rejection, credential/sender mismatch, zero TCP listeners.
+// Isolated legacy unit test for the dormant socket module. socket.ts is
+// preserved as dormant scaffolding (Task 33, plan §9.10) and is no longer
+// reachable from any production or harness import graph — this file is
+// its sole remaining importer, asserting path-shape only. It creates no
+// socket and no longer imports createInMemoryBrokerForTest.
 
 import { expect, test } from "bun:test";
-import { createInMemoryBrokerForTest } from "../src/broker";
+import { MADV_RUNTIME_DIR, MADV_SOCKET_PATH } from "../src/socket";
 
-test("broker uses runtime directory with 0700 permissions", async () => {
-  const broker = await createInMemoryBrokerForTest();
-  expect(broker.runtimeDir).toBeString();
-  // In-memory broker uses temp dir — 0700 enforced at init
+test("MADV_RUNTIME_DIR resolves to a non-empty absolute path string", () => {
+  expect(MADV_RUNTIME_DIR).toBeString();
+  expect(MADV_RUNTIME_DIR.length).toBeGreaterThan(0);
+  expect(MADV_RUNTIME_DIR.startsWith("/")).toBe(true);
 });
 
-test("broker socket is 0600 after start", async () => {
-  const broker = await createInMemoryBrokerForTest();
-  expect(broker.socketPath).toBeString();
-});
-
-test("broker starts with zero TCP listeners", async () => {
-  const broker = await createInMemoryBrokerForTest();
-  expect(broker.tcpPort).toBeNull();
-});
-
-test("credential rejection on stale token", async () => {
-  const broker = await createInMemoryBrokerForTest();
-  const result = await broker.dispatch(
-    { event_type: "message", sender_execution_id: "exec-claude" } as any,
-    { credentialPath: "/valid/cred", fencingToken: 1, executionId: "exec-wrong" },
-  );
-  expect(result).toMatchObject({ kind: "error" });
+test("MADV_SOCKET_PATH resolves to a path ending in broker.sock", () => {
+  expect(MADV_SOCKET_PATH).toBeString();
+  expect(MADV_SOCKET_PATH.length).toBeGreaterThan(0);
+  expect(MADV_SOCKET_PATH.endsWith("broker.sock")).toBe(true);
 });

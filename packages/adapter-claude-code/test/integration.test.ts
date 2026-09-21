@@ -15,10 +15,6 @@ test("full lifecycle: attest -> preview -> launch -> notify -> terminate", async
   const id = await adapter.attest();
   expect(id.executionId).toMatch(/^exec-cc-/);
 
-  const preview = await adapter.prepareConfigPreview();
-  expect(preview.backupPath.endsWith(".bak")).toBe(true);
-  expect(shell.calls.some((c) => c.includes("config write"))).toBe(false);
-
   const exec = await adapter.launch({
     sessionId: "s1",
     executionId: id.executionId,

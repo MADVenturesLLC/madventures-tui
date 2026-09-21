@@ -1136,3 +1136,117 @@ describe("Phase 3A lifecycle transition authority", () => {
     expect(countOccurrences(source, RESUME_EXPORT)).toBe(1);
   });
 });
+
+// ── Task 33: quarantine socket, MCP, and PtyManager from production reach ──
+// (plan Task 33, §9.10/§4.4; act ARCHITECT-TASK33-PHASE2-ACT item 8(e)/(f))
+//
+// Static analysis, consistent with this file's existing convention: scans
+// real export/import specifiers via the TypeScript AST rather than a
+// runtime `import * as ns` namespace object, because named TYPE exports
+// (e.g. McpToolDef, PtyManagerSnapshot) are erased at runtime and would
+// never appear as keys of a runtime namespace object — a dynamic-import
+// check would silently under-test the invariant for every type-only name.
+// The AST scan below catches both value and type-level named exports.
+
+const QUARANTINED_INDEX_EXPORTS = [
+  "BrokerSocket",
+  "MADV_RUNTIME_DIR",
+  "MADV_SOCKET_PATH",
+  "MCP_TOOLS",
+  "McpServer",
+  "McpToolDef",
+  "PtyManager",
+  "createPtyManager",
+] as const;
+
+/** Named export identifiers (value or type) declared by a single module file. */
+function collectNamedExportIdentifiers(filePath: string): Set<string> {
+  const source = readFileSync(filePath, "utf8");
+  const sourceFile = ts.createSourceFile(
+    filePath,
+    source,
+    ts.ScriptTarget.Latest,
+    /* setParentNodes */ true,
+    scriptKindFor(filePath),
+  );
+  const names = new Set<string>();
+  const visit = (node: ts.Node): void => {
+    if (ts.isExportDeclaration(node) && node.exportClause && ts.isNamedExports(node.exportClause)) {
+      for (const element of node.exportClause.elements) {
+        names.add(element.name.text);
+      }
+    }
+    node.forEachChild(visit);
+  };
+  visit(sourceFile);
+  return names;
+}
+
+/**
+ * Files (production or test/harness) under packages/ and apps/ whose
+ * import/export module specifier's final path segment is exactly
+ * `moduleBaseName` (e.g. "socket" matches "./socket" and "../src/socket"
+ * but not "socket-io" or "polysocket"). Repo-relative, portable-slash,
+ * sorted paths.
+ */
+function findModuleSpecifierImporters(root: string, moduleBaseName: string): string[] {
+  const importers: string[] = [];
+  const files = [
+    ...listSourceFiles(join(root, "packages")),
+    ...listSourceFiles(join(root, "apps")),
+    ...listSourceFiles(join(root, "test")),
+  ];
+  for (const file of files) {
+    const portable = toPortablePath(file);
+    if (portable.includes("/node_modules/")) continue;
+    const source = readFileSync(file, "utf8");
+    const sourceFile = ts.createSourceFile(
+      file,
+      source,
+      ts.ScriptTarget.Latest,
+      /* setParentNodes */ true,
+      scriptKindFor(file),
+    );
+    let matched = false;
+    const visit = (node: ts.Node): void => {
+      const specifier =
+        (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier
+          ? node.moduleSpecifier
+          : null;
+      if (specifier && ts.isStringLiteral(specifier)) {
+        const lastSegment = specifier.text.split("/").pop();
+        if (lastSegment === moduleBaseName) matched = true;
+      }
+      node.forEachChild(visit);
+    };
+    visit(sourceFile);
+    if (matched) importers.push(toPortablePath(relative(root, file)));
+  }
+  return importers.sort();
+}
+
+describe("Task 33 — socket, MCP, and PtyManager quarantine from production reach", () => {
+  test("the broker package index exports no socket, MCP, or PtyManager symbol", () => {
+    const exported = collectNamedExportIdentifiers(join(REPO_ROOT, "packages/broker/src/index.ts"));
+    for (const name of QUARANTINED_INDEX_EXPORTS) {
+      expect(exported.has(name)).toBe(false);
+    }
+  });
+
+  test("no production or harness file imports socket.ts", () => {
+    const importers = findModuleSpecifierImporters(REPO_ROOT, "socket");
+    expect(importers).toEqual(["packages/broker/test/socket.test.ts"]);
+  });
+
+  test("no production file constructs a unix:// URL", () => {
+    for (const file of enumerateProductionFiles(REPO_ROOT)) {
+      const source = readFileSync(file, "utf8");
+      expect(source).not.toContain("unix://");
+    }
+  });
+
+  test("exactly one sanctioned edge imports mcp-server directly", () => {
+    const importers = findModuleSpecifierImporters(REPO_ROOT, "mcp-server");
+    expect(importers).toEqual(["packages/broker/test/mcp-contract.test.ts"]);
+  });
+});

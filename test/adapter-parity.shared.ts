@@ -44,7 +44,6 @@ export interface ExecutionIdentity {
 
 export interface AdapterV1 {
   attest(): Promise<ExecutionIdentity>;
-  prepareConfigPreview(): Promise<ConfigChangeSet>;
   launch(input: LaunchInput): Promise<ManagedExecution>;
   notifyInbox(eventId: string): Promise<void>;
   pause(reason: string): Promise<void>;
@@ -140,35 +139,6 @@ export function runAdapterParity(
     const shell = makeFakeShell({ "--version": "1.2.3" }, surface); // no config get model
     const adapter = factory(shell);
     await expect(adapter.attest()).rejects.toThrow(/model_identity_unverifiable|unverifiable/);
-  });
-
-  // --- config preview without mutation ---
-  test(`[${surface}] prepareConfigPreview does not mutate live config`, async () => {
-    const shell = makeFakeShell({
-      "--version": "1.2.3",
-      "config get model": "claude-fable-5|anthropic",
-      "config show": "{}",
-    }, surface);
-    const adapter = factory(shell);
-    const preview = await adapter.prepareConfigPreview();
-    expect(preview).toBeDefined();
-    expect(preview.targetPath).toBeString();
-    expect(preview.beforeSha256).toBeNull(); // no file yet
-    expect(preview.proposedSha256).toMatch(/^[0-9a-f]{64}$/);
-    expect(preview.renderedDiff).toBeString();
-    expect(preview.backupPath).toBeString();
-    expect(shell.calls.some((c) => c.includes("config write"))).toBe(false);
-  });
-
-  // --- backup/restore path present ---
-  test(`[${surface}] backup path is returned and restorable`, async () => {
-    const shell = makeFakeShell({
-      "--version": "1.2.3",
-      "config get model": "claude-fable-5|anthropic",
-    }, surface);
-    const adapter = factory(shell);
-    const preview = await adapter.prepareConfigPreview();
-    expect(preview.backupPath.endsWith(".bak")).toBe(true);
   });
 
   // --- child-execution ID propagation ---
