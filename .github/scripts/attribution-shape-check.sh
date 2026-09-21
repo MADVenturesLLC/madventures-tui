@@ -17,7 +17,11 @@
 #       (DEC-20260721-01 hardening, 2026-07-21). No intent inference: the
 #       prohibition is on the prefixes themselves (clause 5a).
 #   (b) Attribution-value check — a Role-Id trailer value must match the
-#       enumerated 17-role alternation below, not a permissive pattern.
+#       enumerated role alternation below, not a permissive pattern. That
+#       alternation holds TWENTY-NINE values (the 17 ratified before
+#       2026-08-12 plus 12 of the 13 added by DEC-20260812-03); see
+#       ROLE_ID_REGEX and the DELIBERATE ASYMMETRY block for why it is 29
+#       and not 30. Secondary roles are validated against the same set.
 #       Invented values (operator, boss, founder) are rejected. A commit
 #       with no Role-Id but Actor-Id: founder is valid (direct-founder
 #       work); Role-Id: founder is invalid.
@@ -87,15 +91,45 @@ fail=0
 # validate_block <sha> <label>
 # Applies (b) and the block-validity rules of (c) to one commit.
 validate_block() {
-  local sha="$1" label="$2" body role_lines actor_founder actor_present
+  local sha="$1" label="$2" body role_lines role_secondary_lines
+  local actor_founder actor_present
   body="$(git log -1 --format=%B "$sha")"
 
   role_lines="$(printf '%s\n' "$body" | grep -E '^Role-Id:' || true)"
+  role_secondary_lines="$(printf '%s\n' "$body" | grep -E '^Role-Id-Secondary:' || true)"
   actor_present="$(printf '%s\n' "$body" | grep -E '^Actor-Id:[[:space:]]*[^[:space:]]' || true)"
   actor_founder="$(printf '%s\n' "$body" | grep -E '^Actor-Id:[[:space:]]*founder[[:space:]]*$' || true)"
 
+  # Secondary roles (DEC-20260718-05 clause 10) are validated here, against
+  # the same closed alternation as the primary, and a secondary always
+  # requires a primary.
+  #
+  # This function previously ignored Role-Id-Secondary completely, so `pr`
+  # and `main` mode accepted a COMMIT attributing work to the
+  # activation-deferred `investment-acquisition-lead` as a secondary role —
+  # the exact invariant the ROLE_ID_REGEX omission exists to enforce — while
+  # `prbody` rejected the identical block. The commit is the authoritative
+  # attribution record under clause 7, so the gap sat on the side that
+  # matters most. Reproduced before this change: a commit carrying
+  # `Role-Id-Secondary: investment-acquisition-lead` passed `main` mode with
+  # exit 0; so did a secondary-only block with `Actor-Id: founder`.
+  # Regression cases live in `selftest` (st_commit).
+  if [[ -n "$role_secondary_lines" ]]; then
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      if ! printf '%s\n' "$line" | sed 's/^Role-Id-Secondary:/Role-Id:/' | grep -Eq "$ROLE_ID_REGEX"; then
+        echo "FAIL (b) $label $sha: invalid Role-Id-Secondary value: '$line'"
+        fail=1
+      fi
+    done <<< "$role_secondary_lines"
+    if [[ -z "$role_lines" ]]; then
+      echo "FAIL (c) $label $sha: Role-Id-Secondary present without a primary Role-Id"
+      fail=1
+    fi
+  fi
+
   if [[ -n "$role_lines" ]]; then
-    # (b) every Role-Id line must match the enumerated 17-role alternation.
+    # (b) every Role-Id line must match the enumerated role alternation.
     while IFS= read -r line; do
       if ! printf '%s\n' "$line" | grep -Eq "$ROLE_ID_REGEX"; then
         echo "FAIL (b) $label $sha: invalid Role-Id value: '$line'"
@@ -150,6 +184,28 @@ case "$MODE" in
     fi
 
     # (b)+(c) every commit in the PR range, evaluated independently.
+    #
+    # The range is materialized and its exit status checked BEFORE the loop.
+    # Reading it through process substitution — `done < <(git rev-list …)` —
+    # discards rev-list's exit status entirely: an unresolvable range (an
+    # absent base or head object) produced an empty loop, `fail` was never
+    # set, and the gate reported PASS with exit 0. The fail-closed handling
+    # below covers a commit that cannot be READ; it did not cover a range
+    # that cannot be ENUMERATED, which is strictly worse because nothing is
+    # examined at all. Reproduced before this change:
+    #
+    #   $ attribution-shape-check.sh pr <absent-sha> <head> some/branch
+    #   fatal: Invalid revision range <absent-sha>..<head>
+    #   attribution-shape-check: PASS — attribution shape valid
+    #   exit 0
+    #
+    # Regression cases live in `selftest` (st_range).
+    if ! range="$(git rev-list --reverse "$BASE_SHA..$HEAD_SHA" 2>&1)"; then
+      echo "FAIL (c) unable to enumerate the commit range $BASE_SHA..$HEAD_SHA (failing closed): $range"
+      fail=1
+      range=""
+    fi
+
     while IFS= read -r sha; do
       [[ -z "$sha" ]] && continue
       app_rc=0; applicable "$sha" || app_rc=$?
@@ -162,12 +218,22 @@ case "$MODE" in
         fail=1
       else
         # Not applicable under the path filter; still apply (b) to any
-        # Role-Id trailer it carries.
-        if git log -1 --format=%B "$sha" | grep -Eq '^Role-Id:'; then
+        # attribution trailer it carries — primary OR secondary.
+        #
+        # This guard previously looked only for '^Role-Id:', so a
+        # non-applicable commit (an empty diff, e.g. a clean merge) carrying
+        # ONLY 'Role-Id-Secondary:' skipped validate_block entirely. The
+        # secondary-role validation added to validate_block in this change
+        # was therefore unreachable on exactly those commits, leaving the
+        # deferred-secondary and secondary-without-primary fail-opens intact
+        # in `pr` mode. Reproduced before this line changed: an empty commit
+        # carrying 'Role-Id-Secondary: investment-acquisition-lead' passed
+        # `pr` mode with exit 0. Regression case: st_pr in `selftest`.
+        if git log -1 --format=%B "$sha" | grep -Eq '^Role-Id(-Secondary)?:'; then
           validate_block "$sha" "commit(non-applicable)"
         fi
       fi
-    done < <(git rev-list --reverse "$BASE_SHA..$HEAD_SHA")
+    done <<< "$range"
     ;;
 
   main)
@@ -325,6 +391,111 @@ case "$MODE" in
     stb "prohibited COPILOT/ prefix"     1 'COPILOT/feature'
     stb "pinned-allowlist branch exempt" 0 'plato/architecture-governance-reconciliation'
     stb "normal branch accepted"         0 'claude/feature-x'
+
+    # ---- Regression cases for the two fail-opens fixed in this change ----
+    #
+    # Absolute path to this script: st_commit runs it with the working
+    # directory inside a throwaway repository, where a relative $0 would not
+    # resolve.
+    self_abs="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+    absent_sha='0000000000000000000000000000000000000000'
+
+    # st_range <name> <expected-exit> <base> <head>
+    # A range that cannot be ENUMERATED must fail closed. Before the fix,
+    # rev-list's exit status was discarded by process substitution and an
+    # unresolvable range reached PASS having examined nothing.
+    st_range() {
+      local name="$1" expected="$2" base="$3" head="$4" rc=0
+      bash "$self_abs" pr "$base" "$head" claude/selftest >/dev/null 2>&1 || rc=$?
+      if [[ "$rc" -ne "$expected" ]]; then
+        echo "SELFTEST FAIL: $name (exit $rc, expected $expected)"
+        fail=1
+      else
+        echo "selftest ok: $name"
+      fi
+    }
+    st_range "range: absent base fails closed"    1 "$absent_sha" HEAD
+    st_range "range: absent head fails closed"    1 HEAD "$absent_sha"
+    st_range "range: empty but valid range passes" 0 HEAD HEAD
+
+    # st_commit <name> <expected-exit> <commit-message>
+    # Commit-level validation, exercised against a real commit in a
+    # throwaway repository. These cover Role-Id-Secondary, which
+    # validate_block ignored entirely before this change — `prbody` rejected
+    # a deferred secondary role while `pr` and `main` accepted it on the
+    # commit, which is the authoritative attribution record under clause 7.
+    st_commit() {
+      local name="$1" expected="$2" msg="$3" rc=0 tmp
+      tmp="$(mktemp -d)"
+      git init -q "$tmp" >/dev/null 2>&1
+      git -C "$tmp" config user.email 'selftest@example.invalid'
+      git -C "$tmp" config user.name 'attribution selftest'
+      : > "$tmp/f"
+      git -C "$tmp" add f
+      git -C "$tmp" commit -q -m "$msg"
+      ( cd "$tmp" && bash "$self_abs" main HEAD ) >/dev/null 2>&1 || rc=$?
+      rm -rf "$tmp"
+      if [[ "$rc" -ne "$expected" ]]; then
+        echo "SELFTEST FAIL: $name (exit $rc, expected $expected)"
+        fail=1
+      else
+        echo "selftest ok: $name"
+      fi
+    }
+    st_commit "commit: valid block accepted" 0 \
+      $'work\n\nRole-Id: builder\nActor-Id: session:x\nExecution-Surface: claude-code'
+    st_commit "commit: direct-founder work accepted" 0 \
+      $'work\n\nActor-Id: founder'
+    st_commit "commit: no attribution block rejected" 1 \
+      $'work with no block at all'
+    st_commit "commit: valid primary + secondary accepted" 0 \
+      $'work\n\nRole-Id: builder\nRole-Id-Secondary: architect\nActor-Id: session:x\nExecution-Surface: claude-code'
+    st_commit "commit: invalid secondary value rejected" 1 \
+      $'work\n\nRole-Id: builder\nRole-Id-Secondary: boss\nActor-Id: session:x\nExecution-Surface: claude-code'
+    # Activation-deferral invariant (DEC-20260812-03) now enforced on the
+    # commit, not only in the PR body. This assertion is the enforcement;
+    # if a Founder activation ruling later activates the role, it changes
+    # from 1 to 0 in the SAME change that adds it to ROLE_ID_REGEX.
+    st_commit "commit: deferred role rejected as secondary" 1 \
+      $'work\n\nRole-Id: builder\nRole-Id-Secondary: investment-acquisition-lead\nActor-Id: session:x\nExecution-Surface: claude-code'
+    st_commit "commit: deferred role rejected as primary" 1 \
+      $'work\n\nRole-Id: investment-acquisition-lead\nActor-Id: session:x\nExecution-Surface: claude-code'
+    st_commit "commit: secondary without primary rejected" 1 \
+      $'work\n\nRole-Id-Secondary: architect\nActor-Id: founder'
+
+    # st_pr <name> <expected-exit> <empty-commit-message>
+    # `pr` mode over a range whose tip is NON-APPLICABLE (empty diff). These
+    # cover the guard that decides whether validate_block is called at all —
+    # the path on which the secondary-role rules were unreachable.
+    st_pr() {
+      local name="$1" expected="$2" msg="$3" rc=0 tmp base head
+      tmp="$(mktemp -d)"
+      git init -q "$tmp" >/dev/null 2>&1
+      git -C "$tmp" config user.email 'selftest@example.invalid'
+      git -C "$tmp" config user.name 'attribution selftest'
+      : > "$tmp/f"
+      git -C "$tmp" add f
+      git -C "$tmp" commit -q -m $'base\n\nRole-Id: builder\nActor-Id: session:x\nExecution-Surface: claude-code'
+      base="$(git -C "$tmp" rev-parse HEAD)"
+      git -C "$tmp" commit -q --allow-empty -m "$msg"
+      head="$(git -C "$tmp" rev-parse HEAD)"
+      ( cd "$tmp" && bash "$self_abs" pr "$base" "$head" claude/selftest ) >/dev/null 2>&1 || rc=$?
+      rm -rf "$tmp"
+      if [[ "$rc" -ne "$expected" ]]; then
+        echo "SELFTEST FAIL: $name (exit $rc, expected $expected)"
+        fail=1
+      else
+        echo "selftest ok: $name"
+      fi
+    }
+    st_pr "pr/non-applicable: deferred secondary rejected" 1 \
+      $'empty\n\nRole-Id-Secondary: investment-acquisition-lead\nActor-Id: founder'
+    st_pr "pr/non-applicable: secondary without primary rejected" 1 \
+      $'empty\n\nRole-Id-Secondary: architect\nActor-Id: founder'
+    st_pr "pr/non-applicable: valid block accepted" 0 \
+      $'empty\n\nRole-Id: builder\nRole-Id-Secondary: architect\nActor-Id: session:x\nExecution-Surface: claude-code'
+    st_pr "pr/non-applicable: no trailers at all accepted" 0 \
+      $'empty merge with no attribution trailers'
     ;;
 
   *)

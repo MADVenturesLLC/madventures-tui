@@ -86,11 +86,27 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
-          if git show "$BASE_SHA:.github/scripts/attribution-shape-check.sh" > "$RUNNER_TEMP/attribution-shape-check.sh" 2>/dev/null; then
+          # Three outcomes, distinguished deliberately. Testing only whether
+          # `git show` succeeded treated EVERY read failure as "the checker is
+          # absent at base" and fell through to the pull request's own copy —
+          # a corrupt checkout or an unreadable base object would silently
+          # hand the gate to PR-controlled code. Same fail-open class the
+          # checker itself no longer has. Ported from FounderOS PR #353.
+          P=.github/scripts/attribution-shape-check.sh
+          if git cat-file -e "$BASE_SHA:$P" 2>/dev/null; then
+            # Present at base: it must extract cleanly. `bash -e` aborts the
+            # step if it does not, which is the fail-closed outcome.
+            git show "$BASE_SHA:$P" > "$RUNNER_TEMP/attribution-shape-check.sh"
             echo "using trusted base-revision checker ($BASE_SHA)"
+          elif git rev-parse --verify --quiet "$BASE_SHA^{tree}" >/dev/null; then
+            # Base revision reads fine and genuinely does not carry the
+            # checker: the documented bootstrap path, which this repository
+            # is still on until this pull request merges.
+            echo "checker genuinely absent at base — using PR revision (bootstrap)"
+            cp "$P" "$RUNNER_TEMP/attribution-shape-check.sh"
           else
-            echo "checker absent on base — using PR revision"
-            cp .github/scripts/attribution-shape-check.sh "$RUNNER_TEMP/attribution-shape-check.sh"
+            echo "cannot read base revision $BASE_SHA — failing closed"
+            exit 1
           fi
 
       - name: Run attribution shape check (pull request)
@@ -129,11 +145,27 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
-          if git show "$BASE_SHA:.github/scripts/attribution-shape-check.sh" > "$RUNNER_TEMP/attribution-shape-check.sh" 2>/dev/null; then
+          # Three outcomes, distinguished deliberately. Testing only whether
+          # `git show` succeeded treated EVERY read failure as "the checker is
+          # absent at base" and fell through to the pull request's own copy —
+          # a corrupt checkout or an unreadable base object would silently
+          # hand the gate to PR-controlled code. Same fail-open class the
+          # checker itself no longer has. Ported from FounderOS PR #353.
+          P=.github/scripts/attribution-shape-check.sh
+          if git cat-file -e "$BASE_SHA:$P" 2>/dev/null; then
+            # Present at base: it must extract cleanly. `bash -e` aborts the
+            # step if it does not, which is the fail-closed outcome.
+            git show "$BASE_SHA:$P" > "$RUNNER_TEMP/attribution-shape-check.sh"
             echo "restored trusted base-revision checker ($BASE_SHA)"
+          elif git rev-parse --verify --quiet "$BASE_SHA^{tree}" >/dev/null; then
+            # Base revision reads fine and genuinely does not carry the
+            # checker: the documented bootstrap path, which this repository
+            # is still on until this pull request merges.
+            echo "checker genuinely absent at base — using PR revision (bootstrap)"
+            cp "$P" "$RUNNER_TEMP/attribution-shape-check.sh"
           else
-            echo "checker absent on base — using PR revision"
-            cp .github/scripts/attribution-shape-check.sh "$RUNNER_TEMP/attribution-shape-check.sh"
+            echo "cannot read base revision $BASE_SHA — failing closed"
+            exit 1
           fi
 
       - name: Run attribution shape check (pull request body — DEC-20260721-01 item 1)
