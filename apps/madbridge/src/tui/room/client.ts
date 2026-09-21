@@ -101,6 +101,51 @@ export interface JoinResult {
   readonly input: "granted" | "input_held" | "unchanged";
 }
 
+/** CreateRoom result: the Gateway-minted live room (zero slots at birth). */
+export interface CreateResult {
+  /** Validated nonempty Gateway-minted room_id (never coerced from a missing field). */
+  readonly roomId: string;
+  /** Honesty label VALIDATED from the Gateway ack (`fixture === false`), never assumed. */
+  readonly fixture: false;
+  /** Provenance VALIDATED from the Gateway ack (`created_via === "CreateRoom"`). */
+  readonly createdVia: "CreateRoom";
+  readonly snapshot: RoomSnapshotBody;
+}
+
+/**
+ * Consumer-side validation of a CreateRoom SUCCESS acknowledgement
+ * (MT-20260920-ROOM-CREATE-90 finding 1). Returns the list of defects; an
+ * empty list means every required fact is present and consistent:
+ *   op === "CreateRoom", ok === true, room_id nonempty string,
+ *   fixture === false, created_via === "CreateRoom", snapshot passes the
+ *   existing consumer validation, snapshot.room_id === room_id.
+ * Pure: no I/O, no coercion, no manufactured provenance.
+ */
+export function validateCreateRoomAck(ack: Record<string, unknown>): string[] {
+  const defects: string[] = [];
+  if (ack["op"] !== "CreateRoom") defects.push(`op is ${JSON.stringify(ack["op"] ?? null)}, expected "CreateRoom"`);
+  if (ack["ok"] !== true) defects.push("ok is not true");
+  const roomId = ack["room_id"];
+  if (typeof roomId !== "string") defects.push("room_id is not a string");
+  else if (roomId.length === 0) defects.push("room_id is empty");
+  if (ack["fixture"] !== false) defects.push(`fixture is ${JSON.stringify(ack["fixture"] ?? null)}, expected false`);
+  if (ack["created_via"] !== "CreateRoom") defects.push(`created_via is ${JSON.stringify(ack["created_via"] ?? null)}, expected "CreateRoom"`);
+  const snapshot = ack["snapshot"];
+  const snapshotDefects = validateRoomSnapshotBody(snapshot);
+  if (snapshotDefects.length > 0) {
+    defects.push(...snapshotDefects.map((d) => `snapshot: ${d}`));
+  } else if (typeof roomId === "string" && roomId.length > 0) {
+    const snapshotRoomId = (snapshot as RoomSnapshotBody).room_id;
+    if (snapshotRoomId !== roomId) defects.push(`snapshot.room_id ${JSON.stringify(snapshotRoomId)} does not match room_id ${JSON.stringify(roomId)}`);
+  }
+  return defects;
+}
+
+/** A refusal addressed to CreateRoom (or a Nack) — never a success. */
+export function isCreateRoomRefusal(ack: Record<string, unknown>): boolean {
+  return ack["ok"] !== true && (ack["op"] === "CreateRoom" || ack["op"] === "Nack");
+}
+
 export interface RoomClientEvents {
   /** Inbound VT patch frames (checkpoint or patch) per execution. */
   onPatch?: (patch: RoomVtPatch) => void;
@@ -219,6 +264,38 @@ export class RoomAttachClient {
       recoveryKind: String(ack["recovery_kind"]) as RoomRecoveryKind,
       snapshot: snapshot as RoomSnapshotBody,
       input: String(ack["input"]) as JoinResult["input"],
+    };
+  }
+
+  /**
+   * CreateRoom (2026-09-20 Founder amendment) — the Gateway MINTS the room;
+   * the client only requests. The minted room is born PREPARED with zero
+   * execution slots; `fixture: false` and `created_via: "CreateRoom"` are the
+   * Gateway's own labels and are VALIDATED here, never assumed.
+   *
+   * Fail-closed contract (MT-20260920-ROOM-CREATE-90):
+   *   - a refusal addressed to CreateRoom (or a Nack) surfaces its reason;
+   *   - any other non-conforming answer — an unrelated successful ack, a
+   *     missing/empty/non-string room_id, a wrong or missing fixture or
+   *     created_via label, an invalid snapshot, or a snapshot naming a
+   *     different room — is a `protocol_defect`. No field is coerced.
+   * The shared request dispatcher is unchanged; this method is where an
+   * unrelated `ok` frame is rejected for this operation.
+   */
+  async create(idempotencyKey: string): Promise<CreateResult> {
+    const ack = await this.request({ op: "CreateRoom", idempotency_key: idempotencyKey });
+    if (isCreateRoomRefusal(ack)) {
+      throw new RoomAttachError(String(ack["reason"] ?? "create_refused"), `CreateRoom refused: ${JSON.stringify(ack)}`);
+    }
+    const defects = validateCreateRoomAck(ack);
+    if (defects.length > 0) {
+      throw new RoomAttachError("protocol_defect", `CreateRoom acknowledgement failed consumer validation: ${defects.join("; ")}`);
+    }
+    return {
+      roomId: ack["room_id"] as string,
+      fixture: false,
+      createdVia: "CreateRoom",
+      snapshot: ack["snapshot"] as RoomSnapshotBody,
     };
   }
 

@@ -7,6 +7,9 @@
 // Phase 1 attach family (Commission Final r3 §9 — verbs frozen exactly;
 // no aliases, no competing public contract):
 //           join --room <room_id>, leave, follow --json, rooms --json
+// Founder-ruled addition (2026-09-20, Act GLM-20260920-FIRST-LIVE-ROOM-JOIN,
+// Option A): room create — thin front-end for the amended IPC v2 CreateRoom
+// control op; the Gateway mints the room_id.
 //
 // Exit codes: 0 = success, nonzero = blocked / invalid / interrupted
 // --json: produces JSON output on stdout
@@ -21,6 +24,7 @@ import { verifyLedgerCommand } from "./commands/verify-ledger";
 import { exportEvidenceCommand } from "./commands/export-evidence";
 import { closeCommand } from "./commands/close";
 import { joinCommand } from "./commands/join";
+import { roomCommand } from "./commands/room";
 import { leaveCommand } from "./commands/leave";
 import { followCommand } from "./commands/follow";
 import { roomsCommand } from "./commands/rooms";
@@ -41,6 +45,8 @@ const COMMANDS = new Set([
   "resume", "verify-ledger", "export-evidence", "close",
   // Room Runtime Phase 1 frozen attach verbs (r3 §9).
   "join", "leave", "follow", "rooms",
+  // Founder-ruled addition (2026-09-20): production room-create front-end.
+  "room",
 ]);
 
 const HELP_TEXT = `madv-tui — MadBridge governance CLI
@@ -61,6 +67,7 @@ Commands:
   leave             Detach this viewer (occupancy untouched)
   follow            Observe projection streams read-only (--json)
   rooms             List Gateway-provided room facts (--json)
+  room create       Request a live room; the Gateway mints the room_id
 
 Global options:
   --json            Output JSON on stdout
@@ -106,7 +113,7 @@ function parseArgs(args: string[]): {
 }
 
 export async function runCli(args: string[], ctx: CliContext): Promise<CliResult> {
-  const { command, flags } = parseArgs(args);
+  const { command, flags, positional } = parseArgs(args);
 
   if (!command) {
     return {
@@ -169,6 +176,8 @@ export async function runCli(args: string[], ctx: CliContext): Promise<CliResult
         return await followCommand(flags, { ...ctx, json });
       case "rooms":
         return await roomsCommand(flags, { ...ctx, json });
+      case "room":
+        return await roomCommand(flags, positional, { ...ctx, json });
       default: {
         // exhaustiveness check — should never reach here because
         // COMMANDS.has() already filtered unknown commands above
