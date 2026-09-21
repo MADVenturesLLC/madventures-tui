@@ -111,9 +111,24 @@ jobs:
             fi
           fi
 
-      - name: Run proposed-revision self-test (the PR's own parser must pass its own cases)
+      - name: Re-materialize the trusted checker before the body gate
+        # Defence in depth for the trust boundary. $RUNNER_TEMP is writable by
+        # anything this job runs, so any step that executes PR-controlled code
+        # could overwrite the trusted checker and have a later step run the
+        # replacement. The PR's own self-test is ordered last for that reason;
+        # this step makes the invariant hold even if that order is ever
+        # changed, by restoring the base-revision copy right before the gate
+        # that depends on it.
         if: github.event_name == 'pull_request'
-        run: bash .github/scripts/attribution-shape-check.sh selftest
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if git show "$BASE_SHA:.github/scripts/attribution-shape-check.sh" > "$RUNNER_TEMP/attribution-shape-check.sh" 2>/dev/null; then
+            echo "restored trusted base-revision checker ($BASE_SHA)"
+          else
+            echo "checker absent on base — using PR revision"
+            cp .github/scripts/attribution-shape-check.sh "$RUNNER_TEMP/attribution-shape-check.sh"
+          fi
 
       - name: Run attribution shape check (pull request body — DEC-20260721-01 item 1)
         if: github.event_name == 'pull_request'
@@ -151,6 +166,41 @@ jobs:
               exit "$rc"
             fi
           fi
+
+      - name: Verify the vendored checker matches its recorded provenance hash
+        # Mechanically enforces the rule stated in .github/scripts/README.md:
+        # this copy is byte-identical to the canonical FounderOS checker and is
+        # never edited in place. It compares the file against the sha256 the
+        # README records, so an in-place edit that leaves the provenance table
+        # stale fails here.
+        #
+        # SCOPE, stated plainly: this catches drift and accident, not a
+        # determined edit — a change that updates both the file and the README
+        # passes, by construction. The control for that is human review of
+        # .github/** plus branch protection, which is a repository-admin
+        # setting and not something a workflow can assert.
+        run: |
+          recorded="$(grep -oE '`[0-9a-f]{64}`' .github/scripts/README.md | head -n 1 | tr -d '`')"
+          actual="$(sha256sum .github/scripts/attribution-shape-check.sh | cut -d' ' -f1)"
+          if [[ -z "$recorded" ]]; then
+            echo "no sha256 recorded in .github/scripts/README.md"
+            exit 1
+          fi
+          if [[ "$recorded" != "$actual" ]]; then
+            echo "vendored checker does not match its recorded provenance hash"
+            echo "  README:   $recorded"
+            echo "  on disk:  $actual"
+            echo "Re-vendor from FounderOS and update the provenance table, or revert an in-place edit."
+            exit 1
+          fi
+          echo "vendored checker matches recorded provenance hash ($actual)"
+
+      - name: Run proposed-revision self-test (the PR's own parser must pass its own cases)
+        # LAST among the pull_request steps, deliberately. This is the only
+        # step that executes PR-controlled code, so nothing the gate relies on
+        # runs after it.
+        if: github.event_name == 'pull_request'
+        run: bash .github/scripts/attribution-shape-check.sh selftest
 
       - name: Run attribution shape check (final merged commit on main)
         if: github.event_name == 'push'
