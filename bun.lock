@@ -101,7 +101,6 @@
         "@madventures/ledger": "workspace:*",
         "@madventures/policy": "workspace:*",
         "@madventures/protocol": "workspace:*",
-        "node-pty": "^1.1.0",
       },
     },
     "packages/build-memory": {
