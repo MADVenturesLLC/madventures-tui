@@ -1225,6 +1225,57 @@ function findModuleSpecifierImporters(root: string, moduleBaseName: string): str
   return importers.sort();
 }
 
+/**
+ * Task 33 quarantine table (annex §3.4 item 15(d)): each module severed from
+ * production reach, keyed by the module basename `findModuleSpecifierImporters`
+ * matches, and the importers it is still permitted to have. `socket` is owned
+ * by the test "no production or harness file imports socket.ts" and is not
+ * repeated here. `mcp-config` names two files, one per adapter package
+ * (`packages/adapter-claude-code/src/mcp-config.ts` and
+ * `packages/adapter-antigravity/src/mcp-config.ts`); the basename scan covers
+ * both under the single row, and its empty permitted list means neither may be
+ * imported by any production or harness file.
+ */
+const QUARANTINED_MODULE_IMPORTERS: ReadonlyArray<{
+  readonly module: string;
+  readonly permitted: readonly string[];
+}> = [
+  { module: "mcp-server", permitted: ["packages/broker/test/mcp-contract.test.ts"] },
+  { module: "pty-manager", permitted: [] },
+  { module: "mcp-config", permitted: [] },
+];
+
+interface QuarantineViolation {
+  module: string;
+  importer: string;
+}
+
+/** Importers of every quarantined module under a root, keyed by module basename. */
+function quarantinedModuleImporters(root: string): Record<string, string[]> {
+  const importers: Record<string, string[]> = {};
+  for (const { module } of QUARANTINED_MODULE_IMPORTERS) {
+    importers[module] = findModuleSpecifierImporters(root, module);
+  }
+  return importers;
+}
+
+/**
+ * Every importer of a quarantined module that is not on that module's
+ * permitted list. Empty on a compliant tree. A missing sanctioned edge is not
+ * a violation here; the positive guard below asserts the full importer map,
+ * so removing the sanctioned edge fails that test instead.
+ */
+function findQuarantineViolations(root: string): QuarantineViolation[] {
+  const importers = quarantinedModuleImporters(root);
+  const violations: QuarantineViolation[] = [];
+  for (const { module, permitted } of QUARANTINED_MODULE_IMPORTERS) {
+    for (const importer of importers[module] ?? []) {
+      if (!permitted.includes(importer)) violations.push({ module, importer });
+    }
+  }
+  return violations;
+}
+
 describe("Task 33 — socket, MCP, and PtyManager quarantine from production reach", () => {
   test("the broker package index exports no socket, MCP, or PtyManager symbol", () => {
     const exported = collectNamedExportIdentifiers(join(REPO_ROOT, "packages/broker/src/index.ts"));
@@ -1245,8 +1296,87 @@ describe("Task 33 — socket, MCP, and PtyManager quarantine from production rea
     }
   });
 
-  test("exactly one sanctioned edge imports mcp-server directly", () => {
-    const importers = findModuleSpecifierImporters(REPO_ROOT, "mcp-server");
-    expect(importers).toEqual(["packages/broker/test/mcp-contract.test.ts"]);
+  test("quarantined modules admit only their sanctioned importers: mcp-server one edge, pty-manager none, both mcp-config none", () => {
+    expect(quarantinedModuleImporters(REPO_ROOT)).toEqual({
+      "mcp-server": ["packages/broker/test/mcp-contract.test.ts"],
+      "pty-manager": [],
+      "mcp-config": [],
+    });
+    expect(findQuarantineViolations(REPO_ROOT)).toEqual([]);
+  });
+
+  test("the quarantine guard detects a planted pty-manager import", () => {
+    const root = makeTempRoot();
+    try {
+      writeTempFile(
+        root,
+        "packages/broker/src/planted.ts",
+        'import { PtyManager } from "./pty-manager";\nexport { PtyManager };\n',
+      );
+      expect(findQuarantineViolations(root)).toEqual([
+        { module: "pty-manager", importer: "packages/broker/src/planted.ts" },
+      ]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("the quarantine guard detects a planted import of the claude-code mcp-config", () => {
+    const root = makeTempRoot();
+    try {
+      writeTempFile(
+        root,
+        "packages/adapter-claude-code/src/planted.ts",
+        'import { prepareConfigPreview } from "./mcp-config";\nexport { prepareConfigPreview };\n',
+      );
+      expect(findQuarantineViolations(root)).toEqual([
+        { module: "mcp-config", importer: "packages/adapter-claude-code/src/planted.ts" },
+      ]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("the quarantine guard detects a planted import of the antigravity mcp-config", () => {
+    const root = makeTempRoot();
+    try {
+      writeTempFile(
+        root,
+        "packages/adapter-antigravity/src/planted.ts",
+        'import { prepareConfigPreview } from "./mcp-config";\nexport { prepareConfigPreview };\n',
+      );
+      expect(findQuarantineViolations(root)).toEqual([
+        { module: "mcp-config", importer: "packages/adapter-antigravity/src/planted.ts" },
+      ]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("the quarantine guard detects a second mcp-server importer beside the sanctioned edge", () => {
+    const root = makeTempRoot();
+    try {
+      // The sanctioned edge is reproduced so the planted file is a second
+      // importer beside it, not a replacement for it.
+      writeTempFile(
+        root,
+        "packages/broker/test/mcp-contract.test.ts",
+        'import { McpServer } from "../src/mcp-server";\nexport { McpServer };\n',
+      );
+      writeTempFile(
+        root,
+        "packages/broker/src/planted.ts",
+        'import { McpServer } from "./mcp-server";\nexport { McpServer };\n',
+      );
+      expect(quarantinedModuleImporters(root)["mcp-server"]).toEqual([
+        "packages/broker/src/planted.ts",
+        "packages/broker/test/mcp-contract.test.ts",
+      ]);
+      expect(findQuarantineViolations(root)).toEqual([
+        { module: "mcp-server", importer: "packages/broker/src/planted.ts" },
+      ]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
