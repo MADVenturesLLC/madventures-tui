@@ -1136,3 +1136,313 @@ describe("Phase 3A lifecycle transition authority", () => {
     expect(countOccurrences(source, RESUME_EXPORT)).toBe(1);
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════
+// Task 34 — no broker.sock path is reachable; dead native dependency removed
+// (plan §M14 Task 34; PLAN-OPEN-4 node-pty removal; PLAN-OPEN-6 root scripts)
+// ═══════════════════════════════════════════════════════════════════════
+
+import { spawn } from "node:child_process";
+import * as net from "node:net";
+
+const LEGACY_SOCKET = "/tmp/madv-broker-runtime/broker.sock";
+const CHILD_DEADLINE_MS = 5_000;
+const CHILD_GRACE_MS = 500;
+const CHILD_CAP_BYTES = 65_536;
+const START_JSON_BODY =
+  '{"ok":false,"error":"live_runtime_not_certified","hint":"Phase 3A runtime foundation is present; live startup requires Phase 3B certification."}';
+
+function socketAbsent(path: string): boolean {
+  return !existsSync(path);
+}
+
+interface ChildOutcome {
+  code: number | null;
+  signal: string | null;
+  stdout: string;
+  stderr: string;
+  timedOut: boolean;
+  overflowed: boolean;
+}
+
+/**
+ * Bounded isolated child runner (Task 34 Step 1 discipline): 5,000 ms
+ * monotonic deadline, 65,536-byte stdout/stderr caps, ignored stdin, and
+ * SIGTERM → ≤500 ms → SIGKILL → always reap. Never leaves a live child.
+ */
+function runBoundedChild(
+  cmd: string,
+  args: readonly string[],
+  env: Record<string, string>,
+  readiness?: (out: string) => boolean,
+): Promise<ChildOutcome> {
+  return new Promise((resolve) => {
+    const child = spawn(cmd, args, {
+      cwd: REPO_ROOT,
+      env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let out = "";
+    let err = "";
+    let overflowed = false;
+    let timedOut = false;
+    let settled = false;
+
+    const cap = (chunk: Buffer, acc: "out" | "err") => {
+      if (acc === "out") out += chunk.toString();
+      else err += chunk.toString();
+      if (out.length > CHILD_CAP_BYTES || err.length > CHILD_CAP_BYTES) {
+        overflowed = true;
+        terminate();
+      }
+    };
+    child.stdout.on("data", (c: Buffer) => {
+      cap(c, "out");
+      // Readiness performs the test-controlled SIGTERM immediately (plan
+      // Step 1: the TUI is terminated by the test after readiness).
+      if (readiness && !settled && readiness(out)) terminate();
+    });
+    child.stderr.on("data", (c: Buffer) => cap(c, "err"));
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      terminate();
+    }, CHILD_DEADLINE_MS);
+
+    function terminate() {
+      if (child.exitCode !== null || child.signalCode !== null) return;
+      child.kill("SIGTERM");
+      setTimeout(() => {
+        if (child.exitCode === null && child.signalCode === null) {
+          child.kill("SIGKILL");
+        }
+      }, CHILD_GRACE_MS);
+    }
+
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({
+        code: child.exitCode,
+        signal: child.signalCode,
+        stdout: out,
+        stderr: err,
+        timedOut,
+        overflowed,
+      });
+    };
+    child.on("exit", finish);
+    child.on("error", finish);
+  });
+}
+
+function runtimeDirs(): { runtimeDir: string; cleanup: () => void } {
+  const runtimeDir = mkdtempSync(join(tmpdir(), "task34-runtime-"));
+  return {
+    runtimeDir,
+    cleanup: () => rmSync(runtimeDir, { recursive: true, force: true }),
+  };
+}
+
+function listenUnix(path: string): Promise<net.Server> {
+  const server = net.createServer(() => {});
+  return new Promise((res) => server.listen(path, () => res(server)));
+}
+
+describe("Task 34: no broker.sock path is reachable", () => {
+  // 15s test budget: the plan's 5,000 ms deadline belongs to EACH child,
+  // and this test launches two children in sequence (CLI + TUI).
+  test("launching every production entry point in bounded isolated processes creates no broker.sock", async () => {
+    // ── CLI path: `start --json` must fail closed with the exact gate body.
+    const cli = runtimeDirs();
+    try {
+      expect(socketAbsent(LEGACY_SOCKET)).toBe(true);
+      expect(socketAbsent(join(cli.runtimeDir, "broker.sock"))).toBe(true);
+      const r = await runBoundedChild(
+        process.execPath,
+        ["apps/madbridge/src/cli.ts", "start", "--json"],
+        { MADV_RUNTIME_DIR: cli.runtimeDir, PATH: process.env.PATH ?? "" },
+      );
+      expect(r.timedOut).toBe(false);
+      expect(r.overflowed).toBe(false);
+      expect(r.code).toBe(78);
+      // Exactly one trailing newline tolerated; bytes otherwise exact.
+      const body = r.stdout.endsWith("\n") ? r.stdout.slice(0, -1) : r.stdout;
+      expect(body).toBe(START_JSON_BODY);
+      expect(socketAbsent(LEGACY_SOCKET)).toBe(true);
+      expect(socketAbsent(join(cli.runtimeDir, "broker.sock"))).toBe(true);
+    } finally {
+      cli.cleanup();
+    }
+
+    // ── TUI path (default production form, no --fixture): readiness is the
+    // StatusBar's honest disconnected word. DEVIATION FROM PLAN LITERAL
+    // (disclosed): Step 1 names wide-form "NOT CONNECTED"; at this base the
+    // piped renderer emits the medium-format token "NOCONN" (same fact,
+    // same buildStatusLine path), empirically probed at the task base.
+    const tui = runtimeDirs();
+    try {
+      expect(socketAbsent(LEGACY_SOCKET)).toBe(true);
+      expect(socketAbsent(join(tui.runtimeDir, "broker.sock"))).toBe(true);
+      const r = await runBoundedChild(
+        process.execPath,
+        ["apps/madbridge/src/tui/main.tsx"],
+        { MADV_RUNTIME_DIR: tui.runtimeDir, PATH: process.env.PATH ?? "" },
+        (out) => out.includes("NOCONN"),
+      );
+      expect(r.overflowed).toBe(false);
+      expect(r.stdout.includes("NOCONN")).toBe(true);
+      expect(socketAbsent(LEGACY_SOCKET)).toBe(true);
+      expect(socketAbsent(join(tui.runtimeDir, "broker.sock"))).toBe(true);
+      // The TUI is terminated by the runner (SIGTERM/SIGKILL discipline);
+      // those are expected cleanup outcomes, not unexpected signals.
+      const controlled =
+        (r.code === null && (r.signal === "SIGTERM" || r.signal === "SIGKILL")) ||
+        r.code === 0;
+      expect(controlled).toBe(true);
+      expect(socketAbsent(LEGACY_SOCKET)).toBe(true);
+      expect(socketAbsent(join(tui.runtimeDir, "broker.sock"))).toBe(true);
+    } finally {
+      tui.cleanup();
+    }
+  }, 15_000);
+
+  test("no workspace or root manifest declares a native PTY dependency and the lockfile carries no resolved native PTY entry", () => {
+    // ADAPTATION (disclosed in the Task 34 PR): the plan's Step 1 text
+    // predates packages/tui-chaos, whose pty bridge (src/pty/bridge.mjs)
+    // LIVE-imports node-pty to drive the acceptance harness. The plan's
+    // intent is §9.7 — node-pty is not an implementation choice for the
+    // PRODUCTION runtime. The assertion therefore covers every production
+    // manifest (root + apps + packages) with an explicit, named harness
+    // carve-out; the lockfile assertion keeps the plan's precise wording:
+    // no @madventures/broker workspace edge for node-pty.
+    const HARNESS_CARVE_OUT = new Set(["tui-chaos"]);
+    const sections = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"];
+    const manifests = [join(REPO_ROOT, "package.json")];
+    for (const scope of ["packages", "apps"]) {
+      const scopeDir = join(REPO_ROOT, scope);
+      for (const entry of readdirSync(scopeDir)) {
+        if (HARNESS_CARVE_OUT.has(entry)) continue;
+        const p = join(scopeDir, entry, "package.json");
+        if (existsSync(p)) manifests.push(p);
+      }
+    }
+    for (const manifest of manifests) {
+      const json = JSON.parse(readFileSync(manifest, "utf8")) as Record<string, unknown>;
+      for (const section of sections) {
+        const deps = json[section] as Record<string, string> | undefined;
+        expect(deps?.["node-pty"], `${manifest} [${section}] node-pty`).toBeUndefined();
+        expect(deps?.["node-addon-api"], `${manifest} [${section}] node-addon-api`).toBeUndefined();
+      }
+    }
+    const lock = readFileSync(join(REPO_ROOT, "bun.lock"), "utf8");
+    // No production workspace package may carry a node-pty edge in the lock.
+    const lockLines = lock.split("\n");
+    let inBrokerDeps = false;
+    for (const line of lockLines) {
+      if (line.includes('"@madventures/broker@workspace"')) inBrokerDeps = true;
+      else if (inBrokerDeps && /^\s*\]/.test(line)) inBrokerDeps = false;
+      if (inBrokerDeps && line.includes("node-pty")) {
+        throw new Error("@madventures/broker carries a node-pty lockfile edge: " + line.trim());
+      }
+    }
+    // The broker package.json itself (belt and braces with the manifest loop).
+    const brokerPkg = JSON.parse(
+      readFileSync(join(REPO_ROOT, "packages/broker/package.json"), "utf8"),
+    ) as Record<string, unknown>;
+    expect((brokerPkg.dependencies as Record<string, string>)?.["node-pty"]).toBeUndefined();
+  });
+
+  test("root package.json exposes no quarantined script key", () => {
+    const json = JSON.parse(readFileSync(join(REPO_ROOT, "package.json"), "utf8")) as {
+      scripts?: Record<string, unknown>;
+    };
+    expect(json.scripts?.["broker"]).toBeUndefined();
+    expect(json.scripts?.["mcp"]).toBeUndefined();
+  });
+
+  test("the negative control detects a seeded broker.sock and exits 1", async () => {
+    const storage = mkdtempSync(join(tmpdir(), "task34-seed-"));
+    const sockPath = join(storage, "broker.sock");
+    const server = await listenUnix(sockPath);
+    try {
+      const r = await runBoundedChild(
+        process.execPath,
+        ["test/phase3a/negative-control.ts"],
+        { MADV_STORAGE_DIR: storage, PATH: process.env.PATH ?? "" },
+      );
+      expect(r.stdout).toContain("broker_sock_matches");
+      expect(r.stdout).toContain(sockPath);
+      expect(r.code).toBe(1);
+    } finally {
+      server.close();
+      rmSync(storage, { recursive: true, force: true });
+    }
+  });
+
+  test("the negative control respects its depth bound", async () => {
+    // Root A: socket at exactly depth 6 → named, exit 1.
+    const a = mkdtempSync(join(tmpdir(), "task34-depthA-"));
+    const deep6 = join(a, "d1", "d2", "d3", "d4", "d5", "d6");
+    mkdirSync(deep6, { recursive: true });
+    const sockA = join(deep6, "broker.sock");
+    const serverA = await listenUnix(sockA);
+    try {
+      const r = await runBoundedChild(
+        process.execPath,
+        ["test/phase3a/negative-control.ts"],
+        { MADV_STORAGE_DIR: a, PATH: process.env.PATH ?? "" },
+      );
+      expect(r.stdout).toContain(sockA);
+      expect(r.code).toBe(1);
+    } finally {
+      serverA.close();
+      rmSync(a, { recursive: true, force: true });
+    }
+
+    // Root B: socket at depth 7 only → not named, exit 0.
+    const b = mkdtempSync(join(tmpdir(), "task34-depthB-"));
+    const deep7 = join(b, "d1", "d2", "d3", "d4", "d5", "d6", "d7");
+    mkdirSync(deep7, { recursive: true });
+    const sockB = join(deep7, "broker.sock");
+    const serverB = await listenUnix(sockB);
+    try {
+      const r = await runBoundedChild(
+        process.execPath,
+        ["test/phase3a/negative-control.ts"],
+        { MADV_STORAGE_DIR: b, PATH: process.env.PATH ?? "" },
+      );
+      expect(r.stdout.includes(sockB)).toBe(false);
+      expect(r.code).toBe(0);
+    } finally {
+      serverB.close();
+      rmSync(b, { recursive: true, force: true });
+    }
+  });
+
+  test("the negative control never reads MADV_RUNTIME_DIR", async () => {
+    const storage = mkdtempSync(join(tmpdir(), "task34-clean-"));
+    const runtime = mkdtempSync(join(tmpdir(), "task34-runtime-seeded-"));
+    const sockPath = join(runtime, "broker.sock");
+    const server = await listenUnix(sockPath);
+    try {
+      const r = await runBoundedChild(
+        process.execPath,
+        ["test/phase3a/negative-control.ts"],
+        {
+          MADV_STORAGE_DIR: storage,
+          MADV_RUNTIME_DIR: runtime,
+          PATH: process.env.PATH ?? "",
+        },
+      );
+      // The seeded runtime dir is IGNORED: not named, and the run stays clean.
+      expect(r.stdout.includes(sockPath)).toBe(false);
+      expect(r.code).toBe(0);
+    } finally {
+      server.close();
+      rmSync(storage, { recursive: true, force: true });
+      rmSync(runtime, { recursive: true, force: true });
+    }
+  });
+});

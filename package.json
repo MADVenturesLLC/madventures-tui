@@ -15,12 +15,14 @@
     "seal-studio": "bun run --cwd apps/seal-studio dev",
     "seal-studio:build": "bun run --cwd apps/seal-studio build",
     "madv-tui": "bun run apps/madbridge/src/cli.ts",
-    "broker": "bun run packages/broker/src/broker.ts",
-    "mcp": "bun run packages/broker/src/mcp-server.ts",
     "test:tui-chaos": "bun packages/tui-chaos/src/cli.ts run",
     "preflight": "bun packages/preflight/src/cli.ts",
     "founder-act": "bun packages/founder-act/src/main.ts",
-    "honesty-compile": "bun packages/honesty-compiler/src/cli.ts"
+    "honesty-compile": "bun packages/honesty-compiler/src/cli.ts",
+    "test:arch": "bun test test/architecture-boundaries.test.ts test/phase3a/architecture-phase3a.test.ts",
+    "test:phase3a": "bun test test/phase3a",
+    "test:adversarial": "bun test test/phase3a/adversarial",
+    "verify:phase3a": "bun run typecheck && bun run test:arch && bun run test:phase3a && bun run test:adversarial"
   },
   "trustedDependencies": [
     "node-pty"

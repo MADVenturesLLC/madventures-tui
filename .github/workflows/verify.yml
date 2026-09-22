@@ -37,6 +37,16 @@ jobs:
       - name: Test
         run: bun test
 
+      # Task 34 script proof: the four Phase 3A package scripts land in this
+      # task; test:arch and test:phase3a are green at this base and wired
+      # here. test:adversarial and verify:phase3a are DEFINED but NOT wired:
+      # their targets (test/phase3a/adversarial, harness suites) arrive in
+      # M22–M23, and wiring a known-red step would block every PR until then.
+      - name: Task 34 scripts (arch + phase3a)
+        run: |
+          bun run test:arch
+          bun run test:phase3a
+
   # A SECOND JOB, not a matrix on `verify`. A matrix would rename the existing
   # check to `Verify (ubuntu-24.04)` and the required check named `Verify` would
   # silently stop existing — branch protection would then pass with nothing
@@ -86,3 +96,10 @@ jobs:
         env:
           TZ: America/New_York
         run: bun test
+
+      # Task 34 script proof on macOS (see the ubuntu job's note: only the
+      # green scripts are wired; adversarial waits for M22–M23).
+      - name: Task 34 scripts (arch + phase3a)
+        run: |
+          bun run test:arch
+          bun run test:phase3a
