@@ -113,8 +113,15 @@ jobs:
             exit 1
           fi
           if [[ -n "$entry" ]]; then
+            # `git ls-tree` reports a SYMLINK as `120000 blob`, so matching
+            # on " blob " alone accepts one, and `git show` then writes the
+            # link TARGET TEXT into the trusted slot rather than any file.
+            # A target of `:` yields a one-byte shell no-op that exits 0, so
+            # every later invocation would "pass" without running the gate.
+            # Only the two regular-file modes are accepted; a symlink, tree
+            # or submodule entry fails closed.
             case "$entry" in
-              *" blob "*) : ;;
+              100644" blob "* | 100755" blob "*) : ;;
               *) echo "base entry for $P is not a regular file — failing closed"; exit 1 ;;
             esac
             # Recorded at base, so it MUST extract. `bash -e` aborts the step
@@ -193,8 +200,15 @@ jobs:
             exit 1
           fi
           if [[ -n "$entry" ]]; then
+            # `git ls-tree` reports a SYMLINK as `120000 blob`, so matching
+            # on " blob " alone accepts one, and `git show` then writes the
+            # link TARGET TEXT into the trusted slot rather than any file.
+            # A target of `:` yields a one-byte shell no-op that exits 0, so
+            # every later invocation would "pass" without running the gate.
+            # Only the two regular-file modes are accepted; a symlink, tree
+            # or submodule entry fails closed.
             case "$entry" in
-              *" blob "*) : ;;
+              100644" blob "* | 100755" blob "*) : ;;
               *) echo "base entry for $P is not a regular file — failing closed"; exit 1 ;;
             esac
             # Recorded at base, so it MUST extract. `bash -e` aborts the step
