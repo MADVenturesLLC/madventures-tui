@@ -53,6 +53,39 @@
 # nothing follows them. Catching that is the point of the end-anchored prbody
 # mode, and the fix is to move the block above the trailers, never to hide it
 # from the check.
+#
+# ONE-PULL-REQUEST LAG, closed here 2026-09-22 (ported from FounderOS PR #356):
+# under the trusted-copy design a hardening to the checker is enforced only
+# from the NEXT pull request, because the one introducing it is judged by
+# the base copy. A later step therefore also runs the PROPOSED checker, in
+# both modes, as an enforcing step. That cannot weaken the gate — the base
+# copy's verdicts stand regardless, and a proposed checker that exits 0 on
+# everything changes nothing — and it holds the introducing pull request
+# to its own new rules. It executes PR-controlled code, so it runs after
+# every step the trusted gate relies on — and FIRST among the PR-controlled
+# steps, so no PR-controlled code has yet run that could have altered the
+# environment ($GITHUB_ENV, $GITHUB_PATH, BASH_ENV) or the workspace.
+#
+# THREAT MODEL of that step (Copilot on FounderOS PR #356, round 8): it
+# holds an HONEST pull request to its own new rules. It cannot and does not
+# defend against a pull request that weakens its own checker — a no-op
+# checker passes the base copy, passes itself, and once merged becomes the
+# trusted copy for every later pull request. That has been true of the
+# trusted-copy design since DEC-20260721-01 and is not a property of this
+# step; the control for it is human: review of any change to this workflow
+# or to .github/scripts/, the provenance-hash step below (which catches
+# drift, not a determined edit), and the Founder's SHA-named merge
+# authorization under DEC-20260718-04. What the step CAN guarantee it
+# guarantees strictly: it runs before any other PR-controlled step, takes
+# the checker from the head commit object (regular-file modes only, fail
+# closed otherwise), and re-materialises it before each invocation.
+#
+# Changes to this workflow's triggers, permissions, or steps require founder
+# approval before merge (same rule class as DEC-20260718-02 clause 4). The
+# 2026-09-22 port of three FounderOS PR #356 step changes — PR_TITLE on the
+# body gate, head-object bootstrap in both trusted-checker steps, and the
+# enforcing proposed-revision step — rides on the Founder's SHA-named
+# authorization of the pull request that introduced them here.
 # ---------------------------------------------------------------------------
 
 name: Attribution Shape Check
@@ -85,6 +118,7 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           # Three outcomes, distinguished deliberately. Testing only whether
           # `git show` succeeded treated EVERY read failure as "the checker is
@@ -113,8 +147,15 @@ jobs:
             exit 1
           fi
           if [[ -n "$entry" ]]; then
+            # `git ls-tree` reports a SYMLINK as `120000 blob`, so matching
+            # on " blob " alone accepts one, and `git show` then writes the
+            # link TARGET TEXT into the trusted slot rather than any file.
+            # A target of `:` yields a one-byte shell no-op that exits 0, so
+            # every later invocation would "pass" without running the gate.
+            # Only the two regular-file modes are accepted; a symlink, tree
+            # or submodule entry fails closed.
             case "$entry" in
-              *" blob "*) : ;;
+              100644" blob "* | 100755" blob "*) : ;;
               *) echo "base entry for $P is not a regular file — failing closed"; exit 1 ;;
             esac
             # Recorded at base, so it MUST extract. `bash -e` aborts the step
@@ -123,11 +164,21 @@ jobs:
             git show "$BASE_SHA:$P" > "$RUNNER_TEMP/attribution-shape-check.sh"
             echo "using trusted base-revision checker ($BASE_SHA)"
           else
-            # The base revision reads fine and does not record the checker:
-            # the documented bootstrap path, which this repository is on
-            # until this pull request merges.
-            echo "checker not recorded at base — using PR revision (bootstrap)"
-            cp "$P" "$RUNNER_TEMP/attribution-shape-check.sh"
+            # The base revision reads fine and genuinely does not carry the
+            # checker: the documented bootstrap path, for a repository
+            # adopting this gate for the first time. Unreachable here since
+            # PR #92 merged the checker to main; kept correct regardless.
+            # Even the bootstrap copy comes from the HEAD COMMIT OBJECT with
+            # the same mode check, never from the working tree: `cp` follows
+            # symlinks, so a symlink at the path would have copied its target
+            # (Copilot on FounderOS PR #356, round 9; ported 2026-09-22).
+            hentry="$(git ls-tree --full-tree "$HEAD_SHA" -- "$P")"
+            case "$hentry" in
+              100644" blob "* | 100755" blob "*) : ;;
+              *) echo "head entry for $P is not a regular file — failing closed"; exit 1 ;;
+            esac
+            echo "checker genuinely absent at base — using PR revision from the head commit (bootstrap)"
+            git show "$HEAD_SHA:$P" > "$RUNNER_TEMP/attribution-shape-check.sh"
           fi
 
       - name: Run attribution shape check (pull request)
@@ -165,6 +216,7 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           # Three outcomes, distinguished deliberately. Testing only whether
           # `git show` succeeded treated EVERY read failure as "the checker is
@@ -193,8 +245,15 @@ jobs:
             exit 1
           fi
           if [[ -n "$entry" ]]; then
+            # `git ls-tree` reports a SYMLINK as `120000 blob`, so matching
+            # on " blob " alone accepts one, and `git show` then writes the
+            # link TARGET TEXT into the trusted slot rather than any file.
+            # A target of `:` yields a one-byte shell no-op that exits 0, so
+            # every later invocation would "pass" without running the gate.
+            # Only the two regular-file modes are accepted; a symlink, tree
+            # or submodule entry fails closed.
             case "$entry" in
-              *" blob "*) : ;;
+              100644" blob "* | 100755" blob "*) : ;;
               *) echo "base entry for $P is not a regular file — failing closed"; exit 1 ;;
             esac
             # Recorded at base, so it MUST extract. `bash -e` aborts the step
@@ -203,11 +262,21 @@ jobs:
             git show "$BASE_SHA:$P" > "$RUNNER_TEMP/attribution-shape-check.sh"
             echo "restored trusted base-revision checker ($BASE_SHA)"
           else
-            # The base revision reads fine and does not record the checker:
-            # the documented bootstrap path, which this repository is on
-            # until this pull request merges.
-            echo "checker not recorded at base — using PR revision (bootstrap)"
-            cp "$P" "$RUNNER_TEMP/attribution-shape-check.sh"
+            # The base revision reads fine and genuinely does not carry the
+            # checker: the documented bootstrap path, for a repository
+            # adopting this gate for the first time. Unreachable here since
+            # PR #92 merged the checker to main; kept correct regardless.
+            # Even the bootstrap copy comes from the HEAD COMMIT OBJECT with
+            # the same mode check, never from the working tree: `cp` follows
+            # symlinks, so a symlink at the path would have copied its target
+            # (Copilot on FounderOS PR #356, round 9; ported 2026-09-22).
+            hentry="$(git ls-tree --full-tree "$HEAD_SHA" -- "$P")"
+            case "$hentry" in
+              100644" blob "* | 100755" blob "*) : ;;
+              *) echo "head entry for $P is not a regular file — failing closed"; exit 1 ;;
+            esac
+            echo "checker genuinely absent at base — using PR revision from the head commit (bootstrap)"
+            git show "$HEAD_SHA:$P" > "$RUNNER_TEMP/attribution-shape-check.sh"
           fi
 
       - name: Run attribution shape check (pull request body — DEC-20260721-01 item 1)
@@ -237,6 +306,13 @@ jobs:
           # environment variable, never through shell interpolation. The
           # checker strips CRs from web-authored bodies itself.
           PR_BODY: ${{ github.event.pull_request.body }}
+          # The merge commit is "<title> (#N)\n\n<body>", so the title is
+          # the first line git reads and a divider-shaped title strips
+          # every trailer below it (Copilot on FounderOS PR #356, 2026-09-21).
+          # The checker prepends it for its git-readability parse and rejects
+          # a divider-shaped one. A base-revision checker that predates
+          # PR_TITLE ignores the variable.
+          PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
           if bash "$RUNNER_TEMP/attribution-shape-check.sh" prbody; then
             exit 0
@@ -283,10 +359,47 @@ jobs:
           fi
           echo "vendored checker matches recorded provenance hash ($actual)"
 
+      - name: Run proposed-revision checker on this pull request (enforcing; closes the one-PR lag)
+        # See the header for what this step is and is not. It is the FIRST
+        # step to execute PR-controlled code, deliberately: every trusted
+        # verdict above is already recorded, the provenance hash has been
+        # checked, and no PR-controlled step has yet run that could have
+        # altered the environment or the workspace (Copilot on FounderOS
+        # PR #356, rounds 7 and 8; ported 2026-09-22).
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BRANCH: ${{ github.head_ref }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          # The proposed checker is taken from the HEAD COMMIT OBJECT, never
+          # from the working tree, so what is enforced is the checker the
+          # pull request COMMITTED — the one reviewers read. As for the
+          # trusted copy, only the two regular-file modes are accepted: a
+          # symlink reports as `120000 blob` and `git show` would write its
+          # target text; an absent path fails closed too. It is
+          # re-materialised before EACH invocation, because the first
+          # invocation itself runs PR-controlled code that could rewrite
+          # the temporary file before the second.
+          P=.github/scripts/attribution-shape-check.sh
+          entry="$(git ls-tree --full-tree "$HEAD_SHA" -- "$P")"
+          case "$entry" in
+            100644" blob "* | 100755" blob "*) : ;;
+            *) echo "head entry for $P is not a regular file — failing closed"; exit 1 ;;
+          esac
+          git show "$HEAD_SHA:$P" > "$RUNNER_TEMP/proposed-checker.sh"
+          echo "using proposed checker from the head commit ($HEAD_SHA)"
+          bash "$RUNNER_TEMP/proposed-checker.sh" pr \
+            "$BASE_SHA" "$HEAD_SHA" "$BRANCH"
+          git show "$HEAD_SHA:$P" > "$RUNNER_TEMP/proposed-checker.sh"
+          bash "$RUNNER_TEMP/proposed-checker.sh" prbody
+
       - name: Run proposed-revision self-test (the PR's own parser must pass its own cases)
-        # LAST among the pull_request steps, deliberately. This is the only
-        # step that executes PR-controlled code, so nothing the gate relies on
-        # runs after it.
+        # LAST among the pull_request steps, deliberately: it executes
+        # PR-controlled code from the working tree, so nothing any gate
+        # relies on runs after it.
         if: github.event_name == 'pull_request'
         run: bash .github/scripts/attribution-shape-check.sh selftest
 
