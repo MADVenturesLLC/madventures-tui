@@ -2,8 +2,11 @@
 // Shared parity suite run identically against both CLI adapters.
 // The suite never executes the real CLIs in CI; it injects a fake shell so
 // every behavior (executable resolution, version capture, fingerprint, model
-// visibility, config preview, backup/restore, child-execution propagation,
-// inbox notification, disconnect) is exercised deterministically and safely.
+// visibility, effort capture, fail-closed unverifiable-model handling,
+// child-execution propagation, inbox notification, disconnect) is exercised
+// deterministically and safely. Config-preview and backup/restore coverage
+// was removed by Task 33's quarantine of the production preview path; there
+// is no longer a preview behavior for this suite to exercise.
 
 import { expect, test } from "bun:test";
 

@@ -1159,8 +1159,48 @@ const QUARANTINED_INDEX_EXPORTS = [
   "createPtyManager",
 ] as const;
 
-/** Named export identifiers (value or type) declared by a single module file. */
-function collectNamedExportIdentifiers(filePath: string): Set<string> {
+/**
+ * Resolve a relative `import`/`export … from` specifier to an existing file
+ * on disk (`.ts`, `.tsx`, or an `index.ts`/`index.tsx` inside it), or null
+ * for a non-relative specifier or one that resolves to nothing on disk.
+ */
+function resolveRelativeSpecifier(fromFile: string, specifier: string): string | null {
+  if (!specifier.startsWith(".")) return null;
+  const base = join(dirname(fromFile), specifier);
+  const candidates =
+    base.endsWith(".ts") || base.endsWith(".tsx")
+      ? [base]
+      : [`${base}.ts`, `${base}.tsx`, join(base, "index.ts"), join(base, "index.tsx")];
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+/** True if a declaration node (function/class/interface/etc.) carries the `export` modifier. */
+function hasExportModifier(node: ts.Node): boolean {
+  return ts.canHaveModifiers(node) && (ts.getModifiers(node)?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword) ?? false);
+}
+
+/**
+ * Named export identifiers (value or type) visible from a single module
+ * file: both directly-declared exports (`export const X`, `export class X`,
+ * `export function X`, `export interface X`, `export type X`, `export enum
+ * X` — the form every quarantined source file in this repo actually uses)
+ * and `export { X }` re-export clauses.
+ *
+ * A bare `export * from "…"` re-export is followed to its resolved target
+ * and the target's own exports (recursively, through further wildcards)
+ * are folded in — a named-exports-only scan reports an empty set for
+ * `export * from "./socket"` while every one of socket.ts's own exports
+ * still flows through untouched. `export * as ns from …` is not followed —
+ * it introduces one namespace identifier (`ns`), not the target's
+ * individual names, so it cannot silently reintroduce a quarantined name
+ * into this set.
+ */
+function collectNamedExportIdentifiers(filePath: string, visited: Set<string> = new Set()): Set<string> {
+  if (visited.has(filePath)) return new Set();
+  visited.add(filePath);
   const source = readFileSync(filePath, "utf8");
   const sourceFile = ts.createSourceFile(
     filePath,
@@ -1171,10 +1211,33 @@ function collectNamedExportIdentifiers(filePath: string): Set<string> {
   );
   const names = new Set<string>();
   const visit = (node: ts.Node): void => {
-    if (ts.isExportDeclaration(node) && node.exportClause && ts.isNamedExports(node.exportClause)) {
-      for (const element of node.exportClause.elements) {
-        names.add(element.name.text);
+    if (ts.isExportDeclaration(node) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
+      if (node.exportClause && ts.isNamedExports(node.exportClause)) {
+        for (const element of node.exportClause.elements) {
+          names.add(element.name.text);
+        }
+      } else if (!node.exportClause) {
+        const target = resolveRelativeSpecifier(filePath, node.moduleSpecifier.text);
+        if (target) {
+          for (const name of collectNamedExportIdentifiers(target, visited)) {
+            names.add(name);
+          }
+        }
       }
+    } else if (ts.isVariableStatement(node) && hasExportModifier(node)) {
+      for (const decl of node.declarationList.declarations) {
+        if (ts.isIdentifier(decl.name)) names.add(decl.name.text);
+      }
+    } else if (
+      (ts.isFunctionDeclaration(node) ||
+        ts.isClassDeclaration(node) ||
+        ts.isInterfaceDeclaration(node) ||
+        ts.isTypeAliasDeclaration(node) ||
+        ts.isEnumDeclaration(node)) &&
+      hasExportModifier(node) &&
+      node.name
+    ) {
+      names.add(node.name.text);
     }
     node.forEachChild(visit);
   };
@@ -1348,6 +1411,40 @@ describe("Task 33 — socket, MCP, and PtyManager quarantine from production rea
       expect(findQuarantineViolations(root)).toEqual([
         { module: "mcp-config", importer: "packages/adapter-antigravity/src/planted.ts" },
       ]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("the export-identifier scan follows a bare wildcard re-export to its target's exports", () => {
+    const root = makeTempRoot();
+    try {
+      writeTempFile(
+        root,
+        "packages/broker/src/quarantined-leaf.ts",
+        "export const BrokerSocket = 1;\nexport const OTHER = 2;\n",
+      );
+      writeTempFile(root, "packages/broker/src/index.ts", 'export * from "./quarantined-leaf";\n');
+      const exported = collectNamedExportIdentifiers(join(root, "packages/broker/src/index.ts"));
+      expect(exported.has("BrokerSocket")).toBe(true);
+      expect(exported.has("OTHER")).toBe(true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("the export-identifier scan does not follow a namespace wildcard re-export", () => {
+    const root = makeTempRoot();
+    try {
+      writeTempFile(root, "packages/broker/src/quarantined-leaf.ts", "export const BrokerSocket = 1;\n");
+      writeTempFile(
+        root,
+        "packages/broker/src/index.ts",
+        'export * as quarantined from "./quarantined-leaf";\n',
+      );
+      const exported = collectNamedExportIdentifiers(join(root, "packages/broker/src/index.ts"));
+      expect(exported.has("BrokerSocket")).toBe(false);
+      expect(exported.has("quarantined")).toBe(false);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

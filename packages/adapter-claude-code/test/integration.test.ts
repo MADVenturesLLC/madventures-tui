@@ -3,7 +3,7 @@ import { expect, test } from "bun:test";
 import { ClaudeCodeAdapter } from "../src/adapter";
 import { fakeShell } from "../src/shell";
 
-test("full lifecycle: attest -> preview -> launch -> notify -> terminate", async () => {
+test("full lifecycle: attest -> launch -> notify -> terminate", async () => {
   const shell = fakeShell({
     "which claude": "/usr/bin/claude",
     "claude --version": "2.1.226",
