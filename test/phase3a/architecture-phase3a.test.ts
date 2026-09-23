@@ -1137,6 +1137,347 @@ describe("Phase 3A lifecycle transition authority", () => {
   });
 });
 
+// ── Task 33: quarantine socket, MCP, and PtyManager from production reach ──
+// (plan Task 33, §9.10/§4.4; act ARCHITECT-TASK33-PHASE2-ACT item 8(e)/(f))
+//
+// Static analysis, consistent with this file's existing convention: scans
+// real export/import specifiers via the TypeScript AST rather than a
+// runtime `import * as ns` namespace object, because named TYPE exports
+// (e.g. McpToolDef, PtyManagerSnapshot) are erased at runtime and would
+// never appear as keys of a runtime namespace object — a dynamic-import
+// check would silently under-test the invariant for every type-only name.
+// The AST scan below catches both value and type-level named exports.
+
+const QUARANTINED_INDEX_EXPORTS = [
+  "BrokerSocket",
+  "MADV_RUNTIME_DIR",
+  "MADV_SOCKET_PATH",
+  "MCP_TOOLS",
+  "McpServer",
+  "McpToolDef",
+  "PtyManager",
+  "createPtyManager",
+] as const;
+
+/**
+ * Resolve a relative `import`/`export … from` specifier to an existing file
+ * on disk (`.ts`, `.tsx`, or an `index.ts`/`index.tsx` inside it), or null
+ * for a non-relative specifier or one that resolves to nothing on disk.
+ */
+function resolveRelativeSpecifier(fromFile: string, specifier: string): string | null {
+  if (!specifier.startsWith(".")) return null;
+  const base = join(dirname(fromFile), specifier);
+  const candidates =
+    base.endsWith(".ts") || base.endsWith(".tsx")
+      ? [base]
+      : [`${base}.ts`, `${base}.tsx`, join(base, "index.ts"), join(base, "index.tsx")];
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+/** True if a declaration node (function/class/interface/etc.) carries the `export` modifier. */
+function hasExportModifier(node: ts.Node): boolean {
+  return ts.canHaveModifiers(node) && (ts.getModifiers(node)?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword) ?? false);
+}
+
+/**
+ * Named export identifiers (value or type) visible from a single module
+ * file: both directly-declared exports (`export const X`, `export class X`,
+ * `export function X`, `export interface X`, `export type X`, `export enum
+ * X` — the form every quarantined source file in this repo actually uses)
+ * and `export { X }` re-export clauses.
+ *
+ * A bare `export * from "…"` re-export is followed to its resolved target
+ * and the target's own exports (recursively, through further wildcards)
+ * are folded in — a named-exports-only scan reports an empty set for
+ * `export * from "./socket"` while every one of socket.ts's own exports
+ * still flows through untouched. `export * as ns from …` is not followed —
+ * it introduces one namespace identifier (`ns`), not the target's
+ * individual names, so it cannot silently reintroduce a quarantined name
+ * into this set.
+ */
+function collectNamedExportIdentifiers(filePath: string, visited: Set<string> = new Set()): Set<string> {
+  if (visited.has(filePath)) return new Set();
+  visited.add(filePath);
+  const source = readFileSync(filePath, "utf8");
+  const sourceFile = ts.createSourceFile(
+    filePath,
+    source,
+    ts.ScriptTarget.Latest,
+    /* setParentNodes */ true,
+    scriptKindFor(filePath),
+  );
+  const names = new Set<string>();
+  const visit = (node: ts.Node): void => {
+    if (ts.isExportDeclaration(node) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
+      if (node.exportClause && ts.isNamedExports(node.exportClause)) {
+        for (const element of node.exportClause.elements) {
+          names.add(element.name.text);
+        }
+      } else if (!node.exportClause) {
+        const target = resolveRelativeSpecifier(filePath, node.moduleSpecifier.text);
+        if (target) {
+          for (const name of collectNamedExportIdentifiers(target, visited)) {
+            names.add(name);
+          }
+        }
+      }
+    } else if (ts.isVariableStatement(node) && hasExportModifier(node)) {
+      for (const decl of node.declarationList.declarations) {
+        if (ts.isIdentifier(decl.name)) names.add(decl.name.text);
+      }
+    } else if (
+      (ts.isFunctionDeclaration(node) ||
+        ts.isClassDeclaration(node) ||
+        ts.isInterfaceDeclaration(node) ||
+        ts.isTypeAliasDeclaration(node) ||
+        ts.isEnumDeclaration(node)) &&
+      hasExportModifier(node) &&
+      node.name
+    ) {
+      names.add(node.name.text);
+    }
+    node.forEachChild(visit);
+  };
+  visit(sourceFile);
+  return names;
+}
+
+/**
+ * Files (production or test/harness) under packages/ and apps/ whose
+ * import/export module specifier's final path segment is exactly
+ * `moduleBaseName` (e.g. "socket" matches "./socket" and "../src/socket"
+ * but not "socket-io" or "polysocket"). Repo-relative, portable-slash,
+ * sorted paths.
+ */
+function findModuleSpecifierImporters(root: string, moduleBaseName: string): string[] {
+  const importers: string[] = [];
+  const files = [
+    ...listSourceFiles(join(root, "packages")),
+    ...listSourceFiles(join(root, "apps")),
+    ...listSourceFiles(join(root, "test")),
+  ];
+  for (const file of files) {
+    const portable = toPortablePath(file);
+    if (portable.includes("/node_modules/")) continue;
+    const source = readFileSync(file, "utf8");
+    const sourceFile = ts.createSourceFile(
+      file,
+      source,
+      ts.ScriptTarget.Latest,
+      /* setParentNodes */ true,
+      scriptKindFor(file),
+    );
+    let matched = false;
+    const visit = (node: ts.Node): void => {
+      const specifier =
+        (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier
+          ? node.moduleSpecifier
+          : null;
+      if (specifier && ts.isStringLiteral(specifier)) {
+        const lastSegment = specifier.text.split("/").pop();
+        if (lastSegment === moduleBaseName) matched = true;
+      }
+      node.forEachChild(visit);
+    };
+    visit(sourceFile);
+    if (matched) importers.push(toPortablePath(relative(root, file)));
+  }
+  return importers.sort();
+}
+
+/**
+ * Task 33 quarantine table (annex §3.4 item 15(d)): each module severed from
+ * production reach, keyed by the module basename `findModuleSpecifierImporters`
+ * matches, and the importers it is still permitted to have. `socket` is owned
+ * by the test "no production or harness file imports socket.ts" and is not
+ * repeated here. `mcp-config` names two files, one per adapter package
+ * (`packages/adapter-claude-code/src/mcp-config.ts` and
+ * `packages/adapter-antigravity/src/mcp-config.ts`); the basename scan covers
+ * both under the single row, and its empty permitted list means neither may be
+ * imported by any production or harness file.
+ */
+const QUARANTINED_MODULE_IMPORTERS: ReadonlyArray<{
+  readonly module: string;
+  readonly permitted: readonly string[];
+}> = [
+  { module: "mcp-server", permitted: ["packages/broker/test/mcp-contract.test.ts"] },
+  { module: "pty-manager", permitted: [] },
+  { module: "mcp-config", permitted: [] },
+];
+
+interface QuarantineViolation {
+  module: string;
+  importer: string;
+}
+
+/** Importers of every quarantined module under a root, keyed by module basename. */
+function quarantinedModuleImporters(root: string): Record<string, string[]> {
+  const importers: Record<string, string[]> = {};
+  for (const { module } of QUARANTINED_MODULE_IMPORTERS) {
+    importers[module] = findModuleSpecifierImporters(root, module);
+  }
+  return importers;
+}
+
+/**
+ * Every importer of a quarantined module that is not on that module's
+ * permitted list. Empty on a compliant tree. A missing sanctioned edge is not
+ * a violation here; the positive guard below asserts the full importer map,
+ * so removing the sanctioned edge fails that test instead.
+ */
+function findQuarantineViolations(root: string): QuarantineViolation[] {
+  const importers = quarantinedModuleImporters(root);
+  const violations: QuarantineViolation[] = [];
+  for (const { module, permitted } of QUARANTINED_MODULE_IMPORTERS) {
+    for (const importer of importers[module] ?? []) {
+      if (!permitted.includes(importer)) violations.push({ module, importer });
+    }
+  }
+  return violations;
+}
+
+describe("Task 33 — socket, MCP, and PtyManager quarantine from production reach", () => {
+  test("the broker package index exports no socket, MCP, or PtyManager symbol", () => {
+    const exported = collectNamedExportIdentifiers(join(REPO_ROOT, "packages/broker/src/index.ts"));
+    for (const name of QUARANTINED_INDEX_EXPORTS) {
+      expect(exported.has(name)).toBe(false);
+    }
+  });
+
+  test("no production or harness file imports socket.ts", () => {
+    const importers = findModuleSpecifierImporters(REPO_ROOT, "socket");
+    expect(importers).toEqual(["packages/broker/test/socket.test.ts"]);
+  });
+
+  test("no production file constructs a unix:// URL", () => {
+    for (const file of enumerateProductionFiles(REPO_ROOT)) {
+      const source = readFileSync(file, "utf8");
+      expect(source).not.toContain("unix://");
+    }
+  });
+
+  test("quarantined modules admit only their sanctioned importers: mcp-server one edge, pty-manager none, both mcp-config none", () => {
+    expect(quarantinedModuleImporters(REPO_ROOT)).toEqual({
+      "mcp-server": ["packages/broker/test/mcp-contract.test.ts"],
+      "pty-manager": [],
+      "mcp-config": [],
+    });
+    expect(findQuarantineViolations(REPO_ROOT)).toEqual([]);
+  });
+
+  test("the quarantine guard detects a planted pty-manager import", () => {
+    const root = makeTempRoot();
+    try {
+      writeTempFile(
+        root,
+        "packages/broker/src/planted.ts",
+        'import { PtyManager } from "./pty-manager";\nexport { PtyManager };\n',
+      );
+      expect(findQuarantineViolations(root)).toEqual([
+        { module: "pty-manager", importer: "packages/broker/src/planted.ts" },
+      ]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("the quarantine guard detects a planted import of the claude-code mcp-config", () => {
+    const root = makeTempRoot();
+    try {
+      writeTempFile(
+        root,
+        "packages/adapter-claude-code/src/planted.ts",
+        'import { prepareConfigPreview } from "./mcp-config";\nexport { prepareConfigPreview };\n',
+      );
+      expect(findQuarantineViolations(root)).toEqual([
+        { module: "mcp-config", importer: "packages/adapter-claude-code/src/planted.ts" },
+      ]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("the quarantine guard detects a planted import of the antigravity mcp-config", () => {
+    const root = makeTempRoot();
+    try {
+      writeTempFile(
+        root,
+        "packages/adapter-antigravity/src/planted.ts",
+        'import { prepareConfigPreview } from "./mcp-config";\nexport { prepareConfigPreview };\n',
+      );
+      expect(findQuarantineViolations(root)).toEqual([
+        { module: "mcp-config", importer: "packages/adapter-antigravity/src/planted.ts" },
+      ]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("the export-identifier scan follows a bare wildcard re-export to its target's exports", () => {
+    const root = makeTempRoot();
+    try {
+      writeTempFile(
+        root,
+        "packages/broker/src/quarantined-leaf.ts",
+        "export const BrokerSocket = 1;\nexport const OTHER = 2;\n",
+      );
+      writeTempFile(root, "packages/broker/src/index.ts", 'export * from "./quarantined-leaf";\n');
+      const exported = collectNamedExportIdentifiers(join(root, "packages/broker/src/index.ts"));
+      expect(exported.has("BrokerSocket")).toBe(true);
+      expect(exported.has("OTHER")).toBe(true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("the export-identifier scan does not follow a namespace wildcard re-export", () => {
+    const root = makeTempRoot();
+    try {
+      writeTempFile(root, "packages/broker/src/quarantined-leaf.ts", "export const BrokerSocket = 1;\n");
+      writeTempFile(
+        root,
+        "packages/broker/src/index.ts",
+        'export * as quarantined from "./quarantined-leaf";\n',
+      );
+      const exported = collectNamedExportIdentifiers(join(root, "packages/broker/src/index.ts"));
+      expect(exported.has("BrokerSocket")).toBe(false);
+      expect(exported.has("quarantined")).toBe(false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("the quarantine guard detects a second mcp-server importer beside the sanctioned edge", () => {
+    const root = makeTempRoot();
+    try {
+      // The sanctioned edge is reproduced so the planted file is a second
+      // importer beside it, not a replacement for it.
+      writeTempFile(
+        root,
+        "packages/broker/test/mcp-contract.test.ts",
+        'import { McpServer } from "../src/mcp-server";\nexport { McpServer };\n',
+      );
+      writeTempFile(
+        root,
+        "packages/broker/src/planted.ts",
+        'import { McpServer } from "./mcp-server";\nexport { McpServer };\n',
+      );
+      expect(quarantinedModuleImporters(root)["mcp-server"]).toEqual([
+        "packages/broker/src/planted.ts",
+        "packages/broker/test/mcp-contract.test.ts",
+      ]);
+      expect(findQuarantineViolations(root)).toEqual([
+        { module: "mcp-server", importer: "packages/broker/src/planted.ts" },
+      ]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
+
 // ═══════════════════════════════════════════════════════════════════════
 // Task 34 — no broker.sock path is reachable; dead native dependency removed
 // (plan §M14 Task 34; PLAN-OPEN-4 node-pty removal; PLAN-OPEN-6 root scripts)

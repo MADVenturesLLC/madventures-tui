@@ -4,9 +4,6 @@
 
 import type { Credential } from "./credentials";
 import { validateCredential } from "./credentials";
-import { McpServer, MCP_TOOLS } from "./mcp-server";
-import type { McpToolDef } from "./mcp-server";
-import { BrokerSocket, MADV_RUNTIME_DIR, MADV_SOCKET_PATH } from "./socket";
 import { interruptSession, reconcileRepository, rebuildBrokerState } from "./reconciliation";
 import type { InterruptReason, ReconcileInput, ReconcileResult } from "./reconciliation";
 import { transitionSession } from "./session-machine";
@@ -22,10 +19,7 @@ export type BrokerEvent = DispatchResult;
 
 export interface InMemoryBroker {
   running: boolean;
-  runtimeDir: string;
-  socketPath: string;
   tcpPort: number | null;
-  mcpTools: McpToolDef[];
   sessionState: SessionState;
   fencingToken: number;
   tokenUsable: boolean;
@@ -40,18 +34,13 @@ export async function createInMemoryBrokerForTest(): Promise<InMemoryBroker> {
   const listeners: Array<(event: any) => void> = [];
   let running = true;
 
-  const socket = new BrokerSocket();
-
   let sessionState: SessionState = { kind: "active" };
   let fencingToken = 1;
   let tokenUsable = true;
 
   const broker: InMemoryBroker = {
     running: true,
-    runtimeDir: MADV_RUNTIME_DIR,
-    socketPath: MADV_SOCKET_PATH,
     tcpPort: null,
-    mcpTools: MCP_TOOLS,
     sessionState,
     fencingToken,
     tokenUsable,
@@ -59,7 +48,6 @@ export async function createInMemoryBrokerForTest(): Promise<InMemoryBroker> {
     stop() {
       running = false;
       broker.running = false;
-      socket.stop();
     },
 
     async dispatch(event: any, credential: Credential): Promise<DispatchResult> {

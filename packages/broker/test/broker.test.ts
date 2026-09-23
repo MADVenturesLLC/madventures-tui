@@ -25,6 +25,22 @@ test("broker dispatches subscribed events", async () => {
   expect(events.length).toBeGreaterThanOrEqual(0);
 });
 
+// Relocated from packages/broker/test/socket.test.ts (Task 33, D2-A item 6(a)).
+// Semantics unchanged; location only.
+test("broker starts with zero TCP listeners", async () => {
+  const broker = await createInMemoryBrokerForTest();
+  expect(broker.tcpPort).toBeNull();
+});
+
+test("credential rejection on stale token", async () => {
+  const broker = await createInMemoryBrokerForTest();
+  const result = await broker.dispatch(
+    { event_type: "message", sender_execution_id: "exec-claude" } as any,
+    { credentialPath: "/valid/cred", fencingToken: 1, executionId: "exec-wrong" },
+  );
+  expect(result).toMatchObject({ kind: "error" });
+});
+
 describe("broker duplicate-interrupt idempotency", () => {
   test("duplicate interrupt on already-interrupted session does not throw", async () => {
     const broker = await createInMemoryBrokerForTest();

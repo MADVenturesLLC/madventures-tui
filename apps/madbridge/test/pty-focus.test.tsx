@@ -1,35 +1,41 @@
 // apps/madbridge/test/pty-focus.test.tsx
 // Tests for PTY focus, keyboard routing, and trust boundaries.
 //
-// 1. Keyboard bytes go only to focused PTY
+// 1. Byte routing delivers to a registered receiver (retargeted, Task 33 D3-A)
 // 2. Bare digits pass through unchanged
 // 3. Global actions require configured modifier/prefix (alt+ by default)
 // 4. Terminal output containing "Founder approved" changes no broker state
+//
+// Task 33 (D3-A) disposition: this file no longer instantiates the real
+// PtyManager. Two of the four original PtyManager-instantiating cases are
+// retargeted onto the two-method createFakeByteRouter fixture and renamed;
+// the other two (snapshot read-only; terminateAll cleanup) are removed from
+// this file and DEFERRED to the PTY-host milestone — the fake has no
+// lifecycle and no snapshot shape, and none is added here. The retargeted
+// cases below no longer assert focus state: the original's getFocused()
+// and terminateAll() assertions are REMOVED, not retained, because the
+// fake exposes no focus concept. See act item 7 for the full disclosure.
 
 import { test, expect, describe } from "bun:test";
-import { PtyManager } from "@madventures/broker";
+import { createFakeByteRouter } from "../../../test/phase3a/fixture-adapters";
 import { loadKeybindings, resolveKey, isGlobalAction, DEFAULT_KEYBINDINGS, translateKeyEvent } from "../src/tui/keybindings";
 import type { BrokerSnapshot } from "../src/tui/types";
 
 describe("PTY focus and keyboard routing", () => {
-  test("keyboard bytes go only to focused PTY", () => {
-    const manager = new PtyManager();
+  test("byte routing delivers to a registered receiver", () => {
+    const router = createFakeByteRouter();
 
-    // Register two PTYs without actually launching processes.
-    // We test the focus/write routing logic directly.
-    // PtyManager.launch spawns real processes, so we test the
-    // focus and write routing through the manager's API.
+    const received: Uint8Array[] = [];
+    router.onData("pty-a", (b: Uint8Array) => received.push(b));
 
-    // Focus starts null until a PTY is launched.
-    // After launching, the first PTY is auto-focused.
-    // We can test the focus routing logic:
-    expect(manager.getFocused()).toBeNull();
+    const bytes = new Uint8Array([1, 2, 3]);
+    router.write("pty-a", bytes);
+    expect(received.length).toBe(1);
+    expect(received[0]).toEqual(bytes);
 
-    // Write with no focused PTY — bytes are dropped, no error
-    manager.write("test");
-    expect(manager.getFocused()).toBeNull();
-
-    manager.terminateAll();
+    // write to an unregistered id does not throw and invokes no callback
+    expect(() => router.write("unregistered-id", new Uint8Array([9]))).not.toThrow();
+    expect(received.length).toBe(1);
   });
 
   test("bare digits pass through unchanged — not treated as global actions", () => {
@@ -200,35 +206,19 @@ describe("PTY manager trust boundary", () => {
     expect(afterOutput).toEqual(initialSnapshot);
   });
 
-  test("PtyManager snapshot is read-only", () => {
-    const manager = new PtyManager();
-    const snap = manager.snapshot();
+  test("write with no registered receiver is a safe no-op", () => {
+    const router = createFakeByteRouter();
 
-    // Snapshot is a frozen shape — ptys array and focusedId
-    expect(Array.isArray(snap.ptys)).toBe(true);
-    expect(snap.focusedId).toBeNull();
+    // No receiver registered for these ids — write should not throw,
+    // including the empty-bytes case.
+    expect(() => router.write("unregistered-id", new Uint8Array([104, 101, 108, 108, 111]))).not.toThrow();
+    expect(() => router.write("unregistered-id", new Uint8Array([49, 50, 51]))).not.toThrow();
+    expect(() => router.write("unregistered-id", new Uint8Array())).not.toThrow();
 
-    manager.terminateAll();
-  });
-
-  test("PtyManager write with no focused PTY is a no-op", () => {
-    const manager = new PtyManager();
-
-    // No PTYs launched — write should not throw
-    manager.write("hello");
-    manager.write("123");
-    manager.write("");
-
-    expect(manager.getFocused()).toBeNull();
-    manager.terminateAll();
-  });
-
-  test("PtyManager terminateAll cleans up", () => {
-    const manager = new PtyManager();
-    manager.terminateAll();
-
-    const snap = manager.snapshot();
-    expect(snap.ptys.length).toBe(0);
-    expect(snap.focusedId).toBeNull();
+    // A receiver registered for a different id receives nothing.
+    const received: Uint8Array[] = [];
+    router.onData("other-id", (b: Uint8Array) => received.push(b));
+    router.write("unregistered-id", new Uint8Array([1]));
+    expect(received.length).toBe(0);
   });
 });

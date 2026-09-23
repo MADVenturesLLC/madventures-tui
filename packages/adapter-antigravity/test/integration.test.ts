@@ -13,9 +13,6 @@ test("adapter exposes launch/notify/terminate even when attest is unverifiable",
   // attest fails closed (kept out of active) but adapter object is usable
   await expect(adapter.attest()).rejects.toThrow(/model_identity_unverifiable/);
 
-  const preview = await adapter.prepareConfigPreview();
-  expect(preview.backupPath.endsWith(".bak")).toBe(true);
-
   const exec = await adapter.launch({
     sessionId: "s1",
     executionId: "exec-staged",

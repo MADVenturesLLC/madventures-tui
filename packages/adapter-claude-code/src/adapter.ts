@@ -6,7 +6,6 @@
 import type { Shell } from "./shell";
 import { realShell, fakeShell, type Shell as ShellType } from "./shell";
 import { attestClaudeCode, ModelIdentityUnverifiable } from "./attestation";
-import { prepareConfigPreview } from "./mcp-config";
 
 export interface ConfigChangeSet {
   readonly targetPath: string;
@@ -44,7 +43,6 @@ export interface ExecutionIdentity {
 
 export interface AdapterV1 {
   attest(): Promise<ExecutionIdentity>;
-  prepareConfigPreview(): Promise<ConfigChangeSet>;
   launch(input: LaunchInput): Promise<ManagedExecution>;
   notifyInbox(eventId: string): Promise<void>;
   pause(reason: string): Promise<void>;
@@ -66,15 +64,6 @@ export class ClaudeCodeAdapter implements AdapterV1 {
       if (err instanceof ModelIdentityUnverifiable) throw err;
       throw err;
     }
-  }
-
-  async prepareConfigPreview(): Promise<ConfigChangeSet> {
-    const proposed = JSON.stringify(
-      { mcpServers: { madbridge: { url: "unix://madbridge.sock" } } },
-      null,
-      2,
-    );
-    return prepareConfigPreview(this.configTargetPath, proposed);
   }
 
   async launch(input: LaunchInput): Promise<ManagedExecution> {
