@@ -1524,7 +1524,7 @@ secret-marked environment value.
 
 ### 9.4 Required snapshot and output fields
 
-**Phase 3A deferral — `pendingApprovals` projection (D9.2, Founder, 2026-09-16).**
+**Phase 3A — `pendingApprovals` projection (D9.2, Founder, 2026-09-16; D10-R1 B3, Founder, 2026-09-24).**
 `pendingApprovals` remains a required member of the `BrokerSnapshot` contract and is **not**
 removed from the type. Its production projection was **deferred** by D9.2 for Phase 3A; D10-R1 B3
 (`DEC-20260924-02`, Founder, 2026-09-24) now rules it as the empty collection (below). The
