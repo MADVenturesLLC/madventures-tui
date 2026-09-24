@@ -1524,11 +1524,12 @@ secret-marked environment value.
 
 ### 9.4 Required snapshot and output fields
 
-**Phase 3A deferral — `pendingApprovals` projection (D9.2, Founder, 2026-09-16).**
+**Phase 3A — `pendingApprovals` projection (D9.2, Founder, 2026-09-16; D10-R1 B3, Founder, 2026-09-24).**
 `pendingApprovals` remains a required member of the `BrokerSnapshot` contract and is **not**
-removed from the type. However, its production **projection is deferred** for Phase 3A until a
-separately authorized approval-request record type exists, because neither closed event
-vocabulary contains an event that *creates* a pending approval: `EVENT_TYPES`
+removed from the type. Its production projection was **deferred** by D9.2 for Phase 3A; D10-R1 B3
+(`DEC-20260924-02`, Founder, 2026-09-24) now rules it as the empty collection (below). The
+basis stands: neither closed event vocabulary contains an event that *creates* a pending
+approval: `EVENT_TYPES`
 (`packages/protocol/src/events.ts`) has no approval member, and
 `SESSION_LIFECYCLE_EVENT_TYPES` (`packages/protocol/src/lifecycle-events.ts`) contains only
 `approval_resolved`, whose semantics are to *remove* a matching pending approval. The contract
@@ -1537,12 +1538,16 @@ nonetheless presumes pending approvals exist — `BrokerCommand.approval_resolve
 
 Consequently, for Phase 3A and until that record type is separately authorized:
 
-- Task 21b does **not** project `pendingApprovals`.
+- `pendingApprovals` = `[]` (D10-R1 B3). No event in either closed vocabulary can create a pending
+  approval (D9.2 / FIELD-SOURCE row 17), so the empty collection is the truthful projection, not a
+  default. The type is unchanged, and no source machinery is built. Any future task that defines
+  an approval-request record type updates this projection in the same task.
 - Defining the approval-request record type (event, payload, durability, and store) is its own
   future Founder-authorized task. It is not authorized by the D8/D9.2 instrument, and it may
   not be added by a plan correction.
 
-This deferral scopes only Task 21b's projection obligation. It does not weaken the Task 20
+This disposition (D9.2, as ruled by D10-R1 B3) scopes only Task 21b's projection obligation. It
+does not weaken the Task 20
 `BrokerSnapshot` contract for any other member.
 
 **`T | null` means "not produced", not "empty" (D9 Part B item 12, Founder, 2026-09-19).**
@@ -1560,6 +1565,13 @@ mechanical fail-closed teardown must not become blockable by a missing projectio
 in the eight are unchanged; in particular `sessionId` stays `string`, because a null
 `LifecycleState.sessionId` is a projection *failure* rather than a null snapshot field. **The code block below carries the
 amended types; it and `packages/broker/src/client.ts` must agree member for member.**
+
+**`snapshotSeq` and `connected` are stamped by the client (FOUNDER-ACT-20260924-M10-DOCS B2,
+Founder, 2026-09-24; `DEC-20260924-03`).** The projector (Task 21b) emits `snapshotSeq: null` and
+never manufactures a sequence; Task 22 stamps it (D10-R1 B4). Task 22's client stamps
+`snapshotSeq` (starts at 1, +1 per published snapshot) and `connected` on every snapshot it
+publishes. The published type carries `snapshotSeq` as a number, so Task 23 never receives
+`null`. This disposes of HO-20260919-01 once Task 22 lands.
 
 The complete minimum snapshot contract is:
 
