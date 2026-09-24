@@ -1566,6 +1566,13 @@ in the eight are unchanged; in particular `sessionId` stays `string`, because a 
 `LifecycleState.sessionId` is a projection *failure* rather than a null snapshot field. **The code block below carries the
 amended types; it and `packages/broker/src/client.ts` must agree member for member.**
 
+**`snapshotSeq` and `connected` are stamped by the client (FOUNDER-ACT-20260924-M10-DOCS B2,
+Founder, 2026-09-24; `DEC-20260924-03`).** The projector (Task 21b) emits `snapshotSeq: null` and
+never manufactures a sequence; Task 22 stamps it (D10-R1 B4). Task 22's client stamps
+`snapshotSeq` (starts at 1, +1 per published snapshot) and `connected` on every snapshot it
+publishes. The published type carries `snapshotSeq` as a number, so Task 23 never receives
+`null`. This disposes of HO-20260919-01 once Task 22 lands.
+
 The complete minimum snapshot contract is:
 
 ```ts

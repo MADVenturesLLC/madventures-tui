@@ -331,8 +331,8 @@ Tasks 38–39 depend on M1 — they are early, not dependency-free. Only Task 60
 | M18 | `madv-pty-host` framing and closed operation set | 5 | M9, M16, M17 | Private codec; import-graph isolation |
 | M19 | Process-group containment, host launch facts, wedged-host escalation | 5 | M18 | Gap-free launch; direct-PGID path |
 | M20 | Foreground supervisor pure preflight | 6 | M3, M11, M15, M16 | Creates nothing |
-| M21 | Transactional build and rollback | 6 | M8, M10, M19, M20 | No partial session |
-| M22 | Structurally test-only runtime harness and fixture adapters | 10 | M14, M21 | Sole harness entry, unreachable from production |
+| M21 | Transactional build and rollback | 6 | M8, Tasks 21b–23, M19, M20 | No partial session |
+| M22 | Structurally test-only runtime harness and fixture adapters | 10 | M14, M21, Tasks 24–25 | Sole harness entry, unreachable from production |
 | M23 | Adversarial process scenarios | 10 | M22 | All nineteen §6.4 scenarios |
 | M24 | Fixture-driven `verify-ledger` and `export-evidence` | 10 | M22 | Production tools consume fixture output |
 | M25 | Antigravity and alternative-surface investigations | 1 | M15, M16 | Dated records, pass or fail |
@@ -346,6 +346,8 @@ Tasks 38–39 depend on M1 — they are early, not dependency-free. Only Task 60
 > `(Task 21 + Task 21b) ──> Task 22`
 >
 > Task 22 therefore depends on **both**. Its precondition is amended accordingly.
+
+> **Tasks 24–25 re-sequenced after M21 (FOUNDER-ACT-20260924-M10-DOCS, `DEC-20260924-03`, B3, 2026-09-24).** Tasks 24 and 25 move after M21. Publish legality needs a `ready` execution, `BrokerSnapshot` expresses readiness only through `executions`, and `executions` has no source until execution facts are retained (D9 item 5). In this table: M21 depends on M8, Tasks 21b–23, M19, M20; Tasks 24–25 depend on M21 and precede M22. No other dependency is waived. The act does not move Tasks 24–25 to another milestone; they remain listed under M10 in §5 and §11.2.
 
 **Gate note:** M17 is a hard gate. If any §3.6 criterion fails on either Founder Mac, M18–M19, M21, and M23 stop and the phase escalates under §10. FFI, `node-pty`, another native dependency, and any pipe fallback are not available responses.
 
@@ -1540,19 +1542,25 @@ Authoritative source, or the milestone at which one exists, or `FOUNDER-RATIFICA
 **Files:**
 - Create: `packages/broker/src/in-process-client.ts`
 - Modify: `packages/broker/src/index.ts`
+- Modify: `packages/broker/src/runtime-broker.ts` — exactly one read-only method that returns a `SnapshotProjectionInput` (D10-R1 B1) and mutates nothing (FOUNDER-ACT-20260924-M10-DOCS, `DEC-20260924-03`, B1). It is named under Interfaces below. Task 25's responsibility for `runtime-broker.ts` is unchanged; two sequential tasks with distinct methods is not the overlapping ownership D8 declined (act B1).
 - Test: `packages/broker/test/in-process-client.test.ts`
 
 **Interfaces:**
-- Consumes: `BrokerClient`, `evaluateCommandLegality`, `RuntimeBroker`.
+- Consumes: `BrokerClient`, `evaluateCommandLegality`, `RuntimeBroker`, and `projectSnapshot` / `SnapshotProjectionInput` from `./snapshot` (Task 21b, D10-R1 B1).
 - Produces:
   ```ts
   export function createInProcessBrokerClient(broker: RuntimeBroker, principal: ClientPrincipal): BrokerClient;
+  // On RuntimeBroker (packages/broker/src/runtime-broker.ts) — the one read-only method
+  // FOUNDER-ACT-20260924-M10-DOCS B1 permits. Returns a SnapshotProjectionInput (D10-R1 B1)
+  // and mutates nothing.
+  snapshotProjectionInput(): SnapshotProjectionInput;
   ```
   Pinned plan decisions (consistent with §4.1 “monotonic”, which the specification does not further constrain): `snapshotSeq` increments by exactly 1 per published snapshot starting at 1; `outputSeq` increments by exactly 1 per frame per execution starting at 1; for commands that append no ledger record, `acceptedSnapshotSeq` is the current `snapshotSeq` at acceptance.
+  Stamping (FOUNDER-ACT-20260924-M10-DOCS, `DEC-20260924-03`, B2): Task 22's client stamps `snapshotSeq` (starts at 1, +1 per published snapshot) and `connected` on every snapshot it publishes. The published type carries `snapshotSeq` as a number, so Task 23 never receives `null`. This disposes of HO-20260919-01 once Task 22 lands. The projector emits `snapshotSeq: null` and never manufactures a sequence (D10-R1 B4); the client, not the projector, stamps it.
 
 **Preconditions:**
-- M9 reviewed.
-- Task 21b landed: the real production `BrokerSnapshot` projection (`packages/broker/src/snapshot.ts`) is committed and its shape-only tests pass. A fixture-only `getSnapshot()` path does **not** satisfy this precondition (D8, 2026-09-16).
+- M9 reviewed — by the Founder's separate "M9 reviewed" act, which FOUNDER-ACT-20260924-M10-DOCS, `DEC-20260924-03`, B4 does not issue. Task 22 additionally requires that act (act B4).
+- Task 21b landed: the real production `BrokerSnapshot` projection (`packages/broker/src/snapshot.ts`) is committed under D10-R1 (`DEC-20260924-02`) and its eight D10-R1 D1 tests pass. A fixture-only `getSnapshot()` path does **not** satisfy this precondition (D8, 2026-09-16).
 
 - [ ] Step 1: Write the named failing test — add `test("the bound principal cannot be changed by the caller")` asserting the returned object exposes no principal setter and that mutating a passed-in principal object after construction does not change authorization outcomes; `test("snapshotSeq is strictly increasing by one")`; `test("outputSeq is per execution and strictly increasing by one")`; `test("close releases only this client and does not terminate the session")` asserting the broker phase is unchanged after `close()`; `test("a command carrying a foreign sessionId fails with session_mismatch")`.
 - [ ] Step 2: Run `bun test packages/broker/test/in-process-client.test.ts -t "the bound principal cannot be changed by the caller"` — expected RED: `Cannot find module "../src/in-process-client"`.
@@ -1578,7 +1586,7 @@ Authoritative source, or the milestone at which one exists, or `FOUNDER-RATIFICA
 - Produces: `class SequenceInvariantError extends Error { readonly kind: "session_mismatch" | "duplicate" | "regression" | "gap"; readonly stream: "snapshot" | "output" }`, raised and converted to a session interruption with reason code `snapshot_sequence_invariant_failed` or `output_sequence_invariant_failed`.
 
 **Preconditions:**
-- Task 22 committed.
+- Task 22 committed. Task 23 receives `snapshotSeq` as a number on every published snapshot: Task 22's client stamps `snapshotSeq` and `connected`, and the published type carries `snapshotSeq` as a number (FOUNDER-ACT-20260924-M10-DOCS, `DEC-20260924-03`, B2). HO-20260919-01 is disposed of once Task 22 lands (act B2).
 
 - [ ] Step 1: Write the named failing test — add `test("an output sequence gap interrupts the session with output_sequence_invariant_failed")`; `test("a snapshot sequence regression interrupts the session with snapshot_sequence_invariant_failed")`; `test("a duplicate output sequence is not silently dropped")`; `test("an output frame carrying a foreign sessionId interrupts the session")`.
 - [ ] Step 2: Run `bun test packages/broker/test/in-process-client.test.ts -t "an output sequence gap interrupts the session with output_sequence_invariant_failed"` — expected RED: the injected gap is currently delivered to the consumer unchanged and no interruption is recorded.
@@ -1613,6 +1621,7 @@ Authoritative source, or the milestone at which one exists, or `FOUNDER-RATIFICA
 
 **Preconditions:**
 - Task 23 committed.
+- M21 reviewed (FOUNDER-ACT-20260924-M10-DOCS, `DEC-20260924-03`, B3): Tasks 24 and 25 move after M21. Publish legality needs a `ready` execution, `BrokerSnapshot` expresses readiness only through `executions`, and `executions` has no source until execution facts are retained (D9 item 5). Tasks 24–25 depend on M21 and precede M22. No other dependency is waived.
 
 - [ ] Step 1: Write the named failing test — add one test per matrix row named `test("publish row: <family> in <state> yields <error>")` (6 rows); plus `test("a legacy execution-authored pause is rejected with unauthorized in every phase")` iterating all six phases; `test("a malformed incident in a closed session is invalid_command, not session_not_writable")`; `test("a valid incident in a closed session is session_not_writable")`; `test("an execution principal publishing another execution's sender id is unauthorized")`; `test("an ordinary collaboration event does not require a pending approval")`; `test("an action_accept referencing a resolved approval fails with approval_not_pending")`; `test("BrokerResult.commandId equals event.event_id for publish")`.
 - [ ] Step 2: Run `bun test packages/broker/test/publish-legality.test.ts -t "a malformed incident in a closed session is invalid_command, not session_not_writable"` — expected RED: `Cannot find module "../src/publish-legality"`.
@@ -1639,7 +1648,7 @@ Authoritative source, or the milestone at which one exists, or `FOUNDER-RATIFICA
 - Produces: `RuntimeBroker.publishIncident(event: BridgeEventV1): Promise<BrokerResult>` performing exactly one `appendMany([sourceEvent, derivedInterrupted])`.
 
 **Preconditions:**
-- Task 24 committed.
+- Task 24 committed (after M21; FOUNDER-ACT-20260924-M10-DOCS, `DEC-20260924-03`, B3).
 
 - [ ] Step 1: Write the named failing test — add `test("no snapshot is emitted between the source incident and the derived lifecycle record")` recording every published snapshot and asserting none has `phase === "active"` with a non-null `incident`; `test("the derived record copies source_event_id and reported_by_execution_id from the originating event")`; `test("a supervisor-originated interruption sets both source fields to null")`; `test("the accepted result is returned only after the phase is interrupted")`; `test("the mandatory invalidation, closing, and closed records follow the incident pair")`.
 - [ ] Step 2: Run `bun test packages/broker/test/incident-atomicity.test.ts -t "no snapshot is emitted between the source incident and the derived lifecycle record"` — expected RED: `broker.publishIncident is not a function`.
@@ -1649,6 +1658,16 @@ Authoritative source, or the milestone at which one exists, or `FOUNDER-RATIFICA
 - [ ] Step 6: Inspect the diff; confirm exactly one `appendMany` call site for the incident path.
 - [ ] Step 7: Commit the listed files with message: `feat(broker): append the published-incident pair atomically`
 - [ ] Step 8: Stop for the M10 review checkpoint.
+
+##### For Founder ruling — FOUNDER-RATIFICATION-REQUIRED
+
+Proposed by the M10 docs PR under FOUNDER-ACT-20260924-M10-DOCS, `DEC-20260924-03`, C4(e). Nothing below is decided. Each item is `FOUNDER-RATIFICATION-REQUIRED` and takes effect only by a separate Founder ruling; no task may act on a proposal.
+
+| # | Question | Proposal (not a decision) | Status |
+| --- | --- | --- | --- |
+| (i) | Who owns the durable append of accepted non-incident `publish()` events, and the fold of `verification`, `review`, and `pendingTransfers` into broker state? Task 24 produces `evaluatePublishLegality` and wires `BrokerClient.publish()`; Task 25 owns only the incident pair's `appendMany`. No task names the non-incident append or the fold, while FIELD-SOURCE rows 12, 13 and 18 point at "`publish()` ingestion, Task 24". | Name one owner. Option A: extend Task 24 with `RuntimeBroker.publish(event: BridgeEventV1): Promise<BrokerResult>` — one `Ledger.append` of the accepted event, a fold through `reduceLedgerEvent`, then one published snapshot — and source rows 12, 13 and 18 from that fold. Option B: a new Task 24b owning the append and the fold, leaving Task 24 legality-only. Proposal: Option A, because rows 12, 13 and 18 already name Task 24 and the append belongs beside the legality decision it follows. Either option still needs a ruling on ownership-event ingestion for row 18 (`pendingTransfers`), which neither supplies on its own. | `FOUNDER-RATIFICATION-REQUIRED` |
+| (ii) | What does an ownership-reference check do against `pendingTransfers: null`? §9.3 requires a published event referencing an ownership request to be independently validated as still pending, and the snapshot member it would consult is `null` until (i) lands. | Fail closed at the reference check with `invariant_failure` and detail `pendingTransfers not produced by the snapshot`, decided before any pending-state limb — the pattern D9-A1 A1(i) rules for `executions: null` and §9.4's "`T \| null` means not produced" — rather than `ownership_not_pending` (which would assert a fact the snapshot did not produce) or admission. Events that reference no ownership request are unaffected. | `FOUNDER-RATIFICATION-REQUIRED` |
+| (iii) | Does Task 46 retain execution identities and launch facts, so that `executions` (row 16) has a source? Task 46's `BUILD_STEPS` include `hosts`, `children`, `reattest`, `adapters`, `issue_token` and `activate`, and `RuntimeBroker.activate(writerExecutionId, readyExecutionIds)` already receives execution ids; but no task names retention of `ExecutionIdentity` or of the M19 launch facts in broker state, and D9 item 5 deferred `executions` to the milestone that creates its source. | Task 46 as written does not retain them. Proposal: a named retention task in M21 — either a new task placed before Task 46 or Task 46's first step — that retains execution identities and launch facts in broker state, names `executions` as its projected member, and updates `projectSnapshot` in the same task (D10-R1 B3's rule for any future source). Whether retention is a ledger event (reducer-visible, replayable) or in-memory broker state is itself authority-bearing and is not proposed here. | `FOUNDER-RATIFICATION-REQUIRED` |
 
 ---
 
@@ -3438,7 +3457,7 @@ Every proposed commit in §5 carries: the exact files to stage (Step 7 lists the
 | M7 | 15–16 | 2 | Plato/Codex + Tier-2 (prefix table is authority-bearing) |
 | M8 | 17–19 | 3 | Plato/Codex + Tier-2 (fencing is authority-bearing) |
 | M9 | 20–21 | 2 | Plato/Codex |
-| M10 | 21b, 22–25 | 5 | Plato/Codex + Tier-2 (incident atomicity and snapshot projection are authority-bearing) |
+| M10 | 21b, 22–23; 24–25 after M21 (act B3, `DEC-20260924-03`) | 5 | Plato/Codex + Tier-2 (incident atomicity and snapshot projection are authority-bearing) |
 | M11 | 26–28 | 3 | Plato/Codex |
 | M12 | 29 | 1 | Plato/Codex |
 | M13 | 30–32 | 3 | Plato/Codex + Tier-2 (the gate is authority-bearing) |
