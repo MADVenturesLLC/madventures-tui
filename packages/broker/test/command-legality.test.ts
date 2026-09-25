@@ -318,8 +318,9 @@ test("a writer-only command against executions: null fails with invariant_failur
   // fixture is otherwise fully legal and carries the current positive token on
   // both command and snapshot, so a command that reached readiness would
   // succeed; only the null collection refuses it. pty_terminate is deliberately
-  // NOT exercised here: it stays ungated, and asserting it would invert the
-  // ruling.
+  // NOT exercised here: it stays ungated, and its admission against
+  // executions: null is asserted in "pty_terminate against executions: null is
+  // admitted" (FOUNDER-ACT-20260924-M9-HARDEN C1.1).
   const result = evaluateCommandLegality(
     ptyInput({ executionId: EXECUTION_ID, fencingToken: CURRENT_TOKEN }),
     baseSnapshot({
@@ -339,11 +340,105 @@ test("a writer-only command against executions: null fails with invariant_failur
   });
 });
 
+// ─── Four added by FOUNDER-ACT-20260924-M9-HARDEN (F1, F2, F4) ───
+
+/**
+ * Every member of the closed BrokerSnapshot["phase"] union, for the
+ * table-driven phase tests below. The `satisfies` clause rejects a stray
+ * value, and the exhaustiveness check below it fails `tsc` if the union ever
+ * gains a member this table does not list — so "every phase" stays true.
+ */
+const ALL_PHASES = [
+  "starting",
+  "active",
+  "paused",
+  "interrupted",
+  "closing",
+  "closed",
+] as const satisfies readonly BrokerSnapshot["phase"][];
+type MissingPhase = Exclude<BrokerSnapshot["phase"], (typeof ALL_PHASES)[number]>;
+const _everyPhaseListed: MissingPhase extends never ? true : never = true;
+void _everyPhaseListed;
+
+const NON_READY_STATES: readonly ExecutionSnapshot["state"][] = [
+  "declared",
+  "host-starting",
+  "launching",
+  "attesting",
+  "exited",
+  "failed",
+];
+
+test("pty_terminate against executions: null is admitted", () => {
+  // F1, first half. pty_terminate is execution-scoped but not writer-only, so
+  // the D9-A1 null-collection guard at predicate 4 must not reach it: a
+  // missing projection must never make mechanical fail-closed teardown
+  // blockable. The fixture is otherwise fully legal (active, no incident),
+  // so the only thing that could refuse this command is a guard widened to
+  // pty_terminate — and that is exactly what this test would catch.
+  const result = evaluateCommandLegality(
+    ptyTerminate({ executionId: EXECUTION_ID }),
+    baseSnapshot({ executions: null }),
+    FOUNDER_PRINCIPAL,
+  );
+  expect(result).toEqual({ ok: true });
+});
+
+test("pty_terminate against a non-ready execution is admitted", () => {
+  // F1, second half. Clause A's readiness limb is for pty_input/pty_resize
+  // only; pty_terminate is never readiness-gated. Every non-ready member of
+  // the ExecutionSnapshot.state union is driven, with the target execution
+  // present in the snapshot and the fixture otherwise fully legal.
+  for (const state of NON_READY_STATES) {
+    const result = evaluateCommandLegality(
+      ptyTerminate({ executionId: EXECUTION_ID }),
+      baseSnapshotWithExecutionState(state),
+      FOUNDER_PRINCIPAL,
+    );
+    expect(result).toEqual({ ok: true });
+  }
+});
+
+test("a writer-only command failing both readiness and the fencing token yields the readiness refusal", () => {
+  // F2. Predicate 6's readiness limb precedes predicate 7's token check. A
+  // pty_input whose target is not ready AND whose token is stale must be
+  // refused for readiness, never for the token: swapping the two checks
+  // would answer stale_fencing_token here. Every non-ready state is driven;
+  // the fixture is otherwise fully legal (active, no incident, active
+  // writer), and the snapshot carries the current token so that only the
+  // command's token is stale.
+  for (const state of NON_READY_STATES) {
+    const result = evaluateCommandLegality(
+      ptyInput({ executionId: EXECUTION_ID, fencingToken: CURRENT_TOKEN - 1 }),
+      baseSnapshotWithExecutionState(state),
+      FOUNDER_PRINCIPAL,
+    );
+    expect(result).toEqual({ ok: false, error: "invariant_failure", detail: "target execution is not ready" });
+  }
+});
+
+test("pty_terminate is legal in every phase except closed", () => {
+  // F4 for the pty_terminate row: every phase is driven, not one. The
+  // fixture is otherwise fully legal, so only the phase decides.
+  for (const phase of ALL_PHASES) {
+    const result = evaluateCommandLegality(ptyTerminate(), baseSnapshot({ phase }), FOUNDER_PRINCIPAL);
+    if (phase === "closed") {
+      expect(result).toEqual({ ok: false, error: "session_not_writable", detail: "session is already closed" });
+    } else {
+      expect(result).toEqual({ ok: true });
+    }
+  }
+});
+
 // ─── Ten matrix rows ───
 
 test("legality row: pty_input in any non-active phase yields session_not_writable", () => {
-  const result = evaluateCommandLegality(ptyInput(), baseSnapshot({ phase: "starting" }), FOUNDER_PRINCIPAL);
-  expect(result).toEqual({ ok: false, error: "session_not_writable", detail: "session phase does not accept PTY input" });
+  // F4: every non-active phase, not one (FOUNDER-ACT-20260924-M9-HARDEN C2).
+  const nonActivePhases: readonly BrokerSnapshot["phase"][] = ["starting", "paused", "interrupted", "closing", "closed"];
+  for (const phase of nonActivePhases) {
+    const result = evaluateCommandLegality(ptyInput(), baseSnapshot({ phase }), FOUNDER_PRINCIPAL);
+    expect(result).toEqual({ ok: false, error: "session_not_writable", detail: "session phase does not accept PTY input" });
+  }
 });
 
 test("legality row: pty_input in active + incident yields incident_active", () => {
@@ -370,8 +465,12 @@ test("legality row: approval_resolve in active + incident yields incident_active
 });
 
 test("legality row: approval_resolve in any non-active phase yields session_not_writable", () => {
-  const result = evaluateCommandLegality(approvalResolve(), baseSnapshot({ phase: "paused" }), FOUNDER_PRINCIPAL);
-  expect(result).toEqual({ ok: false, error: "session_not_writable", detail: "session phase does not accept this command" });
+  // F4: every non-active phase, not one (FOUNDER-ACT-20260924-M9-HARDEN C2).
+  const nonActivePhases: readonly BrokerSnapshot["phase"][] = ["starting", "paused", "interrupted", "closing", "closed"];
+  for (const phase of nonActivePhases) {
+    const result = evaluateCommandLegality(approvalResolve(), baseSnapshot({ phase }), FOUNDER_PRINCIPAL);
+    expect(result).toEqual({ ok: false, error: "session_not_writable", detail: "session phase does not accept this command" });
+  }
 });
 
 test("legality row: session_pause in active + incident yields incident_active", () => {
@@ -384,13 +483,21 @@ test("legality row: session_pause in active + incident yields incident_active", 
 });
 
 test("legality row: session_pause in any other phase yields session_not_writable", () => {
-  const result = evaluateCommandLegality(sessionPause(), baseSnapshot({ phase: "interrupted" }), FOUNDER_PRINCIPAL);
-  expect(result).toEqual({ ok: false, error: "session_not_writable", detail: "session phase does not accept this command" });
+  // F4: every phase other than active, not one (FOUNDER-ACT-20260924-M9-HARDEN C2).
+  const otherPhases: readonly BrokerSnapshot["phase"][] = ["starting", "paused", "interrupted", "closing", "closed"];
+  for (const phase of otherPhases) {
+    const result = evaluateCommandLegality(sessionPause(), baseSnapshot({ phase }), FOUNDER_PRINCIPAL);
+    expect(result).toEqual({ ok: false, error: "session_not_writable", detail: "session phase does not accept this command" });
+  }
 });
 
 test("legality row: session_resume in any other phase yields session_not_writable", () => {
-  const result = evaluateCommandLegality(sessionResume(), baseSnapshot({ phase: "active" }), FOUNDER_PRINCIPAL);
-  expect(result).toEqual({ ok: false, error: "session_not_writable", detail: "session phase does not accept this command" });
+  // F4: every phase other than paused, not one (FOUNDER-ACT-20260924-M9-HARDEN C2).
+  const otherPhases: readonly BrokerSnapshot["phase"][] = ["starting", "active", "interrupted", "closing", "closed"];
+  for (const phase of otherPhases) {
+    const result = evaluateCommandLegality(sessionResume(), baseSnapshot({ phase }), FOUNDER_PRINCIPAL);
+    expect(result).toEqual({ ok: false, error: "session_not_writable", detail: "session phase does not accept this command" });
+  }
 });
 
 test("legality row: session_close in active + incident yields incident_active", () => {
@@ -403,8 +510,12 @@ test("legality row: session_close in active + incident yields incident_active", 
 });
 
 test("legality row: session_close in any other phase yields session_not_writable", () => {
-  const result = evaluateCommandLegality(sessionClose(), baseSnapshot({ phase: "closing" }), FOUNDER_PRINCIPAL);
-  expect(result).toEqual({ ok: false, error: "session_not_writable", detail: "session phase does not accept this command" });
+  // F4: every phase other than active, not one (FOUNDER-ACT-20260924-M9-HARDEN C2).
+  const otherPhases: readonly BrokerSnapshot["phase"][] = ["starting", "paused", "interrupted", "closing", "closed"];
+  for (const phase of otherPhases) {
+    const result = evaluateCommandLegality(sessionClose(), baseSnapshot({ phase }), FOUNDER_PRINCIPAL);
+    expect(result).toEqual({ ok: false, error: "session_not_writable", detail: "session phase does not accept this command" });
+  }
 });
 
 // ─── Four retained ───
