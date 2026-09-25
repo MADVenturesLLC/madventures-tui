@@ -1372,10 +1372,10 @@ set and remains retained and unmodified. There is no `transferPhase` field on `B
 **Preconditions:**
 - M8 reviewed.
 
-- [ ] Step 1: Write the named failing test — add `test("the command union has exactly seven kinds")`; `test("the error code union has exactly fourteen values")`; `test("the snapshot contract exposes no transferPhase field")` asserting a constructed `BrokerSnapshot` literal is rejected by `tsc` when it carries `transferPhase` (assert via a `// @ts-expect-error` line that must compile clean); `test("output frames key on executionId and never on surfaceId")` asserting `OutputFrame` has no `surfaceId` key.
+- [ ] Step 1: Write the named failing test — add `test("the command union has exactly seven kinds")`; `test("the error code union has exactly fourteen values")`; `test("the snapshot contract exposes no transferPhase field")` asserting a constructed `BrokerSnapshot` literal is rejected by `tsc` when it carries `transferPhase` (assert via a `// @ts-expect-error` line that must compile clean); `test("output frames key on executionId and never on surfaceId")` asserting `OutputFrame` has no `surfaceId` key; test("client.ts consumes the authoritative OwnershipState and declares no ownership union") asserting that client.ts imports OwnershipState from ./ownership-machine exactly once and declares no ownership-state union of its own (Step 6's inspection, as a test).
 - [ ] Step 2: Run `bun test packages/broker/test/broker-client-contract.test.ts` — expected RED: `Cannot find module "../src/client"`.
 - [ ] Step 3: Implement the minimum authorized behavior — create `client.ts` with the type declarations and the two runtime tuples. Types only; no implementation.
-- [ ] Step 4: Run the same command — expected GREEN: 4 pass. Invariant established: **the client boundary is a closed, enumerable, plain-data contract with no parallel identity key.**
+- [ ] Step 4: Run the same command — expected GREEN: 5 pass. Invariant established: **the client boundary is a closed, enumerable, plain-data contract with no parallel identity key.**
 - [ ] Step 5: Run `bun test packages/broker` and `bunx tsc --noEmit` (the `@ts-expect-error` assertion is verified by `tsc`, not by `bun test`).
 - [ ] Step 6: Inspect the diff; confirm no PTY descriptor, subprocess handle, or ledger handle appears in any exported type; confirm `client.ts` imports the existing `OwnershipState` from `./ownership-machine.ts` rather than declaring an ownership-state union; and confirm `ownership-machine.ts` is untouched.
 - [ ] Step 7: Commit the listed files with message: `feat(broker): declare the closed BrokerClient command and snapshot contract`
@@ -1559,7 +1559,7 @@ Authoritative source, or the milestone at which one exists, or `FOUNDER-RATIFICA
   Stamping (FOUNDER-ACT-20260924-M10-DOCS, `DEC-20260924-03`, B2): Task 22's client stamps `snapshotSeq` (starts at 1, +1 per published snapshot) and `connected` on every snapshot it publishes. The published type carries `snapshotSeq` as a number, so Task 23 never receives `null`. This disposes of HO-20260919-01 once Task 22 lands. The projector emits `snapshotSeq: null` and never manufactures a sequence (D10-R1 B4); the client, not the projector, stamps it.
 
 **Preconditions:**
-- M9 reviewed — by the Founder's separate "M9 reviewed" act, which FOUNDER-ACT-20260924-M10-DOCS, `DEC-20260924-03`, B4 does not issue. Task 22 additionally requires that act (act B4).
+- M9 reviewed (FOUNDER-ACT-20260925-M9-REVIEWED, `DEC-20260925-01`, B1).
 - Task 21b landed: the real production `BrokerSnapshot` projection (`packages/broker/src/snapshot.ts`) is committed under D10-R1 (`DEC-20260924-02`) and its eight D10-R1 D1 tests pass. A fixture-only `getSnapshot()` path does **not** satisfy this precondition (D8, 2026-09-16).
 
 - [ ] Step 1: Write the named failing test — add `test("the bound principal cannot be changed by the caller")` asserting the returned object exposes no principal setter and that mutating a passed-in principal object after construction does not change authorization outcomes; `test("snapshotSeq is strictly increasing by one")`; `test("outputSeq is per execution and strictly increasing by one")`; `test("close releases only this client and does not terminate the session")` asserting the broker phase is unchanged after `close()`; `test("a command carrying a foreign sessionId fails with session_mismatch")`.
@@ -3456,7 +3456,7 @@ Every proposed commit in §5 carries: the exact files to stage (Step 7 lists the
 | M6 | 13–14 | 2 | Plato/Codex |
 | M7 | 15–16 | 2 | Plato/Codex + Tier-2 (prefix table is authority-bearing) |
 | M8 | 17–19 | 3 | Plato/Codex + Tier-2 (fencing is authority-bearing) |
-| M9 | 20–21 | 2 | Plato/Codex |
+| M9 | 20–21 | 2 | Plato/Codex — reviewed 2026-09-25 (`DEC-20260925-01`) |
 | M10 | 21b, 22–23; 24–25 after M21 (act B3, `DEC-20260924-03`) | 5 | Plato/Codex + Tier-2 (incident atomicity and snapshot projection are authority-bearing) |
 | M11 | 26–28 | 3 | Plato/Codex |
 | M12 | 29 | 1 | Plato/Codex |
