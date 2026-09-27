@@ -31,6 +31,7 @@ import type {
 } from "@madventures/protocol";
 import { invalidateToken, issueInitialToken } from "./fencing";
 import type { FencingRecordContext } from "./fencing";
+import type { SnapshotProjectionInput } from "./snapshot";
 
 // ─── Dependency contract ───
 
@@ -164,6 +165,22 @@ export class RuntimeBroker {
 
   get snapshotSeq(): number {
     return this.seq;
+  }
+
+  /**
+   * Task 22's one permitted read-only accessor (DEC-20260926-01 B4). Returns
+   * the D10-R1 SnapshotProjectionInput built from this broker's own
+   * authoritative in-memory state and the complete durable ledger chain
+   * starting at sequence 1 (DEC-20260926-01 B3). Mutates nothing: `state` and
+   * `provenance` are read, and the ledger is read fresh via `readAfter(0)` so
+   * the caller always receives the full chain, never a cached suffix.
+   */
+  snapshotProjectionInput(): SnapshotProjectionInput {
+    return {
+      lifecycle: this.state,
+      ledgerRows: this.deps.ledger.readAfter(0),
+      provenance: this.deps.provenance,
+    };
   }
 
   /**
