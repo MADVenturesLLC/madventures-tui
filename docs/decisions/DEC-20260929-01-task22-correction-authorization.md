@@ -11,7 +11,7 @@ I, Michael Daley, Founder of MAD Ventures, rule as follows.
 
 ## Part A — Basis
 
-A1. **The independent review failed.** The B5 review required by `DEC-20260926-01` inspected the exact head `ae1cb8f` and returned FAIL. It is recorded on PR #102 in comment `5868915240` (2026-09-28T11:26:00Z), with custody file `verification/tier2-m10task22-ae1cb8f-codex-FAIL.txt`, SHA-256 `4a123303fcf2211e76f0bf96a30b2b25cd370c095a73731f68bbf4408d63176b`. Its findings:
+A1. **The independent review failed.** The B5 review required by `DEC-20260926-01` inspected the exact head `ae1cb8fc66901717a47285a0756221479ec97826` and returned FAIL. It is recorded on PR #102 in comment `5868915240` (2026-09-28T11:26:00Z), with custody file `verification/tier2-m10task22-ae1cb8f-codex-FAIL.txt`, SHA-256 `4a123303fcf2211e76f0bf96a30b2b25cd370c095a73731f68bbf4408d63176b`. Its findings:
 
 1. B1 stamped-type boundary: `getSnapshot()` is still typed as the nullable `BrokerSnapshot`.
 2. B4 no-new-authority: `snapshotProjectionInput()` returns the broker's live `state` and `provenance` by reference.
@@ -28,7 +28,7 @@ A2. **Review threads.** Copilot's review of 2026-09-28T11:19Z opened three threa
 
 The third, `index.ts:56`, is open and matches finding 4. Named check: the review threads were read through the GitHub API on 2026-09-29T09:20Z. This act does not say who resolved the two threads.
 
-A3. **`DEC-20260926-01` D1 can no longer be met.** Filing that act moved `origin/main` from `b38be8a` to `e5d4697`. The diff between them changes only `docs/decisions/DEC-20260926-01-task22-execution-authorization.md`. The same happens whenever an act is filed on `main`, so this act checks base drift by what changed, not by SHA.
+A3. **`DEC-20260926-01` D1 can no longer be met.** Filing that act moved `origin/main` from `b38be8a8662b437d510b30f4477bcee3d7961999` to `e5d4697d0de61305ac6bf6b91e5c6d75507624c8`. The diff between them changes only `docs/decisions/DEC-20260926-01-task22-execution-authorization.md`. The same happens whenever an act is filed on `main`, so this act checks base drift by what changed, not by SHA.
 
 A4. **Finding 5 has support in the text.** Plan Task 22's requirement coverage quotes the §4.1 sentence "Session mismatch, duplicate, regression, or gap is a typed invariant failure … an unexplained gap interrupts the session". B5 item 5 names "sequence and foreign-session refusal". Yet plan Task 23 exists to implement exactly that sentence: it defines `SequenceInvariantError` and its four named tests. B3 held Task 22 to five named tests, none of which is a gap test. A re-review against the unchanged text could fail the same way. B2 below settles it.
 
@@ -39,9 +39,9 @@ A6. **Correction rounds.** Plan §4 maps M9 and M10 to the same rubric §7.2 mil
 - the independent static M9 review (Codex, 2026-09-24 17:13 UTC, FAIL (STATIC), F1–F4; `DEC-20260924-05` A1);
 - the B5 review in A1.
 
-Neither is recorded in `docs/verification/phase-3a-correction-rounds.md`, although plan §11.3 requires the count to be recorded "when the verdict occurs". Named check: that file was read at `origin/main` `e5d4697` on 2026-09-29T09:20Z.
+Neither is recorded in `docs/verification/phase-3a-correction-rounds.md`, although plan §11.3 requires the count to be recorded "when the verdict occurs". Named check: that file was read at `origin/main` `e5d4697d0de61305ac6bf6b91e5c6d75507624c8` on 2026-09-29T09:20Z.
 
-A7. **One defect beyond the review.** Reading `ae1cb8f` while preparing this act found a further defect, in the class plan Task 22 Step 6 names. `broker` is declared TypeScript-`private`, which is not private at runtime. The bound `RuntimeBroker` can therefore be read from the client object. The same holds for the closed flag, the snapshot counter and the output buffers, which are also writable. B1 item 4 corrects this.
+A7. **One defect beyond the review.** Reading `ae1cb8fc66901717a47285a0756221479ec97826` while preparing this act found a further defect, in the class plan Task 22 Step 6 names. `broker` is declared TypeScript-`private`, which is not private at runtime. The bound `RuntimeBroker` can therefore be read from the client object. The same holds for the closed flag, the snapshot counter and the output buffers, which are also writable. B1 item 4 corrects this.
 
 A8. This act governs the Task 22 correction where its terms conflict with the Phase 3A plan or with `DEC-20260926-01`. Every clause of `DEC-20260926-01` not changed here still stands. This act does not close `PLAN-OPEN-7` and does not authorize any later task.
 
@@ -96,12 +96,12 @@ C3. `DEC-20260926-01` C3 and C4 stand unchanged.
 
 D1. **Before the first edit,** re-fetch and stop and report unless all of these hold:
 
-- (a) PR #102's head is `ae1cb8f`, and the branch has exactly one commit after `b38be8a`;
-- (b) every path changed between `b38be8a` and `origin/main` is under `docs/decisions/` or is `docs/verification/phase-3a-correction-rounds.md`;
+- (a) PR #102's head is `ae1cb8fc66901717a47285a0756221479ec97826`, and the branch has exactly one commit after `b38be8a8662b437d510b30f4477bcee3d7961999`;
+- (b) every path changed between `b38be8a8662b437d510b30f4477bcee3d7961999` and `origin/main` is under `docs/decisions/` or is `docs/verification/phase-3a-correction-rounds.md`;
 - (c) this act is present on `origin/main` with status ISSUED;
 - (d) the two threads in A2 are open.
 
-D2. **RED proof.** Write the new assertions first, then run them against the `ae1cb8f` implementation.
+D2. **RED proof.** Write the new assertions first, then run them against the `ae1cb8fc66901717a47285a0756221479ec97826` implementation.
 
 - Record each failure verbatim.
 - For any assertion that cannot fail on the old code, say which one and why.
@@ -120,7 +120,7 @@ bun test
 - The broker suite shows `257 pass`, `0 fail`, `14 files`.
 - The full suite shows `0 fail`.
 - `git diff --check` is clean.
-- The changed-path list from `b38be8a` is exactly C1's four paths.
+- The changed-path list from `b38be8a8662b437d510b30f4477bcee3d7961999` is exactly C1's four paths.
 
 D4. The PR description carries a table that maps each finding and each Copilot thread to the assertion or check that pins it, and to the fixing commit.
 
@@ -130,7 +130,7 @@ E1. Before PR #102 leaves draft, an independent non-authoring Codex review inspe
 
 - this act;
 - `DEC-20260926-01`;
-- the full diff from `b38be8a` to that head;
+- the full diff from `b38be8a8662b437d510b30f4477bcee3d7961999` to that head;
 - the five findings in A1 and the three Copilot threads.
 
 The reviewer confirms each finding is closed and reports any new finding.
@@ -158,9 +158,9 @@ Actor-Id: session:claude-code/m10-task22-fix-r1
 Execution-Surface: claude-code
 ```
 
-F2. Work in a clean, isolated worktree created for this act, checked out at `ae1cb8f`. Do not use any existing checkout or retained worktree.
+F2. Work in a clean, isolated worktree created for this act, checked out at `ae1cb8fc66901717a47285a0756221479ec97826`. Do not use any existing checkout or retained worktree.
 
-F3. Make one new commit on `build/m10-task22-r1` on top of `ae1cb8f`:
+F3. Make one new commit on `build/m10-task22-r1` on top of `ae1cb8fc66901717a47285a0756221479ec97826`:
 
 ```text
 fix(broker): close the Task 22 independent-review findings
