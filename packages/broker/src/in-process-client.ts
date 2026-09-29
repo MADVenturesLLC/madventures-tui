@@ -1,7 +1,7 @@
 // packages/broker/src/in-process-client.ts
 // Phase 3A M10 Task 22: the in-process BrokerClient (specification sections
 // 9.3-9.4; plan Task 22; Founder Decisions DEC-20260926-01 Parts B and C and
-// DEC-20260929-01 Part B).
+// DEC-20260929-01 Part B and DEC-20260929-02 Part B).
 //
 // This module creates a client-local, in-process implementation of the
 // Task 20 BrokerClient contract (./client.ts, byte-identical, never
@@ -19,6 +19,13 @@
 // is frozen and holds only the six contract methods plus a separate, frozen
 // copy of the principal for callers to read. Nothing a caller can assign,
 // redefine, delete or re-prototype changes what request() evaluates.
+//
+// Nothing handed to a caller is shared (DEC-20260929-02 B2). Every iterator
+// result, output frame, snapshot with its nested values, and BrokerResult is
+// created fresh for the delivery that hands it out, and an ingested frame's
+// bytes are copied on ingest. No module-scope object, array, Map or Set is
+// ever returned or resolved to a caller, so changing anything a caller
+// receives changes no later delivery, no internal state and no other client.
 //
 // Output delivery: until a separately authorized production OutputFrame
 // producer exists, nothing in this module inserts a frame into a client's
@@ -48,8 +55,9 @@ import type { BridgeEventV1 } from "@madventures/protocol";
  * The Task 22 stamped snapshot type (DEC-20260926-01 B1). It narrows only the
  * two fields the in-process client itself is authoritative for: `snapshotSeq`
  * (this client's own monotonic delivery sequence) and `connected` (true for
- * every snapshot delivered before this client closes). Every other field is
- * exactly the BrokerSnapshot contract, unchanged.
+ * every snapshot delivered before this client closes, false for one that
+ * getSnapshot() delivers after close(), DEC-20260929-02 B3). Every other field
+ * is exactly the BrokerSnapshot contract, unchanged.
  */
 export type StampedBrokerSnapshot = Omit<BrokerSnapshot, "snapshotSeq" | "connected"> & {
   readonly snapshotSeq: number;
@@ -93,7 +101,10 @@ interface OutputWaiter {
   readonly settle: (result: IteratorResult<OutputFrame>) => void;
 }
 
-const ITERATION_DONE: IteratorResult<OutputFrame> = { done: true, value: undefined };
+/** A fresh completion result for every delivery: a caller may rewrite what it receives. */
+function iterationDone(): IteratorResult<OutputFrame> {
+  return { done: true, value: undefined };
+}
 
 /** The test seam: each client's ingest function, reachable only through the exported test-only helper. */
 const testIngestSeams = new WeakMap<InProcessBrokerClient, (executionId: string, bytes: Uint8Array) => void>();
@@ -119,7 +130,7 @@ export function createInProcessBrokerClient(
   function nextStampedSnapshot(): StampedBrokerSnapshot {
     const projected = projectSnapshot(broker.snapshotProjectionInput());
     deliveredSeq += 1;
-    return { ...projected, snapshotSeq: deliveredSeq, connected: true };
+    return { ...projected, snapshotSeq: deliveredSeq, connected: !closed };
   }
 
   async function getSnapshot(): Promise<StampedBrokerSnapshot> {
@@ -142,7 +153,7 @@ export function createInProcessBrokerClient(
         return {
           next(): Promise<IteratorResult<OutputFrame>> {
             if (finished || closed) {
-              return Promise.resolve(ITERATION_DONE);
+              return Promise.resolve(iterationDone());
             }
             const queued = outputQueues.get(executionId)?.shift();
             if (queued !== undefined) {
@@ -164,9 +175,9 @@ export function createInProcessBrokerClient(
           return(): Promise<IteratorResult<OutputFrame>> {
             finished = true;
             for (const waiter of [...own]) {
-              waiter.settle(ITERATION_DONE);
+              waiter.settle(iterationDone());
             }
-            return Promise.resolve(ITERATION_DONE);
+            return Promise.resolve(iterationDone());
           },
         };
       },
@@ -199,7 +210,7 @@ export function createInProcessBrokerClient(
     outputQueues.clear();
     outputSeqs.clear();
     for (const waiter of [...outputWaiters]) {
-      waiter.settle(ITERATION_DONE);
+      waiter.settle(iterationDone());
     }
   }
 
@@ -225,7 +236,8 @@ export function createInProcessBrokerClient(
     outputSeqs.set(executionId, outputSeq);
     const queue = outputQueues.get(executionId) ?? [];
     outputQueues.set(executionId, queue);
-    queue.push({ sessionId, executionId, outputSeq, bytes });
+    // Copied on ingest: the delivered frame's bytes is never the caller's array.
+    queue.push({ sessionId, executionId, outputSeq, bytes: new Uint8Array(bytes) });
     for (const waiter of [...outputWaiters]) {
       const frame = waiter.executionId === executionId ? queue.shift() : undefined;
       if (frame !== undefined) {

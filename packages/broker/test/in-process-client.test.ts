@@ -292,6 +292,29 @@ test("snapshotSeq is strictly increasing by one", async () => {
   expect(withoutSeq(await observer.getSnapshot())).toEqual(snapshotBefore);
   await observer.close();
 
+  // DEC-20260929-02 B2: every snapshot is built fresh for its delivery.
+  // Rewriting a delivered snapshot, nested values included, changes no later
+  // delivery on this client and none on another client.
+  const witness = createInProcessBrokerClient(broker, FOUNDER_PRINCIPAL);
+  const reference = withoutSeq(await witness.getSnapshot());
+  const handed = await client.getSnapshot();
+  attempt(() => {
+    const target = handed as unknown as {
+      phase: string;
+      eventLog: { hash: string }[];
+      pendingApprovals: unknown[];
+      repositoryFingerprint: { sha256: string };
+    };
+    target.phase = "closed";
+    target.eventLog[0]!.hash = "forged";
+    target.eventLog.length = 0;
+    target.pendingApprovals.push({ id: "forged" });
+    target.repositoryFingerprint.sha256 = "f".repeat(64);
+  });
+  expect(withoutSeq(await client.getSnapshot())).toEqual(reference);
+  expect(withoutSeq(await witness.getSnapshot())).toEqual(reference);
+  await witness.close();
+
   await client.close();
 });
 
@@ -321,6 +344,28 @@ test("outputSeq is per execution and strictly increasing by one", async () => {
   expect(await isPending(waiting)).toBe(true);
   unsafeTestOnlyIngestOutputFrame(client, WRITER_A, new Uint8Array([3]));
   expect(frameOf(await waiting).outputSeq).toBe(3);
+
+  // DEC-20260929-02 B2: ingested bytes are copied on ingest, so the delivered
+  // frame's bytes is not the array the caller passed in, and rewriting a
+  // delivered frame changes nothing on another client that ingested the same array.
+  const source = new Uint8Array([1, 2, 3]);
+  const twin = createInProcessBrokerClient(broker, FOUNDER_PRINCIPAL);
+  unsafeTestOnlyIngestOutputFrame(client, WRITER_B, source);
+  unsafeTestOnlyIngestOutputFrame(twin, WRITER_B, source);
+  source[0] = 99;
+  const copied = frameOf(await iteratorB.next());
+  expect([...copied.bytes]).toEqual([1, 2, 3]);
+  expect(copied.bytes).not.toBe(source);
+  attempt(() => {
+    copied.bytes[1] = 77;
+    (copied as { outputSeq: number }).outputSeq = 500;
+    (copied as { executionId: string }).executionId = "exec-forged";
+  });
+  expect([...source]).toEqual([99, 2, 3]);
+  const twinFrame = frameOf(await twin.output(WRITER_B)[Symbol.asyncIterator]().next());
+  expect([...twinFrame.bytes]).toEqual([1, 2, 3]);
+  expect([twinFrame.outputSeq, twinFrame.executionId]).toEqual([1, WRITER_B]);
+  await twin.close();
 
   // DEC-20260929-01 B1 item 5: the barrel exports the factory and the two
   // types, never the test-only ingest helper. Tests import it from the module.
@@ -354,8 +399,10 @@ test("close releases only this client and does not terminate the session", async
   const otherClientNext = clientB.output(WRITER_A)[Symbol.asyncIterator]().next();
   expect(await isPending(pendingNext)).toBe(true);
   expect(await isPending(returnedNext)).toBe(true);
-  expect((await returnedOutput.return?.())?.done).toBe(true);
-  expect((await returnedNext).done).toBe(true);
+  const returnResult = await returnedOutput.return?.();
+  expect(returnResult?.done).toBe(true);
+  const returnedSettled = await returnedNext;
+  expect(returnedSettled.done).toBe(true);
 
   await clientA.close();
 
@@ -363,9 +410,35 @@ test("close releases only this client and does not terminate the session", async
   const iterator = clientA.snapshots()[Symbol.asyncIterator]();
   const result = await iterator.next();
   expect(result.done).toBe(true);
-  expect((await pendingNext).done).toBe(true);
+  const settledByClose = await pendingNext;
+  expect(settledByClose.done).toBe(true);
   expect((await openSnapshots.next()).done).toBe(true);
-  expect((await clientA.output(WRITER_A)[Symbol.asyncIterator]().next()).done).toBe(true);
+  const doneFromNext = await clientA.output(WRITER_A)[Symbol.asyncIterator]().next();
+  expect(doneFromNext.done).toBe(true);
+
+  // DEC-20260929-02 B3: after close(), getSnapshot() still resolves a stamped
+  // snapshot, now with connected false, and the per-client counter continues
+  // (two snapshots were delivered before the close).
+  const afterClose = await clientA.getSnapshot();
+  expect(afterClose.connected).toBe(false);
+  expect(afterClose.snapshotSeq).toBe(3);
+  expect((await clientA.getSnapshot()).snapshotSeq).toBe(4);
+
+  // DEC-20260929-02 B2: every done result is fresh for its delivery. Rewriting
+  // each one that was handed out (from next(), from return() and from the
+  // settlement of waiters in close()) changes no later iterator on this client
+  // and none on another client.
+  for (const handed of [returnResult, returnedSettled, settledByClose, doneFromNext]) {
+    attempt(() => {
+      const target = handed as { done: boolean; value: unknown };
+      target.done = false;
+      target.value = "corrupt";
+    });
+  }
+  const later = await clientA.output(WRITER_A)[Symbol.asyncIterator]().next();
+  expect([later.done, later.value]).toEqual([true, undefined]);
+  const spare = await clientB.output(WRITER_B)[Symbol.asyncIterator]().return?.();
+  expect([spare?.done, spare?.value]).toEqual([true, undefined]);
 
   // Releasing clientA releases only clientA: clientB's pending output keeps waiting.
   expect(await isPending(otherClientNext)).toBe(true);
@@ -413,7 +486,8 @@ test("close releases only this client and does not terminate the session", async
   expect(types).not.toContain("session_closed");
 
   await clientB.close();
-  expect((await otherClientNext).done).toBe(true);
+  const settledOther = await otherClientNext;
+  expect([settledOther.done, settledOther.value]).toEqual([true, undefined]);
 });
 
 // ─── 5 ───
@@ -435,6 +509,40 @@ test("a command carrying a foreign sessionId fails with session_mismatch", async
   if (!result.ok) {
     expect(result.error).toBe("session_mismatch");
   }
+
+  // DEC-20260929-02 B2: BrokerResult objects, publish() results included, are
+  // fresh for every call. Rewriting one changes no later result on this client
+  // and none on another client.
+  const expected = structuredClone(result);
+  const rival = createInProcessBrokerClient(broker, { kind: "execution", executionId: WRITER_A });
+  attempt(() => {
+    const target = result as { ok: boolean; error: string; detail: string };
+    target.ok = true;
+    target.error = "invariant_failure";
+    target.detail = "forged";
+  });
+  expect(await client.request(command)).toEqual(expected);
+  expect(await rival.request(command)).toEqual(expected);
+  const founderClient = createInProcessBrokerClient(broker, FOUNDER_PRINCIPAL);
+  const accepted = await founderClient.request(PAUSE_COMMAND);
+  const acceptedCopy = structuredClone(accepted);
+  expect(acceptedCopy.ok).toBe(true);
+  attempt(() => {
+    (accepted as { acceptedSnapshotSeq: number }).acceptedSnapshotSeq = 999;
+    (accepted as { commandId: string }).commandId = "forged";
+  });
+  expect(await founderClient.request(PAUSE_COMMAND)).toEqual(acceptedCopy);
+  const event = { event_id: "evt-publish-22" } as never;
+  const published = await founderClient.publish(event);
+  const publishedCopy = structuredClone(published);
+  expect(publishedCopy.commandId).toBe("evt-publish-22");
+  attempt(() => {
+    (published as { error: string }).error = "forged";
+    (published as { detail: string }).detail = "forged";
+  });
+  expect(await rival.publish(event)).toEqual(publishedCopy);
+  await rival.close();
+  await founderClient.close();
 
   await client.close();
 });
