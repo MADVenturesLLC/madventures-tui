@@ -172,14 +172,16 @@ export class RuntimeBroker {
    * the D10-R1 SnapshotProjectionInput built from this broker's own
    * authoritative in-memory state and the complete durable ledger chain
    * starting at sequence 1 (DEC-20260926-01 B3). Mutates nothing: `state` and
-   * `provenance` are read, and the ledger is read fresh via `readAfter(0)` so
-   * the caller always receives the full chain, never a cached suffix.
+   * `provenance` are copied, so no returned value is an object this broker
+   * later reads (DEC-20260929-01 B1 item 2), and the ledger is read fresh via
+   * `readAfter(0)` so the caller always receives the full chain, never a cached
+   * suffix.
    */
   snapshotProjectionInput(): SnapshotProjectionInput {
     return {
-      lifecycle: this.state,
+      lifecycle: structuredClone(this.state),
       ledgerRows: this.deps.ledger.readAfter(0),
-      provenance: this.deps.provenance,
+      provenance: structuredClone(this.deps.provenance),
     };
   }
 

@@ -49,9 +49,11 @@ export type {
 } from "./client";
 
 // Phase 3A M10 Task 22: the in-process BrokerClient (specification sections
-// 9.3-9.4; plan Task 22; Founder Decision DEC-20260926-01). The broker
-// authority this client is bound to is deliberately NOT exported here or
-// from ./in-process-client; that authority's own module remains the single
-// place it is declared and exported.
-export { createInProcessBrokerClient, unsafeTestOnlyIngestOutputFrame } from "./in-process-client";
+// 9.3-9.4; plan Task 22; Founder Decisions DEC-20260926-01 and
+// DEC-20260929-01 B1 item 5). The broker authority this client is bound to is
+// deliberately NOT exported here or from ./in-process-client; that authority's
+// own module remains the single place it is declared and exported. The
+// test-only output-ingest helper is deliberately NOT exported here either:
+// tests import it from ./in-process-client.
+export { createInProcessBrokerClient } from "./in-process-client";
 export type { InProcessBrokerClient, StampedBrokerSnapshot } from "./in-process-client";
