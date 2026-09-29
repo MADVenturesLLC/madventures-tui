@@ -1,6 +1,6 @@
 FOUNDER-ACT-20260929-TASK22-CORRECTION-A2: Task 22 second re-review outcome, B3 clarification and third review
 
-> **Status:** DRAFT, NOT ISSUED. It becomes an act only when the Founder signs Part H and it is filed on `main` with Status ISSUED.
+> **Status:** ISSUED
 > **Repository:** `MADVenturesLLC/madventures-tui`
 > **Pull request:** #102, branch `build/m10-task22-r1`
 > **Reviewed head (unchanged by this act):** `c6777cb51aa5cdb17ac7ff751484c463b0111738`
@@ -97,8 +97,8 @@ G1. Items 2 and 6 of the two reviews are AMBIGUOUS because of the packet. This a
 
 Signed:
 
-— ______________________
+— Michael Daley
 
-Date: ______________
+Date: 2026-09-29
 
 Actor-Id: founder
