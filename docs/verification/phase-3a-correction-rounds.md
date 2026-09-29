@@ -336,8 +336,14 @@ below is reconstructed beyond what the cited records state.
 ## Round 1 (M9)
 
 - **Verdict:** FAIL (STATIC), 2026-09-24 17:13 UTC.
-- **Verdict target:** the M9 code on `main` (Tasks 20 and 21). Neither `DEC-20260924-05` nor
-  `DEC-20260925-01` records the reviewed SHA, and none is supplied here.
+- **Verdict target:** `f513c7637a825b55354c93b8c69ceac62a6d4c13`, the M9 code on `main`
+  (Tasks 20 and 21).
+  - This is inferred, not recorded: neither `DEC-20260924-05` nor `DEC-20260925-01` names the
+    reviewed SHA.
+  - Basis: `main` was `f513c7637a825b55354c93b8c69ceac62a6d4c13` from its merge at
+    2026-09-24T11:29:54Z until `1f012be616d430cb95df6c74f6f478559fd65208` merged at
+    2026-09-25T09:24:47Z. That window contains the review time, 2026-09-24 17:13 UTC.
+    `DEC-20260924-05`, which acts on the review's findings, is bound to the same base.
 - **Reviewer:** independent static M9 review (Codex), per `DEC-20260924-05` A1.
 - **Findings:** F1–F4. F1, F2 and F4 were missing legality-test coverage; F3 was the plan's Task 20
   test count.
