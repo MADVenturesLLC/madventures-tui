@@ -375,3 +375,18 @@ below is reconstructed beyond what the cited records state.
   that identifies a substantive defect is round 3. That includes the re-review under
   FOUNDER-ACT-20260929-TASK22-CORRECTION Part E, and it requires reassignment of the implementer
   before any further correction.
+
+## Accounting notes (per plan §11.3)
+
+- **A stop-time finding on `84afef0a89bf55fce554ce438126ddc8bce65c32` is recorded and not counted.**
+  - **Date of the finding:** 2026-09-29. Recorded late, on 2026-09-29, when the act that rules on it
+    was filed. `DEC-20260929-01` B4 is the same kind of late entry.
+  - **What:** a Codex stop-time check, run inside the builder session after the push of
+    `84afef0a89bf55fce554ce438126ddc8bce65c32`, found that `ITERATION_DONE` in
+    `packages/broker/src/in-process-client.ts` is one shared, unfrozen module-scope object handed to
+    callers.
+  - **Ruling:** not counted as a plan §11.3 verdict, by FOUNDER-ACT-20260929-TASK22-CORRECTION-A1 B4
+    (`docs/decisions/DEC-20260929-02-task22-correction-a1.md`). It came from an in-session check on
+    the builder's own work, not from an independent review. Rubric milestone 7 stays at **2** of 2.
+    The next independent verdict on milestone-7 work that identifies a substantive defect is round 3,
+    which requires reassignment of the implementer.
