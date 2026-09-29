@@ -319,3 +319,53 @@ Task 42's plan file list (plan §5, lines 2070–2077) omits `packages/pty-host/
 **Verification at the round-12 head:** supervisor suite 14/14 (incl. the new round-12 regression); combined `bun test packages/pty-host packages/broker` 145 pass / 0 fail × 3 consecutive runs (144 + the new regression); `bun run typecheck` exit 0. Scope: three files — two code files (`packages/broker/src/pty-host-supervisor.ts`, `packages/broker/test/pty-host-supervisor.test.ts`) plus this log. Accepted residuals unchanged: the one-syscall adjacent hash→spawn TOCTOU boundary, the unread host stderr pipe, and Task 44 environment/dead-host escalation scope. The round-11 Tier-2 duplicate-comment advisory stands accepted and unmodified. No thread replies/resolutions, no push, no merge, no review dismissals, no Task 44 work.
 
 **Next steps:** fresh Tier-2 review at the round-12 head BEFORE any push (prior verdicts never carry). Push, CodeRabbit re-review, thread resolution, and merge authorization at exact SHA each require separate explicit Founder authorization.
+
+---
+
+# Phase 3A rubric milestone 7 (M9, M10) — Correction-Round Record
+
+**Plan milestones:** M9 (Tasks 20–21) and M10 (Tasks 21b–25)
+**Rubric §7.2 milestone:** 7 (plan §4 maps both M9 and M10 to it)
+**Authority:** plan §11.3, and FOUNDER-ACT-20260929-TASK22-CORRECTION
+(`docs/decisions/DEC-20260929-01-task22-correction-authorization.md`), B4.
+
+**Recorded late.** Plan §11.3 requires each verdict to be recorded when it occurs. Neither verdict
+below was. Both are recorded here on 2026-09-29, when the act that counts them was filed. Nothing
+below is reconstructed beyond what the cited records state.
+
+## Round 1 (M9)
+
+- **Verdict:** FAIL (STATIC), 2026-09-24 17:13 UTC.
+- **Verdict target:** the M9 code on `main` (Tasks 20 and 21). Neither `DEC-20260924-05` nor
+  `DEC-20260925-01` records the reviewed SHA, and none is supplied here.
+- **Reviewer:** independent static M9 review (Codex), per `DEC-20260924-05` A1.
+- **Findings:** F1–F4. F1, F2 and F4 were missing legality-test coverage; F3 was the plan's Task 20
+  test count.
+- **Resolution:**
+  - F1, F2 and F4 were closed with tests only under FOUNDER-ACT-20260924-M9-HARDEN, PR #99, merged
+    at `1f012be616d430cb95df6c74f6f478559fd65208`. Codex's re-review of head
+    `5d8b2ea9dbcabf114183c1181931f29821a8a84a` returned PASS (STATIC).
+  - F3 was closed by `DEC-20260925-01`.
+- **Counted by:** FOUNDER-ACT-20260929-TASK22-CORRECTION B4. All findings in one verdict are one
+  round.
+
+## Round 2 (M10, Task 22)
+
+- **Verdict:** FAIL, recorded 2026-09-28T11:26:00Z in PR #102 comment `5868915240`.
+- **Verdict target:** `ae1cb8fc66901717a47285a0756221479ec97826`
+- **Reviewer:** independent non-authoring Codex review under `DEC-20260926-01` B5.
+- **Findings:** the five in FOUNDER-ACT-20260929-TASK22-CORRECTION A1:
+  - the B1 stamped-type boundary;
+  - the B4 no-new-authority boundary;
+  - the immutable principal;
+  - closure isolation (partial);
+  - sequence refusal.
+- **Resolution:** pending, under FOUNDER-ACT-20260929-TASK22-CORRECTION.
+
+## Current count
+
+- **Rubric milestone 7:** **2** of 2.
+- Plan §11.3 requires reassignment at more than two rounds. The next verdict on milestone-7 work
+  that identifies a substantive defect is round 3. That includes the re-review under
+  FOUNDER-ACT-20260929-TASK22-CORRECTION Part E, and it requires reassignment of the implementer
+  before any further correction.
