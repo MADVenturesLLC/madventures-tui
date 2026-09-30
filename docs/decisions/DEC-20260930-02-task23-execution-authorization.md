@@ -41,7 +41,7 @@ B3. **Reason code follows the stream.** Every `kind` on stream `output` interrup
 
 B4. **The interrupt call.** `interrupt(reason, detail, "high", incidentId, null, null)`. `detail` names the stream, the kind, the last accepted sequence and the offered sequence, and never includes frame bytes. `sourceEventId` and `reportedBy` are null because the client detected the violation and no execution reported it.
 
-`incidentId` is `incident-` followed by `crypto.randomUUID()`, created fresh for each violation. It needs no shared counter and no second authority. Tests assert the value is a non-empty string that is the same on the `session_interrupted`, `session_closing` and `session_closed` rows, and never assert the value itself.
+`incidentId` is `incident-` followed by `crypto.randomUUID()`, created fresh for each violation. It needs no shared counter and no second authority. Tests assert the value is a non-empty string that is the same on the `session_interrupted`, `fencing_token_invalidated`, `session_closing` and `session_closed` rows, and never assert the value itself.
 
 B5. **Order and delivery.** On a violation the client calls `interrupt` first, awaits it, then rejects with `SequenceInvariantError`. The offending frame is never queued, never delivered to a pending `next()`, and never becomes the last accepted sequence. The Task 22 production paths (`getSnapshot()`, `snapshots()`) feed the same check with the client's own counter, which cannot violate it, and must not change any observable timing or result in the five Task 22 tests.
 
@@ -89,7 +89,7 @@ D1. **Before the first edit,** re-fetch and stop and report unless all of these 
 
 D2. **Baseline before any edit,** recorded verbatim: `bunx tsc --noEmit`, `bun test packages/broker/test/in-process-client.test.ts` and `bun test packages/broker`. Expected: `tsc` exits 0, 5 passing in the focused file, and the broker suite as it stands on `main`. The builder reports any difference from `257 pass`, `0 fail`, `14 files`.
 
-D3. **RED proof.** Write the four tests and the two helpers' call sites first. Run the focused file against the unmodified sources. Record each failure verbatim. The plan expects the gap to be delivered unchanged and no interruption recorded. For any test that cannot fail on the old code, say which and why.
+D3. **RED proof.** Write the four tests and the two helpers' call sites first. Run the focused file against the unmodified sources. Record each failure verbatim. The plan expects the gap to be delivered unchanged and no interruption recorded. For any test that cannot fail on the old code, say which and why. Import the two new helpers through a namespace import and call them as properties of it, so that a helper missing from the unmodified sources fails the four new tests and does not stop the file from loading. A named import of a missing export makes Bun fail the whole file with a `SyntaxError` before any test runs. Report which import form the RED proof used.
 
 D4. **After implementation:**
 
@@ -109,7 +109,7 @@ D5. **What the four tests assert.** Each reads the durable ledger rows through `
 - Tests 1, 2 and 4: a `session_interrupted` row exists whose `reason_code` is the B3 code, followed by `fencing_token_invalidated`, `session_closing` and `session_closed`; the rejection is a `SequenceInvariantError` with the expected `kind` and `stream`; a pending `next()` on the same execution stays pending and receives no frame.
 - Test 3: an offered `outputSeq` equal to the last accepted one is rejected as `duplicate`, is not dropped without a trace, and produces the interruption row.
 - The test for a gap also offers a first frame with `outputSeq` other than 1.
-- Every test also asserts the incident id is identical across the three rows that carry it.
+- Every test also asserts the incident id is identical across the four rows that carry it.
 
 D6. The PR description gets a table that maps each of B1 to B10 to the assertion or check that pins it and to the commit SHA.
 
