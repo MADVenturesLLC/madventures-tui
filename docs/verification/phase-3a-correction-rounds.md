@@ -415,11 +415,19 @@ below is reconstructed beyond what the cited records state.
 
 Round 2's resolution, recorded above as pending, is now closed:
 
-- The five findings were corrected on PR #102 by `84afef0a89bf55fce554ce438126ddc8bce65c32` under
-  FOUNDER-ACT-20260929-TASK22-CORRECTION and by `c6777cb51aa5cdb17ac7ff751484c463b0111738` under
-  FOUNDER-ACT-20260929-TASK22-CORRECTION-A1.
-- The Part E PASS above confirmed them closed at `c6777cb51aa5cdb17ac7ff751484c463b0111738`, with
-  Copilot's three threads (merge authorization, item 4).
+- Findings 1 to 4 are Task 22 defects (`DEC-20260929-01` B1). They were corrected on PR #102 by
+  `84afef0a89bf55fce554ce438126ddc8bce65c32` under FOUNDER-ACT-20260929-TASK22-CORRECTION.
+- Finding 5 was not corrected in code. The first review passed foreign-session refusal and failed
+  the absence of duplicate and out-of-order refusal. `DEC-20260929-01` B2 rules that Task 22 owns
+  only sequence stamping and foreign-session refusal, and that duplicate, regression and gap
+  handling belongs to plan Task 23. No code was added for it.
+- `c6777cb51aa5cdb17ac7ff751484c463b0111738` corrected a further defect that is not one of the five:
+  the shared completion result found by the stop-time check, under
+  FOUNDER-ACT-20260929-TASK22-CORRECTION-A1 (`DEC-20260929-02` A2 and B2). It is not counted; see
+  the accounting note above.
+- The Part E PASS above confirmed findings 1 to 4 closed, and finding 5 satisfied as B2 reads it, at
+  `c6777cb51aa5cdb17ac7ff751484c463b0111738`, with Copilot's three threads (merge authorization,
+  item 4).
 - PR #102 merged to `main` at `84f247c61116a47e5c575c963002f245465063b5`, 2026-09-30T01:02:33Z,
   under the Founder's authorization naming head `c6777cb51aa5cdb17ac7ff751484c463b0111738`.
 
