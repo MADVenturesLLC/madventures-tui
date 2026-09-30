@@ -438,3 +438,34 @@ Round 2's resolution, recorded above as pending, is now closed:
   review stays open for Tasks 23 to 25.
 - The next independent verdict on milestone-7 work that identifies a substantive defect is round 3,
   and it requires reassignment of the implementer before any further correction.
+
+## Two earlier reviews of Task 22 (not rounds)
+
+- **Recorded:** 2026-09-30, under FOUNDER-ACT-20260930-TASK22-B3-CLARIFICATION A2 to A4 and B1
+  (`docs/decisions/DEC-20260930-01-task22-b3-clarification.md`). Recorded late: neither verdict was
+  posted on PR #102 before the merge. The act states that both were returned before the review in
+  comment `5901859473`. It does not record the time either was returned.
+- **Verdict target:** `c6777cb51aa5cdb17ac7ff751484c463b0111738`, the head of PR #102 merged at
+  `84f247c61116a47e5c575c963002f245465063b5`. This is the same head as the Part E re-review above.
+- **Reviewers:** both returned FAIL, from an earlier packet.
+  - Reviewer id `codex`. SHA-256 of its text:
+    `9947b7c453ca0a4048508424b947e0d6e230e066dd01cab4db467593e6258da3`.
+  - Reviewer id `chatgpt-5.6-sol`. SHA-256 of its text:
+    `13f060b6f216938c5ae95acad64b38b38a5dbca991f176b12de706b0e21090e1`.
+- **Finding:** item 4, in both. The output iterator's `return()` ends that iterator before the client
+  closes. Both read `DEC-20260929-01` B3, "it ends only when this client closes", literally. Both
+  passed items 1, 3 and 5. Items 2 and 6 were AMBIGUOUS in both.
+- **Packet:** the earlier packet did not conform. It omitted `DEC-20260929-02`,
+  `packages/broker/src/snapshot.ts` and the ledger source that defines `Ledger.readAfter()`, contrary
+  to `DEC-20260929-02` E1 (act A3).
+- **Counted:** neither. They are not Part E verdicts. They were returned on a packet that did not
+  satisfy `DEC-20260929-02` E1, so they are recorded as reviews of that head and are not rounds (act
+  B1). Rubric milestone 7 stays at **2** of 2, consistent with the entries above.
+- **Ruling:** `DEC-20260929-01` B3 is clarified (act B2). A consumer's own `return()` ends that
+  iterator only. The act authorizes no code change (act C1). It does not decide the AMBIGUOUS
+  findings on items 2 and 6 (act F1).
+- **Correction to the merge authorization:** item 3 of the merge authorization on PR #102 (comment
+  `5901996075`) concerned the two passes in comment `5901859473`. It did not address these two
+  verdicts (act B4).
+- **Reference:** FOUNDER-ACT-20260930-TASK22-B3-CLARIFICATION
+  (`docs/decisions/DEC-20260930-01-task22-b3-clarification.md`).
