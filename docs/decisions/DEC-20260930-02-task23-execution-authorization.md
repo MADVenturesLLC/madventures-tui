@@ -33,7 +33,7 @@ B1. **Two validators, no new state elsewhere.** `in-process-client.ts` keeps, in
 - offered is above last plus one: `gap`;
 - offered equals last plus one: accepted, and it becomes the last accepted.
 
-The first output frame of an execution must carry `outputSeq` 1.
+The last accepted sequence is 0 before anything is accepted, on the snapshot stream and on each execution's output stream. The first offered sequence must therefore be 1: an offered 0 is a `duplicate` and a negative value is a `regression`.
 
 B2. **Session mismatch.** An output frame whose `sessionId` differs from `broker.snapshotProjectionInput().lifecycle.sessionId` raises `session_mismatch` on stream `output`. The snapshot stream raises `duplicate`, `regression` and `gap` only.
 
@@ -108,8 +108,9 @@ D5. **What the four tests assert.** Each reads the durable ledger rows through `
 
 - Tests 1, 2 and 4: a `session_interrupted` row exists whose `reason_code` is the B3 code, followed by `fencing_token_invalidated`, `session_closing` and `session_closed`; the rejection is a `SequenceInvariantError` with the expected `kind` and `stream`; a pending `next()` on the same execution stays pending and receives no frame.
 - Test 3: an offered `outputSeq` equal to the last accepted one is rejected as `duplicate`, is not dropped without a trace, and produces the interruption row.
-- The test for a gap also offers a first frame with `outputSeq` other than 1.
+- The test for a gap offers an `outputSeq` more than one above the last accepted one, for example 2 as the first frame of an execution.
 - Every test also asserts the incident id is identical across the four rows that carry it.
+- The four tests are the whole authorized test set (C2). The kinds that no named test exercises (output regression, snapshot duplicate, snapshot gap) are exercised only through the shared check in B1. A reviewer reports that as advisory. It is not a failure of review item 1.
 
 D6. The PR description gets a table that maps each of B1 to B10 to the assertion or check that pins it and to the commit SHA.
 
