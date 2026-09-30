@@ -390,3 +390,51 @@ below is reconstructed beyond what the cited records state.
     the builder's own work, not from an independent review. Rubric milestone 7 stays at **2** of 2.
     The next independent verdict on milestone-7 work that identifies a substantive defect is round 3,
     which requires reassignment of the implementer.
+
+## Part E re-review of Task 22 (not a round)
+
+- **Recorded:** 2026-09-30, from PR #102 comment `5901859473` (2026-09-30T00:48:16Z), under
+  `DEC-20260929-01` E3 and `DEC-20260929-02` E3. That comment records both passes; it does not
+  record the time each pass returned.
+- **Verdict target:** `c6777cb51aa5cdb17ac7ff751484c463b0111738`, the head of PR #102 after both
+  correction commits (`84afef0a89bf55fce554ce438126ddc8bce65c32` and
+  `c6777cb51aa5cdb17ac7ff751484c463b0111738`).
+- **Reviewer:** `chatgpt-5.6-sol`, independent and non-authoring. Static review: the reviewer
+  executed no repository code.
+- **Pass 1:** INCONCLUSIVE. Items 1 and 3 to 7 PASS. Item 2 AMBIGUOUS: the review packet omitted the
+  implementation of `Ledger.readAfter()`, so the reviewer could not establish that returned
+  `LedgerRow` objects are not aliased. The reviewer found no blocking or major defect.
+- **Pass 2, same head:** PASS on all seven items, after a supplement adding
+  `packages/ledger/src/ledger.ts` and the packet author's measurements. Advisory only
+  (`DEC-20260929-02` B5): `snapshots()` pacing.
+- **Counted:** neither pass. Neither identified a substantive defect, so neither is a round under
+  `DEC-20260929-01` B4 or `DEC-20260929-02` B4. The Founder's merge authorization on PR #102
+  (comment `5901996075`, item 3) states the same.
+
+## Round 2 resolution
+
+Round 2's resolution, recorded above as pending, is now closed:
+
+- Findings 1 to 4 are Task 22 defects (`DEC-20260929-01` B1). They were corrected on PR #102 by
+  `84afef0a89bf55fce554ce438126ddc8bce65c32` under FOUNDER-ACT-20260929-TASK22-CORRECTION.
+- Finding 5 was not corrected in code. The first review passed foreign-session refusal and failed
+  the absence of duplicate and out-of-order refusal. `DEC-20260929-01` B2 rules that Task 22 owns
+  only sequence stamping and foreign-session refusal, and that duplicate, regression and gap
+  handling belongs to plan Task 23. No code was added for it.
+- `c6777cb51aa5cdb17ac7ff751484c463b0111738` corrected a further defect that is not one of the five:
+  the shared completion result found by the stop-time check, under
+  FOUNDER-ACT-20260929-TASK22-CORRECTION-A1 (`DEC-20260929-02` A2 and B2). It is not counted; see
+  the accounting note above.
+- The Part E PASS above confirmed findings 1 to 4 closed, and finding 5 satisfied as B2 reads it, at
+  `c6777cb51aa5cdb17ac7ff751484c463b0111738`, with Copilot's three threads (merge authorization,
+  item 4).
+- PR #102 merged to `main` at `84f247c61116a47e5c575c963002f245465063b5`, 2026-09-30T01:02:33Z,
+  under the Founder's authorization naming head `c6777cb51aa5cdb17ac7ff751484c463b0111738`.
+
+## Count after Part E
+
+- **Rubric milestone 7:** still **2** of 2.
+- Task 22 is accepted at its M10 review checkpoint (merge authorization, item 6). The M10 milestone
+  review stays open for Tasks 23 to 25.
+- The next independent verdict on milestone-7 work that identifies a substantive defect is round 3,
+  and it requires reassignment of the implementer before any further correction.
