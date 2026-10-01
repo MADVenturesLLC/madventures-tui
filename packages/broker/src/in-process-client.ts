@@ -38,14 +38,20 @@
 // calls no RuntimeBroker mutator, and invokes no process; it is not a
 // production delivery API and is not exported from ./index.ts.
 //
-// Sequence invariants (plan Task 23; Founder Decision DEC-20260930-02 Part B):
-// one check per stream compares each offered sequence with the last accepted
-// one, which is 0 before anything is accepted. On a session mismatch,
-// duplicate, regression or gap the client calls RuntimeBroker.interrupt with
-// the stream's reason code, awaits it, and only then rejects with
+// Sequence invariants (plan Task 23; Founder Decisions DEC-20260930-02 Part B
+// and DEC-20261001-01 Parts B and C): one check per stream compares each
+// offered sequence with the last accepted one, which is 0 before anything is
+// accepted. The check and the queue-and-deliver step are synchronous; only
+// the interruption is asynchronous. On a session mismatch, duplicate,
+// regression or gap the client calls RuntimeBroker.interrupt with the
+// stream's reason code, awaits it, and only then rejects with
 // SequenceInvariantError; the offending frame is never queued, delivered or
 // accepted, and this client stays open. The snapshot counter and both output
-// seams feed the same check. The two Task 23 seams,
+// seams feed the same check. `unsafeTestOnlyIngestOutputFrame` stamps the
+// durable sessionId and the next outputSeq itself, so its frame cannot be
+// refused: it is synchronous from its call to its return, creates no promise,
+// and an exception raised while ingesting its frame reaches its caller as a
+// synchronous throw. The two Task 23 seams,
 // `unsafeTestOnlyIngestRawOutputFrame` and `unsafeTestOnlyOfferSnapshotSeq`,
 // follow the same WeakMap pattern and the same limits, except that a refused
 // offer reaches RuntimeBroker.interrupt as described.
@@ -154,6 +160,12 @@ interface SequenceViolation {
   readonly offered: number;
 }
 
+/** The interruption detail (DEC-20260930-02 B4): the stream, the kind and both sequences, never frame bytes. */
+function violationDetail(violation: SequenceViolation): string {
+  const { kind, stream, lastAccepted, offered } = violation;
+  return `${stream} sequence ${kind}: last accepted ${lastAccepted}, offered ${offered}`;
+}
+
 /**
  * The one check both streams run (DEC-20260930-02 B1): equal to the last
  * accepted sequence is a duplicate, below it a regression, and exactly one
@@ -203,14 +215,15 @@ export function createInProcessBrokerClient(
 
   /**
    * B3 to B6: interrupt the session with the stream's reason code, await it,
-   * then reject with a fresh SequenceInvariantError. The detail names the
-   * stream, the kind and both sequences, never frame bytes. If the
-   * interruption fails, that failure is the error's cause; there is no latch
-   * and no retry.
+   * then reject with a fresh SequenceInvariantError. This is the one
+   * asynchronous step (DEC-20261001-01 B4); the checks and the delivery never
+   * reach it. The detail names the stream, the kind and both sequences, never
+   * frame bytes. If the interruption fails, that failure is the error's cause;
+   * there is no latch and no retry.
    */
   async function raise(violation: SequenceViolation): Promise<never> {
-    const { kind, stream, lastAccepted, offered } = violation;
-    const detail = `${stream} sequence ${kind}: last accepted ${lastAccepted}, offered ${offered}`;
+    const { kind, stream } = violation;
+    const detail = violationDetail(violation);
     const reason = stream === "output" ? "output_sequence_invariant_failed" : "snapshot_sequence_invariant_failed";
     try {
       await broker.interrupt(reason, detail, "high", `incident-${crypto.randomUUID()}`, null, null);
@@ -242,14 +255,16 @@ export function createInProcessBrokerClient(
   }
 
   /**
-   * B1, B2 and B5 on the output stream; both output seams feed every frame
-   * through here. A frame of this session offering its execution's last
-   * accepted outputSeq plus one is queued and delivered, with its bytes copied
-   * on ingest. Any other frame interrupts the session and is never queued,
-   * delivered or accepted. The frame is read once, so nothing it holds can
-   * change between the check and the delivery.
+   * B1, B2 and B5 on the output stream, synchronously (DEC-20261001-01 B4):
+   * both output seams feed every frame through here, and nothing here creates
+   * a promise. The frame is read once, so nothing it holds can change between
+   * the check and the delivery. A frame of this session offering its
+   * execution's last accepted outputSeq plus one is accepted, queued and
+   * delivered before this returns, with its bytes copied on ingest, and null
+   * is returned. Any other frame is returned as its violation: it is never
+   * queued, delivered or accepted, and the caller decides how it is raised.
    */
-  async function ingestOutputFrame(frame: OutputFrame): Promise<void> {
+  function ingestOutputFrame(frame: OutputFrame): SequenceViolation | null {
     const { sessionId, executionId, outputSeq, bytes } = frame;
     const lastAccepted = outputSeqs.get(executionId) ?? 0;
     const kind =
@@ -257,7 +272,7 @@ export function createInProcessBrokerClient(
         ? sequenceViolation(lastAccepted, outputSeq)
         : "session_mismatch";
     if (kind !== null) {
-      return raise({ kind, stream: "output", lastAccepted, offered: outputSeq });
+      return { kind, stream: "output", lastAccepted, offered: outputSeq };
     }
     outputSeqs.set(executionId, outputSeq);
     const queue = outputQueues.get(executionId) ?? [];
@@ -270,6 +285,7 @@ export function createInProcessBrokerClient(
         waiter.settle({ done: false, value: delivered });
       }
     }
+    return null;
   }
 
   async function getSnapshot(): Promise<StampedBrokerSnapshot> {
@@ -372,16 +388,34 @@ export function createInProcessBrokerClient(
       if (sessionId === null) {
         throw new Error("in-process-client test ingest: no durable sessionId is available");
       }
-      // This seam stamps the durable sessionId and the next outputSeq itself, so
-      // its frame always passes the shared check and is queued and delivered
-      // before this returns (DEC-20260930-02 B7).
-      void ingestOutputFrame({ sessionId, executionId, outputSeq: (outputSeqs.get(executionId) ?? 0) + 1, bytes });
+      // This seam stamps the durable sessionId and the next outputSeq itself,
+      // so the shared check accepts its frame, which is queued and delivered
+      // before this returns (DEC-20260930-02 B7). It is synchronous from its
+      // call to its return and creates no promise: an exception raised while
+      // ingesting the frame propagates to the caller as a synchronous throw
+      // (DEC-20261001-01 B3). A refusal is unreachable by construction; were
+      // the check to report one, it is thrown as a plain Error, synchronously,
+      // with no interrupt and no promise (DEC-20261001-01 B4 d).
+      const violation = ingestOutputFrame({
+        sessionId,
+        executionId,
+        outputSeq: (outputSeqs.get(executionId) ?? 0) + 1,
+        bytes,
+      });
+      if (violation !== null) {
+        throw new Error(`in-process-client test ingest: the stamped frame was refused (${violationDetail(violation)})`);
+      }
     },
     async ingestRaw(frame) {
       if (closed) {
         throw new Error("in-process-client test ingest: this client is closed");
       }
-      return ingestOutputFrame(frame);
+      // B5: the check and the delivery are synchronous; a refused frame
+      // interrupts the session, awaited, and only then rejects.
+      const violation = ingestOutputFrame(frame);
+      if (violation !== null) {
+        return raise(violation);
+      }
     },
     async offerSnapshotSeq(candidate) {
       const violation = admitSnapshotSeq(candidate);
@@ -404,7 +438,11 @@ function seamsOf(client: InProcessBrokerClient): TestSeams {
 
 /**
  * Test-only, non-authority helper (DEC-20260926-01 B4): insert one supplied
- * output frame into one client's own output buffer. Writes no ledger row,
+ * output frame into one client's own output buffer. Synchronous from its call
+ * to its return (DEC-20261001-01 B3): it stamps the durable sessionId and the
+ * next outputSeq itself, its frame is queued and delivered before it returns,
+ * it creates no promise, and an exception raised while ingesting its frame
+ * propagates to the caller as a synchronous throw. Writes no ledger row,
  * calls no RuntimeBroker mutator, invokes no process, and is never a
  * production delivery API. Exported from this module only, never from ./index.ts
  * (DEC-20260929-01 B1 item 5).

@@ -710,13 +710,40 @@ test("a duplicate output sequence is not silently dropped", async () => {
 
   // B6 and B7: the client is still open. The existing helper stamps outputSeq
   // itself, its frame passes the same check, and the pending next() receives it.
-  unsafeTestOnlyIngestOutputFrame(client, WRITER_A, new Uint8Array([2]));
+  // DEC-20261001-01 B3 and B5: the helper is synchronous from its call to its
+  // return. It returns undefined, not a promise.
+  const returned: unknown = unsafeTestOnlyIngestOutputFrame(client, WRITER_A, new Uint8Array([2]));
+  expect(returned).toBeUndefined();
+  expect(returned).not.toBeInstanceOf(Promise);
   expect(frameOf(await pending)).toEqual({
     sessionId: SESSION_ID,
     executionId: WRITER_A,
     outputSeq: 2,
     bytes: new Uint8Array([2]),
   });
+
+  // DEC-20261001-01 B5: with no next() waiting, the frame is already queued
+  // when the helper returns. A next() called synchronously afterwards is
+  // settled from the queue, ahead of an already resolved marker, not by a
+  // later waiter.
+  unsafeTestOnlyIngestOutputFrame(client, WRITER_A, new Uint8Array([3]));
+  const queued = iterator.next();
+  expect(await Promise.race([queued, Promise.resolve("not queued")])).toEqual({
+    done: false,
+    value: { sessionId: SESSION_ID, executionId: WRITER_A, outputSeq: 3, bytes: new Uint8Array([3]) },
+  });
+
+  // DEC-20261001-01 B3 and B5: an exception raised while ingesting the helper's
+  // frame reaches the caller as a synchronous throw. A negative length makes
+  // `new Uint8Array(bytes)` throw a RangeError, observed with a synchronous
+  // toThrow and not an awaited rejection. The partial state this leaves is
+  // not asserted (B3).
+  expect(() => unsafeTestOnlyIngestOutputFrame(client, WRITER_A, -1 as unknown as Uint8Array)).toThrow(RangeError);
+  // B5: the same call leaves no unhandled rejection. bun test fails the running
+  // test on any unhandled rejection (a process or globalThis listener never
+  // sees one here), so this settle window lets a discarded promise surface
+  // before the test goes on; reaching close() is the check.
+  await Bun.sleep(25);
 
   await client.close();
 });
