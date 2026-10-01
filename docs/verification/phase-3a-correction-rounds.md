@@ -469,3 +469,27 @@ Round 2's resolution, recorded above as pending, is now closed:
   verdicts (act B4).
 - **Reference:** FOUNDER-ACT-20260930-TASK22-B3-CLARIFICATION
   (`docs/decisions/DEC-20260930-01-task22-b3-clarification.md`).
+
+## Task 23 Part E review (round 3)
+
+- **Recorded:** 2026-10-01, under FOUNDER-ACT-20261001-TASK23-CORRECTION
+  (`docs/decisions/DEC-20261001-01-task23-correction-authorization.md`) B1 and G1.
+- **Verdict target:** `0e5a930d9ba02522030356264ec4dfa6d727bf77`, the head of PR #108 (a draft), one
+  commit after the Task 23 binding base `ed853080a4bea377c2f5cf274c90f740ab1c9cac`.
+- **Reviewer:** `chatgpt-5.6-sol`, independent and non-authoring. Static review: the reviewer
+  executed nothing.
+- **Packet SHA-256:** `8da30e6decc2a4e4f79c89ff88638cc6ed1a9fb84d267ed4a7a2c1a02360ed02`.
+- **Verdict text SHA-256:** `d32d7d928f6f9267d62649f1456a04eb09431438006d54f974b1e430d573a3a8`, from
+  the Founder's saved copy.
+- **Result:** FAIL. Items 1, 2, 3, 5 and 6 returned PASS. Items 4 and 7 returned FAIL, on one
+  finding (Major M1): at that head, `unsafeTestOnlyIngestOutputFrame` reached an async ingest through
+  a discarded promise, so an exception raised while ingesting its frame no longer propagated
+  synchronously, against `DEC-20260930-02` B7. One advisory finding (A1): no named test exercised
+  output regression, snapshot duplicate or snapshot gap.
+- **Counted:** round 3 (act B1). The packet conformed (act A3). Items 4 and 7 count once. The
+  advisory finding is not a round. Rubric milestone 7 stands at **3**.
+- **Ruling:** the implementer is reassigned (act B2) to `session:claude-code/m10-task23-r2`. The act
+  authorizes one correction commit on PR #108 (act C1). A re-review follows (act Part F), and a
+  substantive finding there is round 4 (act F4).
+- **Not recorded here:** the verdict text itself. It is posted verbatim on PR #108 by a session the
+  Founder directs, after this pull request merges (act G2).
