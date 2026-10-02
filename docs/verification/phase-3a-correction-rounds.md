@@ -524,3 +524,35 @@ Round 2's resolution, recorded above as pending, is now closed:
   The verdict is not merge readiness, permission to leave draft, or merge authorization.
 - **Not recorded here:** the verdict text itself. It is posted verbatim on PR #108 by a session the
   Founder directs, after this pull request merges (act C2).
+
+## Task 23 merge (M10 checkpoint)
+
+- **Recorded:** 2026-10-02, under the Founder's merge authorization on PR #108 (comment
+  `5948449666`), item 8.
+- **Merged:** PR #108, at 2026-10-02T09:11:57Z, as merge commit
+  `67025b487dc5fcddd687d3313b3a384f9fd7313a`, parents `1249491169d47e19afc6fe3a09a81b8b7c6ee270`
+  and `f72e49e850eb38d882430c37b96bc834f19ab32d`. Method: merge commit, head pinned, no
+  caller-supplied message.
+- **Scope:** exactly `packages/broker/src/in-process-client.ts` and
+  `packages/broker/test/in-process-client.test.ts`, against the Task 23 binding base
+  `ed853080a4bea377c2f5cf274c90f740ab1c9cac`.
+- **Authorizations:** ready-for-review comments `5947977129` and `5948170077` (identical text,
+  posted twice); merge comment `5948449666`.
+- **Checks on the head at merge:** `Verify`, `Verify (macOS)` and `code-review` (run
+  `36984422939`, attempt 2) success.
+- **Reviews:** the Part E review at `0e5a930d9ba02522030356264ec4dfa6d727bf77` returned FAIL
+  (round 3, comment `5927922921`). The re-review at `f72e49e850eb38d882430c37b96bc834f19ab32d`
+  returned `PASS-WITH-ADVISORIES` (comment `5944288206`), accepted under `DEC-20261001-02`. No
+  round was added. Rubric milestone 7 stands at **3**.
+- **Carried, not fixed:** O1 (`outputSeqs.set` runs before the byte copy; a failed copy on the
+  test-only path leaves the last accepted `outputSeq` advanced). A later Founder act may rule on
+  it.
+- **Checkpoint:** Task 23 was accepted at its M10 review checkpoint. The M10 milestone review stays
+  open. This entry does not authorize Task 24, Task 25 or any later task.
+- **Post-merge verification:** observed on 2026-10-02, before this entry was written. The merge
+  commit's parents were exactly the two above. `git diff --name-only` from the first parent to the
+  merge commit listed exactly the two scope paths. `main` was at the merge commit itself, so no
+  path had changed on `main` after it. `git interpret-trailers --parse` on the merge commit showed
+  `Role-Id: builder`, `Actor-Id: session:claude-code/m10-task23-r2` and
+  `Execution-Surface: claude-code`. `.github/scripts/attribution-shape-check.sh main` on the merge
+  commit, with the script read from `main`, returned PASS, exit 0.
