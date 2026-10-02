@@ -3,6 +3,8 @@
 // 9.3-9.4; plan Task 22; Founder Decision DEC-20260926-01 Part D). Exactly
 // five named tests, run over a real bun:sqlite Ledger and a real
 // RuntimeBroker — no fake ledger, no wrapper, no callback, no seam.
+// Phase 3A M10 Task 23 (plan Task 23; Founder Decision DEC-20260930-02 Parts
+// B to D) appends four named tests for the sequence invariants, nine in all.
 
 import { expect, test } from "bun:test";
 import { mkdtempSync } from "node:fs";
@@ -12,6 +14,9 @@ import * as barrel from "../src/index";
 import type { InProcessBrokerClient as BarrelInProcessBrokerClient, StampedBrokerSnapshot as BarrelStampedBrokerSnapshot } from "../src/index";
 import { createInProcessBrokerClient, unsafeTestOnlyIngestOutputFrame } from "../src/in-process-client";
 import type { InProcessBrokerClient, StampedBrokerSnapshot } from "../src/in-process-client";
+// DEC-20260930-02 D3: the Task 23 helpers and error are read as properties of
+// a namespace import, so a missing export fails only the tests that use it.
+import * as inProcess from "../src/in-process-client";
 import { RuntimeBroker } from "../src/runtime-broker";
 import type { RuntimeBrokerDeps, RuntimeBrokerProvenance } from "../src/runtime-broker";
 import type { BrokerCommand, ClientPrincipal, OutputFrame } from "../src/client";
@@ -545,4 +550,235 @@ test("a command carrying a foreign sessionId fails with session_mismatch", async
   await founderClient.close();
 
   await client.close();
+});
+
+// ─── Helpers for the DEC-20260930-02 sequence-invariant tests ───
+
+/** The rejection a promise settles with; a promise that resolves fails the test. */
+async function rejectionOf(promise: Promise<unknown>): Promise<unknown> {
+  return promise.then(
+    () => {
+      throw new Error("expected a rejection, the promise resolved");
+    },
+    (error: unknown) => error,
+  );
+}
+
+function expectSequenceError(error: unknown, kind: string, stream: string): void {
+  expect(error).toBeInstanceOf(inProcess.SequenceInvariantError);
+  const typed = error as { name: unknown; kind: unknown; stream: unknown };
+  expect([typed.name, typed.kind, typed.stream]).toEqual(["SequenceInvariantError", kind, stream]);
+}
+
+/**
+ * DEC-20260930-02 D5, read durably through snapshotProjectionInput(): one
+ * session_interrupted row with the B3 reason code and the B4 payload, followed
+ * by fencing_token_invalidated, session_closing and session_closed, all four
+ * carrying the same incident id. The id's value is never asserted (B4).
+ */
+function expectInterruption(broker: RuntimeBroker, reasonCode: string, detail: string): void {
+  const events = broker
+    .snapshotProjectionInput()
+    .ledgerRows.map((row) => JSON.parse(row.event_json) as SessionLifecycleEventV1);
+  const tail = events.slice(events.findIndex((event) => event.event_type === "session_interrupted"));
+  expect(tail.map((event) => event.event_type)).toEqual([
+    "session_interrupted",
+    "fencing_token_invalidated",
+    "session_closing",
+    "session_closed",
+  ]);
+  expect(tail[0]?.reason_code).toBe(reasonCode);
+  expect(tail[0]?.payload).toEqual({
+    incident_id: expect.any(String),
+    reason: detail,
+    severity: "high",
+    source_event_id: null,
+    reported_by_execution_id: null,
+  });
+  const incidentIds = tail.map((event) => (event.payload as { incident_id: unknown }).incident_id);
+  expect(typeof incidentIds[0]).toBe("string");
+  expect(incidentIds[0]).not.toBe("");
+  expect(incidentIds).toEqual([incidentIds[0], incidentIds[0], incidentIds[0], incidentIds[0]]);
+}
+
+// ─── 6 ───
+
+test("an output sequence gap interrupts the session with output_sequence_invariant_failed", async () => {
+  const { broker } = await activeBroker();
+  const client = createInProcessBrokerClient(broker, FOUNDER_PRINCIPAL);
+  const pending = client.output(WRITER_A)[Symbol.asyncIterator]().next();
+
+  // DEC-20260930-02 D5: the first frame of an execution offers outputSeq 2, not 1.
+  const gap: OutputFrame = { sessionId: SESSION_ID, executionId: WRITER_A, outputSeq: 2, bytes: new Uint8Array([4, 2]) };
+  const error = await rejectionOf(inProcess.unsafeTestOnlyIngestRawOutputFrame(client, gap));
+
+  expectSequenceError(error, "gap", "output");
+  expectInterruption(broker, "output_sequence_invariant_failed", "output sequence gap: last accepted 0, offered 2");
+
+  // B5: the gap is not delivered to the pending next() and not queued for a later one.
+  expect(await isPending(pending)).toBe(true);
+  expect(await isPending(client.output(WRITER_A)[Symbol.asyncIterator]().next())).toBe(true);
+
+  // B5: the gap never became the last accepted outputSeq, so the same frame is
+  // a gap again, not a duplicate. The session is already closed, so the broker
+  // refuses the second interruption and appends no row.
+  expectSequenceError(await rejectionOf(inProcess.unsafeTestOnlyIngestRawOutputFrame(client, gap)), "gap", "output");
+  expect(eventTypesOf(broker).filter((type) => type === "session_interrupted")).toHaveLength(1);
+  expect(await isPending(pending)).toBe(true);
+
+  // B9: the error carries no reference to the frame's bytes or to the broker.
+  const reachable = reachableObjects(error as object);
+  expect(reachable.has(gap.bytes)).toBe(false);
+  expect(reachable.has(broker)).toBe(false);
+
+  // B6 and B10: the violation left this client open, and only close() ends the
+  // pending next(), which never received a frame.
+  await client.close();
+  const settled = await pending;
+  expect([settled.done, settled.value]).toEqual([true, undefined]);
+});
+
+// ─── 7 ───
+
+test("a snapshot sequence regression interrupts the session with snapshot_sequence_invariant_failed", async () => {
+  const { broker } = await activeBroker();
+  const client = createInProcessBrokerClient(broker, FOUNDER_PRINCIPAL);
+  // The snapshot stream has no execution; the pending next() is WRITER_A's output.
+  const pending = client.output(WRITER_A)[Symbol.asyncIterator]().next();
+
+  expect((await client.getSnapshot()).snapshotSeq).toBe(1);
+  expect((await client.getSnapshot()).snapshotSeq).toBe(2);
+  // B7: an accepted candidate delivers no snapshot and becomes the last accepted snapshotSeq.
+  expect(await inProcess.unsafeTestOnlyOfferSnapshotSeq(client, 3)).toBeUndefined();
+
+  const error = await rejectionOf(inProcess.unsafeTestOnlyOfferSnapshotSeq(client, 1));
+
+  expectSequenceError(error, "regression", "snapshot");
+  expectInterruption(
+    broker,
+    "snapshot_sequence_invariant_failed",
+    "snapshot sequence regression: last accepted 3, offered 1",
+  );
+  expect(await isPending(pending)).toBe(true);
+
+  // B5 and B6: the regression was not accepted, so the client's own counter
+  // continues from 3. The session has ended; this client is still connected.
+  const after = await client.getSnapshot();
+  expect([after.snapshotSeq, after.connected, after.phase]).toEqual([4, true, "closed"]);
+
+  await client.close();
+  const settled = await pending;
+  expect([settled.done, settled.value]).toEqual([true, undefined]);
+});
+
+// ─── 8 ───
+
+test("a duplicate output sequence is not silently dropped", async () => {
+  const { broker } = await activeBroker();
+  const client = createInProcessBrokerClient(broker, FOUNDER_PRINCIPAL);
+  const iterator = client.output(WRITER_A)[Symbol.asyncIterator]();
+
+  // B7: a valid raw frame is queued and delivered as the existing helper
+  // delivers one, with its bytes copied on ingest.
+  const first: OutputFrame = { sessionId: SESSION_ID, executionId: WRITER_A, outputSeq: 1, bytes: new Uint8Array([1]) };
+  expect(await inProcess.unsafeTestOnlyIngestRawOutputFrame(client, first)).toBeUndefined();
+  const delivered = frameOf(await iterator.next());
+  expect(delivered).toEqual(first);
+  expect(delivered).not.toBe(first);
+  expect(delivered.bytes).not.toBe(first.bytes);
+
+  const pending = iterator.next();
+  const duplicate: OutputFrame = { ...first, bytes: new Uint8Array([1]) };
+  const error = await rejectionOf(inProcess.unsafeTestOnlyIngestRawOutputFrame(client, duplicate));
+
+  expectSequenceError(error, "duplicate", "output");
+  expectInterruption(broker, "output_sequence_invariant_failed", "output sequence duplicate: last accepted 1, offered 1");
+  expect(await isPending(pending)).toBe(true);
+
+  // B6: no latch. The same duplicate offered again is refused again, in a
+  // fresh error. interrupt is called again, the closed session refuses it, and
+  // that refusal is the cause. No second interruption row is written.
+  attempt(() => {
+    (error as { kind: string }).kind = "gap";
+  });
+  const again = await rejectionOf(inProcess.unsafeTestOnlyIngestRawOutputFrame(client, duplicate));
+  expectSequenceError(again, "duplicate", "output");
+  expect(again).not.toBe(error);
+  expect((again as Error).cause).toBeInstanceOf(Error);
+  expect(eventTypesOf(broker).filter((type) => type === "session_interrupted")).toHaveLength(1);
+  expect(await isPending(pending)).toBe(true);
+
+  // B6 and B7: the client is still open. The existing helper stamps outputSeq
+  // itself, its frame passes the same check, and the pending next() receives it.
+  // DEC-20261001-01 B3 and B5: the helper is synchronous from its call to its
+  // return. It returns undefined, not a promise.
+  const returned: unknown = unsafeTestOnlyIngestOutputFrame(client, WRITER_A, new Uint8Array([2]));
+  expect(returned).toBeUndefined();
+  expect(returned).not.toBeInstanceOf(Promise);
+  expect(frameOf(await pending)).toEqual({
+    sessionId: SESSION_ID,
+    executionId: WRITER_A,
+    outputSeq: 2,
+    bytes: new Uint8Array([2]),
+  });
+
+  // DEC-20261001-01 B5: with no next() waiting, the frame is already queued
+  // when the helper returns. A next() called synchronously afterwards is
+  // settled from the queue, ahead of an already resolved marker, not by a
+  // later waiter.
+  unsafeTestOnlyIngestOutputFrame(client, WRITER_A, new Uint8Array([3]));
+  const queued = iterator.next();
+  expect(await Promise.race([queued, Promise.resolve("not queued")])).toEqual({
+    done: false,
+    value: { sessionId: SESSION_ID, executionId: WRITER_A, outputSeq: 3, bytes: new Uint8Array([3]) },
+  });
+
+  // DEC-20261001-01 B3 and B5: an exception raised while ingesting the helper's
+  // frame reaches the caller as a synchronous throw. A negative length makes
+  // `new Uint8Array(bytes)` throw a RangeError, observed with a synchronous
+  // toThrow and not an awaited rejection. The partial state this leaves is
+  // not asserted (B3).
+  expect(() => unsafeTestOnlyIngestOutputFrame(client, WRITER_A, -1 as unknown as Uint8Array)).toThrow(RangeError);
+  // B5: the same call leaves no unhandled rejection. bun test fails the running
+  // test on any unhandled rejection (a process or globalThis listener never
+  // sees one here), so this settle window lets a discarded promise surface
+  // before the test goes on; reaching close() is the check.
+  await Bun.sleep(25);
+
+  await client.close();
+});
+
+// ─── 9 ───
+
+test("an output frame carrying a foreign sessionId interrupts the session", async () => {
+  const { broker } = await activeBroker();
+  const client = createInProcessBrokerClient(broker, FOUNDER_PRINCIPAL);
+  const pending = client.output(WRITER_A)[Symbol.asyncIterator]().next();
+
+  // B2: outputSeq 1 is the next expected sequence, so only the sessionId is wrong.
+  const foreign: OutputFrame = {
+    sessionId: "ses-foreign-999",
+    executionId: WRITER_A,
+    outputSeq: 1,
+    bytes: new Uint8Array([9]),
+  };
+  const error = await rejectionOf(inProcess.unsafeTestOnlyIngestRawOutputFrame(client, foreign));
+
+  expectSequenceError(error, "session_mismatch", "output");
+  expectInterruption(
+    broker,
+    "output_sequence_invariant_failed",
+    "output sequence session_mismatch: last accepted 0, offered 1",
+  );
+  expect(await isPending(pending)).toBe(true);
+
+  // B5: the foreign frame never became the last accepted outputSeq, so a frame
+  // of this session offering 2 is a gap, and it is not delivered either.
+  const next: OutputFrame = { ...foreign, sessionId: SESSION_ID, outputSeq: 2 };
+  expectSequenceError(await rejectionOf(inProcess.unsafeTestOnlyIngestRawOutputFrame(client, next)), "gap", "output");
+  expect(await isPending(pending)).toBe(true);
+
+  await client.close();
+  const settled = await pending;
+  expect([settled.done, settled.value]).toEqual([true, undefined]);
 });
