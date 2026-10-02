@@ -493,3 +493,34 @@ Round 2's resolution, recorded above as pending, is now closed:
   substantive finding there is round 4 (act F4).
 - **Not recorded here:** the verdict text itself. It is posted verbatim on PR #108 by a session the
   Founder directs, after this pull request merges (act G2).
+
+## Task 23 re-review (correction round 3)
+
+- **Recorded:** 2026-10-01, under FOUNDER-ACT-20261001-TASK23-REREVIEW-ACCEPTANCE
+  (`docs/decisions/DEC-20261001-02-task23-rereview-acceptance.md`) B1 to B5 and C1.
+- **Verdict target:** `f72e49e850eb38d882430c37b96bc834f19ab32d`, the head of PR #108 (a draft), two
+  commits after the Task 23 binding base `ed853080a4bea377c2f5cf274c90f740ab1c9cac`. Its parent is
+  the correction base `0e5a930d9ba02522030356264ec4dfa6d727bf77`.
+- **Reviewer:** reviewer id `codex`, accepted by act B2 as satisfying `chatgpt-5.6-sol` in
+  `DEC-20261001-01` F1 and F3, for this verdict and this head only. Reviewer surface `codex`,
+  authoring surface `claude-code`. Independent and non-authoring.
+- **Evidence base (act B3):** a live, read-only review of the repository at the exact head. It
+  executed `bunx tsc --noEmit` (exit 0), the focused test file (9 pass, 0 fail),
+  `bun test packages/broker` (261 pass, 0 fail, 14 files), `bun test` (1551 pass, 0 fail, 95 files)
+  and `git diff --check` (clean). It only read the correction-base RED proof, the builder's baseline
+  and the PR description's evidence. The packet assembled for this head, SHA-256
+  `840fa97e651eddfca305b5ed9ba55f387d99cb7bfcc9999315141fb776ca1c4c`, is not its evidence base.
+- **Verdict text SHA-256:** `f4c4592d3b84c4486d07e42be64c9653e9deb1b88790572b8bd699d86b846651`, from
+  the Founder's saved copy.
+- **Result:** all eight F2 items PASS. Label `PASS-WITH-ADVISORIES`, read as PASS (act B1). Notes
+  carried, none blocking (act B4): A1, no named test exercises output regression, snapshot duplicate
+  or snapshot gap; A2, the served model id is not recorded and is not inferred; O1, the accepted
+  output sequence is recorded before the byte copy, so a copy that throws leaves it advanced with no
+  frame queued, which `DEC-20261001-01` B3 does not rule.
+- **Counted:** no round is added (act B5). Rubric milestone 7 stands at **3**.
+- **PR state the verdict reported:** `Verify` and `Verify (macOS)` success; `code-review` failure
+  because one `github-code-quality` thread on test line 715 was unresolved. Act B6 rules that the
+  thread needs no code change; replying, resolving and re-running a check are the Founder's own acts.
+  The verdict is not merge readiness, permission to leave draft, or merge authorization.
+- **Not recorded here:** the verdict text itself. It is posted verbatim on PR #108 by a session the
+  Founder directs, after this pull request merges (act C2).
