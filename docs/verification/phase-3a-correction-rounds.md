@@ -556,3 +556,24 @@ Round 2's resolution, recorded above as pending, is now closed:
   `Role-Id: builder`, `Actor-Id: session:claude-code/m10-task23-r2` and
   `Execution-Surface: claude-code`. `.github/scripts/attribution-shape-check.sh main` on the merge
   commit, with the script read from `main`, returned PASS, exit 0.
+
+## M14 review preparation (Task 34 correction)
+
+- **Recorded:** 2026-10-02, under FOUNDER-ACT-20261002-M14-TASK34
+  (`docs/decisions/DEC-20261002-01-m14-task34-acceptance.md`).
+- **Merges reviewed:** Task 34, PR #93, merge commit `a2a55bfa31390194904f71c6931e6bc8801df897`;
+  Task 33, PR #94, merge commit `4477bf824892f2e3311843e33f163bc52ac9e5fe`.
+- **Basis:** the act drafter's own reading, not an independent review. The drafter executed at
+  `d950bd77225c7abc7c1cb42e3ab2d72542824541` on Linux with Bun 1.3.11: the architecture test file
+  returned 41 pass, 0 fail, and `bunx tsc --noEmit` exited 0. The full suite, macOS and Bun 1.3.14
+  were not run.
+- **Finding F1:** the `node-pty` premise of `PLAN-OPEN-4` changed once `packages/tui-chaos` was
+  added. Act B2 ruled it a carve-out for `packages/tui-chaos` and the root `trustedDependencies`
+  entry only, and not precedent.
+- **Finding F2:** the lockfile assertion in `test/phase3a/architecture-phase3a.test.ts` cannot fail,
+  because its flag keys on a string that `bun.lock` does not contain. In the drafter's mutation
+  check, a `node-pty` edge planted in the `packages/broker` lockfile block left the test passing
+  (1 pass, 0 fail). Act C1 authorizes a correction.
+- **Ruling:** Task 34 is accepted as merged, subject to that correction (act B1). No round is added
+  by this act. The M14 review checkpoint stays open until act Part D is met. Task 35 and M15 are not
+  authorized.
