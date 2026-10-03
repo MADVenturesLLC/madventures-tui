@@ -1591,6 +1591,23 @@ function listenUnix(path: string): Promise<net.Server> {
   return new Promise((res) => server.listen(path, () => res(server)));
 }
 
+// bun.lock is JSONC: JSON plus trailing commas before a closing brace or
+// bracket. Strip those outside string literals, then parse. The alternation
+// consumes each string literal whole, so a comma inside a string is never
+// touched. Anything else that is not JSON makes JSON.parse throw, and the
+// caller fails closed on that.
+function parseJsonc(text: string): unknown {
+  const stripped = text.replace(
+    /("(?:[^"\\]|\\.)*")|,(\s*[}\]])/g,
+    (_match, literal: string | undefined, closer: string | undefined) => literal ?? closer ?? "",
+  );
+  return JSON.parse(stripped);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 describe("Task 34: no broker.sock path is reachable", () => {
   // 15s test budget: the plan's 5,000 ms deadline belongs to EACH child,
   // and this test launches two children in sequence (CLI + TUI).
@@ -1649,22 +1666,32 @@ describe("Task 34: no broker.sock path is reachable", () => {
     }
   }, 15_000);
 
-  test("no workspace or root manifest declares a native PTY dependency and the lockfile carries no resolved native PTY entry", () => {
-    // ADAPTATION (disclosed in the Task 34 PR): the plan's Step 1 text
-    // predates packages/tui-chaos, whose pty bridge (src/pty/bridge.mjs)
-    // LIVE-imports node-pty to drive the acceptance harness. The plan's
-    // intent is §9.7 — node-pty is not an implementation choice for the
-    // PRODUCTION runtime. The assertion therefore covers every production
-    // manifest (root + apps + packages) with an explicit, named harness
-    // carve-out; the lockfile assertion keeps the plan's precise wording:
-    // no @madventures/broker workspace edge for node-pty.
-    const HARNESS_CARVE_OUT = new Set(["tui-chaos"]);
+  test("no production workspace manifest or bun.lock workspace block declares node-pty or node-addon-api, and tui-chaos is the only exempt workspace", () => {
+    // FOUNDER-ACT-20261002-M14-TASK34 B2 reads PLAN-OPEN-4 as follows: its aim
+    // (spec §9.7, node-pty is not an implementation choice for the PRODUCTION
+    // runtime) stands; node-pty is permitted in packages/tui-chaos, a private
+    // acceptance harness whose pty bridge (src/pty/bridge.mjs) live-imports it,
+    // and in the root trustedDependencies entry that supports it, and nowhere
+    // else. The resolved node-pty@1.1.0 and node-addon-api@7.1.1 entries in
+    // bun.lock stay while tui-chaos needs them. This test enforces that ruling
+    // as a rule, not only as a skipped directory: every production manifest and
+    // every bun.lock workspace block other than the one exempt workspace must
+    // be free of both packages.
+    //
+    // Act C1 (correcting finding F2): the former lockfile scan keyed on the
+    // string "@madventures/broker@workspace", which bun.lock does not contain,
+    // so it could not fail. Workspace dependencies live under the top-level
+    // "workspaces" object of bun.lock, keyed by workspace path. The scan now
+    // parses that object and fails closed if it, or the packages/broker block,
+    // cannot be found.
+    const HARNESS_CARVE_OUT = new Set(["packages/tui-chaos"]);
+    const NATIVE_PTY_PACKAGES = ["node-pty", "node-addon-api"];
     const sections = ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"];
     const manifests = [join(REPO_ROOT, "package.json")];
     for (const scope of ["packages", "apps"]) {
       const scopeDir = join(REPO_ROOT, scope);
       for (const entry of readdirSync(scopeDir)) {
-        if (HARNESS_CARVE_OUT.has(entry)) continue;
+        if (HARNESS_CARVE_OUT.has(`${scope}/${entry}`)) continue;
         const p = join(scopeDir, entry, "package.json");
         if (existsSync(p)) manifests.push(p);
       }
@@ -1677,16 +1704,51 @@ describe("Task 34: no broker.sock path is reachable", () => {
         expect(deps?.["node-addon-api"], `${manifest} [${section}] node-addon-api`).toBeUndefined();
       }
     }
-    const lock = readFileSync(join(REPO_ROOT, "bun.lock"), "utf8");
-    // No production workspace package may carry a node-pty edge in the lock.
-    const lockLines = lock.split("\n");
-    let inBrokerDeps = false;
-    for (const line of lockLines) {
-      if (line.includes('"@madventures/broker@workspace"')) inBrokerDeps = true;
-      else if (inBrokerDeps && /^\s*\]/.test(line)) inBrokerDeps = false;
-      if (inBrokerDeps && line.includes("node-pty")) {
-        throw new Error("@madventures/broker carries a node-pty lockfile edge: " + line.trim());
+
+    // Lockfile: parse the "workspaces" object of bun.lock. Fail closed if the
+    // file does not parse, has no workspaces object, or has no packages/broker
+    // block, because a scan that finds nothing to check proves nothing.
+    let lock: unknown;
+    try {
+      lock = parseJsonc(readFileSync(join(REPO_ROOT, "bun.lock"), "utf8"));
+    } catch (err) {
+      throw new Error(
+        "FAIL CLOSED: bun.lock could not be parsed as JSONC, so no workspace block was checked: " + String(err),
+      );
+    }
+    if (!isRecord(lock) || !isRecord(lock.workspaces)) {
+      throw new Error('FAIL CLOSED: bun.lock has no "workspaces" object, so no workspace block was checked');
+    }
+    const workspaces = lock.workspaces;
+    if (!isRecord(workspaces["packages/broker"])) {
+      throw new Error(
+        'FAIL CLOSED: bun.lock "workspaces" has no "packages/broker" block, so the broker lockfile check did not run',
+      );
+    }
+    const lockViolations: string[] = [];
+    for (const [workspace, block] of Object.entries(workspaces)) {
+      if (HARNESS_CARVE_OUT.has(workspace)) continue;
+      const label = workspace === "" ? '"" (root)' : workspace;
+      if (!isRecord(block)) {
+        throw new Error(`FAIL CLOSED: bun.lock workspace "${label}" block is not an object`);
       }
+      for (const section of sections) {
+        const deps = block[section];
+        if (!isRecord(deps)) continue;
+        for (const pkg of NATIVE_PTY_PACKAGES) {
+          if (Object.prototype.hasOwnProperty.call(deps, pkg)) {
+            lockViolations.push(
+              `bun.lock workspace "${label}" [${section}] lists ${pkg}: ${JSON.stringify(deps[pkg])}`,
+            );
+          }
+        }
+      }
+    }
+    if (lockViolations.length > 0) {
+      throw new Error(
+        "native PTY dependency outside the packages/tui-chaos carve-out (FOUNDER-ACT-20261002-M14-TASK34 B2):\n" +
+          lockViolations.join("\n"),
+      );
     }
     // The broker package.json itself (belt and braces with the manifest loop).
     const brokerPkg = JSON.parse(
