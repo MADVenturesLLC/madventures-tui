@@ -27,7 +27,7 @@
 // Output: one `broker_sock_matches[<root>]=<n>` line per root plus every
 // hit named on its own line; exit 1 on any hit or violation, else 0.
 
-import { readdirSync, lstatSync, existsSync, realpathSync } from "node:fs";
+import { readdirSync, lstatSync, existsSync, realpathSync, type Stats } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { userInfo } from "node:os";
@@ -45,28 +45,33 @@ function storageRoot(): string {
   return realpathSync(userInfo().homedir);
 }
 
-interface Sweep {
+export interface Sweep {
   matches: string[];
   errors: string[];
 }
 
-function isSymbolicLink(path: string): boolean {
-  try {
-    return lstatSync(path).isSymbolicLink();
-  } catch {
-    return false;
-  }
+/** The two filesystem reads the walk makes. Tests inject a failing lstat. */
+export interface SweepFs {
+  readonly readdirSync: (path: string) => string[];
+  readonly lstatSync: (path: string) => Stats;
+}
+
+const NODE_FS: SweepFs = { readdirSync, lstatSync };
+
+/** ENOENT is the vanished-path race: listed by readdirSync, gone before lstat. */
+function vanished(err: unknown): boolean {
+  return (err as { code?: unknown } | null)?.code === "ENOENT";
 }
 
 /** Walk one root up to MAX_DEPTH directory levels, collecting broker.sock hits. */
-function sweep(root: string): Sweep {
+export function sweep(root: string, fs: SweepFs = NODE_FS): Sweep {
   const matches: string[] = [];
   const errors: string[] = [];
 
   const walk = (dir: string, depth: number): void => {
     let entries: string[];
     try {
-      entries = readdirSync(dir);
+      entries = fs.readdirSync(dir);
     } catch (err) {
       // Permission/IO failures are REPORTED, never swallowed silently.
       errors.push(`${dir}: ${(err as Error).message}`);
@@ -74,19 +79,24 @@ function sweep(root: string): Sweep {
     }
     for (const entry of entries) {
       const full = join(dir, entry);
+      // One lstat per entry. A vanished path is ignored. Any other failure is
+      // REPORTED like a readdirSync failure, never swallowed; the entry's type
+      // is then unknown, so it is not skipped as a symlink (that is unproven),
+      // a broker.sock name still counts as a match, and it is not walked.
+      let stats: Stats | null = null;
+      try {
+        stats = fs.lstatSync(full);
+      } catch (err) {
+        if (!vanished(err)) errors.push(`${full}: ${(err as Error).message}`);
+      }
       // Symlinks are skipped without following — in either role.
-      if (isSymbolicLink(full)) continue;
+      if (stats?.isSymbolicLink()) continue;
       if (entry === SOCKET_NAME) {
         matches.push(full);
         continue;
       }
-      if (depth < MAX_DEPTH) {
-        try {
-          if (lstatSync(full).isDirectory()) walk(full, depth + 1);
-        } catch {
-          // Non-directory or vanished between calls: not a directory to walk.
-        }
-      }
+      // Non-directory, vanished or unreadable: not a directory to walk.
+      if (depth < MAX_DEPTH && stats?.isDirectory()) walk(full, depth + 1);
     }
   };
 
@@ -109,8 +119,8 @@ function main(): number {
       console.log(`  hit: ${hit}`);
     }
     for (const err of result.errors) {
-      // Reported, never silently swallowed — but an unreadable directory is
-      // an observation, not a finding: the plan's exit rule is "exits 1 if
+      // Reported, never silently swallowed — but an unreadable directory or
+      // entry is an observation, not a finding: the plan's exit rule is "exits 1 if
       // anything is found", and a real home-directory sweep legitimately
       // encounters permission-denied paths (e.g. ~/Library subdirs).
       console.log(`  unreadable: ${err}`);
@@ -133,4 +143,5 @@ function main(): number {
   return 0;
 }
 
-process.exit(main());
+// Run as a program only; importing the module (tests) must not sweep or exit.
+if (import.meta.main) process.exit(main());

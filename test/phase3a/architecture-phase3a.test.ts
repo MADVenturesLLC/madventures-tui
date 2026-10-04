@@ -1485,6 +1485,8 @@ describe("Task 33 — socket, MCP, and PtyManager quarantine from production rea
 
 import { spawn } from "node:child_process";
 import * as net from "node:net";
+import { lstatSync } from "node:fs";
+import { sweep } from "./negative-control";
 
 const LEGACY_SOCKET = "/tmp/madv-broker-runtime/broker.sock";
 const CHILD_DEADLINE_MS = 5_000;
@@ -1497,6 +1499,28 @@ function socketAbsent(path: string): boolean {
   return !existsSync(path);
 }
 
+/** One broker.sock presence reading at a named Step 1 assertion point. */
+interface SocketObservation {
+  checkpoint: "before-launch" | "readiness" | "end";
+  path: string;
+  present: boolean;
+}
+
+function observeSockets(
+  checkpoint: SocketObservation["checkpoint"],
+  paths: readonly string[],
+): SocketObservation[] {
+  return paths.map((path) => ({ checkpoint, path, present: !socketAbsent(path) }));
+}
+
+/** Throws, naming each checkpoint and path, if any reading found a socket. */
+function assertSocketsAbsent(observations: readonly SocketObservation[]): void {
+  const present = observations
+    .filter((o) => o.present)
+    .map((o) => `broker.sock present at ${o.checkpoint}: ${o.path}`);
+  if (present.length > 0) throw new Error(present.join("\n"));
+}
+
 interface ChildOutcome {
   code: number | null;
   signal: string | null;
@@ -1504,86 +1528,227 @@ interface ChildOutcome {
   stderr: string;
   timedOut: boolean;
   overflowed: boolean;
+  /** A spawn failure or other child-process error, else null. */
+  error: string | null;
+  /** Monotonic ms from spawn when readiness was first observed, else null. */
+  readyAtMs: number | null;
+  /** The child had exited, by code or signal, before readiness was observed. */
+  exitedBeforeReadiness: boolean;
+  /** Readings taken inside the runner: at readiness (before the test's SIGTERM) and at the end. */
+  sockets: SocketObservation[];
+}
+
+function spawnPiped(cmd: string, args: readonly string[], env: Record<string, string>) {
+  return spawn(cmd, args, { cwd: REPO_ROOT, env, stdio: ["ignore", "pipe", "pipe"] });
 }
 
 /**
- * Bounded isolated child runner (Task 34 Step 1 discipline): 5,000 ms
- * monotonic deadline, 65,536-byte stdout/stderr caps, ignored stdin, and
- * SIGTERM → ≤500 ms → SIGKILL → always reap. Never leaves a live child.
+ * Bounded isolated child runner (Task 34 Step 1 discipline):
+ * - deadline: 5,000 ms on a monotonic clock from spawn until the child exits
+ *   or readiness is observed;
+ * - caps: 65,536 bytes each for stdout and stderr, counted by Buffer length
+ *   from spawn until the stream closes, so output written after readiness or
+ *   after SIGTERM still counts; bytes are decoded once, for the returned
+ *   strings, so no character is split across chunks;
+ * - stdin ignored;
+ * - on readiness, timeout or overflow: one SIGTERM, then SIGKILL after 500 ms
+ *   if the child is still alive;
+ * - both socket paths read at readiness, before that SIGTERM, and at the end.
+ * It resolves only after the child has exited and both streams have closed,
+ * or after a spawn failure. It never rejects and never leaves a live child.
  */
 function runBoundedChild(
   cmd: string,
   args: readonly string[],
   env: Record<string, string>,
-  readiness?: (out: string) => boolean,
+  readiness?: (stdout: Buffer) => boolean,
+  sockets: readonly string[] = [],
 ): Promise<ChildOutcome> {
   return new Promise((resolve) => {
-    const child = spawn(cmd, args, {
-      cwd: REPO_ROOT,
-      env,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    let out = "";
-    let err = "";
+    const out: Buffer[] = [];
+    const err: Buffer[] = [];
+    let outBytes = 0;
+    let errBytes = 0;
     let overflowed = false;
     let timedOut = false;
+    let error: string | null = null;
+    let readyAtMs: number | null = null;
+    let exitedBeforeReadiness = false;
+    let exit: { code: number | null; signal: string | null } | null = null;
+    let outClosed = false;
+    let errClosed = false;
+    let terminating = false;
     let settled = false;
+    let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+    let killTimer: ReturnType<typeof setTimeout> | undefined;
+    const observations: SocketObservation[] = [];
 
-    const cap = (chunk: Buffer, acc: "out" | "err") => {
-      if (acc === "out") out += chunk.toString();
-      else err += chunk.toString();
-      if (out.length > CHILD_CAP_BYTES || err.length > CHILD_CAP_BYTES) {
+    const finish = (spawnFailed: boolean) => {
+      if (settled || (!spawnFailed && (exit === null || !outClosed || !errClosed))) return;
+      settled = true;
+      clearTimeout(deadlineTimer);
+      clearTimeout(killTimer);
+      // The end reading: after the child is reaped and its streams closed, or
+      // after a spawn failure. Every failure outcome passes through here.
+      observations.push(...observeSockets("end", sockets));
+      resolve({
+        code: exit?.code ?? null,
+        signal: exit?.signal ?? null,
+        stdout: Buffer.concat(out).toString("utf8"),
+        stderr: Buffer.concat(err).toString("utf8"),
+        timedOut,
+        overflowed,
+        error,
+        readyAtMs,
+        exitedBeforeReadiness,
+        sockets: observations,
+      });
+    };
+
+    let child: ReturnType<typeof spawnPiped>;
+    try {
+      child = spawnPiped(cmd, args, env);
+    } catch (e) {
+      error = (e as Error).message;
+      finish(true);
+      return;
+    }
+    const startedAt = performance.now();
+    const alive = () =>
+      child.pid !== undefined && exit === null && child.exitCode === null && child.signalCode === null;
+
+    const terminate = () => {
+      if (terminating || !alive()) return;
+      terminating = true;
+      child.kill("SIGTERM");
+      killTimer = setTimeout(() => {
+        if (alive()) child.kill("SIGKILL");
+      }, CHILD_GRACE_MS);
+    };
+
+    const checkCaps = () => {
+      if (!overflowed && (outBytes > CHILD_CAP_BYTES || errBytes > CHILD_CAP_BYTES)) {
         overflowed = true;
         terminate();
       }
     };
-    child.stdout.on("data", (c: Buffer) => {
-      cap(c, "out");
-      // Readiness performs the test-controlled SIGTERM immediately (plan
-      // Step 1: the TUI is terminated by the test after readiness).
-      if (readiness && !settled && readiness(out)) terminate();
-    });
-    child.stderr.on("data", (c: Buffer) => cap(c, "err"));
 
-    const timer = setTimeout(() => {
+    deadlineTimer = setTimeout(() => {
       timedOut = true;
       terminate();
     }, CHILD_DEADLINE_MS);
 
-    function terminate() {
-      if (child.exitCode !== null || child.signalCode !== null) return;
-      child.kill("SIGTERM");
-      setTimeout(() => {
-        if (child.exitCode === null && child.signalCode === null) {
-          child.kill("SIGKILL");
-        }
-      }, CHILD_GRACE_MS);
-    }
-
-    const finish = () => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      resolve({
-        code: child.exitCode,
-        signal: child.signalCode,
-        stdout: out,
-        stderr: err,
-        timedOut,
-        overflowed,
-      });
-    };
-    child.on("exit", finish);
-    child.on("error", finish);
+    child.stdout.on("data", (chunk: Buffer) => {
+      out.push(chunk);
+      outBytes += chunk.length;
+      checkCaps();
+      if (readiness && readyAtMs === null && !overflowed && readiness(Buffer.concat(out))) {
+        readyAtMs = performance.now() - startedAt;
+        if (!alive()) exitedBeforeReadiness = true;
+        clearTimeout(deadlineTimer);
+        observations.push(...observeSockets("readiness", sockets));
+        // Readiness performs the test-controlled SIGTERM immediately (plan
+        // Step 1: the TUI is terminated by the test after readiness).
+        terminate();
+      }
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      err.push(chunk);
+      errBytes += chunk.length;
+      checkCaps();
+    });
+    child.stdout.on("close", () => {
+      outClosed = true;
+      finish(false);
+    });
+    child.stderr.on("close", () => {
+      errClosed = true;
+      finish(false);
+    });
+    child.on("exit", (code, signal) => {
+      exit = { code, signal };
+      if (readyAtMs === null) exitedBeforeReadiness = true;
+      clearTimeout(deadlineTimer);
+      finish(false);
+    });
+    child.on("error", (e) => {
+      error ??= e.message;
+      // No pid: the spawn itself failed, so there is no child to reap.
+      if (child.pid === undefined) finish(true);
+    });
   });
 }
 
-function runtimeDirs(): { runtimeDir: string; cleanup: () => void } {
-  const runtimeDir = mkdtempSync(join(tmpdir(), "task34-runtime-"));
-  return {
-    runtimeDir,
-    cleanup: () => rmSync(runtimeDir, { recursive: true, force: true }),
-  };
+interface EntryPathSpec {
+  /** Arguments to the Bun executable: the entry point and its flags. */
+  args: readonly string[];
+  /** Readiness on captured stdout (TUI path only; the CLI path has none). */
+  readiness?: (stdout: Buffer) => boolean;
+  /** Outcome assertions; they run only after every socket-absence assertion. */
+  assertOutcome: (r: ChildOutcome) => void;
+  /** Parent of the disposable MADV_RUNTIME_DIR (default: the OS temp dir). */
+  parentDir?: string;
+}
+
+/**
+ * One Step 1 entry-point path. Both socket paths, the fixed legacy path and
+ * <MADV_RUNTIME_DIR>/broker.sock, are asserted absent before launch, then at
+ * every reading the runner took (readiness and end), before any assertion on
+ * code, signal, output or timing. The runner never rejects, so those socket
+ * assertions always run. The finally block removes the disposable runtime
+ * directory, so removal follows the final socket-absence assertion on every
+ * path, including when it or an outcome assertion throws.
+ */
+async function runEntryPath(spec: EntryPathSpec): Promise<void> {
+  const runtimeDir = mkdtempSync(join(spec.parentDir ?? tmpdir(), "task34-runtime-"));
+  const sockets = [LEGACY_SOCKET, join(runtimeDir, "broker.sock")];
+  try {
+    assertSocketsAbsent(observeSockets("before-launch", sockets));
+    const r = await runBoundedChild(
+      process.execPath,
+      spec.args,
+      { MADV_RUNTIME_DIR: runtimeDir, PATH: process.env.PATH ?? "" },
+      spec.readiness,
+      sockets,
+    );
+    assertSocketsAbsent(r.sockets);
+    spec.assertOutcome(r);
+  } finally {
+    rmSync(runtimeDir, { recursive: true, force: true });
+  }
+}
+
+/** CLI path: exit code 78 and the exact gate body; a spawn failure, signal, timeout or overflow fails it. */
+function assertCliOutcome(r: ChildOutcome): void {
+  expect(r.error).toBeNull();
+  expect(r.timedOut).toBe(false);
+  expect(r.overflowed).toBe(false);
+  expect(r.code).toBe(78);
+  // Exactly one trailing newline tolerated; bytes otherwise exact.
+  const body = r.stdout.endsWith("\n") ? r.stdout.slice(0, -1) : r.stdout;
+  expect(body).toBe(START_JSON_BODY);
+}
+
+/**
+ * TUI path acceptance: every reason the outcome fails (empty means accepted).
+ * Readiness must be observed before the 5,000 ms deadline and while the child
+ * was still running. After readiness, the test's SIGTERM ending in exit code
+ * 0, SIGTERM, or SIGKILL after the 500 ms grace is the expected cleanup.
+ * Neither code 0 nor a signal substitutes for readiness.
+ */
+function tuiPathFailures(r: ChildOutcome): string[] {
+  const failures: string[] = [];
+  if (r.error !== null) failures.push(`child error: ${r.error}`);
+  if (r.timedOut) failures.push("deadline passed before readiness");
+  if (r.overflowed) failures.push("stdout or stderr passed the byte cap");
+  if (r.readyAtMs === null) failures.push("readiness never observed");
+  else if (r.readyAtMs >= CHILD_DEADLINE_MS) {
+    failures.push(`readiness observed at ${Math.round(r.readyAtMs)} ms, after the deadline`);
+  }
+  if (r.exitedBeforeReadiness) failures.push(`exited before readiness (code ${r.code}, signal ${r.signal})`);
+  const cleanup = r.code === 0 || (r.code === null && (r.signal === "SIGTERM" || r.signal === "SIGKILL"));
+  if (!cleanup) failures.push(`unexpected end (code ${r.code}, signal ${r.signal})`);
+  return failures;
 }
 
 function listenUnix(path: string): Promise<net.Server> {
@@ -1613,57 +1778,23 @@ describe("Task 34: no broker.sock path is reachable", () => {
   // and this test launches two children in sequence (CLI + TUI).
   test("launching every production entry point in bounded isolated processes creates no broker.sock", async () => {
     // ── CLI path: `start --json` must fail closed with the exact gate body.
-    const cli = runtimeDirs();
-    try {
-      expect(socketAbsent(LEGACY_SOCKET)).toBe(true);
-      expect(socketAbsent(join(cli.runtimeDir, "broker.sock"))).toBe(true);
-      const r = await runBoundedChild(
-        process.execPath,
-        ["apps/madbridge/src/cli.ts", "start", "--json"],
-        { MADV_RUNTIME_DIR: cli.runtimeDir, PATH: process.env.PATH ?? "" },
-      );
-      expect(r.timedOut).toBe(false);
-      expect(r.overflowed).toBe(false);
-      expect(r.code).toBe(78);
-      // Exactly one trailing newline tolerated; bytes otherwise exact.
-      const body = r.stdout.endsWith("\n") ? r.stdout.slice(0, -1) : r.stdout;
-      expect(body).toBe(START_JSON_BODY);
-      expect(socketAbsent(LEGACY_SOCKET)).toBe(true);
-      expect(socketAbsent(join(cli.runtimeDir, "broker.sock"))).toBe(true);
-    } finally {
-      cli.cleanup();
-    }
+    await runEntryPath({
+      args: ["apps/madbridge/src/cli.ts", "start", "--json"],
+      assertOutcome: assertCliOutcome,
+    });
 
     // ── TUI path (default production form, no --fixture): readiness is the
     // StatusBar's honest disconnected word. DEVIATION FROM PLAN LITERAL
     // (disclosed): Step 1 names wide-form "NOT CONNECTED"; at this base the
     // piped renderer emits the medium-format token "NOCONN" (same fact,
     // same buildStatusLine path), empirically probed at the task base.
-    const tui = runtimeDirs();
-    try {
-      expect(socketAbsent(LEGACY_SOCKET)).toBe(true);
-      expect(socketAbsent(join(tui.runtimeDir, "broker.sock"))).toBe(true);
-      const r = await runBoundedChild(
-        process.execPath,
-        ["apps/madbridge/src/tui/main.tsx"],
-        { MADV_RUNTIME_DIR: tui.runtimeDir, PATH: process.env.PATH ?? "" },
-        (out) => out.includes("NOCONN"),
-      );
-      expect(r.overflowed).toBe(false);
-      expect(r.stdout.includes("NOCONN")).toBe(true);
-      expect(socketAbsent(LEGACY_SOCKET)).toBe(true);
-      expect(socketAbsent(join(tui.runtimeDir, "broker.sock"))).toBe(true);
-      // The TUI is terminated by the runner (SIGTERM/SIGKILL discipline);
-      // those are expected cleanup outcomes, not unexpected signals.
-      const controlled =
-        (r.code === null && (r.signal === "SIGTERM" || r.signal === "SIGKILL")) ||
-        r.code === 0;
-      expect(controlled).toBe(true);
-      expect(socketAbsent(LEGACY_SOCKET)).toBe(true);
-      expect(socketAbsent(join(tui.runtimeDir, "broker.sock"))).toBe(true);
-    } finally {
-      tui.cleanup();
-    }
+    // The TUI is terminated by the runner (SIGTERM/SIGKILL discipline);
+    // those are expected cleanup outcomes, not unexpected signals.
+    await runEntryPath({
+      args: ["apps/madbridge/src/tui/main.tsx"],
+      readiness: (out) => out.includes("NOCONN"),
+      assertOutcome: (r) => expect(tuiPathFailures(r)).toEqual([]),
+    });
   }, 15_000);
 
   test("no production workspace manifest or bun.lock workspace block declares node-pty or node-addon-api, and tui-chaos is the only exempt workspace", () => {
@@ -1846,6 +1977,211 @@ describe("Task 34: no broker.sock path is reachable", () => {
       server.close();
       rmSync(storage, { recursive: true, force: true });
       rmSync(runtime, { recursive: true, force: true });
+    }
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// Task 34 correction C2 (FOUNDER-ACT-20261003-M14-CORRECTION-C2): each
+// V-labelled test pins the finding it names (V1 byte cap, V2 TUI deadline
+// and readiness, V3 socket checkpoints and reaping, V4 lstat errors).
+// ═══════════════════════════════════════════════════════════════════════
+
+const CHILD_ENV = { PATH: process.env.PATH ?? "" };
+const TUI_READY = (out: Buffer): boolean => out.includes("NOCONN");
+
+describe("Task 34 correction C2: the Step 1 runner, entry-path checks and negative-control sweep", () => {
+  test("the bounded child runner keeps the Step 1 production limits: 5,000 ms deadline, 500 ms grace, 65,536-byte cap", () => {
+    expect({ deadlineMs: CHILD_DEADLINE_MS, graceMs: CHILD_GRACE_MS, capBytes: CHILD_CAP_BYTES }).toEqual({
+      deadlineMs: 5_000,
+      graceMs: 500,
+      capBytes: 65_536,
+    });
+  });
+
+  test("V1: the runner caps stdout and stderr by bytes, each separately, including output written after readiness and the test's SIGTERM", async () => {
+    const run = (script: string, readiness?: (out: Buffer) => boolean) =>
+      runBoundedChild(process.execPath, ["-e", script], CHILD_ENV, readiness);
+    // é is two bytes in UTF-8 and one UTF-16 unit.
+    // 32,768 é = 65,536 bytes on each stream: at the cap, not past it.
+    const atCap = await run(
+      "process.stdout.write('é'.repeat(32768)); process.stderr.write('é'.repeat(32768));",
+    );
+    // 32,769 é = 65,538 bytes, but only 32,769 UTF-16 units.
+    const overStdout = await run("process.stdout.write('é'.repeat(32769));");
+    const overStderr = await run("process.stderr.write('é'.repeat(32769));");
+    // Readiness first, then 35,000 é (70,000 bytes) only after the test's SIGTERM.
+    const afterSigterm = await run(
+      "process.on('SIGTERM', () => process.stdout.write('é'.repeat(35000), () => process.exit(0))); process.stdout.write('NOCONN'); setInterval(() => {}, 1000);",
+      TUI_READY,
+    );
+    expect({
+      atCapBytes: [Buffer.byteLength(atCap.stdout), Buffer.byteLength(atCap.stderr)],
+      atCapOnEachStream: atCap.overflowed,
+      stdout65538Bytes: overStdout.overflowed,
+      stderr65538Bytes: overStderr.overflowed,
+      afterReadinessAndSigterm: afterSigterm.overflowed,
+    }).toEqual({
+      atCapBytes: [65_536, 65_536],
+      atCapOnEachStream: false,
+      stdout65538Bytes: true,
+      stderr65538Bytes: true,
+      afterReadinessAndSigterm: true,
+    });
+  }, 15_000);
+
+  test("V1: the runner decodes the collected bytes once, so a two-byte character split across two chunks is returned intact", async () => {
+    // The first byte of é (0xc3) is written and flushed alone; the second
+    // (0xa9) follows 100 ms later, on stdout and on stderr.
+    const r = await runBoundedChild(
+      process.execPath,
+      [
+        "-e",
+        "const half = (b) => Buffer.from([b]); process.stdout.write(half(0xc3), () => process.stderr.write(half(0xc3), () => setTimeout(() => { process.stdout.write(half(0xa9)); process.stderr.write(half(0xa9)); }, 100)));",
+      ],
+      CHILD_ENV,
+    );
+    expect({ stdout: r.stdout, stderr: r.stderr }).toEqual({ stdout: "é", stderr: "é" });
+  }, 15_000);
+
+  test("V2: the TUI-path acceptance rejects exit code 0 without readiness, a token that arrives only after the child exited 0, and a SIGTERM-ignoring child whose readiness token arrives only after the 5,000 ms deadline", async () => {
+    const exitZero = await runBoundedChild(process.execPath, ["-e", "process.exit(0)"], CHILD_ENV, TUI_READY);
+    // sh exits 0 at once; a background subshell prints the token 200 ms later.
+    const afterExit = await runBoundedChild(
+      "/bin/sh",
+      ["-c", "(sleep 0.2; printf NOCONN) & exit 0"],
+      CHILD_ENV,
+      TUI_READY,
+    );
+    // Ignores SIGTERM and prints the token once, when the deadline's SIGTERM
+    // arrives, so the token lands after the deadline and before the SIGKILL.
+    const late = await runBoundedChild(
+      process.execPath,
+      [
+        "-e",
+        "let sent = false; process.on('SIGTERM', () => { if (!sent) { sent = true; process.stdout.write('NOCONN'); } }); setInterval(() => {}, 1000);",
+      ],
+      CHILD_ENV,
+      TUI_READY,
+    );
+    // The probes did what they claim before the acceptance is judged.
+    expect({ code: exitZero.code, stdout: exitZero.stdout }).toEqual({ code: 0, stdout: "" });
+    expect({ timedOut: late.timedOut, stdout: late.stdout, signal: late.signal }).toEqual({
+      timedOut: true,
+      stdout: "NOCONN",
+      signal: "SIGKILL",
+    });
+    expect({
+      exitZeroWithoutReadiness: tuiPathFailures(exitZero).length > 0,
+      readinessOnlyAfterExit: tuiPathFailures(afterExit).length > 0,
+      readinessAfterDeadline: tuiPathFailures(late).length > 0,
+    }).toEqual({ exitZeroWithoutReadiness: true, readinessOnlyAfterExit: true, readinessAfterDeadline: true });
+    // Checked after the verdicts: the token did arrive, but only after exit.
+    expect({ code: afterExit.code, stdout: afterExit.stdout, timedOut: afterExit.timedOut }).toEqual({
+      code: 0,
+      stdout: "NOCONN",
+      timedOut: false,
+    });
+  }, 15_000);
+
+  test("V3: the runner resolves only after stdout and stderr close, so output a descendant writes after the child exits is still captured", async () => {
+    // sh exits at once; a background subshell holds both pipes for 300 ms.
+    const r = await runBoundedChild(
+      "/bin/sh",
+      ["-c", "(sleep 0.3; printf late; printf late >&2) & exit 0"],
+      CHILD_ENV,
+    );
+    expect({ code: r.code, stdout: r.stdout, stderr: r.stderr }).toEqual({
+      code: 0,
+      stdout: "late",
+      stderr: "late",
+    });
+  }, 15_000);
+
+  test("V3: a TUI-path child that creates broker.sock before readiness and removes it on SIGTERM fails at the readiness checkpoint, and its runtime directory is removed afterward", async () => {
+    const parentDir = mkdtempSync(join(tmpdir(), "task34-c2-"));
+    try {
+      let failure = "";
+      await runEntryPath({
+        // A plain file named broker.sock: every absence check is an existence check.
+        args: [
+          "-e",
+          "const fs = require('node:fs'); const sock = require('node:path').join(process.env.MADV_RUNTIME_DIR, 'broker.sock'); fs.writeFileSync(sock, ''); process.on('SIGTERM', () => { fs.unlinkSync(sock); process.exit(0); }); process.stdout.write('NOCONN'); setInterval(() => {}, 1000);",
+        ],
+        readiness: TUI_READY,
+        assertOutcome: (r) => expect(tuiPathFailures(r)).toEqual([]),
+        parentDir,
+      }).catch((err: unknown) => {
+        failure = String(err);
+      });
+      expect(failure).toContain("broker.sock present at readiness");
+      expect(readdirSync(parentDir)).toEqual([]);
+    } finally {
+      rmSync(parentDir, { recursive: true, force: true });
+    }
+  }, 15_000);
+
+  test("V3: when a child leaves broker.sock and fails its outcome, the socket-absence assertion runs before the outcome assertion and the runtime directory is removed only after it", async () => {
+    const parentDir = mkdtempSync(join(tmpdir(), "task34-c2-"));
+    try {
+      let failure = "";
+      await runEntryPath({
+        // Leaves broker.sock and exits 1, so the CLI outcome (code 78) fails too.
+        args: [
+          "-e",
+          "require('node:fs').writeFileSync(require('node:path').join(process.env.MADV_RUNTIME_DIR, 'broker.sock'), ''); process.exit(1);",
+        ],
+        assertOutcome: assertCliOutcome,
+        parentDir,
+      }).catch((err: unknown) => {
+        failure = String(err);
+      });
+      // The socket inside the runtime directory was seen, so the directory
+      // still existed at that assertion; it is gone now.
+      expect(failure).toContain("broker.sock present at end");
+      expect(readdirSync(parentDir)).toEqual([]);
+    } finally {
+      rmSync(parentDir, { recursive: true, force: true });
+    }
+  }, 15_000);
+
+  test("V4: the sweep records a non-ENOENT lstat failure in its errors list, still reports every broker.sock match, and ignores a vanished path", () => {
+    const root = mkdtempSync(join(tmpdir(), "task34-c2-lstat-"));
+    try {
+      // Faults are injected through the sweep's fs seam, not file permissions,
+      // so the result is the same for every user id, uid 0 included.
+      for (const dir of ["seeded", "blocked", "untyped"]) mkdirSync(join(root, dir));
+      for (const file of ["seeded/broker.sock", "blocked/broker.sock", "untyped/broker.sock", "vanished"]) {
+        writeFileSync(join(root, file), "");
+      }
+      const injected: Record<string, string> = {
+        [join(root, "blocked")]: "EACCES",
+        [join(root, "untyped", "broker.sock")]: "EACCES",
+        [join(root, "vanished")]: "ENOENT",
+      };
+      const result = sweep(root, {
+        readdirSync: (path) => readdirSync(path),
+        lstatSync: (path) => {
+          const code = injected[path];
+          if (code !== undefined) {
+            throw Object.assign(new Error(`${code}: injected lstat failure, lstat '${path}'`), { code });
+          }
+          return lstatSync(path);
+        },
+      });
+      expect({
+        matches: [...result.matches].sort(),
+        errorPaths: result.errors.map((e) => e.slice(0, e.indexOf(": "))).sort(),
+        everyErrorIsEacces: result.errors.every((e) => e.includes("EACCES")),
+      }).toEqual({
+        // blocked/ is not walked: its type is unknown. untyped/broker.sock still
+        // counts: an entry whose lstat failed is not proven to be a symlink.
+        matches: [join(root, "seeded", "broker.sock"), join(root, "untyped", "broker.sock")].sort(),
+        errorPaths: [join(root, "blocked"), join(root, "untyped", "broker.sock")].sort(),
+        everyErrorIsEacces: true,
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
     }
   });
 });
