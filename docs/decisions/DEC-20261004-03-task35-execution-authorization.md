@@ -1,6 +1,7 @@
 FOUNDER-ACT-20261004-TASK35-EXECUTION-AUTHORIZATION: Phase 3A M15 Task 35, the capability record and its staleness rules
 
 > **Status:** ISSUED
+> **Version:** v2. It replaces v1 (SHA-256 `abc0fc7bdb0dbcb9f2b54022532583f1f575aa933f02df8402a696d15f4a2b4b`), which was filed in draft pull request 118 at head `16774201fe3cd0cce3fa1bb0f2977b064bcac18a` and was never on `main`. Changed: A4, A5, B6, B9, a new B10, C4 and E7.
 > **Repository:** `MADVenturesLLC/madventures-tui`
 > **Binding base:** `1f07d4db5fbac1a8854d967f2bd0bc610450bc11` (`origin/main` when drafted, the PR #117 merge commit)
 > **Governs:** plan `docs/superpowers/plans/2026-08-12-phase-3a-runtime-foundation.md` (SHA-256 `bdd91837de5eba742e9a2f61553db74c164b58bae9d6fa1b8f96ee748ef18ed8` at the binding base), Task 35
@@ -16,7 +17,7 @@ A2. **`PLAN-OPEN-3` is ruled.** The Founder approved it on 2026-08-15, and the a
 
 A3. **The plan.** Task 35 creates `packages/protocol/src/capability-record.ts` and its test, and modifies `packages/protocol/src/index.ts`. It defines `CapabilityRecordV1`, `parseCapabilityRecord`, `StalenessReason`, `evaluateCapabilityFreshness` and `capabilityRecordFilename`. It names twelve tests and expects 12 passing in the focused file. Step 8 stops for the M15 review checkpoint. Task 36 needs Task 35 committed and is not authorized here.
 
-A4. **Rounds, and why this task is tight.** Plan section 4 maps M15 to rubric milestones 4 and 1. The correction-rounds log records rubric milestone 1 at 2 of 2 (Task 60, two rounds, with the correction author reassigned from Opus 5 to Hermes). The log records no round under rubric milestone 4. Plan section 11.3 requires reassignment at more than two rounds, and one verdict that finds substantive defects in more than one rubric milestone adds one round to each. The next independent verdict on M15 work that identifies a substantive defect is therefore round 3 under rubric milestone 1 and round 1 under rubric milestone 4. It requires reassigning the implementer before any further correction.
+A4. **Rounds, and why this task is tight.** Plan section 4 maps M15 to rubric milestones 4 and 1. The correction-rounds log records rubric milestone 1 at 2 of 2 (Task 60, two rounds, with the correction author reassigned from Opus 5 to Hermes). The log records no round under rubric milestone 4. Plan section 11.3 requires reassignment at more than two rounds on one rubric milestone, and one verdict that finds substantive defects in more than one rubric milestone adds one round to each affected milestone. The plan does not say how a finding in M15 work is apportioned between milestones 4 and 1. B10 rules that, and B9 states the consequence.
 
 A5. **Gaps in the plan text, ruled in Part B.** Read against `main` at the binding base:
 
@@ -26,6 +27,7 @@ A5. **Gaps in the plan text, ruled in Part B.** Read against `main` at the bindi
 - The filename template is `evaluated_at`, a hyphen, the first 12 characters of `binary_sha256`, and `.json`. It has no surface component, but the plan's test title says the name is derived from the normalized surface and the binary hash. `binary_sha256` has no stated format, and the filename is built from it.
 - The plan does not say whether the parser rejects unknown keys or returns a copy.
 - Task 35's four freshness tests do not pin the fixed check order or the exact expiry boundary that `PLAN-OPEN-3` requires.
+- The plan maps M15 to two rubric milestones and gives no rule that apportions a finding between them, so the reassignment consequence of a finding on Task 35 was not stated.
 
 ## Part B: Founder rulings
 
@@ -56,13 +58,15 @@ B4. **Registration cross-check.** For a registered surface, `parseCapabilityReco
 
 B5. **The error type.** `CapabilityRecordError` extends `Error`. It carries `kind`, one of `schema`, `unregistered_surface`, `registration_mismatch`, `timestamp` and `invalid_now`, and `field`, the name of the offending field. It never carries the raw input, any sanitized fact, or any other record content, so a rejection cannot leak what the record held. It is exported from `capability-record.ts` and added to `index.ts`.
 
-B6. **The filename.** `capabilityRecordFilename(record)` returns exactly `evaluated_at`, a hyphen, the first 12 characters of `binary_sha256`, and `.json`. It has no surface component, because the surface is the directory under spec section 5.1. Because the parser guarantees a canonical timestamp and a hexadecimal hash, the result contains no path separator and no character outside the timestamp and hash alphabets. The plan's test titled "the capability filename is derived from the normalized surface and binary hash, never a display name" is pinned as follows: the result equals that template for a parsed record, it contains no slash or NUL, and two records that differ only in `requested_model`, `provider` or `limitations` produce the same name.
+B6. **The filename.** `capabilityRecordFilename(record)` returns exactly `evaluated_at`, a hyphen, the first 12 characters of `binary_sha256`, and `.json`. It has no surface component, because the surface is the directory under spec section 5.1. Because the parser guarantees a canonical timestamp and a hexadecimal hash, the result contains no path separator and no character outside the timestamp and hash alphabets. The plan's test titled "the capability filename is derived from the normalized surface and binary hash, never a display name" is pinned as follows: the result equals that template for a parsed record, it contains no slash or NUL, and two records that differ only in `requested_model` or `limitations` produce the same name. A parsed record for a registered surface cannot differ in `provider` (B4), so `provider` is not part of that comparison.
 
 B7. **Purity.** `capability-record.ts` performs no I/O, reads no clock, and creates no record. It never calls `Date.now()` and never constructs a date without an argument. `now` is always the caller's. The only runtime imports are other modules of `packages/protocol/src`.
 
 B8. **Exports.** `capability-record.ts` exports exactly: the types `CapabilityRecordV1`, `ObservedSurfaceFacts` and `StalenessReason`, the class `CapabilityRecordError`, and the functions `parseCapabilityRecord`, `evaluateCapabilityFreshness` and `capabilityRecordFilename`. The test "a passing record is not a live authorization" enumerates the module's exports and asserts that no function name matches `/authoriz|certif|admit/i`. `index.ts` adds exports for those names and nothing else.
 
-B9. **Reassignment.** This act's builder is a new session and not any Actor-Id that worked on Task 60. Any substantive finding in the Part E review of this task is round 3 under rubric milestone 1 and requires reassigning the implementer before any further correction, as A4 states.
+B9. **Reassignment.** This act's builder is a new session and not any Actor-Id that worked on Task 60. A substantive finding in the Part E review of this task requires reassigning the implementer before any further correction, on the reading B10 rules.
+
+B10. **How a finding on Task 35 is counted.** A substantive finding in a verdict on Task 35 is counted under both rubric milestones 4 and 1, the two the plan's section 4 table maps M15 to. Plan section 11.3 counts a verdict under every rubric milestone it affects, and the plan gives no rule that splits an M15 finding between them, so this act splits none. A verdict that finds a substantive defect is round 3 under rubric milestone 1, which requires reassignment, and round 1 under rubric milestone 4. A point that plan section 11.3 lists as not counting, and an advisory, adds no round to either milestone.
 
 ## Part C: Authorized scope
 
@@ -89,7 +93,7 @@ C2. The test file contains exactly the twelve tests the plan names, with these e
 
 C3. Every other path stays byte-identical to the binding base, including every other file in `packages/protocol`, `packages/storage`, `bun.lock` and every manifest.
 
-C4. No new dependency, no storage, no file or network access, no timer, no registry, no producer of records and no second authority. Task 36 and the investigation tooling are outside this act.
+C4. No new dependency, no storage, no file or network access, no timer, no new registry, no write to `ADAPTER_REGISTRY`, no producer of records and no second authority. The read-only `lookupRegistration` call that B4 requires is authorized. Task 36 and the investigation tooling are outside this act.
 
 ## Part D: Verification
 
@@ -170,7 +174,7 @@ E6. **Review items.** PASS only if all seven pass.
 6. The changed paths are exactly C1, every other path is byte-identical (C3), and the architecture tests are green with no surface identifier in the new module.
 7. The module is pure (B7), and the reviewer reproduces the D4 results and at least the break for each of tests 1 to 4.
 
-E7. The reviewer states what it executed and what it only read. The verdict is recorded on the PR with the reviewer id and the exact head SHA, and entered in `docs/verification/phase-3a-correction-rounds.md` under both plan milestone M15 and rubric milestones 4 and 1.
+E7. The reviewer states what it executed and what it only read. The verdict is recorded on the PR with the reviewer id and the exact head SHA, and entered in `docs/verification/phase-3a-correction-rounds.md` under plan milestone M15 and, as B10 rules, under both rubric milestones 4 and 1.
 
 E8. The Part E review is a task-level review under this act. It is not the M15 review checkpoint, which covers Task 36 as well and closes only by a separate Founder act.
 
