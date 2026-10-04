@@ -577,3 +577,38 @@ Round 2's resolution, recorded above as pending, is now closed:
 - **Ruling:** Task 34 is accepted as merged, subject to that correction (act B1). No round is added
   by this act. The M14 review checkpoint stays open until act Part D is met. Task 35 and M15 are not
   authorized.
+
+## M14 review verdict FAIL (rubric milestone 9, round 1)
+
+- **Recorded:** 2026-10-03, under FOUNDER-ACT-20261003-M14-REVIEW-REQUEST
+  (`docs/decisions/DEC-20261003-01-m14-review-request.md`) and FOUNDER-ACT-20261003-M14-CORRECTION-C2
+  (`docs/decisions/DEC-20261003-02-m14-verdict-fail-correction-c2.md`).
+- **Review:** a non-authoring review of the exact head `515eba9ff573eab3820b12900d4f734468395d84`,
+  covering Task 33 (PR #94), Task 34 (PR #93) and correction C1 (PR #113). Reviewer id `codex`.
+- **Verdict:** FAIL. The verdict file is `~/verdicts/m14-515eba9-codex-review.txt`, SHA-256
+  `323a58be2e0580291832f36d955ad8177a1126ba485aaa82008f2d2fcf77da3f`, 24,831 bytes, 391 lines. The
+  text is not reproduced here. It is posted as a comment on PR #113 under act D2.
+- **Findings, in the act's names V1 to V5 (the verdict calls them F1 to F5):**
+  V1, the child runner in `test/phase3a/architecture-phase3a.test.ts` counts UTF-16 code units, not
+  bytes, against the 65,536 cap. V2, the TUI path does not reject `timedOut`, and accepts exit code 0
+  without prior readiness. V3, the socket-absence checkpoints at readiness and after every failure
+  are missing, the checks run after outcome assertions that can throw, and the runner resolves on
+  `exit` and not on stream close. V4, `test/phase3a/negative-control.ts` swallows every `lstatSync`
+  error. V5, the removed and weakened PTY coverage in `apps/madbridge/test/pty-focus.test.tsx` had no
+  recorded disposition under plan section 12.3.
+- **Round count:** one round under rubric milestone 9 (M1, M12, M13 and M14), round 1 of 2, under plan
+  section 11.3 and act B4. This log held no earlier rubric milestone 9 entry. One verdict adds at most
+  one round. Reassignment is required at more than two rounds, so a third counted round requires it.
+- **V5 disposition (Founder, act B6):** the weakened coverage is accepted as merged. The assertions on
+  focus state and on `terminateAll()` cleanup, and the snapshot read-only case, are owed to the PTY-host
+  milestone and must be restored or explicitly re-ruled there. This is not a general waiver of plan
+  section 12.3. Open fact, not ruled: item 10 of
+  `docs/decisions/DEC-20260902-01-task33-phase1-annex-r5.md` says five `PtyManager` cases and the
+  header of `apps/madbridge/test/pty-focus.test.tsx` says four.
+- **Authorized remedy:** correction C2, one commit on exactly `test/phase3a/architecture-phase3a.test.ts`
+  and `test/phase3a/negative-control.ts`, with committed tests that can fail. It adds no round.
+- **Withdrawn statement:** act B3 of the review request said CI pins Bun 1.3.14. The reviewer found a
+  qualified custodied Bun revision. The statement is withdrawn and had no effect on any result.
+- **Not ruled:** the reviewer's advisories, listed in act B7.
+- **Checkpoint:** the M14 review checkpoint stays open. Task 35, M15 and every later task are not
+  authorized.
