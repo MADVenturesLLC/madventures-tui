@@ -612,3 +612,48 @@ Round 2's resolution, recorded above as pending, is now closed:
 - **Not ruled:** the reviewer's advisories, listed in act B7.
 - **Checkpoint:** the M14 review checkpoint stays open. Task 35, M15 and every later task are not
   authorized.
+
+## M14 re-review verdict PASS (rubric milestone 9, round 1 of 2 unchanged)
+
+- **Recorded:** 2026-10-04, under FOUNDER-ACT-20261004-M14-C2-REREVIEW-REQUEST
+  (`docs/decisions/DEC-20261004-01-m14-c2-rereview-request.md`) and FOUNDER-ACT-20261004-M14-C2-ACCEPTANCE
+  (`docs/decisions/DEC-20261004-02-m14-c2-rereview-acceptance.md`).
+- **Review:** a non-authoring re-review of the exact head `f6cecd671810e4f68e2760abfc3d3a8758e5e8eb`,
+  the merge commit of correction C2 (PR #116, commit `8b8d789527e2ca67ddfeb98beaa20707b15973d1`), covering
+  the M14 chain. Reviewer id `gemini-antigravity`. The model line is `unavailable-from-current-harness`.
+  When asked, the session said it was Gemini 3.1 Pro (High) in the Antigravity CLI. That is an unverified
+  self-report.
+- **Verdict:** PASS, with advisories listed, so PASS-WITH-ADVISORIES under act B5 of the request. The
+  verdict text of record has SHA-256 `68c8e1fbb73f2d6595e8eccb0c91022ee1b2258914a020771fde6f5f15f2a21c`,
+  7,791 bytes, 109 lines. The addendum text of record has SHA-256
+  `76c908807ecc729f90edb3723c1317ff3771b237cd1f16d6117d528453ff3e26`, 7,927 bytes, 92 lines. The texts
+  are not reproduced here. They are posted as comments on PR #116 under act C2 of the acceptance act.
+- **Provenance:** the two texts of record are the drafter's transcriptions of what the Founder pasted,
+  not unedited exports. The differences are two dropped non-document lines, the stripped two-space
+  terminal indent and trailing padding, and one added final newline. The Founder accepted them for this
+  verdict only, under act B2 of the acceptance act. It is not precedent.
+- **Reported by the reviewer, not verified here:** `bun install --frozen-lockfile` and `bunx tsc --noEmit`
+  at exit 0; the architecture file at 49 pass, 0 fail, 474 expect calls; the full suite at 1559 pass,
+  0 fail, 7726 expect calls over 95 files on Bun 1.4.2 on the Founder's Mac; four breaks of the fix, each
+  failing the intended test.
+- **Drafter corroboration (not independent):** the drafter of the correction act broke the fix seven
+  ways on the merged head in a disposable Linux checkout, and each break failed the intended test.
+- **Addendum errors, given no weight (act B4):** the addendum names the PR #116 commit with a SHA that
+  does not exist, and says it was squashed. It was not squashed. PR #116 merged as a merge commit
+  `f6cecd671810e4f68e2760abfc3d3a8758e5e8eb`, with parents `b965a8ef737ca840a2661bb8dd9ab49f764ff95f`
+  and `8b8d789527e2ca67ddfeb98beaa20707b15973d1`.
+- **Seam-based RED method (act B5):** ruled to meet act C2 for V1 to V4. The ruling rests mainly on the
+  drafter's seven breaks and the reviewer's four, and it records that the reviewer's own judgment
+  restates the builder's account.
+- **Advisories (act B6), none bound to a milestone:** the runner waits for stream close, so a descendant
+  that holds a pipe open hangs it until Bun's test timeout, and the runtime directory is left behind
+  (fails closed; a bounded drain needs its own Founder act and is not authorized); output keeps being
+  buffered after the 65,536-byte cap is flagged; `socketAbsent` uses `existsSync`; and the advisories
+  listed in act B7 of the correction act stay as they are.
+- **V5 disposition:** the act B6 disposition of the correction act stands. The weakened PTY coverage is
+  owed to the PTY-host milestone.
+- **Round count:** the PASS adds no round. Rubric milestone 9 stays at round 1 of 2. Reassignment is
+  required at more than two rounds, so a third counted round requires it.
+- **Checkpoint:** the M14 review checkpoint is closed at `f6cecd671810e4f68e2760abfc3d3a8758e5e8eb`
+  under act B9 of the acceptance act. Task 35, M15 and every later task are not authorized. Each needs
+  its own Founder act.
