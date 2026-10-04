@@ -1,0 +1,109 @@
+## 1. Environment and Independence
+
+• Surface: Antigravity session on the Founder's Mac
+• Model ID: unavailable-from-current-harness (running as a Gemini model)
+• Host: Mac
+• Bun Version: bun 1.4.2 (50a8a8387)
+• Authoring Independence: I did not author any of the reviewed work. I had no part in the Gemini advisory reviews on PR 93.
+• Reporting Independence: I executed the Item 1, 3, and 4 checks blindly against the codebase. I did not read the description of PR 116, the Copilot reviews on
+PR 116, the builder report, or the drafter analysis on PR 114 until after executing and fully completing Items 1, 3, and 4. I strictly used my own probes to
+verify the behavior before looking at the builder's RED/GREEN justification.
+
+## 2. Step 0 Results (PASS - Executed)
+
+• Verified FOUNDER-ACT-20261004-M14-C2-REREVIEW-REQUEST via git show. The SHA-256 matches exactly:
+a764418d6680cad979ed432cd6691bbe9529548b10fdce306caf0b26ecd7b138 (14,054 bytes, 88 lines).
+• The head under review is exactly f6cecd671810e4f68e2760abfc3d3a8758e5e8eb. It is an ancestor of origin/main.
+• The git status was clean.
+• All subsequent mutations, lockfile changes, and custom tests were isolated in a disposable workspace (/tmp/madventures-tui-review).
+
+## 3. Items 1 to 7
+
+Item 4 (PASS - Executed)
+Ran tests in the disposable copy:
+
+• bun install --frozen-lockfile (Exit 0)
+• bunx tsc --noEmit (Exit 0)
+• bun test test/phase3a/architecture-phase3a.test.ts: 49 pass, 0 fail, 474 expect() calls. Ran 49 tests across 1 file.
+• Full bun test: 1559 pass, 0 fail, 7726 expect() calls. Ran 1559 tests across 95 files.
+(CI uses a qualified custodied Bun revision; I make no claim of CI parity).
+
+Item 1 (PASS - Executed)
+Ran custom reproductions of the first verdict's probes in the disposable copy.
+
+• V1: Generated 32,769 repetitions of a two-byte character. The runner correctly capped stdout bytes at 65,539 (exceeding 65,536 limit) and flagged overflowed:
+true. No multibyte characters were split.
+• V2: Generated a SIGTERM-ignoring child. The test correctly timed out (timedOut: true) at 5,060ms without accepting a late token. A child exiting 0 without
+readiness correctly flagged exitedBeforeReadiness: true.
+• V3: Ran a child that creates broker.sock and exits 1. The socket was successfully detected at both the readiness and end checkpoints by the assertions. A
+descendant that wrote after child exit had its output properly captured, proving the runner waits for stream closures.
+• V4: Injected an EACCES error into the sweep's lstatSync. The sweep correctly recorded the error in the errors array but still returned the path as a match. An
+ENOENT error was correctly ignored (not added to errors).
+• Break Fixes: I broke the fixes for V1-V4 in architecture-phase3a.test.ts and negative-control.ts. The V-labeled tests correctly failed, proving the assertions
+enforce the corrected behavior.
+
+Item 3 (PASS - Executed)
+
+• Executed the negative control script bun run test/phase3a/negative-control.ts against a disposable MADV_STORAGE_DIR. With a seeded broker.sock (within depth 6),
+it exited 1. Without a socket, it exited 0. A seeded socket at depth 7 was ignored (exited 0), and a socket in MADV_RUNTIME_DIR was successfully ignored (exited
+0).
+• Mutated bun.lock three ways: inserted node-pty into the packages/broker block (failed with "native PTY dependency outside the packages/tui-chaos carve-out"),
+inserted node-pty elsewhere (failed with the same error), and deleted the packages/broker block entirely (failed with "FAIL CLOSED: bun.lock 'workspaces' has no
+'packages/broker' block"). The real lockfile passed.
+
+Item 2 (PASS - Read and Reasoned)
+
+• Read PR 116 commit counts/paths: it consists of one commit (8b8d789) modifying exactly two paths (test/phase3a/architecture-phase3a.test.ts and
+test/phase3a/negative-control.ts).
+• Act C1, C2, C3, and C5 constraints were fully met by the builder.
+• The builder's seam-based RED method for V4 (injecting an lstat failure through an fs interface instead of using real permissions) is robust and acceptable. It
+ensures the test doesn't pass vacuously when run as uid 0.
+
+Item 5 (PASS - Read)
+
+• SHA-256 of DEC-20261003-01: 1a7acd2e1d2a78116685d37594373ec1161b831eb33e6a6b9a3991da45d09b16.
+• SHA-256 of DEC-20261003-02: 7766e994cf96524f1f22a4448c642b71eb1080b486484e2b5271d5562b744d96.
+• The path list from 515eba9 to HEAD modified only the two act files, the rounds log, AGENTS.md, and the two test files.
+• Read the rounds log entry for rubric milestone 9; it is properly recorded (round 1 of 2).
+• The body of comment 5975650599 on PR 113 has a verdict part (stripping the API trailing newline) whose SHA-256 is exactly
+323a58be2e0580291832f36d955ad8177a1126ba485aaa82008f2d2fcf77da3f.
+
+Item 6 and 7 (PASS - Reasoned)
+
+• Copilot finding & stream hang (PR 116): The runner can hang if a descendant keeps streams open forever, failing closed on Bun's timeout, which abandons the
+runtime directory. Classification: Advisory. It does not leave a Task 34 requirement unproven because it fails closed (does not issue a false pass).
+• Overflow-buffering remark (PR 116): The runner buffers output infinitely after overflow rather than destroying the stream, risking OOM. Classification:
+Advisory. It still flags the overflow correctly and fails closed.
+• socketAbsent using existsSync: Unreadable parents or dangling symlinks read as absent. Classification: Advisory. The baseline did this and the behavior was
+unchanged by V1-V4.
+• Disclosed deviation (PR 114): The log stated the verdict was posted on PR 113 when it had not been. Classification: Acceptable. The Founder verified it ("Valid
+in substance... No change made"), satisfying the external requirement before merge.
+• Unruled Advisories (Act B7): Dynamic imports, require gaps, missing negative lockfile test, doubled cosmetic quotes, PR 93 conventions, and Task 33 exception
+evidence. Classification: Advisories. None are defects under the definition in the act.
+
+## 4. Findings
+
+None. No substantive findings or defects were identified that leave a requirement of V1 to V4 unmet or leave a Task 33/34 invariant unproven.
+
+## 5. Advisories
+
+• Residual Risk (Stream Hang): A descendant that keeps stdout/stderr open forever will cause the bounded runner to hang until Bun's per-test timeout fails the
+test. This fails closed, but the runtime directory is not removed.
+• Residual Risk (OOM Buffering): Output is buffered in memory indefinitely even after the 65,536-byte limit is flagged. Malicious input could cause OOM.
+• Residual Risk (socketAbsent): socketAbsent uses existsSync, which treats unreadable parent directories or dangling symlinks as absent.
+• Prior Advisories Kept: The unruled advisories from B7 (scanner gaps, cosmetic quotes, absent negative lockfile mutation test) remain as advisories.
+
+## 6. What was Executed, Read, and Not Run
+
+• Executed: Verified HEAD status and act hash. Created a disposable workspace. Ran bun install, bunx tsc, and bun test suites. Built and ran custom V1-V4 probes
+against runBoundedChild and sweep. Mutated bun.lock (JSON structure validly rewritten to test block failures). Broke the source fixes to verify test assertions
+fail. Ran negative control with multiple depth injections.
+• Read: Read PR 116 commits, changed files, and body. Read PR 114 comments. Read the milestone 9 entry in the rounds log. Computed SHA-256 hashes of the
+decisions and PR comments via API and CLI.
+• Not Run: No operations were run outside the disposable copy. No CI parity checks were run.
+
+Final Verdict: PASS
+Tier2-Reviewer-Id: gemini-antigravity
+Tier2-Head-Sha: f6cecd671810e4f68e2760abfc3d3a8758e5e8eb
+Tier2-Verdict: PASS
+Tier2-Reviewer-Model: unavailable-from-current-harness
