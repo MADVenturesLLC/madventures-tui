@@ -598,7 +598,7 @@ Round 2's resolution, recorded above as pending, is now closed:
   recorded disposition under plan section 12.3.
 - **Round count:** one round under rubric milestone 9 (M1, M12, M13 and M14), round 1 of 2, under plan
   section 11.3 and act B4. This log held no earlier rubric milestone 9 entry. One verdict adds at most
-  one round. A second counted round requires reassignment.
+  one round. Reassignment is required at more than two rounds, so a third counted round requires it.
 - **V5 disposition (Founder, act B6):** the weakened coverage is accepted as merged. The assertions on
   focus state and on `terminateAll()` cleanup, and the snapshot read-only case, are owed to the PTY-host
   milestone and must be restored or explicitly re-ruled there. This is not a general waiver of plan

@@ -36,7 +36,7 @@ B2. **Freshness disclosure.** The reviewer disclosed that its session had seen t
 
 B3. **CI version statement.** Part B3 of the review request act says CI pins Bun 1.3.14. The reviewer found that `.github/workflows/verify.yml` selects a qualified custodied Bun revision. The statement is withdrawn. It had no effect on any result. Reports in this correction state the Bun version actually used and make no claim of parity with CI.
 
-B4. **Counting.** The FAIL is a substantive finding against deliverables of Task 33 and Task 34, and under act D1 of the acceptance act and act B6 of the review request act it is one correction round. Under plan section 11.3 one verdict adds at most one round per rubric milestone, however many findings it holds. It is counted under rubric milestone 9, which covers M1, M12, M13 and M14. At the reviewed head the rounds log has no rubric milestone 9 entry, so this is round 1 of 2. A second counted round ends the builder assignment under section 11.3 and requires reassignment. Correction C2 is the remedy for round 1 and adds no round of its own.
+B4. **Counting.** The FAIL is a substantive finding against deliverables of Task 33 and Task 34, and under act D1 of the acceptance act and act B6 of the review request act it is one correction round. Under plan section 11.3 one verdict adds at most one round per rubric milestone, however many findings it holds. It is counted under rubric milestone 9, which covers M1, M12, M13 and M14. At the reviewed head the rounds log has no rubric milestone 9 entry, so this is round 1 of 2. Section 11.3 requires reassignment at more than two correction rounds on one milestone, so a third counted round requires it. A second counted round is round 2 of 2 and does not. Correction C2 is the remedy for round 1 and adds no round of its own.
 
 B5. **V1 to V4 are defects in the deliverables.** Task 34 Step 1 requires byte caps that apply throughout the child lifetime, a 5,000 ms deadline, rejection of early exit and of missing readiness by the deadline, and socket-absence checks at every assertion point with directory cleanup only after the final checks. The proof as merged does not meet these. Correction C2 is required.
 
@@ -96,6 +96,6 @@ Signed:
 
 — Michael Daley
 
-Date: 2026-10-03
+Date: 2026-10-04
 
 Actor-Id: founder
