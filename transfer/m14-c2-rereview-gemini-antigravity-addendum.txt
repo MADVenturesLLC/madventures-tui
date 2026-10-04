@@ -1,0 +1,92 @@
+ADDENDUM
+
+## A. Item 1, the breaks
+
+I applied exactly 4 mutations in total (one for each finding) in the disposable copy. After capturing the failure, I restored the disposable copy (git restore)
+for every mutation. I did not run the CI pipeline or verify across multiple OS environments (not run).
+
+• V1 Break (Executed):
+    • Mutation applied: In test/phase3a/architecture-phase3a.test.ts, changed outBytes += chunk.length; to outBytes += 0;.
+    • Failing test name: Task 34 correction C2: the Step 1 runner, entry-path checks and negative-control sweep > V1: the runner caps stdout and stderr by bytes,
+    each separately, including output written after readiness and the test's SIGTERM
+    • Decisive failure output: error: expect(received).toEqual(expected) ... - "stdout65538Bytes": true, + "stdout65538Bytes": false,
+    • Restoration: I ran git restore test/phase3a/architecture-phase3a.test.ts.
+• V2 Break (Executed):
+    • Mutation applied: In test/phase3a/architecture-phase3a.test.ts, changed if (r.exitedBeforeReadiness) failures.push(...) to if (false) failures.push(...).
+    • Failing test name: Task 34 correction C2: the Step 1 runner, entry-path checks and negative-control sweep > V2: the TUI-path acceptance rejects exit code 0
+    without readiness, a token that arrives only after the child exited 0, and a SIGTERM-ignoring child whose readiness token arrives only after the 5,000 ms
+    deadline
+    • Decisive failure output: error: expect(received).toEqual(expected) ... - "readinessOnlyAfterExit": true, + "readinessOnlyAfterExit": false,
+    • Restoration: I ran git restore test/phase3a/architecture-phase3a.test.ts.
+• V3 Break (Executed):
+    • Mutation applied: In test/phase3a/architecture-phase3a.test.ts, removed the check for closed streams in finish() by changing if (settled || (!spawnFailed
+    && (exit === null || !outClosed || !errClosed))) return; to if (settled || (!spawnFailed && (exit === null))) return;.
+    • Failing test name: Task 34 correction C2: the Step 1 runner, entry-path checks and negative-control sweep > V3: the runner resolves only after stdout and
+    stderr close, so output a descendant writes after the child exits is still captured
+    • Decisive failure output: error: expect(received).toEqual(expected) ... { "code": 0, - "stderr": "late", - "stdout": "late", + "stderr": "", + "stdout": "",
+    }
+    • Restoration: I ran git restore test/phase3a/architecture-phase3a.test.ts.
+• V4 Break (Executed):
+    • Mutation applied: In test/phase3a/negative-control.ts, removed the pushing of lstatSync errors into the errors array by commenting out if (!vanished(err))
+    errors.push(...).
+    • Failing test name: Task 34 correction C2: the Step 1 runner, entry-path checks and negative-control sweep > V4: the sweep records a non-ENOENT lstat
+    failure in its errors list, still reports every broker.sock match, and ignores a vanished path
+    • Decisive failure output: error: expect(received).toEqual(expected) ... { - "errorPaths": [ ... "blocked", ... "untyped/broker.sock", ], + "errorPaths": [],
+...
+    }
+    • Restoration: I ran git restore test/phase3a/negative-control.ts.
+
+
+## B. Item 2
+
+Seam-based RED method judgment (Reasoned)
+The builder's seam-based RED method is acceptable for V1, V2, and V3. By putting the legacy 515eba9ff573eab3820b12900d4f734468395d84 runner logic behind seams
+(like runEntryPath), the new test assertions run cleanly against the exact historical behavior. This accurately proves that the new assertions correctly identify
+the defects (RED) on the old logic and pass (GREEN) on the new logic, fulfilling Act C2 without requiring redundant test harness duplication.
+
+Acts C1, C2, C3, and C5 (Read)
+
+• C1: Met because the PR 116 commit (8b8d7890b5e43a9f02a6be1bdc1db0bc9165b4c1, squashed to f6cecd671810e4f68e2760abfc3d3a8758e5e8eb) modifies exactly two files
+(test/phase3a/architecture-phase3a.test.ts, test/phase3a/negative-control.ts), corrects V1-V4, and preserves the 5000ms deadline, 500ms grace, and 65,536-byte
+cap parameters exactly.
+• C2: Met because committed tests prove each fix can fail (RED against base 515eba9ff573eab3820b12900d4f734468395d84 and GREEN against head
+f6cecd671810e4f68e2760abfc3d3a8758e5e8eb), and V4 was written using an fs seam to simulate failure rather than relying on host file permissions (preventing
+vacuous passing on uid 0).
+• C3: Met because the PR description body contains explicit outputs of the RED failures, the GREEN passes, full bun test, bunx tsc --noEmit, and bun install
+counts, alongside statements naming the exact Bun version used.
+• C5: Met because both the commit message and the PR body end with the three attribution trailers (Role-Id, Actor-Id, Execution-Surface) as their final paragraph
+(no bare three-hyphen line), and use full 40-character SHAs and 64-character SHA-256s throughout.
+
+## C. Item 3, structure
+
+I verified these invariants manually via shell execution in the disposable copy (not relying on the architecture test file):
+
+• Broker index exports none of the eight named symbols (Executed): I scanned packages/broker/src/index.ts with grep. None of the quarantined names (BrokerSocket,
+MADV_RUNTIME_DIR, MADV_SOCKET_PATH, MCP_TOOLS, McpServer, McpToolDef, PtyManager, createPtyManager) were exported.
+• Only socket.test.ts imports socket.ts (Executed): I scanned the repository using git grep "socket.ts". It is only referenced inside
+packages/broker/test/socket.test.ts (and the architecture boundary test).
+• No production source constructs a unix:// URL (Executed): I scanned packages/ and apps/ using git grep "unix://". No production matches were found.
+• Preserved modules and adapter mcp-config.ts exist (Executed): I verified the files packages/adapter-claude-code/src/mcp-config.ts and packages/adapter-
+antigravity/src/mcp-config.ts both exist via ls.
+• createFakeByteRouter exists and spawns no process (Executed): I verified via git grep that it exists in test/phase3a/fixture-adapters.ts. Reading the
+implementation showed it simply returns a memory map and write/onData functions with no process spawning.
+• Root scripts (Executed): I parsed package.json with jq '.scripts'. The broker and mcp scripts are absent, and test:phase3a, test:arch, test:adversarial, and
+verify:phase3a are explicitly present.
+• Broker package.json declares no node-pty (Executed): I scanned packages/broker/package.json with grep "node-pty". It is not present.
+• README daemon lines (Executed): I scanned README.md with grep -i "broker-daemon". No matches were found.
+
+## D. Item 7, Deviations in PR 116
+
+(All classified as Reasoned based on the PR 116 description read)
+
+• The seam-based RED method: Acceptable. It natively proves the new assertions fail on legacy logic, meeting Act C2 intent without structurally invalidating the
+tests.
+• The first V2 probe that passed against the old code without reaching its claim: Acceptable. The builder patched the mock script to print the token only once
+and pin it, ensuring the test legitimately reached its RED claim without false-passing from string overflow.
+• The two lstat calls becoming one: Acceptable. It is an internal optimization that achieves the identical file-type check functionality required for V4.
+• The sub-cases that already pass at the base: Acceptable. Additional test coverage that verifies existing baseline invariants remain intact is not forbidden by
+the act.
+• The runner having no options argument: Acceptable. The constants are hardcoded inside the runner testing module itself, and providing them via an options
+argument is not mandated by the act.
+• The unchecked CI box in the pull request body: Acceptable. The act does not require the builder to execute or tick GitHub Actions CI checkboxes prior to Tier-2
+review, especially since the builder noted "not run: CI" and made no claim of CI parity.
