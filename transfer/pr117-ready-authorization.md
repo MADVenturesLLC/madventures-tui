@@ -1,0 +1,16 @@
+READY-FOR-REVIEW AUTHORIZATION: MADVenturesLLC/madventures-tui#117
+
+Authorized head: 0b4658bacb734c249f0d7e717adc5ed95ff64a41
+Base: main at f6cecd671810e4f68e2760abfc3d3a8758e5e8eb
+
+I, Michael Daley, Founder of MAD Ventures, authorize marking this pull request ready for review at the exact head SHA above and at no other. Any push after this comment voids this authorization. This is not a merge authorization. The merge needs a separate act naming the exact head, as act C1 of FOUNDER-ACT-20261004-M14-C2-ACCEPTANCE (docs/decisions/DEC-20261004-02-m14-c2-rereview-acceptance.md, signed 2026-10-04) requires.
+
+Verified before issuing (2026-10-04, after the last check below completed at 16:10:50Z):
+1. Head and scope: the head is the SHA above, one commit after the base, and the pull request is a draft with merge state clean. It adds exactly three paths and removes nothing: docs/decisions/DEC-20261004-01-m14-c2-rereview-request.md (SHA-256 a764418d6680cad979ed432cd6691bbe9529548b10fdce306caf0b26ecd7b138, 88 lines, 14,054 bytes), docs/decisions/DEC-20261004-02-m14-c2-rereview-acceptance.md (SHA-256 a3eae0f4e7a595ef39d5e3bb1aa09497874a3cc5963ec4361502ecf2bcd4c357, 86 lines, 12,176 bytes), and one section appended to docs/verification/phase-3a-correction-rounds.md (45 added lines, 0 removed). The changed-file list on GitHub shows 219 additions in total. Code, tests, bun.lock, every manifest, README.md and the plan are unchanged. The commit message and the pull request body end with the three attribution trailers for session:claude-code/tui-m14-c2-rereview-filing.
+2. Authority: act C1 of FOUNDER-ACT-20261004-M14-C2-ACCEPTANCE and act B7 of FOUNDER-ACT-20261004-M14-C2-REREVIEW-REQUEST direct this filing. It adds no round, and it does not authorize Task 35.
+3. The filing session reports that each act file is byte-identical to its transfer blob (commits a18a9aa389d10a92119dc56e63db7268b9dcc203 and 53854f9350c56e059042fa33e75ace82dcf52557 on claude/awesome-cray-vqrzbt), and that the first 67,642 bytes of the rounds log are unchanged. The drafting assistant read the added diff on GitHub and found it to be the prescribed section. The drafting assistant wrote that section, so this is not an independent review.
+4. Required checks on this head, read from GitHub: Verify (completed 2026-10-04T16:09:46Z), Verify (macOS) (16:10:50Z) and code-review (16:09:18Z, run 37215588950) succeeded. attribution-shape, validate-code-review, CodeQL, all four Analyze jobs and both tui-chaos runs succeeded. fork-pr-notice was skipped. The only comment is the automatic code-review quote, which reports 0 unresolved threads.
+5. Open observation: the section filed here says the verdict and addendum texts are posted as comments on PR #116 under act C2. They are not posted yet. I will post them before I issue the merge authorization, and the merge authorization will name them.
+6. Not authorized by this comment: merging, Task 35, M15, any later task, any push to docs/m14-c2-rereview-acceptance-filing, any change to a path other than the three above, and posting any verdict.
+7. Marking ready restarts the code-review check, and Copilot may review. Check and thread states are verified again in the merge authorization, at the time it is issued.
+8. Body: zero bare three-hyphen lines, checked immediately before issuing.
