@@ -57,3 +57,15 @@ export {
   SESSION_LIFECYCLE_EVENT_TYPES,
   INTERRUPTION_REASON_CODES,
 } from "./lifecycle-events";
+
+export type {
+  CapabilityRecordV1,
+  ObservedSurfaceFacts,
+  StalenessReason,
+} from "./capability-record";
+export {
+  CapabilityRecordError,
+  parseCapabilityRecord,
+  evaluateCapabilityFreshness,
+  capabilityRecordFilename,
+} from "./capability-record";
