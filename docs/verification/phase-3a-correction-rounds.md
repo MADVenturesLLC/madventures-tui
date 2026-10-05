@@ -657,3 +657,42 @@ Round 2's resolution, recorded above as pending, is now closed:
 - **Checkpoint:** the M14 review checkpoint is closed at `f6cecd671810e4f68e2760abfc3d3a8758e5e8eb`
   under act B9 of the acceptance act. Task 35, M15 and every later task are not authorized. Each needs
   its own Founder act.
+
+## Task 35 Part E review (rubric milestone 1 round 3, rubric milestone 4 round 1)
+
+- **Recorded:** 2026-10-05, under FOUNDER-ACT-20261005-TASK35-CORRECTION
+  (`docs/decisions/DEC-20261005-01-task35-correction-authorization.md`) B1 and G1.
+- **Plan milestone:** M15, Task 35. **Rubric milestones:** 4 and 1. A substantive finding on Task 35
+  counts under both (FOUNDER-ACT-20261004-TASK35-EXECUTION-AUTHORIZATION B10).
+- **Verdict target:** `16e2f1f9ab3a8984576a934823eb88dbde8522a2`, the head of PR #119 (a draft), one
+  commit after `3a576dcd8b377668f6eb926397fb9a6cd88c1411`. Task 35 binding base
+  `1f07d4db5fbac1a8854d967f2bd0bc610450bc11`.
+- **Reviewer:** `codex`, independent and non-authoring. It reports its model as the GPT-6 family with the
+  exact variant unproven. That is an unverified self-report. It executed the act's D4 commands and a
+  deliberate break for each of tests 1 to 4 on macOS 27.0.1, arm64, with Bun 1.4.2.
+- **Verdict text SHA-256:** `f965b120a06cd22227e6b1c6bd3d4f0c957511f9208bd814cfa9988f5f0d58ab`, 7,948 bytes, 118 lines, from the
+  Founder's saved copy.
+- **Provenance:** the text of record is the first 118 lines of the Founder's raw copy of Codex's
+  output (SHA-256 `9fde49b0b0b420cb4cd53da5f0db263543adc3b3a726d7541ea3f0d2fb402afe`, 126 lines,
+  8,165 bytes). The eight lines removed after the verdict's last line are a blank line and a Codex
+  harness memory-citation block, which is not part of the verdict. No other byte was changed.
+- **Result:** FAIL. Items 1, 3, 4 and 5 returned PASS. Item 2 returned FAIL on finding 1:
+  `parseCapabilityRecord` let exceptions other than `CapabilityRecordError` escape while inspecting its
+  input, against act B3. A revoked `Proxy` escaped as a `TypeError`, and a throwing `Proxy` trap's own
+  error, carrying text the trap chose, reached the caller. Items 6 and 7 returned FAIL on the literal
+  D4 path command, which lists four paths against the binding base. The reviewer states that this is a
+  conflict in the act's text and not a builder defect.
+- **Advisory findings 2 and 3:** no named test pins the `provider` check, the role membership and
+  uniqueness checks, or the finiteness and non-negativity of `pty.observed_ms`. The head enforces all
+  three.
+- **Counted:** one round under each affected rubric milestone (act B1). Items 2, 6 and 7 count once.
+  The advisory findings are not a round. Rubric milestone 1 stands at **3**. Rubric milestone 4 stands
+  at **1**.
+- **Ruling:** the implementer `session:claude-code/m15-task35-r1`, which reported running on Claude
+  Opus 5.5, is reassigned (act B2) to `session:claude-code/m15-task35-r2` on Claude Opus 5. The Founder
+  chose Claude Opus 5 knowing that it implemented the Task 60 correction round 1 under rubric
+  milestone 1. The act authorizes one correction commit on PR #119 (act C1) and corrects the reading of
+  the D4 path check (act B7). A re-review under reviewer id `codex` follows (act Part F). A substantive
+  finding there is round 4 under rubric milestone 1 and round 2 under rubric milestone 4 (act F4).
+- **Not recorded here:** the verdict text itself. It is posted verbatim on PR #119 by a session the
+  Founder directs, after this pull request merges (act G2).
