@@ -1,7 +1,10 @@
 // packages/protocol/test/capability-record.test.ts
 // Tests for the capability record (Task 35): a dated observation with explicit
 // staleness rules, never a live authorization. Rulings: act
-// FOUNDER-ACT-20261004-TASK35-EXECUTION-AUTHORIZATION Part B and PLAN-OPEN-3.
+// FOUNDER-ACT-20261004-TASK35-EXECUTION-AUTHORIZATION Part B and PLAN-OPEN-3,
+// with B3 to B5 of act FOUNDER-ACT-20261005-TASK35-CORRECTION
+// (docs/decisions/DEC-20261005-01-task35-correction-authorization.md) pinned
+// inside "a passing record is not a live authorization".
 // Registry-derived fixture values are read from ADAPTER_REGISTRY, never
 // restated here.
 
@@ -318,6 +321,112 @@ test("a passing record is not a live authorization", () => {
   expectRejected(() => parseCapabilityRecord(rawWith({ authorized: true })), "schema", "record");
   const pty = rawRecord()["pty"] as Record<string, unknown>;
   expectRejected(() => parseCapabilityRecord(rawWith({ pty: { ...pty, admitted: true } })), "schema", "pty");
+
+  // ── Correction act B3 and B4: inspecting the input can itself throw ──
+  // A revoked handle, a throwing trap or a getter makes an ordinary inspection
+  // raise. None of that escapes: each is a schema rejection naming the
+  // container being inspected, and nothing of the original exception is kept.
+
+  const revokedInput = Proxy.revocable({}, {});
+  revokedInput.revoke();
+  expectRejected(() => parseCapabilityRecord(revokedInput.proxy as Record<string, unknown>), "schema", "record");
+
+  // The trap chooses its own error text, so it is set here to a value this
+  // record carries. That text must reach neither the rejection's message, its
+  // stack nor any of its own properties.
+  const leaked = "example-sanitized-fact-never-in-a-rejection";
+  const identityWithFact = {
+    ...(rawRecord()["identity_attestation"] as Record<string, unknown>),
+    sanitized_facts: leaked,
+  };
+  const carrying = parseCapabilityRecord(rawWith({ identity_attestation: identityWithFact }));
+  expect(carrying.identity_attestation.sanitized_facts).toBe(leaked);
+
+  const throwingPrototype = new Proxy(
+    {},
+    {
+      getPrototypeOf(): never {
+        throw new Error(leaked);
+      },
+    },
+  );
+  expectNoContent(
+    expectRejected(
+      () => parseCapabilityRecord(rawWith({ host: throwingPrototype, identity_attestation: identityWithFact })),
+      "schema",
+      "host",
+    ),
+    leaked,
+  );
+
+  const throwingOwnKeys = new Proxy(
+    {},
+    {
+      ownKeys(): never {
+        throw new Error(leaked);
+      },
+    },
+  );
+  expectNoContent(
+    expectRejected(
+      () => parseCapabilityRecord(rawWith({ pty: throwingOwnKeys, identity_attestation: identityWithFact })),
+      "schema",
+      "pty",
+    ),
+    leaked,
+  );
+
+  const revokedRoles = Proxy.revocable([] as unknown[], {});
+  revokedRoles.revoke();
+  expectRejected(
+    () => parseCapabilityRecord(rawWith({ role_eligibility: revokedRoles.proxy })),
+    "schema",
+    "role_eligibility",
+  );
+
+  // ── Correction act B5: checks the correction base already enforces ──
+
+  // Spec section 9.1 copies provider from the registration, so a differing
+  // provider fails admission for every registration, not just the first.
+  for (const registration of registrations()) {
+    for (const value of [`${registration.provider}-other`, registration.provider.toUpperCase()]) {
+      expect(value).not.toBe(registration.provider);
+      expectNoContent(
+        expectRejected(
+          () => parseCapabilityRecord(rawWith({ provider: value }, registration)),
+          "registration_mismatch",
+          "provider",
+        ),
+        value,
+      );
+    }
+  }
+
+  // role_eligibility entries are each one of KNOWN_ROLES and never repeated.
+  const firstRole = KNOWN_ROLES[0]!;
+  expectRejected(
+    () => parseCapabilityRecord(rawWith({ role_eligibility: [firstRole, firstRole] })),
+    "schema",
+    "role_eligibility",
+  );
+  for (const unknown of ["founder", `${firstRole}-other`, firstRole.toUpperCase()]) {
+    expect(KNOWN_ROLES).not.toContain(unknown);
+    expectRejected(
+      () => parseCapabilityRecord(rawWith({ role_eligibility: [unknown] })),
+      "schema",
+      "role_eligibility",
+    );
+  }
+
+  // Every pty.observed_ms value is finite and not negative. -1 is caught only
+  // by the non-negativity check, NaN and Infinity only by the finiteness one.
+  for (const ms of [-1, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+    expectRejected(
+      () => parseCapabilityRecord(rawWith({ pty: { ...pty, observed_ms: { spawn: ms } } })),
+      "schema",
+      "pty.observed_ms",
+    );
+  }
 });
 
 // ─── Filename (B6) ───

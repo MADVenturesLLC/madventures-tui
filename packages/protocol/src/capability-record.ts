@@ -3,6 +3,11 @@
 // host, never a standing authorization (spec sections 2.3, 5.5 and 9.1;
 // PLAN-OPEN-3). Pure: no I/O, no clock, no record creation. The caller
 // supplies `now`, and the registry is read only through lookupRegistration.
+// Inspecting the input is itself untrusted work: B3 of act
+// FOUNDER-ACT-20261005-TASK35-CORRECTION requires every exception raised
+// while parseCapabilityRecord reads its input to leave as a
+// CapabilityRecordError of kind `schema` naming the container, so every
+// such read goes through probe().
 
 import { lookupRegistration } from "./adapter-registry";
 import { parseSurfaceId, type SurfaceId } from "./surface-id";
@@ -114,15 +119,41 @@ function reject(kind: CapabilityRecordErrorKind, field: string): never {
   throw new CapabilityRecordError(kind, field);
 }
 
-function isPlainObject(value: unknown): value is object {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
-  const prototype: unknown = Object.getPrototypeOf(value);
+/**
+ * One inspection of untrusted input, named by the container it inspects.
+ *
+ * A revoked handle, a `Proxy` trap or an accessor can make an ordinary
+ * prototype lookup, array test, key enumeration or property read throw
+ * anything at all, including a value of this module's own error class holding
+ * text the trap chose. `read` performs a single such primitive and never
+ * rejects, so whatever it throws came from the input: it is replaced by a
+ * fresh schema rejection naming the container, and nothing of the original is
+ * read, re-thrown or attached.
+ */
+function probe<T>(container: string, read: () => T): T {
+  try {
+    return read();
+  } catch {
+    return reject("schema", container);
+  }
+}
+
+function isPlainObject(value: unknown, container: string): value is object {
+  if (typeof value !== "object" || value === null) return false;
+  if (probe(container, () => Array.isArray(value))) return false;
+  const prototype: unknown = probe(container, () => Object.getPrototypeOf(value));
   return prototype === Object.prototype || prototype === null;
 }
 
+/** Requires an array. Its length and elements are still read defensively. */
+function readArray(value: unknown, container: string): readonly unknown[] {
+  if (!probe(container, () => Array.isArray(value))) return reject("schema", container);
+  return value as readonly unknown[];
+}
+
 /** Reads an own data property once, so no caller getter runs and no later read can differ. */
-function ownDataValue(source: object, key: string, field: string): unknown {
-  const descriptor = Object.getOwnPropertyDescriptor(source, key);
+function ownDataValue(source: object, key: string, field: string, container: string): unknown {
+  const descriptor = probe(container, () => Object.getOwnPropertyDescriptor(source, key));
   if (descriptor === undefined || !("value" in descriptor)) return reject("schema", field);
   return descriptor.value;
 }
@@ -134,13 +165,13 @@ function readClosed<K extends string>(
   keys: readonly K[],
 ): Record<K, unknown> {
   const container = path === "" ? "record" : path;
-  if (!isPlainObject(value)) return reject("schema", container);
-  const own = Reflect.ownKeys(value);
+  if (!isPlainObject(value, container)) return reject("schema", container);
+  const own = probe(container, () => Reflect.ownKeys(value));
   const snapshot = {} as Record<K, unknown>;
   for (const key of keys) {
     const field = path === "" ? key : `${path}.${key}`;
     if (!own.includes(key)) reject("schema", field);
-    snapshot[key] = ownDataValue(value, key, field);
+    snapshot[key] = ownDataValue(value, key, field, container);
   }
   // Every expected key is present and own keys are unique, so any surplus is
   // an unknown key. It is named by its container, never by the key itself.
@@ -159,20 +190,20 @@ function readEnum<T extends string>(value: unknown, field: string, allowed: read
 }
 
 function readStringList(value: unknown, field: string): string[] {
-  if (!Array.isArray(value)) return reject("schema", field);
+  const array = readArray(value, field);
   const list: string[] = [];
-  for (let index = 0; index < value.length; index++) {
-    list.push(readString(ownDataValue(value, String(index), field), field));
+  for (let index = 0; index < probe(field, () => array.length); index++) {
+    list.push(readString(ownDataValue(array, String(index), field, field), field));
   }
   return list;
 }
 
 function readRoles(value: unknown): ExecutionRole[] {
   const field = "role_eligibility";
-  if (!Array.isArray(value)) return reject("schema", field);
+  const array = readArray(value, field);
   const roles: ExecutionRole[] = [];
-  for (let index = 0; index < value.length; index++) {
-    const role = readEnum(ownDataValue(value, String(index), field), field, KNOWN_ROLES);
+  for (let index = 0; index < probe(field, () => array.length); index++) {
+    const role = readEnum(ownDataValue(array, String(index), field, field), field, KNOWN_ROLES);
     if (roles.includes(role)) reject("schema", field);
     roles.push(role);
   }
@@ -181,11 +212,11 @@ function readRoles(value: unknown): ExecutionRole[] {
 
 function readObservedMs(value: unknown): Record<string, number> {
   const field = "pty.observed_ms";
-  if (!isPlainObject(value)) return reject("schema", field);
+  if (!isPlainObject(value, field)) return reject("schema", field);
   const entries: [string, number][] = [];
-  for (const key of Reflect.ownKeys(value)) {
+  for (const key of probe(field, () => Reflect.ownKeys(value))) {
     if (typeof key !== "string" || key.length === 0) reject("schema", field);
-    const ms = ownDataValue(value, key, field);
+    const ms = ownDataValue(value, key, field, field);
     if (typeof ms !== "number" || !Number.isFinite(ms) || ms < 0) reject("schema", field);
     entries.push([key, ms]);
   }
