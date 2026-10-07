@@ -696,3 +696,43 @@ Round 2's resolution, recorded above as pending, is now closed:
   finding there is round 4 under rubric milestone 1 and round 2 under rubric milestone 4 (act F4).
 - **Not recorded here:** the verdict text itself. It is posted verbatim on PR #119 by a session the
   Founder directs, after this pull request merges (act G2).
+
+## Task 35 re-review (rubric milestone 1 round 4, rubric milestone 4 round 2)
+
+- **Recorded:** 2026-10-07, under FOUNDER-ACT-20261007-TASK35-SECOND-CORRECTION
+  (`docs/decisions/DEC-20261007-01-task35-second-correction-authorization.md`) B1 and G1.
+- **Plan milestone:** M15, Task 35. **Rubric milestones:** 4 and 1. A substantive finding on Task 35
+  counts under both (FOUNDER-ACT-20261004-TASK35-EXECUTION-AUTHORIZATION B10).
+- **Verdict target:** `0528f788142e107a436266cf42005a1bf50f9bc7`, the head of PR #119 (a draft), the
+  correction commit on `16e2f1f9ab3a8984576a934823eb88dbde8522a2`.
+- **Reviewer:** `codex`, independent and non-authoring, in a session given no earlier Task 35 packet. It
+  reports its model as the GPT-6 family with the exact variant unproven. That is an unverified
+  self-report. It executed the act's D4 commands, a 282-case probe matrix and a deliberate break for each
+  of tests 1 to 4 on macOS 27.0.1, arm64, with Bun 1.4.2.
+- **Verdict text SHA-256:** `d28d8fd1a2fa00afcd06ad5cc8afa1464815f7345b062021c8391243c7d3e4b1`, 12,101
+  bytes, 192 lines, from the Founder's saved copy. The Codex application withheld one of the reviewer's
+  messages under a safety filter. At the Founder's request the reviewer restated the complete verdict,
+  with step 7 done and without code, and that restatement is the text of record (act A1).
+- **Result:** FAIL. Items 1, 3, 4, 5, 6 and 7 returned PASS. Items 2 and 8 returned FAIL on finding 1: in
+  `readStringList` and `readRoles` the parser reads an array's `length` inside its containment but
+  compares it outside, so a `Proxy` whose `length` returns an object with a throwing conversion makes the
+  caller receive the thrown value unchanged. This reaches `role_eligibility`, `limitations` and
+  `redaction_rules_applied`. Of the reviewer's 282 probes, 33 escaped, all from this cause.
+- **Advisory findings 2 and 3:** the filename getter defect that
+  FOUNDER-ACT-20261006-TASK35-B3-CLARIFICATION B2 disposed of, unchanged; and no test pins the type check
+  on `host.arch`, which the head enforces.
+- **Recurrence:** the same substantive defect as the first verdict, recurring after a claimed correction
+  (act A3, spec section 7.6).
+- **Counted:** one round under each affected rubric milestone (act B1). Items 2 and 8 count once. The
+  advisory findings are not a round. Rubric milestone 1 stands at **4**. Rubric milestone 4 stands at
+  **2**.
+- **Ruling:** the implementer `session:claude-code/m15-task35-r2`, which reported running on Claude Opus
+  5, is reassigned (act B2) to `session:hermes/m15-task35-r3` on `deepseek-v4-flash`, surface
+  `hermes-local-code`. The Founder chose it knowing Hermes's M19 history and that Hermes implemented the
+  Task 60 correction round 2 under rubric milestone 1. The technical assessment in act B4 (spec section
+  7.1) finds the code at the correction base sound apart from finding 1, preserves it, and covers both
+  reassignments. The act authorizes one correction commit on PR #119 (act C1) that makes containment hold
+  by construction (act B3). A re-review under reviewer id `codex` follows (act Part F). A substantive
+  finding there is round 5 under rubric milestone 1 and round 3 under rubric milestone 4 (act B10).
+- **Not recorded here:** the verdict text itself. It is posted verbatim on PR #119 by a session the
+  Founder directs, after this pull request merges (act G2).
