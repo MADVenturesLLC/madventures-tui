@@ -1,0 +1,19 @@
+MERGE AUTHORIZATION: MADVenturesLLC/madventures-tui#124
+
+Authorized head: 3192e34a8b763149ade9139b2318b5aa8f43a0e2
+Base when verified: main at 1d711b310b5870034518d4a3da4b536c4a86d66a
+
+I, Michael Daley, Founder of MAD Ventures, authorize the merge of this pull request at the exact head SHA above and at no other. Any push after this comment voids this authorization.
+
+Verified before issuing (2026-10-07, after the last check below completed at 21:27:12Z):
+1. Required checks on this head: Verify (completed 2026-10-07T21:16:43Z), Verify (macOS) (21:18:06Z) and code-review (21:16:41Z, run 37687956671) succeeded. The combined commit status reads success ("typecheck and tests passed; review threads resolved", 21:16:39Z), and GitHub reports the pull request as mergeable with merge state clean. attribution-shape, validate-code-review, CodeQL, all four Analyze jobs, both tui-chaos runs, copilot-pull-request-reviewer (21:25:36Z) and Cursor Security Agent (21:27:12Z) succeeded. fork-pr-notice was skipped.
+2. Head and scope: one commit on the base, parent 1d711b310b5870034518d4a3da4b536c4a86d66a. It adds exactly one path with 71 additions and no deletion: docs/decisions/DEC-20261007-03-task35-builder-amendment-2.md (SHA-256 4d8b92adc0a70003af584e2e30fcc7a1c904423c2187219ae6d7b57a5a5a4868, 71 lines, 6,745 bytes). Code, tests, the rounds log, bun.lock, every manifest and the plan are unchanged. main is still at the base SHA.
+3. Reviews and threads: there are no review threads. Copilot's review 5448551625 at 21:25:34Z, on this head, reports 0 open findings and marks the authorization and the builder reassignment for final human review. This comment is that review: I signed the act, and I made the reassignment knowingly.
+4. Ready-for-review: this pull request left draft at 21:23:25Z under my ready-for-review authorization, comment 6047101710, posted at 21:21:34Z for this head. No push has been made since.
+5. Authority: part C1 of FOUNDER-ACT-20261007-TASK35-BUILDER-AMENDMENT-2 directs this filing. The file equals the transfer blob at commit bf1b4fa2783ba81cdff96477c1e99404fb52d2fa. The drafting assistant wrote the act, so this is not an independent review. No code path changed, so bun install, tsc and bun test were not run for this pull request, and the repository checks above are the evidence.
+6. Rounds and effect: this merge adds no round. Rubric milestone 1 stays at 4 and rubric milestone 4 at 2. It puts the act on main with Status ISSUED, which its part B7 requires before the correction builder starts.
+7. Order after the merge: the correction builder, session:claude-code/m15-task35-r3-opus, may start under FOUNDER-ACT-20261007-TASK35-SECOND-CORRECTION as FOUNDER-ACT-20261007-TASK35-BUILDER-AMENDMENT and this act amend it, in a fresh worktree at /Users/michaeldaley/madventures-tui-m15-task35-r3-opus. This comment authorizes nothing beyond what those acts provide.
+8. Body: the pull request body becomes the merge commit message. It ends with the three attribution trailers as the final paragraph. This comment has zero bare three-hyphen lines, checked immediately before issuing.
+9. Not authorized by this comment: leaving draft or merging PR #119, the re-review of PR #119, Task 36 or any later task, any further push to docs/task35-builder-amendment-2-filing, and any change to a path other than the one above.
+
+Merge method: merge commit, head SHA pinned, no caller-supplied message. Post this comment before merging. Verify the merge commit on main immediately after: its first parent is the main head at the moment of merge and its second parent is 3192e34a8b763149ade9139b2318b5aa8f43a0e2, the changed paths against the first parent are exactly the one above, trailers are present and parseable, attribution-shape-check.sh main on the merge SHA passes, and the push runs on main are green. If that fails, stop; do not rewrite main.
