@@ -1,0 +1,15 @@
+READY-FOR-REVIEW AUTHORIZATION: MADVenturesLLC/madventures-tui#122
+
+Authorized head: 73b729d5f39ffd4acb6294d5a2f6fbdcfaaf36eb
+Base: main at afcb082871bba1f331a8966cf55f1492651da93d
+
+I, Michael Daley, Founder of MAD Ventures, authorize marking this pull request ready for review at the exact head SHA above and at no other. Any push after this comment voids this authorization. This is not a merge authorization. The merge needs a separate act naming the exact head.
+
+Verified before issuing (2026-10-07, after the last check below completed at 11:44:13Z):
+1. Head and scope: the head is the SHA above, one commit after the base, and the pull request is a draft with merge state clean. It changes exactly two paths, with 220 additions and no deletion: docs/decisions/DEC-20261007-01-task35-second-correction-authorization.md, new (SHA-256 9a6269f69fce98cade21d16bc7bac54243634ff977ed15d3c07622cd1264eaf6, 180 lines, 22,706 bytes), and docs/verification/phase-3a-correction-rounds.md, with 40 lines appended after its last section and its first 74,631 bytes unchanged (new SHA-256 a25710b2792c89cdc8b3ed412a4a3f243e5965f0cb5fb49280c484de43a97a0a, 738 lines, 78,033 bytes). Code, tests, bun.lock, every manifest and the plan are unchanged. The commit message and the pull request body end with the three attribution trailers for session:claude-code/tui-task35-second-correction-filing.
+2. Authority: I signed FOUNDER-ACT-20261007-TASK35-SECOND-CORRECTION, version 2, on 2026-10-07. Its part G1 directs this filing, and its part D1 item c requires it on main with Status ISSUED before the correction builder starts. This filing authorizes no work by itself.
+3. Identity of the files: the drafting assistant fetched the head into a separate checkout. The act file there has the SHA-256 in item 1 and equals the transfer blob at commit 2c3268ed07c0d0e47918e114ef1392d010f6cff3 on claude/awesome-cray-vqrzbt. The appended rounds-log text equals the entry the filing prompt prescribed, character for character. It records the verdict of record with SHA-256 d28d8fd1a2fa00afcd06ad5cc8afa1464815f7345b062021c8391243c7d3e4b1, 12,101 bytes and 192 lines, my saved copy. The drafting assistant wrote the entry and the filing prompt, so this is not an independent review.
+4. Required checks on this head, read from GitHub: Verify (completed 2026-10-07T11:42:56Z), Verify (macOS) (11:44:13Z) and code-review (11:42:32Z, run 37615691390) succeeded. attribution-shape, validate-code-review, CodeQL, all four Analyze jobs and both tui-chaos runs succeeded. fork-pr-notice was skipped. The only comment is the automatic code-review quote, and there are no review threads.
+5. Not authorized by this comment: merging, posting the verdict on PR #119 under act G2, starting the correction builder, any push to docs/task35-second-correction-filing, and any change to a path other than the two above.
+6. Marking ready restarts the code-review check, and Copilot may review. Check and thread states are verified again in the merge authorization, at the time it is issued.
+7. Body: zero bare three-hyphen lines, checked immediately before issuing.
