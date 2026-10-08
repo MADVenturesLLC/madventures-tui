@@ -1,0 +1,26 @@
+## Task 35 re-review verdict PASS (rubric milestone 1 round 5, rubric milestone 4 round 3, unchanged)
+
+- **Recorded:** 2026-10-08, under FOUNDER-ACT-20261008-TASK35-REREVIEW-ACCEPTANCE
+  (`docs/decisions/DEC-20261008-03-task35-rereview-acceptance.md`) C1, for the re-review of
+  FOUNDER-ACT-20261008-TASK35-THIRD-CORRECTION Part F, read with
+  FOUNDER-ACT-20261008-TASK35-CONTAINMENT-SCOPE.
+- **Plan milestone:** M15, Task 35. **Rubric milestones:** 4 and 1.
+- **Head reviewed:** `35b8b96c8e8636304df4836c85d4f534c9be579d`, the third correction commit on PR #119,
+  built by `session:codex/m15-task35-r4`.
+- **Reviewer:** `gemini-antigravity`, launched as `gemini-3.1-pro-high` and reporting itself as Gemini
+  3.1 Pro (High), in a fresh session and worktree. The model is a self-report and the launch setting.
+- **Verdict text SHA-256:** `414d1e5b9ba9dfa0351d0b2b9308067797bb28894dcdc21200ab4eb070c67b13`, from the
+  Founder's saved copy. The text is posted on PR #119 under act C2.
+- **Result:** PASS on all ten items. The reviewer reports `tsc` exit 0, 12 pass in the focused file,
+  146 pass in 11 files in the protocol suite, and 1,571 pass, 0 fail in 96 files in the full suite on
+  macOS with Bun 1.4.2. It reports finding 1 of the third verdict reproduced at the previous head and
+  contained at the head, and every required break failing the intended test.
+- **Advisories (act B4):** the case of the containment scope act A1; the `requested_model` coverage
+  gap; the filename defect, whose fix is owed before any caller outside tests.
+- **Gaps (act A3):** some output elided or summarized, replay and nested-parse inputs not given, and
+  the known coverage gap and the filename advisory not reported.
+- **Set aside (act A4):** an earlier session's report on the same head, after follow-up messages
+  stated the record to it. It is not a verdict, is not cited and adds no round.
+- **Counted:** no round. Rubric milestone 1 stays at **5**. Rubric milestone 4 stays at **3**.
+- **Not authorized here:** leaving draft or merging PR #119, M15 closure and Task 36. Each needs a
+  separate Founder act.
