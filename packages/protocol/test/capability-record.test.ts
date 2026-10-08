@@ -3,8 +3,10 @@
 // staleness rules, never a live authorization. Rulings: act
 // FOUNDER-ACT-20261004-TASK35-EXECUTION-AUTHORIZATION Part B and PLAN-OPEN-3,
 // with B3 to B5 of act FOUNDER-ACT-20261005-TASK35-CORRECTION
-// (docs/decisions/DEC-20261005-01-task35-correction-authorization.md) pinned
-// inside "a passing record is not a live authorization".
+// (docs/decisions/DEC-20261005-01-task35-correction-authorization.md) and B5
+// and B6 of act FOUNDER-ACT-20261007-TASK35-SECOND-CORRECTION
+// (docs/decisions/DEC-20261007-01-task35-second-correction-authorization.md)
+// pinned inside "a passing record is not a live authorization".
 // Registry-derived fixture values are read from ADAPTER_REGISTRY, never
 // restated here.
 
@@ -426,6 +428,58 @@ test("a passing record is not a live authorization", () => {
       "schema",
       "pty.observed_ms",
     );
+  }
+
+  // ── Second correction act B5: containment by construction ──
+  // Comparing an index with an array's length converts whatever the length
+  // read returned, which runs code the input supplies. Whatever that code
+  // throws, even a rejection of this module's own class or a value posing as
+  // one, is replaced by a fresh schema rejection naming the array.
+  const thrownValues = (): unknown[] => {
+    const revokedValue = Proxy.revocable({}, {});
+    revokedValue.revoke();
+    const constructed = new CapabilityRecordError("registration_mismatch", "provider");
+    constructed.message = leaked;
+    const posing = { name: "CapabilityRecordError", kind: "registration_mismatch", field: "provider", message: leaked };
+    const proxied = new Proxy(new CapabilityRecordError("registration_mismatch", "provider"), {});
+    return [new Error(leaked), revokedValue.proxy, constructed, posing, proxied];
+  };
+  const withLength = (array: readonly unknown[], length: unknown): unknown =>
+    new Proxy([...array], {
+      get: (target, key, receiver) => (key === "length" ? length : Reflect.get(target, key, receiver)),
+    });
+  for (const name of ["role_eligibility", "limitations", "redaction_rules_applied"]) {
+    const valid = rawRecord()[name] as readonly unknown[];
+    for (const hook of [Symbol.toPrimitive, "valueOf"]) {
+      for (const thrown of thrownValues()) {
+        const length = {
+          [hook]: (): never => {
+            throw thrown;
+          },
+        };
+        const error = expectRejected(
+          () =>
+            parseCapabilityRecord(rawWith({ [name]: withLength(valid, length), identity_attestation: identityWithFact })),
+          "schema",
+          name,
+        );
+        expect(error).not.toBe(thrown);
+        expectNoContent(error, leaked);
+      }
+    }
+    const revokedLength = Proxy.revocable({}, {});
+    revokedLength.revoke();
+    expectRejected(
+      () => parseCapabilityRecord(rawWith({ [name]: withLength(valid, revokedLength.proxy) })),
+      "schema",
+      name,
+    );
+  }
+
+  // ── Second correction act B6: every host field is a string ──
+  const host = rawRecord()["host"] as Record<string, unknown>;
+  for (const field of HOST_FIELDS) {
+    expectRejected(() => parseCapabilityRecord(rawWith({ host: { ...host, [field]: 17 } })), "schema", `host.${field}`);
   }
 });
 

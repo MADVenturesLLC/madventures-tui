@@ -6,8 +6,10 @@
 // Inspecting the input is itself untrusted work: B3 of act
 // FOUNDER-ACT-20261005-TASK35-CORRECTION requires every exception raised
 // while parseCapabilityRecord reads its input to leave as a
-// CapabilityRecordError of kind `schema` naming the container, so every
-// such read goes through probe().
+// CapabilityRecordError of kind `schema` naming the container. B3 of act
+// FOUNDER-ACT-20261007-TASK35-SECOND-CORRECTION makes that hold by
+// construction: the whole parse runs inside one boundary, which lets through
+// only the rejection the parse raised itself, recognized by identity.
 
 import { lookupRegistration } from "./adapter-registry";
 import { parseSurfaceId, type SurfaceId } from "./surface-id";
@@ -115,26 +117,36 @@ const PTY_FIELDS = ["result", "observed_ms"] as const;
 const PASS_FAIL = ["pass", "fail"] as const;
 const AUTH_RESULTS = ["pass", "fail", "no_primitive"] as const;
 
+// The container the parse in progress is inspecting, which a replaced
+// exception is named by, and the rejection that parse raised itself, the only
+// value its boundary lets through.
+let inspecting = "record";
+let raised: CapabilityRecordError | undefined;
+
 function reject(kind: CapabilityRecordErrorKind, field: string): never {
-  throw new CapabilityRecordError(kind, field);
+  const error = new CapabilityRecordError(kind, field);
+  raised = error;
+  throw error;
 }
 
 /**
  * One inspection of untrusted input, named by the container it inspects.
  *
- * A revoked handle, a `Proxy` trap or an accessor can make an ordinary
- * prototype lookup, array test, key enumeration or property read throw
- * anything at all, including a value of this module's own error class holding
- * text the trap chose. `read` performs a single such primitive and never
- * rejects, so whatever it throws came from the input: it is replaced by a
- * fresh schema rejection naming the container, and nothing of the original is
- * read, re-thrown or attached.
+ * A revoked handle, a `Proxy` trap, an accessor or a conversion can make an
+ * ordinary prototype lookup, array test, key enumeration, property read or
+ * comparison run code the input supplies, and that code can throw anything at
+ * all, including a value of this module's own error class. `read` performs a
+ * single such inspection and never rejects. The container is recorded for the
+ * boundary in parseCapabilityRecord to name, and nothing this module raised
+ * while `read` ran, such as a rejection the input's code provoked from an
+ * exported function, counts as the parse's own.
  */
 function probe<T>(container: string, read: () => T): T {
+  inspecting = container;
   try {
     return read();
-  } catch {
-    return reject("schema", container);
+  } finally {
+    raised = undefined;
   }
 }
 
@@ -192,7 +204,7 @@ function readEnum<T extends string>(value: unknown, field: string, allowed: read
 function readStringList(value: unknown, field: string): string[] {
   const array = readArray(value, field);
   const list: string[] = [];
-  for (let index = 0; index < probe(field, () => array.length); index++) {
+  for (let index = 0; probe(field, () => index < array.length); index++) {
     list.push(readString(ownDataValue(array, String(index), field, field), field));
   }
   return list;
@@ -202,7 +214,7 @@ function readRoles(value: unknown): ExecutionRole[] {
   const field = "role_eligibility";
   const array = readArray(value, field);
   const roles: ExecutionRole[] = [];
-  for (let index = 0; index < probe(field, () => array.length); index++) {
+  for (let index = 0; probe(field, () => index < array.length); index++) {
     const role = readEnum(ownDataValue(array, String(index), field, field), field, KNOWN_ROLES);
     if (roles.includes(role)) reject("schema", field);
     roles.push(role);
@@ -257,8 +269,31 @@ function deepFreeze<T>(value: T): T {
 /**
  * Accepts only the exact CapabilityRecordV1 shape and returns a new, deeply
  * frozen record that shares nothing with `raw`. `raw` is never changed.
+ *
+ * The whole parse is one containment boundary. The rejection the parse raised
+ * itself leaves unchanged, recognized by identity alone. Anything else thrown
+ * inside it came from code the input supplies and is replaced by a fresh
+ * schema rejection naming the container being inspected; the thrown value is
+ * compared and never read. Both module variables are restored on the way
+ * out, so a parse the input's code starts cannot disturb this one.
  */
 export function parseCapabilityRecord(raw: Record<string, unknown>): CapabilityRecordV1 {
+  const outerInspecting = inspecting;
+  const outerRaised = raised;
+  inspecting = "record";
+  raised = undefined;
+  try {
+    return readRecord(raw);
+  } catch (thrown) {
+    if (raised !== undefined && thrown === raised) throw thrown;
+    return reject("schema", inspecting);
+  } finally {
+    inspecting = outerInspecting;
+    raised = outerRaised;
+  }
+}
+
+function readRecord(raw: Record<string, unknown>): CapabilityRecordV1 {
   const record = readClosed(raw, "", RECORD_FIELDS);
 
   // PLAN-OPEN-3: both stored timestamps and their exact 30-day relation are
