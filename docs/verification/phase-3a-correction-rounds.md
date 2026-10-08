@@ -736,3 +736,58 @@ Round 2's resolution, recorded above as pending, is now closed:
   finding there is round 5 under rubric milestone 1 and round 3 under rubric milestone 4 (act B10).
 - **Not recorded here:** the verdict text itself. It is posted verbatim on PR #119 by a session the
   Founder directs, after this pull request merges (act G2).
+
+## Task 35 re-review (rubric milestone 1 round 5, rubric milestone 4 round 3)
+
+- **Recorded:** 2026-10-08, under FOUNDER-ACT-20261008-TASK35-THIRD-CORRECTION
+  (`docs/decisions/DEC-20261008-01-task35-third-correction-authorization.md`) B1 and G1.
+- **Plan milestone:** M15, Task 35. **Rubric milestones:** 4 and 1. A substantive finding on Task 35
+  counts under both (FOUNDER-ACT-20261004-TASK35-EXECUTION-AUTHORIZATION B10).
+- **Verdict target:** `de8854340a2ef649e4afb0904dcd2a42dd314241`, the head of PR #119 (a draft), the
+  second correction commit on `0528f788142e107a436266cf42005a1bf50f9bc7`.
+- **Builder of the target:** `session:claude-code/m15-task35-r3-opus`, which reported running on Claude
+  Opus 5.5, under FOUNDER-ACT-20261007-TASK35-BUILDER-AMENDMENT-2
+  (`docs/decisions/DEC-20261007-03-task35-builder-amendment-2.md`). The Hermes assignment of the round-4
+  entry was withdrawn by FOUNDER-ACT-20261007-TASK35-BUILDER-AMENDMENT
+  (`docs/decisions/DEC-20261007-02-task35-builder-amendment.md`), and the GLM assignment that act made
+  was withdrawn by the second amendment. Neither withdrawn session made a commit.
+- **Reviewer:** `codex`, independent and non-authoring, in a session given no earlier Task 35 packet. It
+  reports its model as the GPT-6 family with the exact variant unproven. That is an unverified
+  self-report. It executed the act's D4 commands, the 282-case matrix of the previous verdict, a
+  574-case ledger at each head, the required breaks and a deliberate break for each of tests 1 to 4 on
+  macOS 27.0.1, arm64, with Bun 1.4.2.
+- **Verdict text SHA-256:** `2dff1c64c66dc1d256d1aa9d44bd217fd8b59ec73a5319c5ced846ad7a8a5a5e`, from the
+  Founder's saved copy.
+- **Result:** FAIL. Items 1, 3, 4, 5, 6 and 7 returned PASS. Items 2, 8 and 9 returned FAIL on finding 1:
+  the parser recognizes its own rejection through a module variable that every exported function sets,
+  so input code that obtains a rejection from `evaluateCapabilityFreshness` or
+  `capabilityRecordFilename` and rethrows it has it passed to the caller unchanged, with content the
+  input chose. The reviewer reached this through a `length` trap that replaces `Array.prototype.push`,
+  for each of `role_eligibility`, `limitations` and `redaction_rules_applied`. All twelve tests pass with
+  this behavior. The 33 escapes of the previous verdict are contained at the head.
+- **Advisory findings 2 and 3:** the filename getter defect that
+  FOUNDER-ACT-20261006-TASK35-B3-CLARIFICATION B2 disposed of, unchanged; and three implementations that
+  pass all twelve tests, two of them routes of finding 1 and one dropping the validation of
+  `requested_model`.
+- **Recurrence:** the same substantive defect as the three earlier verdicts, recurring after a claimed
+  correction (act A3, spec section 7.6).
+- **Counted:** one round under each affected rubric milestone (act B1). Items 2, 8 and 9 count once. The
+  advisory findings are not a round. Rubric milestone 1 stands at **5**. Rubric milestone 4 stands at
+  **3**. The round is entered against Claude Opus 5.5 (FOUNDER-ACT-20261007-TASK35-BUILDER-AMENDMENT-2
+  B3).
+- **Deviations recorded (act A7):** the builder session's first turn ran on `claude-sonnet-5-5` and
+  stopped before any command, and the Founder switched the same session to Claude Opus 5.5; the Founder
+  ran the builder's push after the harness blocked it; the Founder marked PR #119 ready at
+  2026-10-08T09:52:57Z without an act and returned it to draft at 09:55:39Z; the Founder's approval
+  review `5440139473` on `0528f788142e107a436266cf42005a1bf50f9bc7` preceded that head's re-review and
+  was dismissed by the next push; and the builder made read-only API calls beyond its act. None changed
+  the head under review or a round.
+- **Ruling:** the implementer `session:claude-code/m15-task35-r3-opus` is reassigned (act B2) to
+  `session:codex/m15-task35-r4` on the `codex` surface, a GPT model. The technical assessment in act B3
+  (spec section 7.1) finds the code at the correction base sound apart from finding 1 and preserves it.
+  The act authorizes one correction commit on PR #119 (act C1) that scopes the parser's recognition of
+  its own rejections to each call (act B5), pinned inside test 7 (act B6). A re-review under reviewer id
+  `gemini-antigravity` follows (act Part F). A substantive finding there is round 6 under rubric
+  milestone 1 and round 4 under rubric milestone 4 (act B10).
+- **Not recorded here:** the verdict text itself. It is posted verbatim on PR #119 by a session the
+  Founder directs, after this pull request merges (act G2).
