@@ -481,6 +481,86 @@ test("a passing record is not a live authorization", () => {
   for (const field of HOST_FIELDS) {
     expectRejected(() => parseCapabilityRecord(rawWith({ host: { ...host, [field]: 17 } })), "schema", `host.${field}`);
   }
+
+  // DEC-20261008-01 B6(a): genuine exported rejections still belong to another call.
+  const exportedRejections = [
+    () => evaluateCapabilityFreshness(carrying, "invalid-now", observedMatching(carrying)),
+    () => capabilityRecordFilename({ ...carrying, evaluated_at: "invalid-timestamp" }),
+  ];
+  for (const name of ["role_eligibility", "limitations", "redaction_rules_applied"]) {
+    for (const obtain of exportedRejections) {
+      const originalPush = Array.prototype.push;
+      let thrown: unknown;
+      const valid = name === "role_eligibility" ? [KNOWN_ROLES[0]!] : ["example-array-value"];
+      const array = new Proxy(valid, {
+        get(target, key, receiver) {
+          if (key === "length") {
+            Array.prototype.push = function (): never {
+              Array.prototype.push = originalPush;
+              try {
+                obtain();
+              } catch (error) {
+                thrown = error;
+                (error as CapabilityRecordError).message = leaked;
+                throw error;
+              }
+              throw new Error("expected an exported rejection");
+            };
+          }
+          return Reflect.get(target, key, receiver);
+        },
+      });
+      try {
+        const error = expectRejected(
+          () => parseCapabilityRecord(rawWith({ [name]: array, identity_attestation: identityWithFact })),
+          "schema",
+          name,
+        );
+        expect(error).not.toBe(thrown);
+        expectNoContent(error, leaked);
+      } finally {
+        Array.prototype.push = originalPush;
+      }
+    }
+  }
+
+  // DEC-20261008-01 B6(b): earlier and nested parses have their own state.
+  let earlier: unknown;
+  try {
+    parseCapabilityRecord(rawWith({ overall: 17 }));
+  } catch (error) {
+    earlier = error;
+  }
+  const conversionRejections = [
+    ...exportedRejections,
+    () => { throw earlier; },
+    () => parseCapabilityRecord(rawWith({ overall: 17 })),
+  ];
+  for (const obtain of conversionRejections) {
+    let thrown: unknown;
+    const length = {
+      valueOf(): never {
+        try {
+          obtain();
+        } catch (error) {
+          thrown = error;
+          (error as CapabilityRecordError).message = leaked;
+          throw error;
+        }
+        throw new Error("expected a conversion rejection");
+      },
+    };
+    const error = expectRejected(
+      () => parseCapabilityRecord(rawWith({
+        role_eligibility: withLength(rawRecord()["role_eligibility"] as readonly unknown[], length),
+        identity_attestation: identityWithFact,
+      })),
+      "schema",
+      "role_eligibility",
+    );
+    expect(error).not.toBe(thrown);
+    expectNoContent(error, leaked);
+  }
 });
 
 // ─── Filename (B6) ───

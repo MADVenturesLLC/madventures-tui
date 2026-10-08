@@ -9,7 +9,8 @@
 // CapabilityRecordError of kind `schema` naming the container. B3 of act
 // FOUNDER-ACT-20261007-TASK35-SECOND-CORRECTION makes that hold by
 // construction: the whole parse runs inside one boundary, which lets through
-// only the rejection the parse raised itself, recognized by identity.
+// only the rejection the parse raised itself, recognized by identity. B5 of
+// DEC-20261008-01 confines that identity and container to the current call.
 
 import { lookupRegistration } from "./adapter-registry";
 import { parseSurfaceId, type SurfaceId } from "./surface-id";
@@ -117,132 +118,8 @@ const PTY_FIELDS = ["result", "observed_ms"] as const;
 const PASS_FAIL = ["pass", "fail"] as const;
 const AUTH_RESULTS = ["pass", "fail", "no_primitive"] as const;
 
-// The container the parse in progress is inspecting, which a replaced
-// exception is named by, and the rejection that parse raised itself, the only
-// value its boundary lets through.
-let inspecting = "record";
-let raised: CapabilityRecordError | undefined;
-
 function reject(kind: CapabilityRecordErrorKind, field: string): never {
-  const error = new CapabilityRecordError(kind, field);
-  raised = error;
-  throw error;
-}
-
-/**
- * One inspection of untrusted input, named by the container it inspects.
- *
- * A revoked handle, a `Proxy` trap, an accessor or a conversion can make an
- * ordinary prototype lookup, array test, key enumeration, property read or
- * comparison run code the input supplies, and that code can throw anything at
- * all, including a value of this module's own error class. `read` performs a
- * single such inspection and never rejects. The container is recorded for the
- * boundary in parseCapabilityRecord to name, and nothing this module raised
- * while `read` ran, such as a rejection the input's code provoked from an
- * exported function, counts as the parse's own.
- */
-function probe<T>(container: string, read: () => T): T {
-  inspecting = container;
-  try {
-    return read();
-  } finally {
-    raised = undefined;
-  }
-}
-
-function isPlainObject(value: unknown, container: string): value is object {
-  if (typeof value !== "object" || value === null) return false;
-  if (probe(container, () => Array.isArray(value))) return false;
-  const prototype: unknown = probe(container, () => Object.getPrototypeOf(value));
-  return prototype === Object.prototype || prototype === null;
-}
-
-/** Requires an array. Its length and elements are still read defensively. */
-function readArray(value: unknown, container: string): readonly unknown[] {
-  if (!probe(container, () => Array.isArray(value))) return reject("schema", container);
-  return value as readonly unknown[];
-}
-
-/** Reads an own data property once, so no caller getter runs and no later read can differ. */
-function ownDataValue(source: object, key: string, field: string, container: string): unknown {
-  const descriptor = probe(container, () => Object.getOwnPropertyDescriptor(source, key));
-  if (descriptor === undefined || !("value" in descriptor)) return reject("schema", field);
-  return descriptor.value;
-}
-
-/** Snapshots a plain object whose own key set must be exactly `keys`. */
-function readClosed<K extends string>(
-  value: unknown,
-  path: string,
-  keys: readonly K[],
-): Record<K, unknown> {
-  const container = path === "" ? "record" : path;
-  if (!isPlainObject(value, container)) return reject("schema", container);
-  const own = probe(container, () => Reflect.ownKeys(value));
-  const snapshot = {} as Record<K, unknown>;
-  for (const key of keys) {
-    const field = path === "" ? key : `${path}.${key}`;
-    if (!own.includes(key)) reject("schema", field);
-    snapshot[key] = ownDataValue(value, key, field, container);
-  }
-  // Every expected key is present and own keys are unique, so any surplus is
-  // an unknown key. It is named by its container, never by the key itself.
-  if (own.length !== keys.length) reject("schema", container);
-  return snapshot;
-}
-
-function readString(value: unknown, field: string): string {
-  if (typeof value !== "string" || value.length === 0) return reject("schema", field);
-  return value;
-}
-
-function readEnum<T extends string>(value: unknown, field: string, allowed: readonly T[]): T {
-  if (typeof value !== "string" || !(allowed as readonly string[]).includes(value)) return reject("schema", field);
-  return value as T;
-}
-
-function readStringList(value: unknown, field: string): string[] {
-  const array = readArray(value, field);
-  const list: string[] = [];
-  for (let index = 0; probe(field, () => index < array.length); index++) {
-    list.push(readString(ownDataValue(array, String(index), field, field), field));
-  }
-  return list;
-}
-
-function readRoles(value: unknown): ExecutionRole[] {
-  const field = "role_eligibility";
-  const array = readArray(value, field);
-  const roles: ExecutionRole[] = [];
-  for (let index = 0; probe(field, () => index < array.length); index++) {
-    const role = readEnum(ownDataValue(array, String(index), field, field), field, KNOWN_ROLES);
-    if (roles.includes(role)) reject("schema", field);
-    roles.push(role);
-  }
-  return roles;
-}
-
-function readObservedMs(value: unknown): Record<string, number> {
-  const field = "pty.observed_ms";
-  if (!isPlainObject(value, field)) return reject("schema", field);
-  const entries: [string, number][] = [];
-  for (const key of probe(field, () => Reflect.ownKeys(value))) {
-    if (typeof key !== "string" || key.length === 0) reject("schema", field);
-    const ms = ownDataValue(value, key, field, field);
-    if (typeof ms !== "number" || !Number.isFinite(ms) || ms < 0) reject("schema", field);
-    entries.push([key, ms]);
-  }
-  // fromEntries defines own properties, so a "__proto__" key stays data.
-  return Object.fromEntries(entries);
-}
-
-function readSurface(value: unknown): SurfaceId {
-  const text = readString(value, "surface");
-  try {
-    return parseSurfaceId(text);
-  } catch {
-    return reject("schema", "surface");
-  }
+  throw new CapabilityRecordError(kind, field);
 }
 
 /**
@@ -250,11 +127,16 @@ function readSurface(value: unknown): SurfaceId {
  * before toISOString() can throw, and whose toISOString() is the identical
  * canonical UTC string.
  */
-function canonicalTimestampMs(value: unknown, kind: "timestamp" | "invalid_now", field: string): number {
-  if (typeof value !== "string") return reject(kind, field);
+function canonicalTimestampMs(
+  value: unknown,
+  kind: "timestamp" | "invalid_now",
+  field: string,
+  raise: typeof reject = reject,
+): number {
+  if (typeof value !== "string") return raise(kind, field);
   const ms = new Date(value).getTime();
-  if (!Number.isFinite(ms)) reject(kind, field);
-  if (new Date(ms).toISOString() !== value) reject(kind, field);
+  if (!Number.isFinite(ms)) raise(kind, field);
+  if (new Date(ms).toISOString() !== value) raise(kind, field);
   return ms;
 }
 
@@ -267,106 +149,203 @@ function deepFreeze<T>(value: T): T {
 }
 
 /**
- * Accepts only the exact CapabilityRecordV1 shape and returns a new, deeply
- * frozen record that shares nothing with `raw`. `raw` is never changed.
- *
- * The whole parse is one containment boundary. The rejection the parse raised
- * itself leaves unchanged, recognized by identity alone. Anything else thrown
- * inside it came from code the input supplies and is replaced by a fresh
- * schema rejection naming the container being inspected; the thrown value is
- * compared and never read. Both module variables are restored on the way
- * out, so a parse the input's code starts cannot disturb this one.
+ * Accepts only the exact shape and returns a deeply frozen copy of `raw`.
+ * Each call owns its rejection identity and inspected container. No input
+ * callback or other exported call can reach or change that state.
  */
 export function parseCapabilityRecord(raw: Record<string, unknown>): CapabilityRecordV1 {
-  const outerInspecting = inspecting;
-  const outerRaised = raised;
-  inspecting = "record";
-  raised = undefined;
+  let inspecting = "record";
+  let raised: CapabilityRecordError | undefined;
+
+  function reject(kind: CapabilityRecordErrorKind, field: string): never {
+    const error = new CapabilityRecordError(kind, field);
+    raised = error;
+    throw error;
+  }
+
+  function probe<T>(container: string, read: () => T): T {
+    inspecting = container;
+    return read();
+  }
+
+  function isPlainObject(value: unknown, container: string): value is object {
+    if (typeof value !== "object" || value === null) return false;
+    if (probe(container, () => Array.isArray(value))) return false;
+    const prototype: unknown = probe(container, () => Object.getPrototypeOf(value));
+    return prototype === Object.prototype || prototype === null;
+  }
+
+  /** Requires an array. Its length and elements are still read defensively. */
+  function readArray(value: unknown, container: string): readonly unknown[] {
+    if (!probe(container, () => Array.isArray(value))) return reject("schema", container);
+    return value as readonly unknown[];
+  }
+
+  /** Reads an own data property once, so no caller getter runs and no later read can differ. */
+  function ownDataValue(source: object, key: string, field: string, container: string): unknown {
+    const descriptor = probe(container, () => Object.getOwnPropertyDescriptor(source, key));
+    if (descriptor === undefined || !("value" in descriptor)) return reject("schema", field);
+    return descriptor.value;
+  }
+
+  /** Snapshots a plain object whose own key set must be exactly `keys`. */
+  function readClosed<K extends string>(
+    value: unknown,
+    path: string,
+    keys: readonly K[],
+  ): Record<K, unknown> {
+    const container = path === "" ? "record" : path;
+    if (!isPlainObject(value, container)) return reject("schema", container);
+    const own = probe(container, () => Reflect.ownKeys(value));
+    const snapshot = {} as Record<K, unknown>;
+    for (const key of keys) {
+      const field = path === "" ? key : `${path}.${key}`;
+      if (!own.includes(key)) reject("schema", field);
+      snapshot[key] = ownDataValue(value, key, field, container);
+    }
+    // Every expected key is present and own keys are unique, so any surplus is
+    // an unknown key. It is named by its container, never by the key itself.
+    if (own.length !== keys.length) reject("schema", container);
+    return snapshot;
+  }
+
+  function readString(value: unknown, field: string): string {
+    if (typeof value !== "string" || value.length === 0) return reject("schema", field);
+    return value;
+  }
+
+  function readEnum<T extends string>(value: unknown, field: string, allowed: readonly T[]): T {
+    if (typeof value !== "string" || !(allowed as readonly string[]).includes(value)) return reject("schema", field);
+    return value as T;
+  }
+
+  function readStringList(value: unknown, field: string): string[] {
+    const array = readArray(value, field);
+    const list: string[] = [];
+    for (let index = 0; probe(field, () => index < array.length); index++) {
+      list.push(readString(ownDataValue(array, String(index), field, field), field));
+    }
+    return list;
+  }
+
+  function readRoles(value: unknown): ExecutionRole[] {
+    const field = "role_eligibility";
+    const array = readArray(value, field);
+    const roles: ExecutionRole[] = [];
+    for (let index = 0; probe(field, () => index < array.length); index++) {
+      const role = readEnum(ownDataValue(array, String(index), field, field), field, KNOWN_ROLES);
+      if (roles.includes(role)) reject("schema", field);
+      roles.push(role);
+    }
+    return roles;
+  }
+
+  function readObservedMs(value: unknown): Record<string, number> {
+    const field = "pty.observed_ms";
+    if (!isPlainObject(value, field)) return reject("schema", field);
+    const entries: [string, number][] = [];
+    for (const key of probe(field, () => Reflect.ownKeys(value))) {
+      if (typeof key !== "string" || key.length === 0) reject("schema", field);
+      const ms = ownDataValue(value, key, field, field);
+      if (typeof ms !== "number" || !Number.isFinite(ms) || ms < 0) reject("schema", field);
+      entries.push([key, ms]);
+    }
+    // fromEntries defines own properties, so a "__proto__" key stays data.
+    return Object.fromEntries(entries);
+  }
+
+  function readSurface(value: unknown): SurfaceId {
+    const text = readString(value, "surface");
+    try {
+      return parseSurfaceId(text);
+    } catch {
+      return reject("schema", "surface");
+    }
+  }
+
   try {
     return readRecord(raw);
   } catch (thrown) {
     if (raised !== undefined && thrown === raised) throw thrown;
     return reject("schema", inspecting);
-  } finally {
-    inspecting = outerInspecting;
-    raised = outerRaised;
-  }
-}
-
-function readRecord(raw: Record<string, unknown>): CapabilityRecordV1 {
-  const record = readClosed(raw, "", RECORD_FIELDS);
-
-  // PLAN-OPEN-3: both stored timestamps and their exact 30-day relation are
-  // settled before anything else reads them.
-  const evaluatedMs = canonicalTimestampMs(record.evaluated_at, "timestamp", "evaluated_at");
-  const expiresMs = canonicalTimestampMs(record.expires_at, "timestamp", "expires_at");
-  if (expiresMs - evaluatedMs !== HORIZON_MS) reject("timestamp", "expires_at");
-
-  const surface = readSurface(record.surface);
-  const registration = lookupRegistration(surface);
-  if (registration === undefined) return reject("unregistered_surface", "surface");
-
-  // Spec section 9.1: these are copied from the registration, so they must
-  // equal its values exactly.
-  const provider = readString(record.provider, "provider");
-  if (provider !== registration.provider) reject("registration_mismatch", "provider");
-  const organizationId = readString(record.organization_id, "organization_id");
-  if (organizationId !== registration.organization_id) reject("registration_mismatch", "organization_id");
-  const independenceDomain = readString(record.independence_domain, "independence_domain");
-  if (independenceDomain !== registration.independence_domain) {
-    reject("registration_mismatch", "independence_domain");
   }
 
-  const binarySha256 = readString(record.binary_sha256, "binary_sha256");
-  if (!SHA256_HEX.test(binarySha256)) reject("schema", "binary_sha256");
+  function readRecord(raw: Record<string, unknown>): CapabilityRecordV1 {
+    const record = readClosed(raw, "", RECORD_FIELDS);
 
-  const host = readClosed(record.host, "host", HOST_FIELDS);
-  const identity = readClosed(record.identity_attestation, "identity_attestation", IDENTITY_ATTESTATION_FIELDS);
-  if (typeof identity.sanitized_facts !== "string") reject("schema", "identity_attestation.sanitized_facts");
-  const auth = readClosed(record.auth_readiness, "auth_readiness", AUTH_READINESS_FIELDS);
-  const pty = readClosed(record.pty, "pty", PTY_FIELDS);
-  if (typeof record.independent_review_eligible !== "boolean") reject("schema", "independent_review_eligible");
+    // PLAN-OPEN-3: both stored timestamps and their exact 30-day relation are
+    // settled before anything else reads them.
+    const evaluatedMs = canonicalTimestampMs(record.evaluated_at, "timestamp", "evaluated_at", reject);
+    const expiresMs = canonicalTimestampMs(record.expires_at, "timestamp", "expires_at", reject);
+    if (expiresMs - evaluatedMs !== HORIZON_MS) reject("timestamp", "expires_at");
 
-  return deepFreeze({
-    surface,
-    provider,
-    requested_model: readString(record.requested_model, "requested_model"),
-    role_eligibility: readRoles(record.role_eligibility),
-    independence_domain: independenceDomain,
-    organization_id: organizationId,
-    cli_version: readString(record.cli_version, "cli_version"),
-    binary_path: readString(record.binary_path, "binary_path"),
-    binary_sha256: binarySha256,
-    evaluated_at: new Date(evaluatedMs).toISOString(),
-    expires_at: new Date(expiresMs).toISOString(),
-    host: {
-      arch: readString(host.arch, "host.arch"),
-      macos_version: readString(host.macos_version, "host.macos_version"),
-      macos_build: readString(host.macos_build, "host.macos_build"),
-      bun_version: readString(host.bun_version, "host.bun_version"),
-      bun_path: readString(host.bun_path, "host.bun_path"),
-      bun_sha256: readString(host.bun_sha256, "host.bun_sha256"),
-      term: readString(host.term, "host.term"),
-      shell: readString(host.shell, "host.shell"),
-    },
-    identity_attestation: {
-      result: readEnum(identity.result, "identity_attestation.result", PASS_FAIL),
-      primitive: readString(identity.primitive, "identity_attestation.primitive"),
-      sanitized_facts: identity.sanitized_facts as string,
-    },
-    auth_readiness: {
-      result: readEnum(auth.result, "auth_readiness.result", AUTH_RESULTS),
-      primitive: auth.primitive === null ? null : readString(auth.primitive, "auth_readiness.primitive"),
-    },
-    pty: {
-      result: readEnum(pty.result, "pty.result", PASS_FAIL),
-      observed_ms: readObservedMs(pty.observed_ms),
-    },
-    independent_review_eligible: record.independent_review_eligible as boolean,
-    limitations: readStringList(record.limitations, "limitations"),
-    overall: readEnum(record.overall, "overall", PASS_FAIL),
-    redaction_rules_applied: readStringList(record.redaction_rules_applied, "redaction_rules_applied"),
-  });
+    const surface = readSurface(record.surface);
+    const registration = lookupRegistration(surface);
+    if (registration === undefined) return reject("unregistered_surface", "surface");
+
+    // Spec section 9.1: these are copied from the registration, so they must
+    // equal its values exactly.
+    const provider = readString(record.provider, "provider");
+    if (provider !== registration.provider) reject("registration_mismatch", "provider");
+    const organizationId = readString(record.organization_id, "organization_id");
+    if (organizationId !== registration.organization_id) reject("registration_mismatch", "organization_id");
+    const independenceDomain = readString(record.independence_domain, "independence_domain");
+    if (independenceDomain !== registration.independence_domain) {
+      reject("registration_mismatch", "independence_domain");
+    }
+
+    const binarySha256 = readString(record.binary_sha256, "binary_sha256");
+    if (!SHA256_HEX.test(binarySha256)) reject("schema", "binary_sha256");
+
+    const host = readClosed(record.host, "host", HOST_FIELDS);
+    const identity = readClosed(record.identity_attestation, "identity_attestation", IDENTITY_ATTESTATION_FIELDS);
+    if (typeof identity.sanitized_facts !== "string") reject("schema", "identity_attestation.sanitized_facts");
+    const auth = readClosed(record.auth_readiness, "auth_readiness", AUTH_READINESS_FIELDS);
+    const pty = readClosed(record.pty, "pty", PTY_FIELDS);
+    if (typeof record.independent_review_eligible !== "boolean") reject("schema", "independent_review_eligible");
+
+    return deepFreeze({
+      surface,
+      provider,
+      requested_model: readString(record.requested_model, "requested_model"),
+      role_eligibility: readRoles(record.role_eligibility),
+      independence_domain: independenceDomain,
+      organization_id: organizationId,
+      cli_version: readString(record.cli_version, "cli_version"),
+      binary_path: readString(record.binary_path, "binary_path"),
+      binary_sha256: binarySha256,
+      evaluated_at: new Date(evaluatedMs).toISOString(),
+      expires_at: new Date(expiresMs).toISOString(),
+      host: {
+        arch: readString(host.arch, "host.arch"),
+        macos_version: readString(host.macos_version, "host.macos_version"),
+        macos_build: readString(host.macos_build, "host.macos_build"),
+        bun_version: readString(host.bun_version, "host.bun_version"),
+        bun_path: readString(host.bun_path, "host.bun_path"),
+        bun_sha256: readString(host.bun_sha256, "host.bun_sha256"),
+        term: readString(host.term, "host.term"),
+        shell: readString(host.shell, "host.shell"),
+      },
+      identity_attestation: {
+        result: readEnum(identity.result, "identity_attestation.result", PASS_FAIL),
+        primitive: readString(identity.primitive, "identity_attestation.primitive"),
+        sanitized_facts: identity.sanitized_facts as string,
+      },
+      auth_readiness: {
+        result: readEnum(auth.result, "auth_readiness.result", AUTH_RESULTS),
+        primitive: auth.primitive === null ? null : readString(auth.primitive, "auth_readiness.primitive"),
+      },
+      pty: {
+        result: readEnum(pty.result, "pty.result", PASS_FAIL),
+        observed_ms: readObservedMs(pty.observed_ms),
+      },
+      independent_review_eligible: record.independent_review_eligible as boolean,
+      limitations: readStringList(record.limitations, "limitations"),
+      overall: readEnum(record.overall, "overall", PASS_FAIL),
+      redaction_rules_applied: readStringList(record.redaction_rules_applied, "redaction_rules_applied"),
+    });
+  }
+
 }
 
 function stale(reason: StalenessReason): { readonly fresh: false; readonly reason: StalenessReason } {
