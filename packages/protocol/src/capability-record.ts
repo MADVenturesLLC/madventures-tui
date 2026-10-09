@@ -381,9 +381,11 @@ export function evaluateCapabilityFreshness(
 export function capabilityRecordFilename(record: CapabilityRecordV1): string {
   // The parser already guarantees both. They are checked again so a record
   // built without the parser can never put a path separator into the name.
-  canonicalTimestampMs(record.evaluated_at, "timestamp", "evaluated_at");
-  if (typeof record.binary_sha256 !== "string" || !SHA256_HEX.test(record.binary_sha256)) {
+  const evaluatedAt = record.evaluated_at;
+  const binarySha256 = record.binary_sha256;
+  canonicalTimestampMs(evaluatedAt, "timestamp", "evaluated_at");
+  if (typeof binarySha256 !== "string" || !SHA256_HEX.test(binarySha256)) {
     reject("schema", "binary_sha256");
   }
-  return `${record.evaluated_at}-${record.binary_sha256.slice(0, 12)}.json`;
+  return `${evaluatedAt}-${binarySha256.slice(0, 12)}.json`;
 }

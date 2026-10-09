@@ -620,6 +620,30 @@ test("the capability filename is derived from the normalized surface and binary 
     "binary_sha256",
   );
   expectRejected(() => capabilityRecordFilename({ ...record, evaluated_at: "../../x" }), "timestamp", "evaluated_at");
+
+  // B7: accessor-backed fields are snapshotted once, validated, and reused.
+  let timestampReads = 0;
+  let hashReads = 0;
+  const accessorRecord: CapabilityRecordV1 = {
+    ...record,
+    get evaluated_at() {
+      timestampReads++;
+      return timestampReads === 1 ? EVALUATED_AT : "../../elsewhere";
+    },
+    get binary_sha256() {
+      hashReads++;
+      return hashReads <= 2 ? BINARY_SHA256 : "../../elsewhere";
+    },
+  };
+  let result: string | undefined;
+  let rejection: unknown;
+  try { result = capabilityRecordFilename(accessorRecord); } catch (error) { rejection = error; }
+  expect([timestampReads, hashReads]).toEqual([1, 1]);
+  if (rejection === undefined) {
+    expect(result).toBe(`${EVALUATED_AT}-${BINARY_SHA256.slice(0, 12)}.json`);
+  } else {
+    expect(rejection).toBeInstanceOf(CapabilityRecordError);
+  }
 });
 
 // ─── Stored timestamps (B3, PLAN-OPEN-3) ───

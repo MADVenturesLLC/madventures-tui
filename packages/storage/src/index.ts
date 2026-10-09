@@ -10,3 +10,9 @@ export {
 export type { StorageRootFailure } from "./storage-root";
 export { createSessionStorage, rollbackSessionStorage } from "./session-storage";
 export type { SessionStorage } from "./session-storage";
+export {
+  writeCapabilityRecord,
+  readCapabilityRecords,
+  latestFreshRecord,
+  CapabilityStoreError,
+} from "./capability-store";
