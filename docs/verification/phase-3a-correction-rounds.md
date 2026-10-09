@@ -818,3 +818,28 @@ Round 2's resolution, recorded above as pending, is now closed:
 - **Counted:** no round. Rubric milestone 1 stays at **5**. Rubric milestone 4 stays at **3**.
 - **Not authorized here:** leaving draft or merging PR #119, M15 closure and Task 36. Each needs a
   separate Founder act.
+
+## Task 36 review verdict PASS (rubric milestone 1 round 5, rubric milestone 4 round 3, unchanged)
+
+- **Recorded:** 2026-10-09, under FOUNDER-ACT-20261009-TASK36-REVIEW-ACCEPTANCE
+  (`docs/decisions/DEC-20261009-02-task36-review-acceptance.md`) C1, for the review of
+  FOUNDER-ACT-20261009-TASK36-EXECUTION-AUTHORIZATION Part E5.
+- **Plan milestone:** M15, Task 36. **Rubric milestones:** 4 and 1.
+- **Head reviewed:** `64c9a7b1c5914dfae1dde8b5103963ff8b4e4518`, the Task 36 commit on PR #129, built by
+  `session:codex/m15-task36-r1`.
+- **Reviewer:** `gemini-antigravity`, launched as `gemini-3.1-pro-high` and reporting the same model id,
+  in a fresh session and clone. The model is a self-report and the launch setting.
+- **Verdict text SHA-256:** `ece8da6e31979cdb93a9a66527b01df314af65cb5280a72499f6f1937ab5a69d`, from the
+  Founder's saved copy. The text is posted on PR #129 under act C2.
+- **Result:** PASS on all eight items. The reviewer reports `tsc` exit 0, 7 pass in the focused file,
+  176 pass in 15 files across storage and protocol, and 1,578 pass, 0 fail in 97 files in the full
+  suite on macOS with Bun 1.4.2. It reports each of the five required breaks failing its target test.
+- **Advisory (act A3, B4):** no test fails if the module reads the clock; the act requires none.
+- **Gaps (act A4):** the read list and the act hash not shown, the item 3 match not stated, the
+  write-side parse rejection identified by name, and the B9 statement left out.
+- **Rulings during the build (act A2):** the harness and model report; the sandbox rerun; five
+  nested-sandbox failures, with the Founder's run outside any sandbox at 0 fail; and the removal of
+  one blank line `bun install` inserted in `bun.lock`.
+- **Counted:** no round. Rubric milestone 1 stays at **5**. Rubric milestone 4 stays at **3**.
+- **Not authorized here:** leaving draft or merging PR #129, and M15 closure. Each needs a separate
+  Founder act.
