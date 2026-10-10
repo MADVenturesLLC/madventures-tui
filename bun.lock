@@ -176,6 +176,9 @@
     "packages/storage": {
       "name": "@madventures/storage",
       "version": "0.1.0",
+      "dependencies": {
+        "@madventures/protocol": "workspace:*",
+      },
     },
     "packages/tui-chaos": {
       "name": "@madventures/tui-chaos",
