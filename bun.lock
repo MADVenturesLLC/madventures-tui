@@ -180,6 +180,13 @@
         "@madventures/protocol": "workspace:*",
       },
     },
+    "packages/supervisor": {
+      "name": "@madventures/supervisor",
+      "version": "0.1.0",
+      "dependencies": {
+        "@madventures/protocol": "workspace:*",
+      },
+    },
     "packages/tui-chaos": {
       "name": "@madventures/tui-chaos",
       "version": "0.1.0",
@@ -282,6 +289,8 @@
     "@madventures/pty-host": ["@madventures/pty-host@workspace:packages/pty-host"],
 
     "@madventures/storage": ["@madventures/storage@workspace:packages/storage"],
+
+    "@madventures/supervisor": ["@madventures/supervisor@workspace:packages/supervisor"],
 
     "@madventures/tui-chaos": ["@madventures/tui-chaos@workspace:packages/tui-chaos"],
 
