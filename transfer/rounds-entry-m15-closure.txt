@@ -1,0 +1,22 @@
+## M15 review checkpoint closed (rubric milestone 1 round 5, rubric milestone 4 round 3, unchanged)
+
+- **Recorded:** 2026-10-10, under FOUNDER-ACT-20261010-M15-CHECKPOINT-CLOSURE
+  (`docs/decisions/DEC-20261010-01-m15-checkpoint-closure.md`) C1, as
+  FOUNDER-ACT-20261009-TASK36-EXECUTION-AUTHORIZATION E7 requires.
+- **Plan milestone:** M15, Tasks 35 and 36. **Rubric milestones:** 4 and 1.
+- **Closed at:** `28ce9bf9272a5ff864469081704a855a22f3027f`, the PR #129 merge commit.
+- **Basis:** the accepted `gemini-antigravity` PASS on Task 35 at
+  `35b8b96c8e8636304df4836c85d4f534c9be579d` (verdict SHA-256
+  `414d1e5b9ba9dfa0351d0b2b9308067797bb28894dcdc21200ab4eb070c67b13`) and on Task 36 at
+  `64c9a7b1c5914dfae1dde8b5103963ff8b4e4518` (verdict SHA-256
+  `ece8da6e31979cdb93a9a66527b01df314af65cb5280a72499f6f1937ab5a69d`). Every path outside `docs/` on
+  `main` at the closing head equals the Task 36 reviewed head. No further milestone review was held
+  (act A5).
+- **Advisories carried (act B2):** the Task 35 setter case; the `requested_model` coverage gap; no test
+  for a clock read in the store; the directory path race on PR #129.
+- **Discharged (act B3):** the filename defect of DEC-20261006-01 B2.
+- **Notes (act A6):** the PR #130 merge authorization and thread reply were posted outside the guarded
+  command, the authorization with its list numbering and header layout lost; one re-run each of a
+  cancelled duplicate `code-review` run on PR #128 and PR #129.
+- **Counted:** no round. Rubric milestone 1 stays at **5**. Rubric milestone 4 stays at **3**.
+- **Not authorized here:** Task 37, M16 and every later task.
