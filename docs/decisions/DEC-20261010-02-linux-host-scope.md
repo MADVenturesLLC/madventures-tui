@@ -1,0 +1,61 @@
+FOUNDER-ACT-20261010-LINUX-HOST-SCOPE: the Ubuntu PC added to Phase 3A as a supported and certified host
+
+> **Status:** ISSUED
+> **Repository:** `MADVenturesLLC/madventures-tui`
+> **`origin/main` when drafted:** `acab0dfadc4e4650ddeaadb836bc516156766848`
+> **Amends, by direction in Part B:** spec `docs/superpowers/specs/2026-08-12-phase-3a-runtime-foundation-design.md` (SHA-256 `764801aebeaf9686ed63523cea7f79120320725caa5be4cd55e9556259b6d88f`), plan `docs/superpowers/plans/2026-08-12-phase-3a-runtime-foundation.md` (SHA-256 `bdd91837de5eba742e9a2f61553db74c164b58bae9d6fa1b8f96ee748ef18ed8`), `PLAN-OPEN-2-environment-allowlists.md` (SHA-256 `6f570ea8123c824687953cc64b793587b9a5acb4db56729c29bec383f694e1b0`)
+> **Read with:** `DEC-20261010-01`, plan section 11.3
+
+I, Michael Daley, Founder of MAD Ventures, rule as follows.
+
+## Part A: Basis
+
+A1. **My decision.** On 2026-10-10 I decided that my new Ubuntu PC will be the main computer that runs the build room, that the build stays supported on the MacBook as well so I can work on either, and that the iMac and the MacBook stay available for certification. I chose to add Linux within Phase 3A, before M17, rather than in a later phase.
+
+A2. **The host, as I observed it on 2026-10-10.** Ubuntu 26.04.1 LTS, kernel 7.0.0-38-generic, `x86_64`. User `michaeldaley`, uid 1000, home `/home/michaeldaley`, passwd shell `/bin/bash`, `SHELL` `/bin/bash`, `TERM` `xterm-ghostty`, `TMPDIR` unset. `git`, `gh`, `agy` and `claude` are installed. Bun and Codex are not.
+
+A3. **What the current documents say.** Spec section 1.4 excludes Linux from Phase 3A. Spec sections 3.6 and 6.5 and plan M17, M26 and section 8 certify on the iMac and the MacBook only, and section 6.5 bars machine-specific code branches. Spec section 5.2 puts test roots under the macOS per-user private temporary tree. `PLAN-OPEN-2` makes `TMPDIR` required and places Claude Code's sign-in material in the macOS keychain. The capability record merged under Task 35 has `host.macos_version` and `host.macos_build` fields.
+
+A4. **What already runs on Linux.** The required CI check Verify runs the full suite on `ubuntu-24.04` `x86_64` with a qualified Bun build, and it has passed on every Phase 3A pull request.
+
+A5. **Why now.** M16 is the last milestone that does not depend on the platform. M17 (the PTY spike), M19 (containment) and M26 (certification) do. Settling the platform before M17 costs one amendment; settling it after M26 would mean rebuilding them.
+
+## Part B: Founder rulings
+
+B1. **Scope.** Phase 3A supports macOS and Linux. On Linux it supports exactly one host profile: Ubuntu 26.04 LTS on `x86_64`, as on the PC in A2. Other Linux distributions and architectures, Windows and remote hosts stay excluded.
+
+B2. **Certification.** Every gate that names the iMac and the MacBook adds the Ubuntu PC as a third host. The same reviewed commit must pass on all three.
+
+B3. **One codebase.** Code may branch on the operating system only where an operating-system facility differs. Each such branch is named in the amendment of B6 and exercised on its own operating system by the CI jobs and at certification. No code branches on a host's identity, such as its name or user.
+
+B4. **The environment rules on Linux.** The `claude-code-v1` and `antigravity-v1` allowlists do not change. `TMPDIR` stays required. On Linux the governed launcher sets `TMPDIR` to a per-user private directory owned by the installation uid with mode `0700`; the shared `/tmp` is not acceptable. Task 45 validates that, in addition to its presence. The `HOME`, `PATH`, `SHELL` and installation-identity rules apply unchanged. The rule that no secret passes through the environment stands, and both allowlists keep zero `secret: true` variables. Where Claude Code keeps its sign-in material on Linux, and what its auth-readiness probe reports there, are facts for Task 45 to establish on this host. If either differs from what `PLAN-OPEN-2` assumes, Task 45 stops for my ruling.
+
+B5. **The capability record.** The record's macOS host fields cannot describe this host. A separate task act amends the record before any capability record is produced or evaluated on Linux. Until then, no capability record is written on Linux.
+
+B6. **The amendment owed.** Before Task 38 is authorized, one docs-only pull request amends spec sections 1.4, 3.5, 3.6, 5.2 and 6.5, plan M17, M26 and section 8, and `PLAN-OPEN-2`, to give effect to B1 to B5, and updates the approval record. The drafting assistant drafts it, and it takes effect only by a separate Founder act that ratifies its exact text.
+
+B7. **Task 37.** Task 37 does not depend on the platform and proceeds under its own act once this act is on `main`. Its review runs on the Ubuntu PC, so that Linux evidence exists from M16 on.
+
+B8. **Work hosts.** I may run builders, reviewers, filing sessions and my own commands from any of the three hosts. Each report names the host it ran on. Each host uses Bun 1.4.2, the version the MacBook reported for Task 36, until the amendment of B6 fixes the gate versions.
+
+B9. **Counting.** This is a new Founder ruling, which plan section 11.3 does not count as a correction round. Rubric milestone 1 stays at 5 and rubric milestone 4 at 3.
+
+## Part C: Filing
+
+C1. One docs-only pull request files this act, and changes nothing else.
+
+## Part D: Not authorized
+
+- The amendment text of B6, which needs its own act to take effect.
+- Any change to code, tests, `bun.lock`, a manifest, the plan, a spec or `PLAN-OPEN-2` under this act.
+- The capability-record change of B5, Task 38 and every later task.
+
+## Part E: Signature
+
+Signed:
+
+— Michael Daley
+
+Date: 2026-10-10
+
+Actor-Id: founder
