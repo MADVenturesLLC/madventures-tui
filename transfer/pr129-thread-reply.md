@@ -1,0 +1,3 @@
+Founder disposition, in my merge authorization on this pull request: advisory, with no push. The execution act rules the write and read method, and the reviewer of record found the head follows it. validateStorageRoot admits a root only when no component is a symbolic link and the directory is owned by the running user with no group or other access, so only a process running as that user, or as root, can make the swap, and such a process can already change the store directly. The point is carried into the M15 closure act as an advisory for the containment milestones. Resolving.
+
+— Michael Daley, Founder
