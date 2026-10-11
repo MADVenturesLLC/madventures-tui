@@ -1,0 +1,16 @@
+READY-FOR-REVIEW AUTHORIZATION: MADVenturesLLC/madventures-tui#135
+
+Authorized head: 61751b6d025fdfffd591b2fe07cd70596e1cf7d4
+Base: main at 7aa7a33d414c66f4c807f775172f32de84989a91
+
+I, Michael Daley, Founder of MAD Ventures, authorize marking this pull request ready for review at the exact head SHA above and at no other. Any push after this comment voids this authorization. This is not a merge authorization. The merge needs a separate act naming the exact head.
+
+Verified before issuing (2026-10-11, after the last check below completed at 00:51:46Z):
+1. Head and scope: the head is the SHA above, one commit whose only parent is the base, and the pull request is a draft with merge state clean. It changes exactly two paths, with 108 additions and no deletion: docs/decisions/DEC-20261010-04-task37-review-acceptance.md, new (SHA-256 9cec4d8826d67cfa0bb64269b83ce5cc035a17e114aef30470fefd4ce6313272, 80 lines, 12,045 bytes), and docs/verification/phase-3a-correction-rounds.md, with 28 lines appended after its last section and its first 88,307 bytes unchanged (new SHA-256 d114642637e3036628c5a41352ad989ef0fa7aec7c39cb162d97e99adc8d7294, 896 lines, 90,531 bytes). Code, tests, bun.lock, every manifest and the plan are unchanged. The commit message and the pull request body end with the three attribution trailers for session:claude-code/tui-task37-review-acceptance-filing.
+2. Authority: I signed FOUNDER-ACT-20261010-TASK37-REVIEW-ACCEPTANCE on 2026-10-10. Its part C1 directs this filing. This filing authorizes no work by itself.
+3. Identity of the files: the drafting assistant fetched the head into a separate checkout. The act file there is byte-identical to the transfer blob at commit 3d89005fede89ec2bfe1dcd02a8411122ba04dc7, and the rounds log there is byte-identical to the result the drafting assistant prepared in advance from main and the transfer entry. The drafting assistant wrote the act and the entry, so this is not an independent review.
+4. Required checks on this head, read from GitHub: Verify (completed 2026-10-11T00:50:27Z), Verify (macOS) (00:51:46Z) and code-review (00:50:16Z) succeeded. attribution-shape, validate-code-review, CodeQL, all four Analyze jobs and both tui-chaos runs succeeded. fork-pr-notice was skipped. The only comment is the automatic code-review quote, and there are no reviews or review threads.
+5. Deviation: the filing prompt required zero square brackets in the pull request body. The body keeps one, in the line that names Claude Code as a link, and the filing session did not report it. I accept it: it is a link, not a placeholder, and attribution-shape passed. The body is not edited, and it becomes the merge commit message as it stands.
+6. Not authorized by this comment: merging, posting the verdict on pull request 134 under the act's part C2, marking pull request 134 ready, M16 closure and every later task, any push to docs/task37-review-acceptance-filing, and any change to a path other than the two above.
+7. Marking ready may bring a Copilot review and re-run review checks. Check and thread states are verified again in the merge authorization, at the time it is issued.
+8. Body: zero bare three-hyphen lines, checked immediately before issuing.
