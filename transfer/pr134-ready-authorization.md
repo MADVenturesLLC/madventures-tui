@@ -1,0 +1,17 @@
+READY-FOR-REVIEW AUTHORIZATION: MADVenturesLLC/madventures-tui#134
+
+Authorized head: 6af09a91bd9f1d4a2b8129a51eb142a3991b6b48
+Base: main, which is at 5d0d24bb57724574976b04486abafb7462d7ea6e
+
+I, Michael Daley, Founder of MAD Ventures, authorize marking this pull request ready for review at the exact head SHA above and at no other. Any push after this comment voids this authorization. This is not a merge authorization. The merge needs a separate act naming the exact head.
+
+Verified before issuing (2026-10-11, after the last check below completed at 03:21:14Z):
+1. Head and scope: the head is the SHA above, one commit whose only parent is acab0dfadc4e4650ddeaadb836bc516156766848, and the pull request is a draft. Against main it changes exactly the six paths of FOUNDER-ACT-20261010-TASK37-EXECUTION-AUTHORIZATION C1, with 301 additions and 1 deletion. Main has moved 7 commits since the branch base, changing only docs/decisions/DEC-20261010-02-linux-host-scope.md, docs/decisions/DEC-20261010-03-task37-execution-authorization.md, docs/decisions/DEC-20261010-04-task37-review-acceptance.md and docs/verification/phase-3a-correction-rounds.md. GitHub reports the merge state clean.
+2. Authority: FOUNDER-ACT-20261010-TASK37-REVIEW-ACCEPTANCE is on main since merge commit 5d0d24bb57724574976b04486abafb7462d7ea6e. It accepts the gemini-antigravity PASS at this head, and its part B6 allows a separate act to mark this pull request ready once the verdict is posted. The verdict was posted under its part C2 as comment 6104947005 at 2026-10-11T03:17:14Z. The drafting assistant extracted the fenced block from that comment and confirmed it equals the text of record, SHA-256 3841221592796c3b573e308404de07667946154f4203f28092b9fb873d307f32, 79 lines, 6,638 bytes.
+3. Required checks on this head, read from GitHub: Verify (completed 2026-10-10T18:36:59Z), Verify (macOS) (18:38:19Z) and code-review (18:36:36Z) succeeded, and the combined commit status reads success. attribution-shape, validate-code-review, CodeQL, all four Analyze jobs, both tui-chaos runs and Cursor Security Agent (2026-10-11T03:21:14Z) succeeded. fork-pr-notice was skipped.
+4. Reviews and threads: there are no reviews, no review threads and no review comments. The only other comment is the automatic code-review quote.
+5. Description: the pull request body equals the description the builder saved, SHA-256 24b3c9ff0f9329ce1704c3eae76537158426bfa408d6a2048fc5588808ad147b, and ends with the three attribution trailers of session:codex/m16-task37-r1. I pushed the branch and opened this pull request under FOUNDER-ACT-20261010-TASK37-EXECUTION-AUTHORIZATION E4.
+6. Deviations on this pull request, each already recorded and none changing the head: my seven rulings to the builder during the build (FOUNDER-ACT-20261010-TASK37-REVIEW-ACCEPTANCE A2 and B3), the gaps in the verdict (same act A5 and B2), the INCONCLUSIVE first review attempt (same act A6 and B3), and the six Ubuntu host failures recorded as Linux evidence (same act B4). The drafting assistant drafted the acts and the prompts and reviewed none of the code independently.
+7. Not authorized by this comment: merging, approving, any push to build/m16-task37-r1, M16 closure, M17 and every later task, and taking up the six Ubuntu host failures.
+8. Marking ready may bring a Copilot review and re-run review checks. Check and thread states are verified again in the merge authorization, at the time it is issued.
+9. Body: zero bare three-hyphen lines, checked immediately before issuing.
