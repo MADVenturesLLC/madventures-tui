@@ -1,0 +1,18 @@
+MERGE AUTHORIZATION: MADVenturesLLC/madventures-tui#135
+
+Authorized head: 61751b6d025fdfffd591b2fe07cd70596e1cf7d4
+Base when verified: main at 7aa7a33d414c66f4c807f775172f32de84989a91
+
+I, Michael Daley, Founder of MAD Ventures, authorize the merge of this pull request at the exact head SHA above and at no other. Any push after this comment voids this authorization.
+
+Verified before issuing (2026-10-11, after the last check below completed at 02:55:44Z):
+1. Required checks on this head: Verify (completed 2026-10-11T00:50:27Z), Verify (macOS) (00:51:46Z) and code-review (00:50:16Z) succeeded, and the combined commit status reads success. attribution-shape, validate-code-review, CodeQL, all four Analyze jobs, both tui-chaos runs, copilot-pull-request-reviewer (02:53:37Z) and Cursor Security Agent (02:55:44Z) succeeded. fork-pr-notice was skipped. GitHub reports the merge state clean.
+2. Head and scope: one commit on the base, parent 7aa7a33d414c66f4c807f775172f32de84989a91. It changes exactly docs/decisions/DEC-20261010-04-task37-review-acceptance.md, new (SHA-256 9cec4d8826d67cfa0bb64269b83ce5cc035a17e114aef30470fefd4ce6313272), and docs/verification/phase-3a-correction-rounds.md, with 28 lines appended and its first 88,307 bytes unchanged (SHA-256 d114642637e3036628c5a41352ad989ef0fa7aec7c39cb162d97e99adc8d7294), with 108 additions and no deletion. Nothing else changes. main is still at the base SHA.
+3. Review and threads: Copilot's review 5481663214 at 02:53:37Z, on this head, recommends approval with 0 open findings and opens no thread. There are no review threads and no review comments.
+4. Ready-for-review: this pull request left draft at 02:51:28Z under my ready-for-review authorization, comment 6104772197, posted at 02:51:25Z for this head. No push has been made since.
+5. Authority: part C1 of FOUNDER-ACT-20261010-TASK37-REVIEW-ACCEPTANCE directs this filing. The act file and the entry equal the transfer blobs at commit 3d89005fede89ec2bfe1dcd02a8411122ba04dc7. The drafting assistant wrote the act and the entry, so this is not an independent review. No code path changed, so bun install, tsc and bun test were not run for this pull request, and the repository checks above are the evidence.
+6. Effect: this merge puts the act on main with Status ISSUED, and the Task 37 PASS at 6af09a91bd9f1d4a2b8129a51eb142a3991b6b48 stands accepted under its B1. It adds no round. Rubric milestone 1 stays at 5 and rubric milestone 4 at 3. The body keeps the one square bracket accepted in item 5 of my ready-for-review authorization.
+7. Body: the pull request body becomes the merge commit message. It ends with the three attribution trailers as the final paragraph. This comment has zero bare three-hyphen lines, checked immediately before issuing.
+8. Not authorized by this comment: posting the verdict on pull request 134, which the act's part C2 directs after this merge; marking pull request 134 ready or merging it; M16 closure and every later task; any further push to docs/task37-review-acceptance-filing; and any change to a path other than the two above.
+
+Merge method: merge commit, head SHA pinned, no caller-supplied message. Post this comment before merging. Verify the merge commit on main immediately after: its first parent is the main head at the moment of merge and its second parent is 61751b6d025fdfffd591b2fe07cd70596e1cf7d4, the changed paths against the first parent are exactly the two above, trailers are present and parseable, attribution-shape-check.sh main on the merge SHA passes, and the push runs on main are green. If that fails, stop; do not rewrite main.
