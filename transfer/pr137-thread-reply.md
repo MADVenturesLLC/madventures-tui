@@ -1,0 +1,3 @@
+Founder disposition, in my merge authorization on this pull request: the finding is correct about the wording. I rule, as if written in B5 of this act, that the path in B5 is where the report is filed in the repository, not where the run writes it. The generator writes the report outside the worktree, at /home/michaeldaley/ubuntu-spike-evidence/report/ under the same file name, so the clean-status check of B4 item 8 holds, and the pull request that files the ratification of the Linux amendment copies it byte-identically to docs/verification/. No change to the act text. Resolving.
+
+— Michael Daley, Founder
