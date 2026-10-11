@@ -1,0 +1,22 @@
+## M16 review checkpoint closed (rubric milestone 1 round 5, rubric milestone 4 round 3, unchanged)
+
+- **Recorded:** 2026-10-11, under FOUNDER-ACT-20261011-M16-CHECKPOINT-CLOSURE
+  (`docs/decisions/DEC-20261011-01-m16-checkpoint-closure.md`) C1, as
+  FOUNDER-ACT-20261010-TASK37-EXECUTION-AUTHORIZATION E7 requires.
+- **Plan milestone:** M16, Task 37. **Rubric milestone:** 4.
+- **Closed at:** `6ef0f18408e39e9d1aa14137afb76d9c09580e16`, the PR #134 merge commit.
+- **Basis:** the accepted `gemini-antigravity` PASS on Task 37 at
+  `6af09a91bd9f1d4a2b8129a51eb142a3991b6b48` (verdict SHA-256
+  `3841221592796c3b573e308404de07667946154f4203f28092b9fb873d307f32`). Each of the six Task 37 files on
+  `main` at the closing head equals the reviewed head. No further milestone review was held (act A5).
+- **Finding after the review (act A4):** Copilot found that `redact` can expose a secret value through
+  an earlier replacement marker. Ruled a binding advisory in the PR #134 merge authorization, comment
+  6110189285, item 3, because no production allowlist has a `secret: true` variable. Not a counted
+  review, so no round.
+- **Advisories carried (act B2):** the redaction collision, binding on any act that adds a
+  `secret: true` variable; the six Ubuntu host failures, before the Ubuntu spike run; and the four
+  advisories of DEC-20261010-01 B2, unchanged.
+- **Notes (act A6):** the merge command first run before the authorization was posted, stopping
+  without effect; one re-run of a code-review run cancelled by the thread reply.
+- **Counted:** no round. Rubric milestone 1 stays at **5**. Rubric milestone 4 stays at **3**.
+- **Not authorized here:** the Linux amendment, the Ubuntu spike run, Task 45 and every later task.
