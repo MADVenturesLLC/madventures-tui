@@ -866,3 +866,31 @@ Round 2's resolution, recorded above as pending, is now closed:
   cancelled duplicate `code-review` run on PR #128 and PR #129.
 - **Counted:** no round. Rubric milestone 1 stays at **5**. Rubric milestone 4 stays at **3**.
 - **Not authorized here:** Task 37, M16 and every later task.
+
+## Task 37 review verdict PASS (rubric milestone 1 round 5, rubric milestone 4 round 3, unchanged)
+
+- **Recorded:** 2026-10-10, under FOUNDER-ACT-20261010-TASK37-REVIEW-ACCEPTANCE
+  (`docs/decisions/DEC-20261010-04-task37-review-acceptance.md`) C1, for the review of
+  FOUNDER-ACT-20261010-TASK37-EXECUTION-AUTHORIZATION Part E5.
+- **Plan milestone:** M16, Task 37. **Rubric milestone:** 4.
+- **Head reviewed:** `6af09a91bd9f1d4a2b8129a51eb142a3991b6b48`, the Task 37 commit on PR #134, built by
+  `session:codex/m16-task37-r1` on the Founder's Ubuntu PC.
+- **Reviewer:** `gemini-antigravity`, in a fresh session and clone on the Ubuntu PC, reporting the
+  Antigravity CLI and Gemini 3.1 Pro (High). The model is a self-report; the act names no model.
+- **Verdict text SHA-256:** `3841221592796c3b573e308404de07667946154f4203f28092b9fb873d307f32`, from the
+  Founder's saved copy. The text is posted on PR #134 under act C2.
+- **Result:** PASS on all eight items, no findings. The reviewer reports `tsc` exit 0, 5 pass in the
+  focused file, 195 pass and 0 fail across protocol and architecture, and the six named breaks each
+  failing a test. Its full suite showed 3 failures at the head and the same 3 at the base.
+- **Gaps (act A5):** output summarized where verbatim output was required, runs outside a sandbox
+  not stated, the act hash not shown, and the B10 statement left out.
+- **Rulings during the build (act A2):** session skills loaded; `git fetch`, `bun install`,
+  `git commit` and the full suite run outside the sandbox with approval; six pre-existing Ubuntu host
+  failures at the base; and three corrections to the builder's own uncommitted test file.
+- **Earlier attempt (act A6):** one INCONCLUSIVE review that stopped before reading code, kept with
+  SHA-256 `9256b8aa68c8e9d8f87be5bf6e9b28e97c468acb71e4aaab59c17954b386a15b`. Not a verdict.
+- **Linux evidence (act B4):** six full-suite failures at the base on the Ubuntu PC, three of which
+  passed in the reviewer's run. Not taken up here.
+- **Counted:** no round. Rubric milestone 1 stays at **5**. Rubric milestone 4 stays at **3**.
+- **Not authorized here:** leaving draft or merging PR #134, and M16 closure. Each needs a separate
+  Founder act.
