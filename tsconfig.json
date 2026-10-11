@@ -33,7 +33,8 @@
       "@madventures/adapter-claude-code": ["./packages/adapter-claude-code/src/index.ts"],
       "@madventures/adapter-antigravity": ["./packages/adapter-antigravity/src/index.ts"],
       "@madventures/pty-host": ["./packages/pty-host/src/index.ts"],
-      "@madventures/storage": ["./packages/storage/src/index.ts"]
+      "@madventures/storage": ["./packages/storage/src/index.ts"],
+      "@madventures/supervisor": ["./packages/supervisor/src/index.ts"]
     }
   },
   "exclude": ["apps/projector-mc", "apps/seal-studio"]
