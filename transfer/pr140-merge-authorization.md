@@ -1,0 +1,18 @@
+MERGE AUTHORIZATION: MADVenturesLLC/madventures-tui#140
+
+Authorized head: d6134e08e518b7fa558e09f8f97a1459aa02790b
+Base when verified: main at 95783dade386d3042f1209b051e8eea1504516dc
+
+I, Michael Daley, Founder of MAD Ventures, authorize the merge of this pull request at the exact head SHA above and at no other. Any push after this comment voids this authorization.
+
+Verified before issuing (2026-10-12, after the last check below completed at 11:07:56Z):
+1. Required checks on this head: Verify (completed 2026-10-12T10:44:50Z), Verify (macOS) (10:45:43Z) and code-review (10:44:33Z) succeeded, and the combined commit status reads success. attribution-shape, validate-code-review, CodeQL, all four Analyze jobs, both tui-chaos runs, copilot-pull-request-reviewer (11:03:51Z) and Cursor Security Agent (11:07:56Z) succeeded. fork-pr-notice was skipped. Every workflow run on this head succeeded, and none is held for approval.
+2. Head and scope: one commit on the base, parent 95783dade386d3042f1209b051e8eea1504516dc. It changes exactly two paths, with 222 additions and no deletion: docs/decisions/DEC-20261012-03-tests-4-6-cause-and-fix.md, new (SHA-256 e91b25f4fbb0f23101f96793afe3a85951372efbc83148602e38ccb2a873c4f1), and docs/verification/2026-10-12-tests-4-6-investigation-ubuntu.md, new (SHA-256 ec6c39229959f4d3dd0c55ff948caa7d8a98cda1b915ddb2ddc3bf81a68de79b). Nothing else changes. main is still at the base SHA, and GitHub reports the merge state clean.
+3. Review: Copilot's review 5489826432 at 11:03:49Z, on this head, reports no findings and opens no thread. There are no other reviews and no review threads.
+4. Ready-for-review: this pull request left draft at 11:01:18Z under my ready-for-review authorization, comment 6122942584, posted at 11:01:16Z for this head. No push has been made since.
+5. Authority: part C1 of FOUNDER-ACT-20261012-TESTS-4-6-CAUSE-AND-FIX directs this filing. The act equals the transfer blob at commit cedbabcb4fe77793dfa9ebba4a557da84bf2f98d, and the report is the report my investigation run wrote on the Ubuntu PC. The drafting assistant wrote the act and the run script, so this is not an independent review. No code path changed, so bun install, tsc and bun test were not run for this pull request, and the repository checks above are the evidence.
+6. Effect: this merge puts the act on main with Status ISSUED, and files the investigation report under its B5. The build of its B3 and the check of its B4 may then start, each once the drafting assistant has drafted its prompt or run script and I have read it. It adds no round. Rubric milestone 1 stays at 5 and rubric milestone 4 at 3.
+7. Body: the pull request body becomes the merge commit message. It ends with the three attribution trailers as the final paragraph. This comment has zero bare three-hyphen lines, checked immediately before issuing.
+8. Not authorized by this comment: any change to code, tests, workflows, the plan, a spec or PLAN-OPEN-2, any change to MADVenturesLLC/os-governed-artifacts, the ruling of the act's B6, Task 45 and every later task, any further push to docs/b4-cause-and-fix-act-filing, and any change to a path other than the two above.
+
+Merge method: merge commit, head SHA pinned, no caller-supplied message. Post this comment before merging. Verify the merge commit on main immediately after: its first parent is the main head at the moment of merge and its second parent is d6134e08e518b7fa558e09f8f97a1459aa02790b, the changed paths against the first parent are exactly the two above, trailers are present and parseable, attribution-shape-check.sh main on the merge SHA passes, and the push runs on main are green. If that fails, stop; do not rewrite main.
