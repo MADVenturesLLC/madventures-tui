@@ -67,7 +67,7 @@ jobs:
   # partial macOS coverage rather than macOS coverage.
   verify-macos:
     name: Verify (macOS)
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 15
     steps:
       - name: Checkout
