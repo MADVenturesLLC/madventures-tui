@@ -1,0 +1,16 @@
+READY-FOR-REVIEW AUTHORIZATION: MADVenturesLLC/madventures-tui#138
+
+Authorized head: c9875ac370659813dd130bf921bbbabc2b9c7346
+Base: main at 0184a80d5ddefcfa89a97f8634234f4e59d1b3ae
+
+I, Michael Daley, Founder of MAD Ventures, authorize marking this pull request ready for review at the exact head SHA above and at no other. Any push after this comment voids this authorization. This is not a merge authorization. The merge needs a separate act naming the exact head.
+
+Verified before issuing (2026-10-12, after the last check below completed at 02:26:56Z):
+1. Head and scope: the head is the SHA above, one commit whose only parent is the base, and the pull request is a draft with merge state clean. It changes exactly six paths, with 616 additions and 120 deletions: docs/decisions/DEC-20261012-01-linux-amendment-ratification.md, new (SHA-256 ed3443e7c88af827dfc2d9792a1ef994568f8a8e6184b4aa76569bfefd584d83); docs/verification/2026-10-11-bun-terminal-spike-ubuntu.md, new (SHA-256 670653fd50a6107f40503a9942d59b5574f83101d3a345708d97cbfa208b8e88); and the spec, the plan, PLAN-OPEN-2 and the approval record, which now have SHA-256 7a5ada083f5e29af397099eb307282242bc1d241ad091d75b8b010065debd286, 400ae9b9b3bb83cf63a6432f04a11cfd6142e9530bdc80d36a941f7ec85e08e2, 7ceb367c48adb1954e107ed7cdfd5578277f88c1acadb21561e043d24a95417f and 14e79fd47697fb2251b2e04008cd0245801a486fbb745728ce7fb8819fd216eb, the "after" column of the act's A3. Code, tests, bun.lock, every manifest and the rounds log are unchanged. The commit message and the pull request body end with the three attribution trailers for session:claude-code/tui-linux-amendment-filing.
+2. Authority: I signed FOUNDER-ACT-20261012-LINUX-AMENDMENT-RATIFICATION on 2026-10-12. Its part C1 directs this filing. This filing authorizes no work by itself.
+3. Identity of the files: the drafting assistant read the six files at the head from GitHub. The act equals the transfer blob at commit 76b5b0874bffa107bcee2863a867548c51bffa72, the four amended files equal the result of applying the patch with SHA-256 5dd0ce4fa3e0801682f648fee803ad364d33bafb669a4795f2c8b23e9cb1f130 to main, and the report has the SHA-256 of the report my run wrote on the Ubuntu PC. The drafting assistant wrote the act, the patch and the run script, so this is not an independent review.
+4. Required checks on this head, read from GitHub: Verify (completed 2026-10-12T02:26:06Z), Verify (macOS) (02:26:56Z) and code-review (02:25:35Z) succeeded. attribution-shape, validate-code-review, CodeQL, all four Analyze jobs and both tui-chaos runs succeeded. fork-pr-notice was skipped. Every workflow run on this head succeeded. The only comment is the automatic code-review quote, and there are no reviews or review threads.
+5. Deviations: the filing session reported none. git diff --check flagged no line. The pull request body has zero square brackets.
+6. Not authorized by this comment: merging, the issue 18 entry, Task 45 and every later task, any act on the open items of the act's B6, any push to docs/linux-amendment-filing, and any change to a path other than the six above.
+7. Marking ready may bring a Copilot review and re-run review checks. Check and thread states are verified again in the merge authorization, at the time it is issued.
+8. Body: zero bare three-hyphen lines, checked immediately before issuing.
