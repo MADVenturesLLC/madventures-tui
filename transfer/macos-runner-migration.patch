@@ -1,0 +1,48 @@
+diff --git a/.github/workflows/tui-chaos.yml b/.github/workflows/tui-chaos.yml
+index 105bfe7..7f0c08e 100644
+--- a/.github/workflows/tui-chaos.yml
++++ b/.github/workflows/tui-chaos.yml
+@@ -65,7 +65,7 @@ jobs:
+ 
+   tui-chaos-macos:
+     name: tui-chaos (macOS)
+-    runs-on: macos-14
++    runs-on: macos-15
+     timeout-minutes: 15
+     steps:
+       - name: Checkout
+diff --git a/.github/workflows/verify.yml b/.github/workflows/verify.yml
+index b3cccc3..d23fd9b 100644
+--- a/.github/workflows/verify.yml
++++ b/.github/workflows/verify.yml
+@@ -59,7 +59,7 @@ jobs:
+   # failed on any Mac not set to UTC. Only running it on macOS surfaced that.
+   # Linux CI cannot find this class of bug by construction.
+   #
+-  # ARM64 ONLY. macos-14 is Apple Silicon. This lane therefore covers one half
++  # ARM64 ONLY. macos-15 is Apple Silicon. This lane therefore covers one half
+   # of what M17 certifies — the dual-host gate is Intel AND Apple Silicon, and a
+   # green run here says nothing about the Intel half. Adding the Intel lane
+   # (`macos-15-intel`) is deliberately NOT done here: it is the next Founder
+@@ -67,7 +67,7 @@ jobs:
+   # partial macOS coverage rather than macOS coverage.
+   verify-macos:
+     name: Verify (macOS)
+-    runs-on: macos-14
++    runs-on: macos-15
+     timeout-minutes: 15
+     steps:
+       - name: Checkout
+diff --git a/CONTRIBUTING.md b/CONTRIBUTING.md
+index 5485e7f..20b1d12 100644
+--- a/CONTRIBUTING.md
++++ b/CONTRIBUTING.md
+@@ -109,7 +109,7 @@ issue for a security report.
+ - TypeScript via `bunx tsc --noEmit`.
+ - Tests via `bun test`.
+ 
+-CI runs on pull requests to `main` (Ubuntu `Verify` and macOS-14
++CI runs on pull requests to `main` (Ubuntu `Verify` and macOS-15
+ `Verify (macOS)`). It must run without credentials unless a named phase
+ requires a purpose-named secret.
+ 
