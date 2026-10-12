@@ -83,9 +83,9 @@ These are binding for every milestone. They are copied from the approved specifi
 17. **Application Support storage with passwd-resolved home and `MADV_STORAGE_DIR`.** Root is `<passwd-home>/Library/Application Support/MADVentures/madventures-tui/`. Default home is `getpwuid(getuid())`, not `$HOME`; a divergent `$HOME` is a typed preflight failure. `MADV_STORAGE_DIR` is the only override and passes the same validator. Phase 3A does not create `runtime/` (spec §§5.1, 5.2).
 18. **Ledger-write failure interrupts the whole session.** A mid-session append failure triggers typed interruption `ledger_write_failed` and terminates the session; if the interruption cannot be persisted, next-start reconciliation records the unclean closure (spec §5.3).
 19. **Bun.Terminal spike before production PTY-host construction.** The pre-written candidate is `Bun.Terminal`. The spike must prove every §3.6 criterion before the production PTY host is built (spec §§3.6, 9.7).
-20. **Both Intel and Apple Silicon macOS verification.** The same reviewed commit is tested independently on the Founder iMac and MacBook. Both signed-off, checksummed reports must pass before merge (spec §§3.6, 6.5).
+20. **Three-host verification: Intel and Apple Silicon macOS, and Ubuntu 26.04 LTS on `x86_64`.** The same reviewed commit is tested independently on the Founder iMac, MacBook, and Ubuntu PC (spec §1.5), each with Bun 1.4.2. Bun 1.4.2 is provisional under spec §1.5. All three signed-off, checksummed reports must pass before merge. The M17 spike record on the two Macs is historical and is not reopened; the Ubuntu PC ran the spike criteria under `DEC-20261010-02` B2 (spec §§1.5, 3.6, 6.5).
 21. **No native dependency, FFI alternative, pipe fallback, or design weakening without a new Founder-approved amendment.** FFI `posix_openpt`, `node-pty`, another native dependency, or a pipe fallback is not an implementation choice (spec §9.7).
-22. **TUI live integration and start-gate removal remain Phase 3B.** Gate removal is a certification event citing dual-host reports, a live-pair certification, TUI integration evidence, and production acceptance plus negative-control results (spec §§0.1, 4.2, 6.9).
+22. **TUI live integration and start-gate removal remain Phase 3B.** Gate removal is a certification event citing the three-host certification reports, a live-pair certification, TUI integration evidence, and production acceptance plus negative-control results (spec §§0.1, 4.2, 6.9).
 23. **Test count cannot shrink.** The suite must not regress below 714 tests, 2606 `expect()` calls, and 35 files. Phase 3A-required coverage increases the suite rather than replacing it (spec §6.8.1).
 24. **No skipped or disabled required tests.** No required or existing test is skipped, disabled, filtered, quarantined, marked `.only`, or otherwise excluded without an explicit Founder-visible disposition (spec §6.8.1).
 25. **No implementation milestone may silently change the approved architecture.** Material scope expansion requires a stop and Founder approval before implementation; implementing first and disclosing afterward is a qualification failure (spec §7.4).
@@ -211,7 +211,7 @@ Paths marked **(spec-pinned)** are named normatively by the approved specificati
 | `test/phase3a/runtime-harness.ts` **(spec-pinned, §9.11)** | The only Phase 3A runtime harness entry. Accepts only controlled fixture adapters and disposable validated storage roots. Registers fixture-only surface IDs. Cannot admit a real provider surface or remove the production `start` gate. | M22 |
 | `test/phase3a/fixture-adapters.ts` | Deterministic fixture adapters and fixture surface registrations, valid only inside the harness. | M22 |
 | `test/phase3a/negative-control.ts` | The single bounded negative-control implementation used by §8.3 and §12.2: depth-6, symlink-safe, passwd-resolved `broker.sock` and `runtime/` audit over the storage root, the fixed literal quarantined legacy path, and the worktree. Exits `1` on any hit. Written in Bun so both Macs run identical semantics with no shell-portability surface. | M14 |
-| `test/phase3a/spike/bun-terminal-spike.ts` | The dual-host `Bun.Terminal` capability spike primitive exercising every §3.6 criterion with monotonic-clock timings. | M17 |
+| `test/phase3a/spike/bun-terminal-spike.ts` | The `Bun.Terminal` capability spike primitive exercising every §3.6 criterion with monotonic-clock timings on every certification host. | M17 |
 
 **New test files created** (all under existing test roots; each is named in §5 with its owning task):
 
@@ -231,8 +231,10 @@ Paths marked **(spec-pinned)** are named normatively by the approved specificati
 
 `docs/verification/2026-08-12-bun-terminal-spike-imac.md` ·
 `docs/verification/2026-08-12-bun-terminal-spike-macbook.md` ·
-`docs/verification/2026-08-12-phase-3a-dual-host-imac.md` ·
-`docs/verification/2026-08-12-phase-3a-dual-host-macbook.md` ·
+`docs/verification/2026-10-11-bun-terminal-spike-ubuntu.md` (the Ubuntu PC spike run of `DEC-20261010-02` B2; outside the Task 39 report test) ·
+`docs/verification/2026-08-12-phase-3a-host-certification-imac.md` ·
+`docs/verification/2026-08-12-phase-3a-host-certification-macbook.md` ·
+`docs/verification/2026-08-12-phase-3a-host-certification-ubuntu.md` ·
 `docs/verification/phase-3a-antigravity-preliminary.md` (Task 60 / Stage 0 / rubric milestone 1 — preliminary human-readable evidence only, no capability record) ·
 `docs/verification/2026-08-12-antigravity-surface-investigation.md` ·
 `docs/verification/2026-08-12-surface-investigation-<surface>.md` (one per Founder-approved alternative) ·
@@ -305,7 +307,7 @@ Twenty-six milestones. The ordering is derived from the actual dependency graph 
 | 4 | Branded `SurfaceId` | M2 | 3 | after Task 3 commits |
 | 5 | `ExecutionIdentity` migration | M2 | 3 | after Task 4 commits |
 | 38 | `Bun.Terminal` spike primitive | M17 | 2 | after M1 is reviewed |
-| 39 | Two checksummed dual-host spike reports | M17 | 2 | after Task 38 commits **and** the same candidate has run on both Founder Macs |
+| 39 | Two checksummed Mac spike reports | M17 | 2 | after Task 38 commits **and** the same candidate has run on both Founder Macs (met 2026-08-22; the Ubuntu PC spike report of `DEC-20261010-02` B2 is filed separately and is not a Task 39 report) |
 
 Tasks 38–39 depend on M1 — they are early, not dependency-free. Only Task 60 has no technical precondition at all.
 
@@ -327,7 +329,7 @@ Tasks 38–39 depend on M1 — they are early, not dependency-free. Only Task 60
 | M14 | Socket / MCP / pipe-PTY quarantine and architecture enforcement | 9 | M13 | Dormancy proven structurally |
 | M15 | Capability records and surface-investigation tooling | 4, 1 | M2, M11 | Dated observations, not whitelists |
 | M16 | Per-adapter environment allowlists and secret redaction | 4 | M2, M15 | One environment producer |
-| M17 | `Bun.Terminal` PTY spike (dual-host gate) | 2 | M1 | Both host reports; **gate for M18** |
+| M17 | `Bun.Terminal` PTY spike (host gate) | 2 | M1 | Both Mac host reports (passed 2026-08-22, not reopened) and the Ubuntu PC spike report of `DEC-20261010-02` B2; **gate for M18** |
 | M18 | `madv-pty-host` framing and closed operation set | 5 | M9, M16, M17 | Private codec; import-graph isolation |
 | M19 | Process-group containment, host launch facts, wedged-host escalation | 5 | M18 | Gap-free launch; direct-PGID path |
 | M20 | Foreground supervisor pure preflight | 6 | M3, M11, M15, M16 | Creates nothing |
@@ -336,7 +338,7 @@ Tasks 38–39 depend on M1 — they are early, not dependency-free. Only Task 60
 | M23 | Adversarial process scenarios | 10 | M22 | All nineteen §6.4 scenarios |
 | M24 | Fixture-driven `verify-ledger` and `export-evidence` | 10 | M22 | Production tools consume fixture output |
 | M25 | Antigravity and alternative-surface investigations | 1 | M15, M16 | Dated records, pass or fail |
-| M26 | Dual-host certification evidence and final merge gate | 2, 10 | M23, M24, M25 | Both checksummed reports; gate still closed |
+| M26 | Three-host certification evidence and final merge gate | 2, 10 | M23, M24, M25 | All three checksummed reports; gate still closed |
 
 > **Task 21 / Task 21b dependency (D8, 2026-09-16).** Task 21 and Task 21b are **INDEPENDENT SIBLINGS** off Task 20. Task 21 **consumes** a `BrokerSnapshot` (it takes one as a parameter and never constructs one), so no ordering edge exists between them and either may land first:
 >
@@ -349,7 +351,7 @@ Tasks 38–39 depend on M1 — they are early, not dependency-free. Only Task 60
 
 > **Tasks 24–25 re-sequenced after M21 (FOUNDER-ACT-20260924-M10-DOCS, `DEC-20260924-03`, B3, 2026-09-24).** Tasks 24 and 25 move after M21. Publish legality needs a `ready` execution, `BrokerSnapshot` expresses readiness only through `executions`, and `executions` has no source until execution facts are retained (D9 item 5). In this table: M21 depends on M8, Tasks 21b–23, M19, M20; Tasks 24–25 depend on M21 and precede M22. No other dependency is waived. The act does not move Tasks 24–25 to another milestone; they remain listed under M10 in §5 and §11.2.
 
-**Gate note:** M17 is a hard gate. If any §3.6 criterion fails on either Founder Mac, M18–M19, M21, and M23 stop and the phase escalates under §10. FFI, `node-pty`, another native dependency, and any pipe fallback are not available responses.
+**Gate note:** M17 is a hard gate. If any §3.6 criterion fails on any certification host (spec §1.5), every dependent milestone not yet complete stops and the phase escalates under §10; a failure in the Ubuntu PC spike run of `DEC-20261010-02` B2 stops for the Founder's ruling. The Linux amendment of `DEC-20261010-02` B6 must be on `main` before Task 45 or any later task is authorized. FFI, `node-pty`, another native dependency, and any pipe fallback are not available responses.
 
 ---
 
@@ -1710,7 +1712,7 @@ Proposed by the M10 docs PR under FOUNDER-ACT-20260924-M10-DOCS, `DEC-20260924-0
 
 **Requirement coverage:**
 - §5.1 (root path shape; `sessions/`, `capability/`; no `runtime/`)
-- §5.2 (`MADV_STORAGE_DIR` is the only override; default and override pass the same validator; the seven validity conditions; pure preflight validates a proposed path without creating it; tests use disposable `mkdtemp` roots under the macOS per-user private temporary tree and exercise the same production validator; there is no relaxed test path)
+- §5.2 (`MADV_STORAGE_DIR` is the only override; default and override pass the same validator; the seven validity conditions; pure preflight validates a proposed path without creating it; tests use disposable `mkdtemp` roots under `os.tmpdir()` — the per-user private temporary tree on macOS, and on Linux possibly the shared `/tmp`, where each root is created owned by the current UID with mode `0700` — and exercise the same production validator; there is no relaxed test path; the governed launcher's `TMPDIR` is a separate rule under `PLAN-OPEN-2`)
 - §4.4 (`MADV_RUNTIME_DIR` is not reused)
 
 **Files:**
@@ -2125,7 +2127,21 @@ block remains a valid Bash code block.
 
 ---
 
-### Milestone M17 — `Bun.Terminal` PTY spike (dual-host gate)
+### Milestone M17 — `Bun.Terminal` PTY spike (host gate)
+
+> **Linux amendment (`DEC-20261010-02` B2 and B6).** M17 passed on both Macs on
+> 2026-08-22 and is not reopened; Tasks 38 and 39 below are a historical record.
+> Linux was added after M17. Before the Linux amendment was ratified, the
+> Founder's Ubuntu PC ran the same thirteen §3.6 criteria under
+> `DEC-20261011-02` B4, at `main` commit
+> `0184a80d5ddefcfa89a97f8634234f4e59d1b3ae` with Bun 1.4.2 on 2026-10-11 (UTC),
+> and all thirteen passed in each of three consecutive runs. Its report is
+> `docs/verification/2026-10-11-bun-terminal-spike-ubuntu.md`. It is not
+> a Task 39 report: the Task 39 report test
+> (`test/phase3a/spike/bun-terminal-spike-reports.test.ts`) still reads the two
+> Mac reports only and is unchanged. M18 and M19 landed before Linux was added
+> and are not rebuilt; they are checked on Linux by the CI full suite and at M26
+> certification.
 
 #### Task 38: Build the spike primitive covering every §3.6 criterion
 
@@ -2440,7 +2456,7 @@ block remains a valid Bash code block.
   Wire format: 4-byte big-endian length, 1-byte kind tag, payload. Unknown tags and truncated or oversized frames throw `MalformedFrameError`.
 
 **Preconditions:**
-- M17 gate passed on both hosts.
+- M17 gate passed on both Macs (2026-08-22). The Ubuntu PC spike run of `DEC-20261010-02` B2 is not a precondition of this task, which landed before Linux was added.
 
 - [ ] Step 1: Write the named failing test — add `test("an unknown command tag fails closed with MalformedFrameError")`; `test("a truncated length prefix returns null rather than a partial frame")`; `test("input bytes round-trip exactly, including 0x00 and 0xFF")`; `test("a raw unframed byte stream is rejected")`; `test("an oversized frame is rejected")`; and in the broker test `test("broker and host codecs agree on every frame kind")` round-tripping all eleven kinds across both modules.
 - [ ] Step 2: Run `bun test packages/pty-host/test/frames.test.ts` — expected RED: `Cannot find module "../src/frames"` (the package does not exist).
@@ -2822,7 +2838,7 @@ block remains a valid Bash code block.
 **Preconditions:**
 - Task 51 committed.
 
-- [ ] Step 1: Write the named failing test — in `descriptor-hygiene.test.ts` add `test("with two PTY hosts and an adapter, no process holds a sibling's lifeline write end")` enumerating each child’s open descriptors via `lsof -p <pid>` and asserting no overlap with another host’s write-end inode; `test("closing host A's stdin does not affect host B")`. In `process-group.test.ts` add `test("a grandchild in the governed process group is terminated")`; `test("a child that ignores SIGTERM is SIGKILLed within the outer bound")`; `test("deliberate lifeline EOF terminates that child's process group only")`; `test("PTY-host exit interrupts the whole session with pty_host_failure")`; `test("a descendant that calls setsid is documented as escaping, not silently claimed contained")` asserting the residual is recorded in the report rather than asserted away.
+- [ ] Step 1: Write the named failing test — in `descriptor-hygiene.test.ts` add `test("with two PTY hosts and an adapter, no process holds a sibling's lifeline write end")` enumerating each child’s open descriptors — via `lsof -p <pid>` on macOS and by listing `/proc/<pid>/fd` on Linux, the branch named in spec §1.5 row 7 — and asserting no overlap with another host’s write-end inode; `test("closing host A's stdin does not affect host B")`. In `process-group.test.ts` add `test("a grandchild in the governed process group is terminated")`; `test("a child that ignores SIGTERM is SIGKILLed within the outer bound")`; `test("deliberate lifeline EOF terminates that child's process group only")`; `test("PTY-host exit interrupts the whole session with pty_host_failure")`; `test("a descendant that calls setsid is documented as escaping, not silently claimed contained")` asserting the residual is recorded in the report rather than asserted away.
 - [ ] Step 2: Run `bun test test/phase3a/adversarial/descriptor-hygiene.test.ts -t "with two PTY hosts and an adapter, no process holds a sibling's lifeline write end"` — expected RED: the harness starts only one host; the second host and the adapter do not exist, so the enumeration has nothing to compare.
 - [ ] Step 3: Implement the minimum authorized behavior — extend the harness to start two governed executions plus one fixture adapter concurrently. No production file changes unless the descriptor test reveals a real leak, in which case fix `spawnPtyHost`’s close-on-exec handling in `packages/broker/src/pty-host-supervisor.ts`.
 - [ ] Step 4: Run both files — expected GREEN: 7 pass. Invariant established: **no sibling can write another child’s lifeline, and containment claims match what is actually demonstrated.**
@@ -2980,34 +2996,35 @@ block remains a valid Bash code block.
 
 ---
 
-### Milestone M26 — Dual-host certification evidence and final merge gate
+### Milestone M26 — Three-host certification evidence and final merge gate
 
-#### Task 58: Produce both dual-host Phase 3A reports at one SHA
+#### Task 58: Produce the three host certification reports at one SHA
 
 **Requirement coverage:**
-- §6.5 (the same reviewed commit is tested independently on both Founder Macs; each signed-off report records the eight listed field groups; both reports must pass before merge; machine-specific code branches or UI forks are not an acceptable substitute)
-- §6.8.3–5 (iMac report passes and is checksummed; MacBook report passes and is checksummed; both identify the same candidate commit)
-- §9.8 (all deadlines are reported as observed durations in dual-host evidence)
+- §6.5 (the same reviewed commit is tested independently on each of the three certification hosts of §1.5; each signed-off report records the eight listed field groups; all three reports must pass before merge; machine-specific code branches or UI forks are not an acceptable substitute, and the only permitted operating-system branches are those listed in §1.5)
+- §6.8.3–5 (iMac report passes and is checksummed; MacBook and Ubuntu PC reports pass and are checksummed; all three identify the same candidate commit)
+- §9.8 (all deadlines are reported as observed durations in the certification evidence of every host)
 
 **Files:**
-- Create: `docs/verification/2026-08-12-phase-3a-dual-host-imac.md`
-- Create: `docs/verification/2026-08-12-phase-3a-dual-host-macbook.md`
+- Create: `docs/verification/2026-08-12-phase-3a-host-certification-imac.md`
+- Create: `docs/verification/2026-08-12-phase-3a-host-certification-macbook.md`
+- Create: `docs/verification/2026-08-12-phase-3a-host-certification-ubuntu.md`
 - Test: `test/phase3a/evidence-pipeline.test.ts`
 
 **Interfaces:**
 - Consumes: the observed timings emitted by M23’s adversarial suite.
-- Produces: two reports with identical structure and a trailing `Report SHA-256:` line.
+- Produces: three reports with identical structure and a trailing `Report SHA-256:` line.
 
 **Preconditions:**
-- M25 reviewed; the candidate commit is fixed and identical on both hosts; both worktrees are clean.
+- M25 reviewed; the candidate commit is fixed and identical on all three hosts; all three worktrees are clean; every host runs Bun 1.4.2.
 
-- [ ] Step 1: Write the named failing test — add `test("both dual-host Phase 3A reports name the same candidate SHA")`; `test("both reports record architecture, macOS version and build, Bun path, version and hash, TERM, and shell")`; `test("both reports record complete suite counts, not filtered counts")` asserting each contains a `Ran <n> tests across <m> files` line; `test("both reports record observed timings for every deadline")`; `test("both reports record worktree cleanliness and exact changed files")`; `test("both reports carry a checksum")`.
-- [ ] Step 2: Run `bun test test/phase3a/evidence-pipeline.test.ts -t "both dual-host Phase 3A reports name the same candidate SHA"` — expected RED: neither report exists (`ENOENT`).
-- [ ] Step 3: Implement the minimum authorized behavior — on each host, at the identical candidate SHA, run the §12 command set and write the report from the actual output. Do not transcribe results from the other host.
-- [ ] Step 4: Run the focused command on both hosts — expected GREEN: 6 pass. Invariant established: **cross-host certification rests on two independent runs of one commit.**
-- [ ] Step 5: Run `bun test` (full) and `bunx tsc --noEmit` on both hosts.
-- [ ] Step 6: Inspect the diff; confirm only the two reports changed and no machine-specific source branch was introduced.
-- [ ] Step 7: Commit the two reports with message: `docs(verification): publish dual-host Phase 3A certification reports`
+- [ ] Step 1: Write the named failing test — add `test("all three host certification reports name the same candidate SHA")`; `test("all three reports record architecture, operating-system version and build, Bun path, version and hash, TERM, and shell")`; `test("all three reports record complete suite counts, not filtered counts")` asserting each contains a `Ran <n> tests across <m> files` line; `test("all three reports record observed timings for every deadline")`; `test("all three reports record worktree cleanliness and exact changed files")`; `test("all three reports carry a checksum")`.
+- [ ] Step 2: Run `bun test test/phase3a/evidence-pipeline.test.ts -t "all three host certification reports name the same candidate SHA"` — expected RED: no report exists (`ENOENT`).
+- [ ] Step 3: Implement the minimum authorized behavior — on each host, at the identical candidate SHA, run the §12 command set, using the Linux forms of §8.3 on the Ubuntu PC, and write the report from the actual output. Do not transcribe results from another host.
+- [ ] Step 4: Run the focused command on all three hosts — expected GREEN: 6 pass. Invariant established: **cross-host certification rests on three independent runs of one commit.**
+- [ ] Step 5: Run `bun test` (full) and `bunx tsc --noEmit` on all three hosts.
+- [ ] Step 6: Inspect the diff; confirm only the three reports changed, and that no operating-system branch outside spec §1.5 and no host-identity branch was introduced.
+- [ ] Step 7: Commit the three reports with message: `docs(verification): publish three-host Phase 3A certification reports`
 - [ ] Step 8: Stop for the M26 review checkpoint.
 
 #### Task 59: Verify the merge gate with the production gate still closed
@@ -3026,13 +3043,13 @@ block remains a valid Bash code block.
 - Produces: a single `describe("Phase 3A merge gate")` block whose assertions correspond one-to-one with the §6.8 items that are machine-checkable (items 1, 2, 6, 7, 8, 9, 12, 13, 14, 15, 16). Items 3, 4, 5, 10, 11, and 17 are human and reviewer verdicts recorded in the reports.
 
 **Preconditions:**
-- Task 58 committed on both hosts.
+- Task 58 committed on all three hosts.
 
 - [ ] Step 1: Write the named failing test — add `test("merge gate item 12: production start still returns live_runtime_not_certified")`; `test("merge gate item 13: production start is structurally unable to reach the runtime or harness")`; `test("merge gate item 14: external-control placeholders return their stable typed errors and inspect no runtime state")`; `test("merge gate item 15: no production or harness path creates broker.sock")`; `test("merge gate item 16: no residual child, descendant, PTY host, descriptor, open session record, or valid token remains after tests")`; `test("merge gate item 1: the suite has not regressed below the Phase 2 floor")` asserting the recorded counts are ≥ 714 / 2606 / 35.
 - [ ] Step 2: Run `bun test test/phase3a/architecture-phase3a.test.ts -t "merge gate item 1: the suite has not regressed below the Phase 2 floor"` — expected RED: the floor constants are not yet declared in the test file; the assertion references an undefined baseline.
 - [ ] Step 3: Implement the minimum authorized behavior — declare `PHASE_2_FLOOR = { tests: 714, expects: 2606, files: 35 }` and implement the six assertions. Create the correction-round log with the §7.3 running record.
 - [ ] Step 4: Run the file — expected GREEN. Invariant established: **the merge gate is machine-checked wherever it can be, and the production gate is proven closed at merge time.**
-- [ ] Step 5: Run `bun test` (full), `bunx tsc --noEmit`, `git diff --check "$SOURCE_BASELINE_SHA"` (§0A; `aa16032c56fdf6c7105e99b1765ed9365d605bf4`), `git status -sb`, and `git ls-files --others --exclude-standard` on both hosts.
+- [ ] Step 5: Run `bun test` (full), `bunx tsc --noEmit`, `git diff --check "$SOURCE_BASELINE_SHA"` (§0A; `aa16032c56fdf6c7105e99b1765ed9365d605bf4`), `git status -sb`, and `git ls-files --others --exclude-standard` on all three hosts.
 - [ ] Step 6: Inspect the complete diff against the baseline SHA and verify every changed file appears in §3.
 - [ ] Step 7: Commit the listed files with message: `test(phase3a): assert the machine-checkable Phase 3A merge-gate items`
 - [ ] Step 8: Stop for the final Founder merge review. **Do not merge. Do not remove the start gate.**
@@ -3070,8 +3087,8 @@ Format: **Specification requirement → planned task → production file → tes
 | §3.2 framed command stream doubling as lifeline; sole write-end ownership | 40, 42, 52 | `packages/pty-host/src/frames.ts`, `packages/broker/src/pty-host-supervisor.ts` | `test/phase3a/adversarial/descriptor-hygiene.test.ts` | `MalformedFrameError`; leaked-descriptor assertion | M18, M23 |
 | §3.3 gap-free launch ordering | 42 | `packages/pty-host/src/launch.ts` | `packages/pty-host/test/launch.test.ts` | ordered-trace assertion failure | M19 |
 | §3.4 bounded termination ladder; wedged-host direct PGID | 43, 44, 53 | `packages/pty-host/src/signals.ts`, `packages/broker/src/pty-host-supervisor.ts` | `test/phase3a/adversarial/wedged-host.test.ts` | `pty_host_failure`; direct `SIGKILL` of the reported PGID | M19, M23 |
-| §3.5 honest containment claim; `setsid` residual documented | 52 | — | `test/phase3a/adversarial/process-group.test.ts` + dual-host reports | residual recorded, never asserted away | M23, M26 |
-| §3.6 Bun spike, thirteen criteria, both hosts | 38, 39 | `test/phase3a/spike/bun-terminal-spike.ts` | both spike reports | **phase stops**; no FFI/native/pipe substitute | M17 |
+| §3.5 honest containment claim; `setsid` residual documented | 52 | — | `test/phase3a/adversarial/process-group.test.ts` + three-host reports | residual recorded, never asserted away | M23, M26 |
+| §3.6 Bun spike, thirteen criteria, every certification host | 38, 39 | `test/phase3a/spike/bun-terminal-spike.ts` | both Mac spike reports and the Ubuntu PC spike report | **phase stops**; no FFI/native/pipe substitute | M17 |
 
 ### 6.2 Sections 4–6
 
@@ -3097,7 +3114,7 @@ Format: **Specification requirement → planned task → production file → tes
 | §6.2 architecture assertions (ten bullets) | 2, 6, 7, 15, 33, 34, 41, 48, 59 | — | `test/phase3a/architecture-phase3a.test.ts` | assertion failure blocks the milestone | M1–M26 |
 | §6.3 deterministic fixture runtime (twelve bullets) | 48–50, 55 | — | `test/phase3a/harness-*.test.ts`, `evidence-pipeline.test.ts` | typed result plus zero residuals | M22, M24 |
 | §6.4 adversarial process tests (nineteen scenarios) | 51–54 | — | `test/phase3a/adversarial/**` | observed timings vs §9.8 deadlines | M23 |
-| §6.5 dual-host certification evidence | 58 | — | both `docs/verification/2026-08-12-phase-3a-dual-host-*.md` | missing or divergent SHA blocks merge | M26 |
+| §6.5 three-host certification evidence | 58 | — | all three `docs/verification/2026-08-12-phase-3a-host-certification-*.md` | missing or divergent SHA blocks merge | M26 |
 | §6.6 surface investigations — preliminary | **60** | — | `docs/verification/phase-3a-antigravity-preliminary.md` | preliminary only; does not satisfy §6.6's record requirement | Stage 0 |
 | §6.6 surface investigations — formal | 56, 57 | — | investigation reports + capability records | failing surface excluded; foundation still merges | M25 |
 | §6.7 single-writer review workflow | §11 | — | `docs/verification/phase-3a-correction-rounds.md` | verdicts pin exact SHAs | every checkpoint |
@@ -3203,39 +3220,59 @@ Every scenario below names the exact file, the exact test name, and the fixture 
 
 ---
 
-## 8. Dual-host verification
+## 8. Three-host verification
 
-Both procedures run the **same commit**, on a **clean worktree**, at the **same SHA**. Neither host may transcribe the other’s numbers. A single-host run certifies nothing.
+All three procedures run the **same commit**, on a **clean worktree**, at the **same SHA**, with **Bun 1.4.2** (provisional; spec §1.5) and **Node.js 20 or later** on `PATH`. No host may transcribe another host’s numbers. A run on fewer than all three hosts certifies nothing. The 2026-08-22 M17 runs on the two Macs used Bun 1.3.14 and are a historical record (spec §3.6). The operating-system version and build are recorded at the run, not pinned here.
 
-### 8.1 Host A — Founder iMac
+### 8.1 Hosts A and B — Founder Macs
 
 ```text
+Host A — Founder iMac
 Architecture: x86_64
-macOS: 13.7.8
-Bun: 1.3.14
+OS: macOS (version and build recorded at the run)
+Bun: 1.4.2
+Node.js: on PATH, version recorded at the run
 TERM: xterm-256color
 Shell: /bin/zsh
 ```
-
-### 8.2 Host B — Founder MacBook
 
 ```text
+Host B — Founder MacBook
 Architecture: arm64
-macOS: 26.6.1
-Bun: 1.3.14
+OS: macOS (version and build recorded at the run)
+Bun: 1.4.2
+Node.js: on PATH, version recorded at the run
 TERM: xterm-256color
 Shell: /bin/zsh
 ```
+
+### 8.2 Host C — Founder Ubuntu PC
+
+```text
+Host C — Founder Ubuntu PC
+Architecture: x86_64
+OS: Ubuntu 26.04 LTS (distribution release and kernel release recorded at the run)
+Bun: 1.4.2
+Node.js: on PATH, version recorded at the run
+TERM: xterm-ghostty
+Shell: /bin/bash
+```
+
+`TERM` and `Shell` for Host C are the values observed on 2026-10-10 (`DEC-20261010-02` A2).
 
 ### 8.3 Identical required commands (run in this order on each host)
+
+The commands are identical on every host except where a line is marked: on Host C, `sw_vers` is replaced by `cat /etc/os-release` and `uname -r`, and `shasum -a 256` by `sha256sum`. These are operator commands, not code branches.
 
 ```bash
 # 0. Environment and identity capture
 uname -m
-sw_vers
+sw_vers                          # Host C: cat /etc/os-release; uname -r
 bun --version
 which bun
-shasum -a 256 "$(which bun)"
+shasum -a 256 "$(which bun)"     # Host C: sha256sum "$(which bun)"
+command -v node
+node --version
 printf '%s\n' "$TERM"
 printf '%s\n' "$SHELL"
 
@@ -3274,7 +3311,7 @@ bun apps/madbridge/src/cli.ts close --json; echo "exit=$?"
 bun apps/madbridge/src/cli.ts --help
 
 # 6. Negative controls. Implemented in Bun rather than shell `find`, so the check
-#    is one implementation with identical semantics on both target Macs and carries
+#    is one implementation with identical semantics on every certification host and carries
 #    no shell-portability surface at all. It resolves the passwd home exactly as
 #    §5.2 requires — $HOME is never trusted here, since trusting it would contradict
 #    the very invariant this plan enforces — bounds the walk to depth 6, never
@@ -3287,9 +3324,9 @@ echo "pty_host_processes=$(pgrep -f madv-pty-host | wc -l | tr -d ' ')"   # expe
 
 # 8. Report checksum over the report BODY ONLY — every line before the
 #    trailing "Report SHA-256:" line, so the checksum never hashes itself.
-HOST=imac        # Host A. On Host B use: HOST=macbook
-REPORT="docs/verification/2026-08-12-phase-3a-dual-host-$HOST.md"
-awk '/^Report SHA-256:/{exit} {print}' "$REPORT" | shasum -a 256
+HOST=imac        # Host A. On Host B use: HOST=macbook. On Host C use: HOST=ubuntu
+REPORT="docs/verification/2026-08-12-phase-3a-host-certification-$HOST.md"
+awk '/^Report SHA-256:/{exit} {print}' "$REPORT" | shasum -a 256   # Host C: | sha256sum
 ```
 
 **`test/phase3a/negative-control.ts`** (created in M14, Task 34) is the single implementation of this check. It walks three roots to a depth bound of 6: the resolved storage root (`MADV_STORAGE_DIR` override or the passwd-home default), the **fixed literal** quarantined legacy path `/tmp/madv-broker-runtime`, and the repository worktree. For each it prints `broker_sock_matches[<root>]=<n>`, names every hit, checks that `<storage-root>/runtime` is absent per §5.1, and exits `1` if anything is found.
@@ -3300,12 +3337,14 @@ awk '/^Report SHA-256:/{exit} {print}' "$REPORT" | shasum -a 256
 
 ### 8.4 Expected evidence artifacts
 
-| Artifact | Host A | Host B |
-| --- | --- | --- |
-| `docs/verification/2026-08-12-bun-terminal-spike-imac.md` | required | — |
-| `docs/verification/2026-08-12-bun-terminal-spike-macbook.md` | — | required |
-| `docs/verification/2026-08-12-phase-3a-dual-host-imac.md` | required | — |
-| `docs/verification/2026-08-12-phase-3a-dual-host-macbook.md` | — | required |
+| Artifact | Host A | Host B | Host C |
+| --- | --- | --- | --- |
+| `docs/verification/2026-08-12-bun-terminal-spike-imac.md` | filed 2026-08-22 | — | — |
+| `docs/verification/2026-08-12-bun-terminal-spike-macbook.md` | — | filed 2026-08-22 | — |
+| `docs/verification/2026-10-11-bun-terminal-spike-ubuntu.md` | — | — | filed with the ratification of the Linux amendment (`DEC-20261010-02` B2) |
+| `docs/verification/2026-08-12-phase-3a-host-certification-imac.md` | required | — | — |
+| `docs/verification/2026-08-12-phase-3a-host-certification-macbook.md` | — | required | — |
+| `docs/verification/2026-08-12-phase-3a-host-certification-ubuntu.md` | — | — | required |
 
 ### 8.5 Required timing measurements (recorded as observed milliseconds, per §9.8)
 
@@ -3320,14 +3359,16 @@ awk '/^Report SHA-256:/{exit} {print}' "$REPORT" | shasum -a 256
 
 ### 8.6 Capability-record fields to capture on each host
 
+These fields describe a macOS host. Under `DEC-20261010-02` B5, no capability record is written, produced, or evaluated on Host C until a separate Founder act amends the record.
+
 `surface` · `provider` · `requested_model` · `role_eligibility` · `independence_domain` · `organization_id` · `cli_version` · `binary_path` · `binary_sha256` · `evaluated_at` · `expires_at` · `host.{arch, macos_version, macos_build, bun_version, bun_path, bun_sha256, term, shell}` · `identity_attestation.{result, primitive, sanitized_facts}` · `auth_readiness.{result, primitive}` · `pty.{result, observed_ms}` · `independent_review_eligible` · `limitations` · `overall` · `redaction_rules_applied`
 
-### 8.7 Report contents (both hosts, identical structure)
+### 8.7 Report contents (all three hosts, identical structure)
 
 1. Candidate commit SHA and branch
 2. Clean/dirty worktree state and the exact output of `git status -sb`, `git ls-files --others --exclude-standard`, and `git diff --name-only <baseline>`
-3. Bun executable path, version, and SHA-256
-4. Architecture, macOS version and build, `TERM`, shell
+3. Bun executable path, version, and SHA-256, and the Node.js path and version
+4. Architecture, operating-system version and build (on macOS the version and build; on Linux the distribution release and the kernel release), `TERM`, shell
 5. Every command from §8.3 with its complete, unfiltered output counts
 6. Each of the thirteen spike criteria — with every sub-assertion of the four compound criteria listed individually — and each adversarial criterion, with measured timings in milliseconds
 7. Failures, retries, warnings, and residual risks — including the §3.5 `setsid` residual and the §5.6 agent-printed-secret residual, both stated as known and unsolved
@@ -3335,16 +3376,16 @@ awk '/^Report SHA-256:/{exit} {print}' "$REPORT" | shasum -a 256
 
 ### 8.8 Pass/fail criteria
 
-**Pass** requires all of: identical candidate SHA on both reports; clean worktree on both; `bun test` complete-suite counts ≥ 714 / 2606 / 35 with 0 failures; `bunx tsc --noEmit` exit 0; `git diff --check` clean; every spike and adversarial criterion `pass: true` within its §9.8 bound; all five production commands returning their exact gated payloads and exit codes (`78` for `start`, `69` for the four placeholders); zero `broker.sock` found; zero residual `madv-pty-host` processes; both reports checksummed.
+**Pass** requires all of: identical candidate SHA on all three reports; clean worktree on all three; Bun 1.4.2 on every host; `bun test` complete-suite counts ≥ 714 / 2606 / 35 with 0 failures; `bunx tsc --noEmit` exit 0; `git diff --check` clean; every spike and adversarial criterion `pass: true` within its §9.8 bound; all five production commands returning their exact gated payloads and exit codes (`78` for `start`, `69` for the four placeholders); zero `broker.sock` found; zero residual `madv-pty-host` processes; all three reports checksummed.
 
-**Fail** on any of the above — and specifically: a divergent SHA between reports, a filtered test invocation used as the suite count, a missing observed timing, a machine-specific source branch introduced to make one host pass, or a report written for a host that was not actually run.
+**Fail** on any of the above — and specifically: a divergent SHA between reports, a filtered test invocation used as the suite count, a missing observed timing, a machine-specific source branch introduced to make one host pass, an operating-system branch not listed in spec §1.5, or a report written for a host that was not actually run.
 
 ### 8.9 What must stop the phase rather than be weakened
 
-- A `Bun.Terminal` criterion failing on either host. **Do not** substitute FFI `posix_openpt`, `node-pty`, another native dependency, or a pipe fallback. Stop, write the evidence report, and escalate for a Founder-approved design amendment (§9.7).
+- A `Bun.Terminal` criterion failing on any certification host. **Do not** substitute FFI `posix_openpt`, `node-pty`, another native dependency, or a pipe fallback. Stop, write the evidence report, and escalate for a Founder-approved design amendment (§9.7).
 - A deadline in §9.8 that cannot be met. **Do not** raise the number. Stop and escalate.
 - Process-group containment that cannot be demonstrated. **Do not** narrow the claim silently. Stop and escalate.
-- A dual-host divergence that could be “fixed” by a machine-specific branch. §6.5 forbids that substitute. Stop and escalate.
+- A divergence between hosts that could be “fixed” by a machine-specific branch or an operating-system branch not listed in spec §1.5. Spec §§1.5 and 6.5 forbid that substitute. Stop and escalate.
 
 ---
 
@@ -3369,7 +3410,7 @@ Antigravity is investigated **first** (§2.3), because the planned live pairing 
 Every **formal** investigation — including a failing one — produces both a machine-readable `CapabilityRecordV1` under `<storage-root>/capability/<surface>/` and a human-readable report under `docs/verification/`, containing:
 
 - exact CLI version, absolute binary path, and binary SHA-256;
-- host architecture, macOS version and build, Bun version/path/hash, `TERM`, shell;
+- host architecture, macOS version and build, Bun version/path/hash, `TERM`, shell (macOS only: under `DEC-20261010-02` B5 no capability record is written, produced, or evaluated on Linux until a separate Founder act amends the record);
 - every primitive attempted, with the exact command line and sanitized output;
 - structured modes tried and session metadata observed;
 - the identity-attestation verdict and, on failure, **the precise rubric clause not met**;
@@ -3416,7 +3457,7 @@ Implementing first and disclosing afterward is a qualification failure under §7
 | 2 | A **contradiction between the approved specification and the live repository** | Halt. Record both the specification citation and the exact `file:line`. Do not choose a side. |
 | 3 | An **unplanned production file** — a file not listed in §3 needs to be created or modified | Halt. Name the file and the requirement forcing it. This is material scope expansion (§7.4). |
 | 4 | A **new external or native dependency** would be needed | Halt. §9.7 and §7.4 forbid it. FFI, `node-pty`, and any native bridge are not available. |
-| 5 | **`Bun.Terminal` fails any §3.6 criterion on either Founder Mac** | Halt M18, M19, M21, M23. Write the evidence report with observed values. Escalate for a design amendment. No pipe fallback. |
+| 5 | **`Bun.Terminal` fails any §3.6 criterion on any certification host (spec §1.5)** | Halt every dependent milestone not yet complete. Write the evidence report with observed values. Escalate for a design amendment. No pipe fallback. |
 | 6 | **Process-group containment cannot be satisfied** | Halt. Do not silently narrow the claim in §3.5. |
 | 7 | A request or temptation to **weaken the start gate or harness separation** | Halt. §§4.2, 9.11, 6.9. Gate removal is a Phase 3B certification event. |
 | 8 | A **required test cannot first fail for the expected reason** | Halt. A test that passes on creation, or fails for an unrelated reason, has established nothing. Fix the test; if it still cannot go RED, the requirement may already be violated or misunderstood — escalate. |
@@ -3464,7 +3505,7 @@ Every proposed commit in §5 carries: the exact files to stage (Step 7 lists the
 | M14 | 33–34 | 2 | Plato/Codex; Founder rulings on `PLAN-OPEN-4` and `PLAN-OPEN-6` before Task 34 |
 | M15 | 35–36 | 2 | Plato/Codex; Founder ruling on `PLAN-OPEN-3` before Task 35 |
 | M16 | 37 | 1 | Plato/Codex; Founder ruling on `PLAN-OPEN-2` before Task 37 |
-| M17 | 38–39 | 2 | **Founder gate review** — both hosts |
+| M17 | 38–39 | 2 | **Founder gate review** — both Macs (2026-08-22); the Ubuntu PC spike run of `DEC-20261010-02` B2 adds no commit to this ledger |
 | M18 | 40–41 | 2 | Plato/Codex |
 | M19 | 42–44 | 3 | Plato/Codex + Tier-2 (containment is authority-bearing) |
 | M20 | 45 | 1 | Plato/Codex |
@@ -3484,7 +3525,7 @@ Every proposed commit in §5 carries: the exact files to stage (Step 7 lists the
 - **Denominator (Founder ruling, 2026-08-12):** "one milestone" in the two-round budget and the reassignment trigger means one **rubric §7.2 milestone** as mapped by the §4 table's "Rubric §7.2 milestone" column. Correction rounds on plan milestones sharing a rubric milestone (for example, M5–M8 → rubric milestone 8) accumulate against a single budget of two. The log at `docs/verification/phase-3a-correction-rounds.md` records every verdict under both its plan milestone and rubric milestone; the reassignment trigger evaluates the rubric-milestone total.
 - One verdict that contains multiple substantive findings in the same rubric milestone adds one round to that rubric milestone. A verdict that contains substantive findings in more than one rubric milestone adds one round to each affected rubric milestone.
 - Reviews of the implementation-plan document before implementation authorization are plan-authoring history, not implementation correction rounds. The rubric-milestone counters begin with verdicts on implemented milestone work; they are currently zero.
-- **Does not count:** a new Founder ruling made after the milestone implementation; a host-specific finding impossible to observe on the builder's execution host before the required dual-host run; a reviewer-requested voluntary supplementary test that confirms behavior already correct and already covered as required; editorial clarification that does not change behavior or required evidence.
+- **Does not count:** a new Founder ruling made after the milestone implementation; a host-specific finding impossible to observe on the builder's execution host before the required certification-host runs; a reviewer-requested voluntary supplementary test that confirms behavior already correct and already covered as required; editorial clarification that does not change behavior or required evidence.
 - **Does count:** absence of a test required by the milestone or by §6 — that is **substantive incompleteness**. Labeling required coverage as "supplementary" is not permitted.
 - **Reassignment is required** at more than two correction rounds on one milestone, or on any §7.6 disqualifier.
 
@@ -3500,7 +3541,7 @@ Every proposed commit in §5 carries: the exact files to stage (Step 7 lists the
 
 ## 12. Final verification commands
 
-Run these on **both** Founder Macs at the candidate SHA, on a clean worktree.
+Run these on **each** of the three Founder certification hosts (spec §1.5) at the candidate SHA, on a clean worktree, with Bun 1.4.2. Where a command differs by operating system, §8.3 gives the Linux form.
 
 ### 12.1 Pinned baseline commands
 
@@ -3590,7 +3631,7 @@ bun apps/madbridge/src/cli.ts pause --json; echo "exit=$?"   # expect 69
 bun apps/madbridge/src/cli.ts resume --json; echo "exit=$?"  # expect 69
 bun apps/madbridge/src/cli.ts close --json; echo "exit=$?"   # expect 69
 
-# Negative controls — one Bun implementation, identical on both Macs.
+# Negative controls — one Bun implementation, identical on every certification host.
 # Bounded to depth 6, symlink-safe, passwd-resolved, count-reporting, exits 1 on any hit.
 bun test/phase3a/negative-control.ts; echo "negative_control_exit=$?"     # expect 0
 echo "pty_host_processes=$(pgrep -f madv-pty-host | wc -l | tr -d ' ')"   # expect 0
@@ -3608,7 +3649,7 @@ bun run verify:phase3a
 - **The final full-suite result must come from the bare `bun test` invocation in §12.1.** A count taken from any filtered, path-scoped, or `-t`-filtered run is not the suite result and may not be reported as one.
 - The reported counts are the four values Bun prints: `<n> pass`, `<n> fail`, `<n> expect() calls`, `Ran <n> tests across <n> files`.
 - No required test may be skipped, disabled, renamed out of discovery, filtered, quarantined, marked `.only`, or replaced with a weaker assertion without an explicit Founder-visible disposition recorded in `docs/verification/phase-3a-correction-rounds.md`.
-- Both dual-host reports must quote their own `bun test` output. Copying the other host's numbers is an evidence disqualifier under §7.6.
+- Each of the three host reports must quote its own `bun test` output. Copying another host's numbers is an evidence disqualifier under §7.6.
 
 ---
 
@@ -3726,9 +3767,9 @@ A fourth precondition applies to every task in the plan: `IMPLEMENTATION_BASE_SH
 | --- | --- |
 | **Specified and reviewable** — all 61 tasks | **Pass.** Complete, self-consistent, RED-first (with the Task 60 evidence-only exception recorded in §13.5), traceable. Tier-2 may review the whole document now. |
 | **Stage 0 execution path, no `PLAN-OPEN-*` ruling required** — 8 tasks | **Path open; not simultaneously eligible.** Only Task 60 and Task 1 are *initially* eligible after the three gates and §0A. Tasks 2–5 and 38–39 unlock through their own written preconditions, in order. |
-| **Gated** — 53 tasks, additionally blocked behind Tasks 6, 34, 35, 37, the M17 dual-host gate, and `PLAN-OPEN-7` (Task 21b and Task 22 only) | **Not eligible.** Specified down to interfaces and tests, but blocked on rulings or on an upstream gate. Accounting: 24 (Stage 1a) + 5 (Stage 1b) + 1 (Stage 2) + 2 (Stage 3) + 1 (Stage 4) + 20 (Stage 5) = 53. *(Superseded in part: Task 21b executed under D10-R1, `DEC-20260924-02`; Tasks 24–25 follow M21 and M21 depends on Tasks 21b–23, per `DEC-20260924-03` B3. Stage counts are not recomputed; `PLAN-OPEN-7` remains OPEN.)* |
+| **Gated** — 53 tasks, additionally blocked behind Tasks 6, 34, 35, 37, the M17 gate (passed on both Macs 2026-08-22), and `PLAN-OPEN-7` (Task 21b and Task 22 only) | **Not eligible.** Specified down to interfaces and tests, but blocked on rulings or on an upstream gate. Accounting: 24 (Stage 1a) + 5 (Stage 1b) + 1 (Stage 2) + 2 (Stage 3) + 1 (Stage 4) + 20 (Stage 5) = 53. *(Superseded in part: Task 21b executed under D10-R1, `DEC-20260924-02`; Tasks 24–25 follow M21 and M21 depends on Tasks 21b–23, per `DEC-20260924-03` B3. Stage counts are not recomputed; `PLAN-OPEN-7` remains OPEN.)* |
 
-**Stage 0 membership is not eligibility.** Being in Stage 0 means a task needs no `PLAN-OPEN-*` ruling — nothing more. The unlock order inside Stage 0 is: Task 60 and Task 1 first (independently of each other); Task 2 after Task 1 commits; Task 3 and Task 38 after M1 is reviewed; Task 4 after Task 3; Task 5 after Task 4; Task 39 after Task 38 commits and the same candidate has run on both Founder Macs. An implementer who reads "8 Stage 0 tasks" as "8 tasks I may start now" would begin Tasks 2–5 or 38–39 before their preconditions hold.
+**Stage 0 membership is not eligibility.** Being in Stage 0 means a task needs no `PLAN-OPEN-*` ruling — nothing more. The unlock order inside Stage 0 is: Task 60 and Task 1 first (independently of each other); Task 2 after Task 1 commits; Task 3 and Task 38 after M1 is reviewed; Task 4 after Task 3; Task 5 after Task 4; Task 39 after Task 38 commits and the same candidate has run on both Founder Macs (met 2026-08-22). An implementer who reads "8 Stage 0 tasks" as "8 tasks I may start now" would begin Tasks 2–5 or 38–39 before their preconditions hold.
 
 #### Staged execution map
 
@@ -3742,7 +3783,7 @@ Every stage below is additionally subject to the three gates above. "Unblocked b
 | **2** | `PLAN-OPEN-4`, `PLAN-OPEN-6` | Task 34 → M14 review completes | 1 |
 | **3** | `PLAN-OPEN-3` | Tasks 35–36 → M15 review completes | 2 |
 | **4** | `PLAN-OPEN-2` | Task 37 → M16 review completes | 1 |
-| **5** | Stages 1–4 **and** the M17 dual-host gate passing on both Macs | M18 (40–41), M19 (42–44), M20 (45), M21 (46–47), M22 (48–50), M23 (51–54), M24 (55), M25 (56–57), M26 (58–59) | 20 |
+| **5** | Stages 1–4 **and** the M17 gate passing on both Macs (met 2026-08-22); Task 45 and every later task also require the Linux amendment of `DEC-20261010-02` B6 on `main`, after the Ubuntu PC spike run of its B2 | M18 (40–41), M19 (42–44), M20 (45), M21 (46–47), M22 (48–50), M23 (51–54), M24 (55), M25 (56–57), M26 (58–59) | 20 |
 | | | **Total** | **61** |
 
 **Why the spike is in Stage 0.** M17 is the only milestone that can stop the phase outright, and beyond M1 it depends on nothing but `Bun.Terminal` and a test directory. Placing it early means a `Bun.Terminal` failure surfaces before any Founder ruling is needed and before thirty-seven tasks of investment — which is the whole point of a rubric-first spike. A prior revision of Task 38 listed "M16 reviewed" as its precondition, contradicting the M17 row of the §4 milestone table and manufacturing a false dependency on `PLAN-OPEN-2`. Corrected: **M1 only** — which is a real dependency, not none. Tasks 38–39 remain M17 members and are not "outside the milestone chain".

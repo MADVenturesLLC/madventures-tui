@@ -5,6 +5,7 @@
 **Blocks:** Task 37 and tasks dependent on M16. Does not block independently reachable Tasks 38–39.
 **Repository:** `MADVenturesLLC/madventures-tui`
 **Founder approval record:** [Phase 3A PLAN-OPEN Rulings — Founder Approval Record](PLAN-OPEN-approval-record.md)
+**Linux amendment:** the `TMPDIR` rule and the Linux secret-posture assumption below give effect to `DEC-20261010-02` B4. They take effect only through the Founder act that ratifies the Linux amendment's exact text. The two allowlists are unchanged.
 
 ---
 
@@ -146,9 +147,40 @@ personal absolute path or introduce `MADBRIDGE_CLAUDE_CONFIG_DIR`.
 `claude-code-v1` uses only the installation-profile `claude_config_dir` and the
 allowlisted `CLAUDE_CONFIG_DIR`.
 
+## `TMPDIR` — trusted value
+
+`TMPDIR` stays required in both allowlists (`DEC-20261010-02` B4).
+
+On Linux, the governed launcher — the step that starts the supervisor, outside
+the supervisor process — sets `TMPDIR` to the value of `XDG_RUNTIME_DIR`, the
+per-user runtime directory the operating system provides for the installation
+user. If `XDG_RUNTIME_DIR` is unset or empty, the launcher fails closed and
+starts nothing. It never falls back to `/tmp` or to any other directory. On
+macOS, `TMPDIR` is the per-user private temporary directory the operating
+system already provides.
+
+Task 45 validates `TMPDIR` the same way on both operating systems, in addition
+to its presence, before `buildAllowlistedEnvironment()` runs:
+
+1. ambient `TMPDIR` exists, is non-empty, and is absolute;
+2. its `realpath` is an existing directory;
+3. that directory is owned by the recorded `installation_uid`;
+4. its permission bits are exactly `0700`; and
+5. its `realpath` is not, and does not lie inside, the `realpath` of `/tmp` or
+   of `/var/tmp`.
+
+A missing or invalid `TMPDIR` produces `auth_not_ready`, as the enforcement
+section below provides. Task 45 establishes on both Macs that the operating
+system's per-user `TMPDIR` meets these rules, and on the Ubuntu PC that
+`XDG_RUNTIME_DIR` does. If either does not, Task 45 stops for a Founder ruling.
+These rules govern the `TMPDIR` the launcher passes to the supervisor; test
+fixtures follow spec §5.2.
+
+This rule applies to both `claude-code-v1` and `antigravity-v1`.
+
 If the live launcher or installation profile cannot yet satisfy the `PATH`,
-`SHELL`, `HOME`, or `CLAUDE_CONFIG_DIR` requirements, the affected profile
-remains ineligible rather than falling back.
+`SHELL`, `HOME`, `CLAUDE_CONFIG_DIR`, or `TMPDIR` requirements, the affected
+profile remains ineligible rather than falling back.
 
 ---
 
@@ -360,7 +392,7 @@ Task 45 owns the preflight validation of:
 - `PATH`;
 - `SHELL`;
 - `TERM`;
-- `TMPDIR`;
+- `TMPDIR`, its presence and the trusted-value rules above;
 - effective Claude Code settings sources; and
 - absence of `apiKeyHelper` and `--settings`.
 
@@ -397,6 +429,10 @@ is launched. This ruling does not add a new `PreflightFailure` member;
 
 ## Secret posture
 
-Both profiles contain **zero `secret: true` variables**. The OAuth material lives in the macOS keychain and is accessed by the provider binary directly — no secret passes through the environment.
+Both profiles contain **zero `secret: true` variables**, on both operating systems. No secret passes through the environment.
+
+On macOS, the OAuth material lives in the macOS keychain and is accessed by the provider binary directly.
+
+On Linux, this ruling assumes that Claude Code keeps its sign-in material in a credentials file inside the recorded `claude_config_dir`, readable only by the installation user and accessed by the provider binary directly, and that its approved `["auth", "status"]` probe reports the four predicate fields above exactly as it does on macOS. Task 45 establishes both facts on the Ubuntu PC. If either differs, Task 45 stops for a Founder ruling (`DEC-20261010-02` B4). The supervisor's settings-source validation reads only the settings sources named above. It never opens, reads, copies, hashes, or exports a credentials file, and no diagnostic or evidence includes one.
 
 Secret-redaction behavior must still be tested using a fixture registration with a `secret: true` variable. Future API-key or gateway authentication requires a separately approved environment reference (e.g., `claude-code-v2`) rather than broadening these OAuth profiles.

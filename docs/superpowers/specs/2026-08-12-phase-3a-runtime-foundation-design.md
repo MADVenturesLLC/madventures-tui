@@ -7,7 +7,8 @@
 **Baseline SHA:** `0b942771fc07e5eb05203b1d3d641d3e8ad101f1`  
 **Corrects:** `203c310a0c4fdca74dbbc4622e91fafd4c7fe432` findings 1–12; `e60e8c87fa00096b4db2e003f94914e312b08a17` findings F1–F6; and `8564fcd1759c9b13216ada24873e6349666fcc2b` findings N1–N3 plus remaining F4\
 **Required Phase 3A merge state:** runtime foundation present behind a mandatory live-start gate  
-**Live-session certification:** deferred to Phase 3B
+**Live-session certification:** deferred to Phase 3B\
+**Linux host scope:** amended under `DEC-20261010-02` B6 to support macOS and exactly one Linux profile (§1.5); the amendment takes effect only through the Founder act that ratifies its exact text
 
 **Phase 2 functional baseline:** 714 pass, 0 fail, 2606 `expect()` calls,
 35 files; TypeScript and `git diff --check` clean
@@ -26,7 +27,7 @@ The phase exists to establish, under deterministic fixtures:
 - per-surface PTY containment;
 - storage, capability, ledger, and evidence foundations;
 - truthful production command placeholders; and
-- adversarial verification on both Founder Macs.
+- adversarial verification on the three Founder certification hosts (§1.5).
 
 The Founder is the final authority over scope, envelopes, pairing, builder
 assignment, review findings, certification, and merge. The task envelope is an
@@ -152,7 +153,66 @@ Phase 3A does not implement:
 - N-surface orchestration;
 - self-daemonizing hostile-child containment beyond process groups;
 - session retention or archival automation; or
-- Linux, Windows, or remote-host support.
+- support for any Linux profile other than the one in §1.5, for Windows, or
+  for remote hosts.
+
+### 1.5 Supported host profiles and operating-system branches
+
+Phase 3A supports macOS and Linux (`DEC-20261010-02` B1). On Linux it supports
+exactly one host profile: Ubuntu 26.04 LTS on `x86_64`. Other Linux
+distributions and architectures are excluded (§1.4).
+
+The three Founder certification hosts are:
+
+| Host | Label | Operating system | Architecture |
+| --- | --- | --- | --- |
+| Founder's iMac | `imac` | macOS | `x86_64` |
+| Founder's MacBook | `macbook` | macOS | `arm64` |
+| Founder's Ubuntu PC | `ubuntu` | Ubuntu 26.04 LTS | `x86_64` |
+
+Every certification gate in this document requires all three hosts to pass the
+same reviewed commit. The one exception is the M17 spike record in §3.6, which
+was completed on both Macs before Linux was added and is not reopened.
+
+**Gate runtime.** Certification on every host uses Bun 1.4.2
+(`DEC-20261010-02` B8), provisionally. The Founder act that takes up the open
+tests under `DEC-20261011-02` B7 fixes the certification runtime and states the
+runtime that then applies; every mention of Bun 1.4.2 as the certification
+runtime in this document and the plan is subject to that act. Bun 1.3.14 appears
+in this document only as part of the historical M17 record. The required CI checks Verify (`ubuntu-24.04`) and
+Verify (macOS) (`macos-14`) install, through
+`.github/actions/setup-qualified-bun`, the qualified custodied Bun revision
+`69cb78c9097cebd3bdb832d9fff8b7d23abce09e`, a temporary upstream-PR runtime.
+CI runners are not certification hosts, the CI runtime is not a gate version,
+and the CI Linux runner is not the supported Linux profile.
+
+**Host prerequisite.** Every certification host has Node.js 20 or later on
+`PATH`, because the existing `tui-chaos` suite runs its PTY transport under Node
+(`findNodeRuntime` in `packages/tui-chaos/src/pty/session.ts`). Each host report
+records the Node.js path and version.
+
+**Operating-system branches.** Code may branch on the operating system only
+where an operating-system facility differs (`DEC-20261010-02` B3). No code
+branches on a host's identity, such as its host name or user. The permitted
+branches are exactly these:
+
+| # | Location | macOS | Linux | Kind |
+| --- | --- | --- | --- | --- |
+| 1 | `packages/pty-host/src/main.ts`, `isZombiePid` | runs `ps -o state= -p <pid>` | reads `/proc/<pid>/stat` | production |
+| 2 | `apps/madbridge/src/commands/doctor.ts`, `checkPlatform` | reports `ok` | reports `ok` | production; any other platform reports `warn`; it reports support, admits nothing, and does not establish the Linux profile above |
+| 3 | `test/phase3a/spike/bun-terminal-spike.ts`, `fdInventory` | runs `lsof -p <pid>` | lists `/proc/<pid>/fd` | spike |
+| 4 | `packages/broker/test/pty-host-supervisor.test.ts`, the environment-forwarding fixture | `/usr/bin/awk` iterating `ENVIRON` | `/usr/bin/awk` reading `/proc/self/environ` | test |
+| 5 | `packages/tui-chaos/src/pty/bridge.mjs`, `repairSpawnHelper` | restores the executable bit on `node-pty`'s `darwin-*` prebuilt helper | no repair | test tooling; selects by prebuild directory name |
+| 6 | `.github/actions/setup-qualified-bun/action.yml`, platform archive selection | `Darwin-arm64` archive | `Linux-x86_64` archive | CI |
+| 7 | `test/phase3a/adversarial/descriptor-hygiene.test.ts`, descriptor enumeration (plan Task 52, not yet built) | runs `lsof -p <pid>` | lists `/proc/<pid>/fd` | test |
+
+Each branch must be exercised on its own operating system by the CI jobs and at
+certification; a branch that is not is a finding. This list is closed. Adding,
+removing, or changing an operating-system branch requires a Founder act that
+amends this table before the change lands. The Linux `TMPDIR` rule of
+`PLAN-OPEN-2` adds no branch: the supervisor applies one validation on both
+operating systems, and if the launcher that sets `TMPDIR` on Linux is ever
+implemented in repository code, its branch is added to this table first.
 
 ## 2. Startup, attestation, and session lifecycle
 
@@ -401,10 +461,13 @@ is mandatory and is verified by `SIGSTOP`-wedging a fixture host.
 
 ### 3.5 Honest containment claim and residuals
 
-Phase 3A claims process-group containment, not hostile-process containment. A
-descendant that calls `setsid()` can escape its original process group. macOS
-does not provide Linux cgroups or PID namespaces, and the governed processes
-are selected adapters rather than arbitrary hostile programs.
+Phase 3A claims process-group containment, not hostile-process containment, on
+macOS and Linux alike. On both, a descendant that calls `setsid()` can escape
+its original process group. macOS does not provide Linux cgroups or PID
+namespaces. Linux does, but Phase 3A does not use them: the claim and the
+mechanism are the same on both operating systems, and adopting either facility
+requires a Founder-approved design amendment and a §1.5 branch. The governed
+processes are selected adapters rather than arbitrary hostile programs.
 
 The documented residual is simultaneous external `SIGKILL` of both supervisor
 and PTY host before either can execute cleanup. This is acceptable for Version
@@ -416,12 +479,26 @@ The PTY design is gated by a rubric-first Bun capability spike. No pipe-based
 fallback is allowed. Failure stops the PTY implementation and produces an
 evidence report for evaluating alternatives.
 
-The same reviewed spike commit must pass on:
+The same reviewed spike commit had to pass on both Macs, and did: M17 passed on
+2026-08-22 at candidate `56435bfe61978abed2cbcdb9b6c4e52550dc222d`. That record
+is historical and is not reopened (`DEC-20261010-02` B2):
 
 | Host | Architecture | macOS | Build | Bun | TERM | Shell |
 | --- | --- | --- | --- | --- | --- | --- |
 | Founder's iMac | `x86_64` | 13.7.8 | 22H730 | 1.3.14 | `xterm-256color` | `/bin/zsh` |
 | Founder's MacBook | `arm64` | 26.6.1 | 25G76 | 1.3.14 | `xterm-256color` | `/bin/zsh` |
+
+The Founder's Ubuntu PC ran the same criteria before this Linux amendment was
+ratified (`DEC-20261010-02` B2, under `DEC-20261011-02` B4), at `main` commit
+`0184a80d5ddefcfa89a97f8634234f4e59d1b3ae` on 2026-10-11 (UTC). All thirteen
+passed in each of three consecutive runs. Its report is
+`docs/verification/2026-10-11-bun-terminal-spike-ubuntu.md`:
+
+| Host | Architecture | Operating system | Version and build | Bun | TERM | Shell |
+| --- | --- | --- | --- | --- | --- | --- |
+| Founder's Ubuntu PC | `x86_64` | Ubuntu 26.04 LTS | 26.04.1 LTS, kernel 7.0.0-38-generic | 1.4.2 | `xterm-ghostty` | `/bin/bash` |
+
+Any criterion failing on any host stops the PTY implementation as above.
 
 The spike must demonstrate:
 
@@ -442,8 +519,8 @@ The spike must demonstrate:
 Timing is measured against the sole deadline table in Section 9.8. Reports
 record observed values rather than merely saying “pass.”
 
-One adaptive TUI will later run on both hosts. Machine-specific UI forks are
-out of scope.
+One adaptive TUI will later run on every supported host. Machine-specific UI
+forks are out of scope.
 
 ## 4. BrokerClient, command surface, and production gates
 
@@ -510,7 +587,7 @@ structural separation.
 Gate removal is a Phase 3B certification event, not an incidental edit. The
 reviewed change must cite:
 
-- both dual-host PTY reports;
+- the three host spike reports of §3.6;
 - a passing live-pair certification;
 - live TUI integration evidence; and
 - production acceptance and negative-control results.
@@ -618,8 +695,17 @@ build creates missing directories with mode `0700`, then revalidates ownership,
 mode, symlinks, and `realpath` before opening the ledger. Failure rolls the build
 back.
 
-Tests use disposable `mkdtemp` roots under the macOS per-user private temporary
-tree and exercise the same production validator. There is no relaxed test path.
+Tests use disposable `mkdtemp` roots under `os.tmpdir()` and exercise the same
+production validator. There is no relaxed test path. On macOS `os.tmpdir()` is
+the per-user private temporary tree. On Linux, where `TMPDIR` may be unset, it
+may be the shared `/tmp`; each `mkdtemp` root there is created owned by the
+current UID with mode `0700` and must pass the same validator.
+
+That permission covers test fixtures only. The `TMPDIR` that the governed
+launcher passes to the supervisor is a different rule, set by `PLAN-OPEN-2`: on
+Linux it is the per-user `XDG_RUNTIME_DIR`, the launch fails closed when that is
+unset, and on every operating system Task 45 rejects a `TMPDIR` that is, or lies
+inside, the shared `/tmp` or `/var/tmp`.
 
 ### 5.3 Ledger durability
 
@@ -681,7 +767,9 @@ Machine-readable capability records live under
 - CLI version, absolute binary path, and binary hash;
 - evaluation date and expiration horizon;
 - host architecture, macOS version/build, Bun version/path/hash, `TERM`, and
-  shell;
+  shell (these host fields describe macOS only; under `DEC-20261010-02` B5 no
+  capability record is written, produced, or evaluated on Linux until a
+  separate Founder act amends the record);
 - identity-attestation result and raw sanitized facts;
 - auth-readiness result;
 - PTY, process-group, termination, and timing results;
@@ -810,22 +898,27 @@ death times. Passing requires the Section 9.8 deadlines. The Layer 4 `SIGSTOP`
 scenario asserts the no-grace path: an unresponsive or `SIGSTOP` host does not
 earn the responsive-host child grace.
 
-### 6.5 Layer 5 — dual-host certification evidence
+### 6.5 Layer 5 — three-host certification evidence
 
-The same reviewed commit is tested independently on the Founder iMac and
-MacBook. Each signed-off report records:
+The same reviewed commit is tested independently on each of the three
+certification hosts of §1.5 — the Founder iMac, the MacBook, and the Ubuntu PC —
+each with Bun 1.4.2. Each signed-off report records:
 
 - candidate commit SHA and branch;
 - clean/dirty worktree state and exact changed files;
-- Bun executable path, version, and hash;
-- architecture, macOS version/build, `TERM`, and shell;
+- Bun executable path, version, and hash, and the Node.js path and version;
+- architecture, the operating-system version and build (on macOS the version
+  and build; on Linux the distribution release and the kernel release), `TERM`,
+  and shell;
 - exact commands and complete counts;
 - each spike criterion and measured timing;
 - failures, retries, warnings, and residual risks; and
 - report checksum.
 
-Both reports must pass before Phase 3A merge. Machine-specific code branches or
-UI forks are not an acceptable substitute.
+All three reports must pass before Phase 3A merge. Machine-specific code
+branches or UI forks are not an acceptable substitute. The only permitted
+operating-system branches are those listed in §1.5, and no code branches on a
+host's identity.
 
 ### 6.6 Surface investigations
 
@@ -873,10 +966,11 @@ Phase 3A may merge only when all of the following are true:
    coverage increases the suite rather than replacing it. No required or
    existing test is skipped, disabled, filtered, quarantined, marked `.only`,
    or otherwise excluded without an explicit Founder-visible disposition.
-2. Pure, architecture, fixture, adversarial, and dual-host layers pass.
+2. Pure, architecture, fixture, adversarial, and three-host layers pass.
 3. The iMac report passes and is checksummed.
-4. The MacBook report passes and is checksummed.
-5. Both reports identify the same candidate commit.
+4. The MacBook report passes and is checksummed, and the Ubuntu PC report passes
+   and is checksummed.
+5. All three reports identify the same candidate commit.
 6. TypeScript is clean.
 7. `git diff --check` is clean.
 8. Fixture-generated ledgers pass production `verify-ledger`.
@@ -902,7 +996,7 @@ foundation exists, but live startup is not certified.
 Phase 3B may replace the `start` placeholder only in a certification change
 that cites:
 
-- passing dual-host Phase 3A reports;
+- passing Phase 3A certification reports from all three hosts of §1.5;
 - a fresh live-pair capability and attestation record;
 - TUI integration with real snapshots, ordered output frames, and typed
   actions;
@@ -928,7 +1022,7 @@ reassignment.
 ### 7.2 Required milestones
 
 1. Surface identity and auth investigations
-2. Dual-host Bun PTY capability spike
+2. Bun PTY capability spike on every certification host
 3. Contracts and pure preflight
 4. Storage, capability records, and evidence foundations
 5. PTY-host protocol and containment
@@ -962,7 +1056,7 @@ The following do not count as correction rounds:
 
 - a new Founder ruling made after the milestone implementation;
 - a host-specific finding impossible to observe on the builder's execution
-  host before the required dual-host run;
+  host before the required certification-host runs;
 - a reviewer-requested voluntary supplementary test that confirms behavior
   already correct and already covered as required; or
 - editorial clarification that does not change behavior or required evidence.
@@ -1028,7 +1122,7 @@ A builder is qualified for Phase 3B only if:
 - all Phase 3A milestones pass or pass after correction;
 - no milestone exceeds two correction rounds;
 - no disqualifier occurs;
-- both Founder hosts pass the same reviewed SHA;
+- all three Founder certification hosts pass the same reviewed SHA;
 - all findings and warnings have explicit dispositions;
 - Gemini Antigravity reviews the exact candidate SHA;
 - the Founder explicitly qualifies the builder; and
@@ -1059,9 +1153,9 @@ Founder ruling: <qualification decision and date>
 
 Phase 3A is complete when the merge gate passes and the Founder merges the exact
 approved SHA. Completion means the production runtime foundation is present,
-verified through fixtures on both Founder Macs, and honestly gated. It does not
-mean a real two-surface session is certified, deployed, activated, or available
-from `madbridge start`.
+verified through fixtures on the three Founder certification hosts, and honestly
+gated. It does not mean a real two-surface session is certified, deployed,
+activated, or available from `madbridge start`.
 
 The next authorized activity after Founder approval of this written spec is a
 separate implementation plan. No implementation is authorized by this document
@@ -2020,12 +2114,12 @@ line flags or ambient environment. It requires the inherited private control
 channel and one validated launch frame from the broker module. Direct invocation
 without that channel fails before PTY or child creation.
 
-The pre-written Bun spike candidate is `Bun.Terminal`, using its macOS PTY
-implementation. The spike must prove every Section 3.6 criterion before the
-production PTY host is built. FFI `posix_openpt`, `node-pty`, another native
-dependency, or a pipe fallback is not an implementation choice. Any alternative
-requires a stop, a written evidence report, and a new Founder-approved design
-amendment.
+The pre-written Bun spike candidate is `Bun.Terminal`, using its PTY
+implementation on macOS and on Linux. The spike must prove every Section 3.6
+criterion before the production PTY host is built. FFI `posix_openpt`,
+`node-pty`, another native dependency, or a pipe fallback is not an
+implementation choice. Any alternative requires a stop, a written evidence
+report, and a new Founder-approved design amendment.
 
 ### 9.8 Fixed PTY-host response deadlines
 
@@ -2052,7 +2146,7 @@ The two-second child grace applies only after a responsive host confirms
 grace period. Every governed process must be gone within five seconds.
 
 All deadlines use a monotonic clock and are reported as observed durations in
-dual-host evidence.
+the certification evidence of every host.
 
 ### 9.9 `init` and CLI truth-surface disposition
 
