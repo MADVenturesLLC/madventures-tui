@@ -109,7 +109,7 @@ issue for a security report.
 - TypeScript via `bunx tsc --noEmit`.
 - Tests via `bun test`.
 
-CI runs on pull requests to `main` (Ubuntu `Verify` and macOS-14
+CI runs on pull requests to `main` (Ubuntu `Verify` and macOS-15
 `Verify (macOS)`). It must run without credentials unless a named phase
 requires a purpose-named secret.
 
