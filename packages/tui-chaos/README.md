@@ -129,7 +129,7 @@ detail, and the last captured grid are in the run's artifacts for debugging.
 ## CI
 
 `.github/workflows/tui-chaos.yml` runs `bun run test:tui-chaos` on
-`ubuntu-24.04` and `macos-14` and uploads the evidence packet on every PR to
+`ubuntu-24.04` and `macos-15` and uploads the evidence packet on every PR to
 `main`. Nonzero exit fails the job.
 
 ## Architecture notes

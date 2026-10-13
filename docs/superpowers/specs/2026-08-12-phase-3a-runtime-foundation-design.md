@@ -174,17 +174,18 @@ Every certification gate in this document requires all three hosts to pass the
 same reviewed commit. The one exception is the M17 spike record in §3.6, which
 was completed on both Macs before Linux was added and is not reopened.
 
-**Gate runtime.** Certification on every host uses Bun 1.4.2
-(`DEC-20261010-02` B8), provisionally. The Founder act that takes up the open
-tests under `DEC-20261011-02` B7 fixes the certification runtime and states the
-runtime that then applies; every mention of Bun 1.4.2 as the certification
-runtime in this document and the plan is subject to that act. Bun 1.3.14 appears
-in this document only as part of the historical M17 record. The required CI checks Verify (`ubuntu-24.04`) and
-Verify (macOS) (`macos-14`) install, through
-`.github/actions/setup-qualified-bun`, the qualified custodied Bun revision
-`69cb78c9097cebd3bdb832d9fff8b7d23abce09e`, a temporary upstream-PR runtime.
-CI runners are not certification hosts, the CI runtime is not a gate version,
-and the CI Linux runner is not the supported Linux profile.
+**Gate runtime.** `DEC-20261013-03` fixes the certification runtime for each
+operating system. On macOS, every Bun process of a certification run is Bun
+1.4.2, revision `744846f844374847c902b5e7fd59b4342a51ef99`. On Linux, every Bun
+process of a certification run is the qualified custodied Bun revision
+`69cb78c9097cebd3bdb832d9fff8b7d23abce09e`, a temporary upstream-PR runtime,
+until that act's replacement rule applies. Every mention of Bun 1.4.2 as the
+certification runtime in this document and the plan is read under that act. Bun
+1.3.14 appears in this document only as part of the historical M17 record. The
+required CI checks Verify (`ubuntu-24.04`) and Verify (macOS) (`macos-15`)
+install, through `.github/actions/setup-qualified-bun`, the same custodied
+revision. CI runners are not certification hosts, and the CI Linux runner is not
+the supported Linux profile.
 
 **Host prerequisite.** Every certification host has Node.js 20 or later on
 `PATH`, because the existing `tui-chaos` suite runs its PTY transport under Node
