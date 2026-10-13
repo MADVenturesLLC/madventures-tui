@@ -1,0 +1,52 @@
+diff --git a/docs/decisions/PLAN-OPEN-1-identity-authentication.md b/docs/decisions/PLAN-OPEN-1-identity-authentication.md
+index 72a1223..61fe582 100644
+--- a/docs/decisions/PLAN-OPEN-1-identity-authentication.md
++++ b/docs/decisions/PLAN-OPEN-1-identity-authentication.md
+@@ -23,7 +23,7 @@
+ | `auth_readiness_probe.argv` | `["auth", "status"]` |
+ | `non_interactive_flags` | `["--print", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--no-session-persistence"]` |
+ | `environment_allowlist_ref` | `"claude-code-v1"` |
+-| `supported_versions` | `["2.1.233"]` |
++| `supported_versions` | `["2.1.296"]` (`DEC-20261013-05`; `["2.1.233"]` until then) |
+ | `auth_failure_detection` | `["auth_status_exit_code:1", "system/api_retry.error:authentication_failed", "system/api_retry.error:oauth_org_not_allowed"]` |
+ | `limitations` | `["fable is requested intent only; live eligibility requires exact equality with system/init.model"]` |
+ 
+diff --git a/docs/decisions/PLAN-OPEN-2-environment-allowlists.md b/docs/decisions/PLAN-OPEN-2-environment-allowlists.md
+index d26373a..a262ce3 100644
+--- a/docs/decisions/PLAN-OPEN-2-environment-allowlists.md
++++ b/docs/decisions/PLAN-OPEN-2-environment-allowlists.md
+@@ -266,7 +266,7 @@ Antigravity's active CLI session tokens are maintained through its host-owned lo
+ 
+ ## Auth-readiness predicate (Claude Code)
+ 
+-The verified `claude auth status` output for Claude Code 2.1.233 is:
++The verified `claude auth status` output for Claude Code 2.1.233 is as follows; Claude Code 2.1.296 reports the same four predicate fields with the same values on the Ubuntu PC (`DEC-20261013-05`):
+ 
+ ```json
+ {
+diff --git a/packages/protocol/src/adapter-registry.ts b/packages/protocol/src/adapter-registry.ts
+index 9c8a33e..e0974ff 100644
+--- a/packages/protocol/src/adapter-registry.ts
++++ b/packages/protocol/src/adapter-registry.ts
+@@ -37,7 +37,7 @@ const CLAUDE_CODE_REGISTRATION: AdapterRegistrationV1 = deepFreeze({
+   surface: parseSurfaceId("claude-code"),
+   executable_name: "madbridge-claude-v5",
+   provider: "anthropic",
+-  supported_versions: ["2.1.233"],
++  supported_versions: ["2.1.296"],
+   identity_probe: {
+     argv: ["--print", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--no-session-persistence"],
+     parse: "json",
+diff --git a/packages/protocol/test/adapter-registry.test.ts b/packages/protocol/test/adapter-registry.test.ts
+index 1cc0bdd..7a74d7f 100644
+--- a/packages/protocol/test/adapter-registry.test.ts
++++ b/packages/protocol/test/adapter-registry.test.ts
+@@ -15,7 +15,7 @@ const CLAUDE_CODE_REGISTRATION: AdapterRegistrationV1 = {
+   surface: parseSurfaceId("claude-code"),
+   executable_name: "madbridge-claude-v5",
+   provider: "anthropic",
+-  supported_versions: ["2.1.233"],
++  supported_versions: ["2.1.296"],
+   identity_probe: {
+     argv: ["--print", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--no-session-persistence"],
+     parse: "json",
