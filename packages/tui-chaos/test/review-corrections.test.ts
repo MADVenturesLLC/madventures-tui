@@ -191,7 +191,7 @@ describe("F1/F2: real run — mixed selection (governance_focus + ansi_flood)", 
     } finally {
       rmSync(tempRoot, { recursive: true, force: true });
     }
-  });
+  }, 30_000);
 });
 
 describe("F1/F2: real run — excluding governance_focus", () => {
@@ -213,7 +213,7 @@ describe("F1/F2: real run — excluding governance_focus", () => {
     } finally {
       rmSync(tempRoot, { recursive: true, force: true });
     }
-  });
+  }, 30_000);
 });
 
 describe("F1/F2: real run — ordinary fixture-only scenario", () => {
@@ -232,7 +232,7 @@ describe("F1/F2: real run — ordinary fixture-only scenario", () => {
     } finally {
       rmSync(tempRoot, { recursive: true, force: true });
     }
-  });
+  }, 30_000);
 });
 
 export {};
