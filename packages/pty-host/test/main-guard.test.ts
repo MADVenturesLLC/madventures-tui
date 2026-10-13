@@ -70,7 +70,7 @@ async function runHost(
   args: readonly string[],
   opts: { readonly stdinBytes?: Uint8Array; readonly env?: Record<string, string> } = {},
 ): Promise<RunResult> {
-  const proc = Bun.spawn(["bun", MAIN_ENTRY, ...args], {
+  const proc = Bun.spawn([process.execPath, MAIN_ENTRY, ...args], {
     cwd: REPO_ROOT,
     stdin: "pipe",
     stdout: "pipe",
@@ -115,7 +115,7 @@ interface LiveHost {
  * facts, never by guessing how long an operation takes.
  */
 function spawnLiveHost(args: readonly string[] = [], opts: { readonly env?: Record<string, string> } = {}): LiveHost {
-  const proc = Bun.spawn(["bun", MAIN_ENTRY, ...args], {
+  const proc = Bun.spawn([process.execPath, MAIN_ENTRY, ...args], {
     cwd: REPO_ROOT,
     stdin: "pipe",
     stdout: "pipe",
