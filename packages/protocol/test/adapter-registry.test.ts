@@ -15,7 +15,7 @@ const CLAUDE_CODE_REGISTRATION: AdapterRegistrationV1 = {
   surface: parseSurfaceId("claude-code"),
   executable_name: "madbridge-claude-v5",
   provider: "anthropic",
-  supported_versions: ["2.1.233"],
+  supported_versions: ["2.1.296"],
   identity_probe: {
     argv: ["--print", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--no-session-persistence"],
     parse: "json",
