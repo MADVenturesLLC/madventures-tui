@@ -1,0 +1,18 @@
+MERGE AUTHORIZATION: MADVenturesLLC/madventures-tui#145
+
+Authorized head: 791d2e9532f780aaba5819d0eb6c93d6aff9c931
+Base when verified: main at 3f9b414c0ffcaf6955873f757cb55b97b2de77a1
+
+I, Michael Daley, Founder of MAD Ventures, authorize the merge of this pull request at the exact head SHA above and at no other. Any push after this comment voids this authorization.
+
+Verified before issuing (2026-10-13, after the last check below completed at 03:02:35Z):
+1. Required checks on this head: Verify (completed 2026-10-13T02:45:16Z), Verify (macOS) (02:46:31Z) and code-review (02:44:54Z) succeeded, and the combined commit status reads success. attribution-shape, validate-code-review, CodeQL, all four Analyze jobs, both tui-chaos runs, copilot-pull-request-reviewer (03:00:17Z) and Cursor Security Agent (03:02:35Z) succeeded. fork-pr-notice was skipped. Every workflow run on this head succeeded, and none is held for approval.
+2. Head and scope: one commit on the base, parent 3f9b414c0ffcaf6955873f757cb55b97b2de77a1. It changes exactly two paths, at the SHA-256 values my ready-for-review authorization for this head names: docs/decisions/DEC-20261013-02-f1f2-test-timeout.md, new, and packages/tui-chaos/test/review-corrections.test.ts as the ratified patch leaves it. Nothing else changes. Verify (macOS), the check that failed twice on pull request 143, succeeded on this head with the patch. main is still at the base SHA, and GitHub reports the merge state clean.
+3. Review: Copilot's review 5498269747 at 03:00:16Z, on this head, reports no open findings, recommends approval and opens no thread. There are no other reviews and no review threads.
+4. Ready-for-review: this pull request left draft at 02:58:18Z under my ready-for-review authorization, comment 6137208506, posted for this head. No push has been made since.
+5. Authority: part C1 of FOUNDER-ACT-20261013-F1F2-TEST-TIMEOUT directs this filing. The act equals the transfer blob at commit 3370a1d2a00c8cc1e405bcf54c52454e37ed6c74, and the test file equals the patch with SHA-256 ea8c2c955e16c6012e41edb82f9460fd87bd572d1c4369ace89f311634cee866 applied to the base. The deviations are stated in item 5 of my ready-for-review authorization. The drafting assistant wrote the act and the patch, so this is not an independent review.
+6. Effect: this merge puts the act on main with Status ISSUED. The three F1/F2 real-run tests then run with a 30,000 ms bound, which under B2 of the act is a bound and not a waiver. Under B3 of the act, the branch of pull request 143 may then be updated with main by one merge commit and no other change. It adds no round. Rubric milestone 1 stays at 5, rubric milestone 4 at 3 and rubric milestone 6 at 0.
+7. Body: the pull request body becomes the merge commit message. It ends with the three attribution trailers as the final paragraph. This comment has zero bare three-hyphen lines, checked immediately before issuing.
+8. Not authorized by this comment: any change to a path beyond the two above, any further push to test/f1f2-timeout, the update of pull request 143 itself, which follows its own command, Task 45 and every later task.
+
+Merge method: merge commit, head SHA pinned, no caller-supplied message. Post this comment before merging. Verify the merge commit on main immediately after: its first parent is the main head at the moment of merge and its second parent is 791d2e9532f780aaba5819d0eb6c93d6aff9c931, the changed paths against the first parent are exactly the two above, trailers are present and parseable, attribution-shape-check.sh main on the merge SHA passes, and the push runs on main are green. If that fails, stop; do not rewrite main.
