@@ -19,8 +19,8 @@ content of each decision as it stands with this record's pointer applied.
 
 | Document | Exact SHA-256 (post-pointer) |
 |---|---|
-| `PLAN-OPEN-1-identity-authentication.md` | `196b91b8c9ffbda3d4319c4a8abc96c20ffe16950ba23864eb8780de356f5aee` |
-| `PLAN-OPEN-2-environment-allowlists.md` (Linux amendment, `DEC-20261010-02` B6; previously `6f570ea8123c824687953cc64b793587b9a5acb4db56729c29bec383f694e1b0`) | `7ceb367c48adb1954e107ed7cdfd5578277f88c1acadb21561e043d24a95417f` |
+| `PLAN-OPEN-1-identity-authentication.md` (Claude Code 2.1.296, `DEC-20261013-05` B1; previously `196b91b8c9ffbda3d4319c4a8abc96c20ffe16950ba23864eb8780de356f5aee`) | `d40682beb5a5c3f617638b1775f3777e25c66e12787b9269141164dcc3d9bc42` |
+| `PLAN-OPEN-2-environment-allowlists.md` (Claude Code 2.1.296, `DEC-20261013-05` B1; previously `7ceb367c48adb1954e107ed7cdfd5578277f88c1acadb21561e043d24a95417f` from the Linux amendment, `DEC-20261010-02` B6, and before that `6f570ea8123c824687953cc64b793587b9a5acb4db56729c29bec383f694e1b0`) | `b60676aa47b216c36d9080c884650943cdac93dd12109d2864ebcf0eb6887d8c` |
 | `PLAN-OPEN-3-capability-horizon.md` | `cca3061b91ffc9eb231003f5e5d7c20230f47cf8c2378f6f1241d57309618562` |
 | `PLAN-OPEN-4-node-pty-removal.md` | `e662936c0a2f91b25c4f9f38d791bb59182b22cc4ed19ce577afa81e34eeb460` |
 | `PLAN-OPEN-6-root-scripts.md` | `26270a7af4c932dd122bfd6ed3383e845bb655886a8d7efe8e152939ce7a957f` |
@@ -58,7 +58,7 @@ content of each decision as it stands with this record's pointer applied.
 | Revision 6.1 — D9 ruling (2026-09-18) | Recorded in [Founder authorization artifact #18](https://github.com/MADVenturesLLC/madventures-tui/issues/18) | Recorded in issue #18 | Post-approval commit recorded in issue #18 |
 | Revision 6.2 — Linux amendment (`DEC-20261010-02` B6) | Recorded in [Founder authorization artifact #18](https://github.com/MADVenturesLLC/madventures-tui/issues/18) | Recorded in issue #18 | Post-approval commit recorded in issue #18 |
 
-Because Revisions 5.8, 5.9, 5.10, 5.11, 5.12, 6.0, 6.1, and 6.2 change this approval
+Because Revisions 5.8, 5.9, 5.10, 5.11, 5.12, 6.0, 6.1, 6.2, and 6.3 change this approval
 record itself, their patch SHA-256 values, byte counts, resulting approval-record
 SHA-256, and commit identities are recorded externally in Founder authorization
 artifact #18 rather than embedded self-referentially in this file.
@@ -72,6 +72,11 @@ transcription + D9.2 disposition + docs-correction authorization*, issued
 Revision 6.2 amends `PLAN-OPEN-2` and the Phase 3A plan for Linux under
 `DEC-20261010-02` B6. It is not inferred from the 2026-08-15 rulings and takes
 effect only through the Founder act that ratifies its exact text.
+
+Revision 6.3 records the `PLAN-OPEN-1` and `PLAN-OPEN-2` contents that
+`DEC-20261013-05` ratified for Claude Code 2.1.296, as item 3 of the Founder's
+merge authorization of pull request 146 ruled. It is not inferred from the
+2026-08-15 rulings and takes effect only through `DEC-20261014-04`.
 
 ## Provenance note
 
