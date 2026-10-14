@@ -27,7 +27,7 @@ The phase exists to establish, under deterministic fixtures:
 - per-surface PTY containment;
 - storage, capability, ledger, and evidence foundations;
 - truthful production command placeholders; and
-- adversarial verification on the three Founder certification hosts (§1.5).
+- adversarial verification on the two Founder certification hosts (§1.5).
 
 The Founder is the final authority over scope, envelopes, pairing, builder
 assignment, review findings, certification, and merge. The task envelope is an
@@ -153,26 +153,27 @@ Phase 3A does not implement:
 - N-surface orchestration;
 - self-daemonizing hostile-child containment beyond process groups;
 - session retention or archival automation; or
-- support for any Linux profile other than the one in §1.5, for Windows, or
-  for remote hosts.
+- support for macOS on `x86_64`, for any Linux profile other than the one in
+  §1.5, for Windows, or for remote hosts.
 
 ### 1.5 Supported host profiles and operating-system branches
 
-Phase 3A supports macOS and Linux (`DEC-20261010-02` B1). On Linux it supports
-exactly one host profile: Ubuntu 26.04 LTS on `x86_64`. Other Linux
-distributions and architectures are excluded (§1.4).
+Phase 3A supports macOS and Linux (`DEC-20261010-02` B1), each in exactly one
+host profile (`DEC-20261013-04`): macOS on `arm64`, and Ubuntu 26.04 LTS on
+`x86_64`. macOS on `x86_64`, other Linux distributions and other architectures
+are excluded (§1.4).
 
-The three Founder certification hosts are:
+The two Founder certification hosts are:
 
 | Host | Label | Operating system | Architecture |
 | --- | --- | --- | --- |
-| Founder's iMac | `imac` | macOS | `x86_64` |
 | Founder's MacBook | `macbook` | macOS | `arm64` |
 | Founder's Ubuntu PC | `ubuntu` | Ubuntu 26.04 LTS | `x86_64` |
 
-Every certification gate in this document requires all three hosts to pass the
-same reviewed commit. The one exception is the M17 spike record in §3.6, which
-was completed on both Macs before Linux was added and is not reopened.
+Every certification gate in this document requires both hosts to pass the same
+reviewed commit. The one exception is the M17 spike record in §3.6, which was
+completed on both Macs, the Founder's iMac and the MacBook, before Linux was
+added and is not reopened. The iMac is not a certification host.
 
 **Gate runtime.** `DEC-20261013-03` fixes the certification runtime for each
 operating system. On macOS, every Bun process of a certification run is Bun
@@ -899,11 +900,11 @@ death times. Passing requires the Section 9.8 deadlines. The Layer 4 `SIGSTOP`
 scenario asserts the no-grace path: an unresponsive or `SIGSTOP` host does not
 earn the responsive-host child grace.
 
-### 6.5 Layer 5 — three-host certification evidence
+### 6.5 Layer 5 — two-host certification evidence
 
-The same reviewed commit is tested independently on each of the three
-certification hosts of §1.5 — the Founder iMac, the MacBook, and the Ubuntu PC —
-each with Bun 1.4.2. Each signed-off report records:
+The same reviewed commit is tested independently on each of the two
+certification hosts of §1.5, the MacBook and the Ubuntu PC, each with the
+certification runtime of §1.5. Each signed-off report records:
 
 - candidate commit SHA and branch;
 - clean/dirty worktree state and exact changed files;
@@ -916,7 +917,7 @@ each with Bun 1.4.2. Each signed-off report records:
 - failures, retries, warnings, and residual risks; and
 - report checksum.
 
-All three reports must pass before Phase 3A merge. Machine-specific code
+Both reports must pass before Phase 3A merge. Machine-specific code
 branches or UI forks are not an acceptable substitute. The only permitted
 operating-system branches are those listed in §1.5, and no code branches on a
 host's identity.
@@ -967,11 +968,10 @@ Phase 3A may merge only when all of the following are true:
    coverage increases the suite rather than replacing it. No required or
    existing test is skipped, disabled, filtered, quarantined, marked `.only`,
    or otherwise excluded without an explicit Founder-visible disposition.
-2. Pure, architecture, fixture, adversarial, and three-host layers pass.
-3. The iMac report passes and is checksummed.
-4. The MacBook report passes and is checksummed, and the Ubuntu PC report passes
-   and is checksummed.
-5. All three reports identify the same candidate commit.
+2. Pure, architecture, fixture, adversarial, and two-host layers pass.
+3. The MacBook report passes and is checksummed.
+4. The Ubuntu PC report passes and is checksummed.
+5. Both reports identify the same candidate commit.
 6. TypeScript is clean.
 7. `git diff --check` is clean.
 8. Fixture-generated ledgers pass production `verify-ledger`.
@@ -997,7 +997,7 @@ foundation exists, but live startup is not certified.
 Phase 3B may replace the `start` placeholder only in a certification change
 that cites:
 
-- passing Phase 3A certification reports from all three hosts of §1.5;
+- passing Phase 3A certification reports from both hosts of §1.5;
 - a fresh live-pair capability and attestation record;
 - TUI integration with real snapshots, ordered output frames, and typed
   actions;
@@ -1123,7 +1123,7 @@ A builder is qualified for Phase 3B only if:
 - all Phase 3A milestones pass or pass after correction;
 - no milestone exceeds two correction rounds;
 - no disqualifier occurs;
-- all three Founder certification hosts pass the same reviewed SHA;
+- both Founder certification hosts pass the same reviewed SHA;
 - all findings and warnings have explicit dispositions;
 - Gemini Antigravity reviews the exact candidate SHA;
 - the Founder explicitly qualifies the builder; and
@@ -1154,7 +1154,7 @@ Founder ruling: <qualification decision and date>
 
 Phase 3A is complete when the merge gate passes and the Founder merges the exact
 approved SHA. Completion means the production runtime foundation is present,
-verified through fixtures on the three Founder certification hosts, and honestly
+verified through fixtures on the two Founder certification hosts, and honestly
 gated. It does not mean a real two-surface session is certified, deployed,
 activated, or available from `madbridge start`.
 
