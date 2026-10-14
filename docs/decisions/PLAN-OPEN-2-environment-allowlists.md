@@ -266,7 +266,7 @@ Antigravity's active CLI session tokens are maintained through its host-owned lo
 
 ## Auth-readiness predicate (Claude Code)
 
-The verified `claude auth status` output for Claude Code 2.1.233 is:
+The verified `claude auth status` output for Claude Code 2.1.233 is as follows; Claude Code 2.1.296 reports the same four predicate fields with the same values on the Ubuntu PC (`DEC-20261013-05`):
 
 ```json
 {

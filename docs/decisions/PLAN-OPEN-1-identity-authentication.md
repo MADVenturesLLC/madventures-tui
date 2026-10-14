@@ -23,7 +23,7 @@
 | `auth_readiness_probe.argv` | `["auth", "status"]` |
 | `non_interactive_flags` | `["--print", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--no-session-persistence"]` |
 | `environment_allowlist_ref` | `"claude-code-v1"` |
-| `supported_versions` | `["2.1.233"]` |
+| `supported_versions` | `["2.1.296"]` (`DEC-20261013-05`; `["2.1.233"]` until then) |
 | `auth_failure_detection` | `["auth_status_exit_code:1", "system/api_retry.error:authentication_failed", "system/api_retry.error:oauth_org_not_allowed"]` |
 | `limitations` | `["fable is requested intent only; live eligibility requires exact equality with system/init.model"]` |
 
