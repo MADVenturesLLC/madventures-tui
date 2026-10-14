@@ -1,0 +1,22 @@
+RESUMPTION NOTE r2: Phase 3A Task 45, after the second stop. Paste this as the second message of a new Codex session on the Ubuntu PC, right after the builder prompt with SHA-256 e4045d2790e7ce833bd7133050b3997f25f41fee5dc180a5dc3b136a0c1be066 from transfer commit 23000e3a5a533d81292ff0983a073dc5d3252472, in the same clone and on the same branch. It replaces the first resumption note, SHA-256 77b40044afdb0947a03c33c1a3ffa0a8e74340e6a0490014fe0684d74ba21df5, which you do not receive. The builder prompt governs in full, except where this note adds to it.
+
+The first stop. A first Codex session stopped at the D2 baseline. Its stop report is /home/michaeldaley/task45-r1-pr/task45-r1-stop-report.md, SHA-256 a38c025916397e19e0d4b8ea768387159ad75d35bed036a0d83127ac9c1bdbcf. Its full suite had failures outside B9 from two causes I established myself, with no other test run active and the custodied binary by its full path: two spike tests in test/phase3a/spike/bun-terminal-spike.test.ts failed because suite runs overlapped, and passed 10 of 10 in each of three runs alone; tests 1 to 3 failed because node-pty's native module had not been built, and after I rebuilt node_modules outside any sandbox they passed 8 of 8. My own full suite before that rebuild is /home/michaeldaley/task45-r1-pr/founder-baseline-20261014T022702Z.log, SHA-256 7b545262f4e82fef0d9b08624038fecfea5b206deda7873a99e35402f4d3c944. The pty.node it builds is node_modules/.bun/node-pty@1.1.0/node_modules/node-pty/build/Release/pty.node, SHA-256 51bd9b9424a78a33731507b98e683c3b55e2713f0106f9d625bb601d1df34f3b.
+
+The second stop. A second Codex session, under the first resumption note, ran its D2 full suite inside the sandbox: 1,493 pass, 51 fail and 3 errors, including socket EPERM failures. It then retried outside the sandbox, with the two runs overlapping: 1,582 pass and 1 fail, test 4. It reported its stop report as /tmp/task45-r1-stop-report.txt with SHA-256 6262586701ace48ec98313bef2c16e8c57d2e3ec4b67947055a12cb8a8fe77ca; that file was not kept, and its summary to me is the only record. It made no edit, commit or GitHub call, and the tree stayed clean at 09340bfac348c9e0c03d7839d2bf45ba221f83c4.
+
+My disposition. A test run inside the Codex sandbox is not a D2 or D4 run and counts for nothing; the sandbox denies sockets that the suite needs. Neither run of the second session is the D2 baseline, because they overlapped and the second was a retry. B9 of DEC-20261013-01 does not change: test 4 is expected to fail exactly as at the base, tests 5 and 6 must pass, a test of that set that passes is recorded, and every other failure or error, including tests 1 to 3 and the spike tests, is a stop. I started this session with its sandbox turned off, so no command needs escalation.
+
+Rules for this session:
+1. Before any test, confirm that your commands run without a sandbox, and report how you confirmed it. If a command runs sandboxed or needs escalation, stop before running any test.
+2. Do not delete, move or rebuild node_modules. Before the D2 baseline, and again after bun install --frozen-lockfile, confirm that pty.node exists at the path above with the SHA-256 above. If it is missing or differs, stop.
+3. Run one test command at a time, in the foreground. Never start a test command while another is still running, never run two suites at once, and never leave a test command running in the background. Wait for each command to exit before the next. If a command would exceed your command time limit, stop instead of backgrounding it.
+4. The D2 full suite is one run of QB test after the supervisor tests, recorded verbatim. If it falls outside B9, stop; do not rerun it or retry it under any other setting.
+5. Report the first stop report and my baseline log by path and SHA-256, and the second stop report by its reported SHA-256 as not kept, under Deviations, as context, and do not edit or move any file of mine.
+
+Everything else in the builder prompt stands: the working directory /home/michaeldaley/madventures-tui-m20-task45-r1, the branch build/m20-task45-r1, the role, the Actor-Id session:codex/m20-task45-r1 and the other two E1 trailers, the preconditions, THE TEST RUNTIME, THE WORK, DO NOT, the stop conditions, the deliverables and the final report. Neither earlier session made a commit, so this session's commit is the only one under that Actor-Id.
+
+— Michael Daley
+
+Date: 2026-10-14
+
+Actor-Id: founder
