@@ -4,6 +4,7 @@
   "type": "module",
   "private": true,
   "dependencies": {
-    "@madventures/protocol": "workspace:*"
+    "@madventures/protocol": "workspace:*",
+    "@madventures/storage": "workspace:*"
   }
 }

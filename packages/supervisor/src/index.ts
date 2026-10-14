@@ -5,3 +5,6 @@ export {
   MissingRequiredVariableError,
   UnknownEnvironmentAllowlistError,
 } from "./environment";
+
+export { runPurePreflight } from "./preflight";
+export type { PreflightInput, PreflightFailure, PreflightOk, PreflightResult, LaunchPlan, LaunchExecution } from "./preflight";
