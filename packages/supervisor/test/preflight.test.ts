@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import { ADAPTER_REGISTRY, sha256CanonicalSync, type AdapterRegistrationV1 } from "@madventures/protocol";
@@ -12,7 +12,7 @@ const children: Bun.Subprocess<"pipe", "pipe", "pipe">[] = [];
 afterEach(async () => { for (const child of children.splice(0)) { try { child.kill("SIGKILL"); } catch {} await child.exited; } for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
 
 function fixture() {
-  const root = mkdtempSync(join(tmpdir(), "task45-preflight-"));
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "task45-preflight-")));
   roots.push(root);
   chmodSync(root, 0o700);
   const repo = join(root, "repo");
@@ -90,7 +90,9 @@ test("preflight fails with auth_not_ready", async () => {
   writeFileSync(f.settings, '{}');
   f.input.settingsSources = [join(f.root, '.credentials.json')]; await failure(f, 'auth_not_ready'); f.input.settingsSources = [f.settings];
   f.input.invocationArguments = ["--settings=fixture"]; await failure(f, "auth_not_ready"); f.input.invocationArguments = [];
-  f.input.ambient.TMPDIR = f.root; await failure(f, "auth_not_ready"); // /tmp descendant, despite private ownership/mode.
+  const sharedTemporaryRoot = realpathSync(mkdtempSync(join("/tmp", "task45-shared-temp-")));
+  roots.push(sharedTemporaryRoot);
+  f.input.ambient.TMPDIR = sharedTemporaryRoot; await failure(f, "auth_not_ready"); // Shared /tmp descendant, despite private ownership/mode.
   f.input.ambient.TMPDIR = f.temp;
   for (const key of ["SHELL", "PATH", "CLAUDE_CONFIG_DIR"]) {
     const old = f.input.ambient[key]; f.input.ambient[key] = "different"; await failure(f, "auth_not_ready"); f.input.ambient[key] = old;
