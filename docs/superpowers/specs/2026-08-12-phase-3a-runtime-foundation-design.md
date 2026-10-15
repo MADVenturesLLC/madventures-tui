@@ -938,17 +938,20 @@ The failing surface is excluded from the candidate pair. The fixture-tested
 Phase 3A foundation may still merge behind the production start gate.
 
 Antigravity's role as an investigated execution surface is independent from
-Gemini Antigravity's Tier-2 reviewer role. Failure of the `agy` CLI attestation
-does not disqualify the reviewer or block review of the foundation.
+its use as the builder's surface under §6.7. Failure of the `agy` CLI
+attestation does not disqualify the builder or block review of the foundation.
 
 ### 6.7 Review workflow and single-writer discipline
 
 The provisional Phase 3A roles are:
 
-- **Primary implementer:** Claude Opus 5, subject to the qualification rubric
+- **Primary implementer:** a Gemini 4 session on the Antigravity surface, from
+  the reassignment of `DEC-20261014-01`, subject to the qualification rubric
   below;
 - **Continuity and pre-commit reviewer:** Plato/Codex;
-- **Independent Tier-2 reviewer:** Gemini Antigravity, reviewing an exact SHA;
+- **Independent Tier-2 reviewer:** a fresh Grok or Codex session named in each
+  task's authorization, never a session of the builder's own model, reviewing
+  an exact SHA;
 - **Bounded correction implementer:** GLM-5.2 only when separately authorized;
 - **Alternative primary implementer:** Grok 4.5 or another Founder-authorized
   builder if reassignment is required; and
@@ -978,8 +981,8 @@ Phase 3A may merge only when all of the following are true:
 9. Fixture-generated evidence passes production `export-evidence` and
     sanitization checks.
 10. Every warning and review finding has an explicit disposition.
-11. Gemini Antigravity issues an approving Tier-2 verdict for the exact
-    candidate SHA.
+11. The Tier-2 reviewer of §6.7 issues an approving Tier-2 verdict for the
+    exact candidate SHA.
 12. Production `start` still returns `live_runtime_not_certified`.
 13. Production `start` is structurally unable to reach the runtime or harness.
 14. External-control placeholders return their stable typed errors and inspect
@@ -1048,8 +1051,8 @@ A correction round is one review verdict for one milestone that identifies one
 or more substantive defects requiring implementation or required-test changes.
 All substantive findings in the same verdict count as one round.
 
-Countable verdicts may come from either Plato/Codex pre-commit review or Gemini
-Antigravity Tier-2 review. Each verdict can add at most one round to that
+Countable verdicts may come from either Plato/Codex pre-commit review or the
+Tier-2 review of §6.7. Each verdict can add at most one round to that
 milestone. The running count is recorded in a Founder-visible log when the
 verdict occurs; it is never reconstructed at qualification time.
 
@@ -1125,7 +1128,7 @@ A builder is qualified for Phase 3B only if:
 - no disqualifier occurs;
 - both Founder certification hosts pass the same reviewed SHA;
 - all findings and warnings have explicit dispositions;
-- Gemini Antigravity reviews the exact candidate SHA;
+- the Tier-2 reviewer of §6.7 reviews the exact candidate SHA;
 - the Founder explicitly qualifies the builder; and
 - the Phase 3B work does not silently drift from this design.
 
