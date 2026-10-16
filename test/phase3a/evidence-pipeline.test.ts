@@ -26,6 +26,96 @@ interface ExtractedRecordBlock {
   readonly recordedSha256: string | null;
 }
 
+interface CapturedCommandBlock {
+  readonly command: string;
+  readonly exitStatus: number;
+  readonly stdoutDeclaredBytes: number;
+  readonly stdout: string;
+  readonly stderrDeclaredBytes: number;
+  readonly stderr: string;
+}
+
+const BINARY_PATH = "/Users/michaeldaley/.local/bin/agy";
+
+const TOP_LEVEL_HELP_COMMANDS: readonly string[] = [
+  `${BINARY_PATH} --help < /dev/null`,
+  `${BINARY_PATH} -h < /dev/null`,
+  `${BINARY_PATH} help < /dev/null`,
+];
+
+const ALL_TWELVE_SUBCOMMANDS: readonly string[] = [
+  "agent",
+  "agents",
+  "changelog",
+  "help",
+  "install",
+  "mcp",
+  "mic-serve",
+  "models",
+  "plugin",
+  "plugins",
+  "remote-control",
+  "update",
+];
+
+const FLAG_DOCUMENTED_SUBCOMMANDS: readonly string[] = [
+  "agent",
+  "agents",
+  "changelog",
+  "install",
+  "mic-serve",
+  "models",
+];
+
+const MCP_NESTED_SUBCOMMANDS: readonly string[] = [
+  "add",
+  "remove",
+  "list",
+  "enable",
+  "disable",
+];
+
+const REMOTE_CONTROL_NESTED_SUBCOMMANDS: readonly string[] = [
+  "start",
+  "status",
+  "stop",
+];
+
+const PLUGIN_SAFE_NESTED_SUBCOMMANDS: readonly string[] = [
+  "list",
+  "import",
+  "install",
+  "uninstall",
+  "enable",
+  "disable",
+  "validate",
+];
+
+const REQUIRED_HELP_COMMANDS: readonly string[] = [
+  ...TOP_LEVEL_HELP_COMMANDS,
+  ...ALL_TWELVE_SUBCOMMANDS.map((sub) => `${BINARY_PATH} help ${sub} < /dev/null`),
+  ...FLAG_DOCUMENTED_SUBCOMMANDS.flatMap((sub) => [
+    `${BINARY_PATH} ${sub} --help < /dev/null`,
+    `${BINARY_PATH} ${sub} -h < /dev/null`,
+  ]),
+  ...MCP_NESTED_SUBCOMMANDS.flatMap((nested) => [
+    `${BINARY_PATH} mcp ${nested} --help < /dev/null`,
+    `${BINARY_PATH} mcp ${nested} -h < /dev/null`,
+    `${BINARY_PATH} help mcp ${nested} < /dev/null`,
+  ]),
+  ...REMOTE_CONTROL_NESTED_SUBCOMMANDS.flatMap((nested) => [
+    `${BINARY_PATH} remote-control ${nested} --help < /dev/null`,
+    `${BINARY_PATH} remote-control ${nested} -h < /dev/null`,
+    `${BINARY_PATH} help remote-control ${nested} < /dev/null`,
+  ]),
+  ...PLUGIN_SAFE_NESTED_SUBCOMMANDS.flatMap((nested) => [
+    `${BINARY_PATH} help plugin ${nested} < /dev/null`,
+    `${BINARY_PATH} plugin help ${nested} < /dev/null`,
+    `${BINARY_PATH} help plugins ${nested} < /dev/null`,
+    `${BINARY_PATH} plugins help ${nested} < /dev/null`,
+  ]),
+];
+
 function readInvestigationReport(): string {
   return readFileSync(REPORT_PATH, "utf8");
 }
@@ -57,6 +147,57 @@ function extractCapabilityRecordSection(report: string): ExtractedRecordBlock {
     recordedFilename: filenameMatch?.[1] ?? null,
     recordedSha256: sha256Match?.[1] ?? null,
   };
+}
+
+function extractCommandCaptures(report: string): readonly CapturedCommandBlock[] {
+  const captureRegex =
+    /^- \*\*Command:\*\* `([^`\n]+)`\n- \*\*Exit status:\*\* `(-?\d+)`\n- \*\*Stdout \((\d+) bytes\):\*\*\n```text\n([\s\S]*?)```\n- \*\*Stderr \((\d+) bytes\):\*\*\n```text\n([\s\S]*?)```/gm;
+  const captures: CapturedCommandBlock[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = captureRegex.exec(report)) !== null) {
+    captures.push({
+      command: match[1]!,
+      exitStatus: Number(match[2]!),
+      stdoutDeclaredBytes: Number(match[3]!),
+      stdout: match[4]!,
+      stderrDeclaredBytes: Number(match[5]!),
+      stderr: match[6]!,
+    });
+  }
+  return captures;
+}
+
+function hasKeyRecursive(value: unknown, targetKey: string): boolean {
+  if (typeof value !== "object" || value === null) return false;
+  if (Array.isArray(value)) {
+    return value.some((item) => hasKeyRecursive(item, targetKey));
+  }
+  if (Object.prototype.hasOwnProperty.call(value, targetKey)) return true;
+  return Object.values(value as Record<string, unknown>).some((nested) =>
+    hasKeyRecursive(nested, targetKey),
+  );
+}
+
+function assertNoUnacceptedIdentityClaim(text: string): void {
+  const clauses = text.split(/[.!?\n]+/);
+  for (const clause of clauses) {
+    if (
+      /\b(?:config get model|init\.model|--model|requested-model echo)\b/i.test(clause) &&
+      /\b(?:pass(?:es|ing)?|accept(?:s|ed|able|ing)?|qualif(?:y|ies|ied|ying)|satisf(?:y|ies|ied|ying)|valid|sufficient)\b/i.test(
+        clause,
+      )
+    ) {
+      expect(clause).toMatch(
+        /\b(?:no|not|never|neither|nor|none|cannot|fails?|failing|failed|ineligible|rejected|omits?|omitted|absent|unaccepted)\b/i,
+      );
+      expect(clause).not.toMatch(
+        /(?:^|[,;])\s*(?:agy\s+)?(?:config get model|init\.model|--model|a?\s*requested-model echo)\s+(?:is|are|was|were)?\s*(?:accepted|passing|valid|sufficient)\b/i,
+      );
+      expect(clause).not.toMatch(
+        /(?:^|[,;])\s*(?:agy\s+)?(?:config get model|init\.model|--model|a?\s*requested-model echo)\s+(?:pass(?:es)?|qualif(?:y|ies)|satisf(?:y|ies))\b/i,
+      );
+    }
+  }
 }
 
 test("an Antigravity capability record exists and states an explicit overall verdict", () => {
@@ -140,6 +281,11 @@ test("a failing investigation still persists a record and a report", () => {
   expect(recordedFilename).toBe(capabilityRecordFilename(record));
   expect(recordedSha256).toBe(computedSha256);
 
+  expect(report).not.toMatch(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
+  expect(report).not.toMatch(/\bsk-[A-Za-z0-9_-]{8,}/);
+  expect(report).not.toMatch(/\bya29\.[A-Za-z0-9._-]+/);
+  expect(report).not.toMatch(/\bAIza[0-9A-Za-z_-]{20,}/);
+
   expect(report).toContain(record.binary_path);
   expect(report).toContain(record.binary_sha256);
   expect(report).toContain(record.cli_version);
@@ -151,6 +297,73 @@ test("a failing investigation still persists a record and a report", () => {
   expect(report).toContain(
     "structured per-session or per-response metadata naming the provider and exact model actually used",
   );
+
+  const streamHeaderRegex = /^- \*\*(Stdout|Stderr) \((\d+) bytes\):\*\*\n```text\n([\s\S]*?)```/gm;
+  let streamHeaderCount = 0;
+  let streamMatch: RegExpExecArray | null;
+  while ((streamMatch = streamHeaderRegex.exec(report)) !== null) {
+    streamHeaderCount += 1;
+    const declaredBytes = Number(streamMatch[2]!);
+    const content = streamMatch[3]!;
+    expect(Buffer.byteLength(content, "utf8")).toBe(declaredBytes);
+  }
+
+  const captures = extractCommandCaptures(report);
+  expect(captures.length).toBeGreaterThan(0);
+  expect(streamHeaderCount).toBe(captures.length * 2);
+
+  for (const capture of captures) {
+    expect(Buffer.byteLength(capture.stdout, "utf8")).toBe(capture.stdoutDeclaredBytes);
+    expect(Buffer.byteLength(capture.stderr, "utf8")).toBe(capture.stderrDeclaredBytes);
+  }
+
+  const byCommand = new Map<string, CapturedCommandBlock[]>();
+  for (const capture of captures) {
+    const list = byCommand.get(capture.command) ?? [];
+    list.push(capture);
+    byCommand.set(capture.command, list);
+  }
+
+  const whichCmd = "command -v agy < /dev/null";
+  const shasumCmd = `shasum -a 256 ${record.binary_path} < /dev/null`;
+  const versionCmd = `${record.binary_path} --version < /dev/null`;
+
+  const whichCaptures = byCommand.get(whichCmd) ?? [];
+  expect(whichCaptures.length).toBeGreaterThanOrEqual(2);
+  for (const c of whichCaptures) {
+    expect(c.exitStatus).toBe(0);
+    expect(c.stdout).toBe(`${record.binary_path}\n`);
+  }
+
+  const shasumCaptures = byCommand.get(shasumCmd) ?? [];
+  expect(shasumCaptures.length).toBeGreaterThanOrEqual(2);
+  for (const c of shasumCaptures) {
+    expect(c.exitStatus).toBe(0);
+    expect(c.stdout).toBe(`${record.binary_sha256}  ${record.binary_path}\n`);
+  }
+
+  const versionCaptures = byCommand.get(versionCmd) ?? [];
+  expect(versionCaptures.length).toBeGreaterThanOrEqual(3);
+  for (const c of versionCaptures) {
+    expect(c.exitStatus).toBe(0);
+    expect(c.stdout).toBe(`${record.cli_version}\n`);
+  }
+
+  expect(captures[0]?.command).toBe(whichCmd);
+  expect(captures[1]?.command).toBe(shasumCmd);
+  expect(captures[2]?.command).toBe(versionCmd);
+  expect(captures[captures.length - 3]?.command).toBe(whichCmd);
+  expect(captures[captures.length - 2]?.command).toBe(shasumCmd);
+  expect(captures[captures.length - 1]?.command).toBe(versionCmd);
+
+  for (const helpCmd of REQUIRED_HELP_COMMANDS) {
+    const found = byCommand.get(helpCmd) ?? [];
+    expect(found.length).toBe(1);
+  }
+
+  for (const capture of captures) {
+    expect(capture.command).not.toMatch(/\/agy\s+plugins?\s+\S+\s+(?:--help|-h|-help)\b/);
+  }
 });
 
 test("no configured model string is accepted as identity evidence", () => {
@@ -164,13 +377,38 @@ test("no configured model string is accepted as identity evidence", () => {
 
   const facts = record.identity_attestation.sanitized_facts;
   expect(facts).toContain(
-    "a documented CLI or API primitive returning the resolved provider and exact model for the actual session",
+    "Spec section 2.2 requires either a documented CLI or API primitive returning the resolved provider and exact model for the actual session, or structured per-session or per-response metadata naming the provider and exact model actually used.",
   );
-  expect(facts).toContain(
-    "structured per-session or per-response metadata naming the provider and exact model actually used",
-  );
+  expect(facts).toContain("Neither clause is met");
   expect(facts).toContain("config get model");
-  expect(facts).not.toMatch(/config get model[^.\n]*\bpass(?:es|ing)?\b/i);
-  expect(facts).not.toMatch(/init\.model[^.\n]*\bpass(?:es|ing)?\b/i);
-  expect(facts).not.toMatch(/--model[^.\n]*\bpass(?:es|ing)?\b/i);
+  expect(facts).toContain("init.model");
+  expect(report).toContain(
+    "**Failing identity evidence (all of these):** configuration files; requested flags or environment values",
+  );
+
+  assertNoUnacceptedIdentityClaim(facts);
+  assertNoUnacceptedIdentityClaim(report);
+
+  const captures = extractCommandCaptures(report);
+  const structuredCaptures = captures.filter(
+    (c) =>
+      c.command.includes("--output-format json") ||
+      c.command.includes("--output-format stream-json"),
+  );
+  expect(structuredCaptures.length).toBe(4);
+
+  if (record.identity_attestation.result === "fail" || record.overall === "fail") {
+    for (const capture of structuredCaptures) {
+      expect(capture.stdout).not.toMatch(/"provider"\s*:/);
+      const lines = capture.stdout
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+      expect(lines.length).toBeGreaterThan(0);
+      for (const line of lines) {
+        const parsedLine = JSON.parse(line) as unknown;
+        expect(hasKeyRecursive(parsedLine, "provider")).toBe(false);
+      }
+    }
+  }
 });
