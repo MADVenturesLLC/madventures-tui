@@ -8,3 +8,23 @@ export {
 
 export { runPurePreflight } from "./preflight";
 export type { PreflightInput, PreflightFailure, PreflightOk, PreflightResult, LaunchPlan, LaunchExecution } from "./preflight";
+
+export { BUILD_STEPS, runTransactionalBuild } from "./build";
+export type {
+  BuildAdapterHandle,
+  BuildChildResource,
+  BuildFailureCode,
+  BuildHostResource,
+  BuildInput,
+  BuildLifelineResource,
+  BuildResult,
+  BuildStep,
+  BuildStepObservation,
+  BuildSurfaceRegistration,
+  CreatedBuildResource,
+  LiveReattestationInput,
+  LiveReattestationRecord,
+  LiveReattestationResult,
+  LiveSurfaceAttester,
+  PartialBuildState,
+} from "./build";
