@@ -967,3 +967,87 @@ Round 2's resolution, recorded above as pending, is now closed:
   milestone 6 stays at **0**.
 - **Not authorized here:** Task 46 before the filing pull request of act C1 has merged, Task 47 and
   every later task.
+
+## Task 46 review verdict FAIL (rubric milestone 6 round 1 for the new builder)
+
+- **Recorded:** 2026-10-16, under FOUNDER-ACT-20261016-TASK46-CORRECTION
+  (`docs/decisions/DEC-20261016-02-task46-correction.md`) B1 and C1, for the review of
+  FOUNDER-ACT-20261014-TASK46-EXECUTION-AUTHORIZATION
+  (`docs/decisions/DEC-20261014-03-task46-transactional-build.md`) E4.
+- **Plan milestone:** M21, Task 46. **Rubric milestone:** 6.
+- **Head reviewed:** `2acdab6ab0930ecb5e280088a957157da904ee22`, the Task 46 round 1 commit on PR #155
+  (`build/m21-task46-r1`), built by `session:antigravity/m21-task46-r1` from binding base
+  `be996b1fd7ccbc1f5fdee914b1e9de31020b8461`.
+- **Reviewer:** `codex`, independent and non-authoring, in a fresh session and clone on the Founder's
+  Ubuntu PC.
+- **Verdict text SHA-256:** `206b7ae9575c9f8d6a187d180050e99745ebf56e66a28627c5acb50267a2865c`, 14,507
+  bytes, 262 lines, posted on PR #155 as comment 6207017331. That comment omitted the header lines
+  naming the reviewer id, the head and the verdict, which DEC-20261016-02 A1 records: reviewer id
+  `codex`, head `2acdab6ab0930ecb5e280088a957157da904ee22`, verdict FAIL.
+- **Result:** FAIL. Items 2 to 6 of E4 returned PASS and item 1 returned FAIL on four substantive
+  findings:
+  1. `lifelines` created unbound placeholder records while `spawnPtyHost` in `hosts` created the
+     anonymous lifeline, the host and the child launch in one call, leaving partial state on a failure
+     injected at `children` without child records;
+  2. an exception thrown by a caller-supplied observer after `session_activated` or
+     `fencing_token_issued`, or at `storage`, changed the returned result, omitted resources or
+     rejected the promise;
+  3. `detail` copied raw text from a failing attester and from a thrown exception where metadata only
+     was required;
+  4. the package index exported `runTransactionalBuild(input)` with test-only seams (`registration`,
+     `spawnHost`, `sources`, `terminateProcess`, `observers`) on the public input.
+  The reviewer also showed that removing the provider comparison from `reattest` left all four tests
+  passing.
+- **Counted:** one round under rubric milestone 6 for the new builder (DEC-20261014-01 B2,
+  DEC-20261014-03 B10, DEC-20261016-02 B1): round **1** of 2 for the new builder under rubric
+  milestone 6 (total rubric milestone 6 rounds: **1**). Rubric milestone 1 stays at **5** prior to the
+  Task 56 entry below. Rubric milestone 4 stays at **3**.
+- **Ruling:** DEC-20261016-02 accepts the verdict, fixes the step/resource mapping and public/internal
+  interface split in B2 to B6, and authorizes one correction commit on `build/m21-task46-r1`
+  (`session:antigravity/m21-task46-r2`) on the Founder's MacBook, followed by a fresh Codex re-review
+  (`codex`) on the MacBook.
+- **Not authorized here:** Task 47, leaving draft or merging PR #155, or closing M21.
+
+## Task 56 review verdict FAIL (rubric milestone 1 round 1 for the new builder)
+
+- **Recorded:** 2026-10-16, under FOUNDER-ACT-20261016-TASK56-CORRECTION-AND-MACBOOK-HOST
+  (`docs/decisions/DEC-20261016-03-task56-correction.md`) B1 and C1, for the review of
+  FOUNDER-ACT-20261015-TASK56-EXECUTION-AUTHORIZATION
+  (`docs/decisions/DEC-20261015-04-task56-antigravity-investigation.md`) E4.
+- **Plan milestone:** M25, Task 56. **Rubric milestone:** 1.
+- **Head reviewed:** `9302c8247cfad2b14cfded49ef382ce85bf0760a`, the Task 56 round 1 commit on PR #157
+  (`build/m25-task56-r1`), built by `session:antigravity/m25-task56-r1` from binding base
+  `be996b1fd7ccbc1f5fdee914b1e9de31020b8461` on the Founder's MacBook. Stored capability record
+  `/Users/michaeldaley/Library/Application Support/MADVentures/madventures-tui/capability/antigravity/2026-10-16T03:11:04.805Z-827ba22b4aa3.json`,
+  SHA-256 `704f23d9b6d82834bc23bd84e3ee4a58dcb7732e200ce5b74a3ad24a19982cbb`.
+- **Reviewer:** `codex`, independent and non-authoring, in a fresh session and clone on the Founder's
+  MacBook (host ratified by DEC-20261016-03 B1), reporting a model based on GPT-6 with no exact model
+  identifier exposed.
+- **Verdict text SHA-256:** `91b5e64a4e912bbfeb85762bc5ceeac970dc16eecda5054b8ca64d32f09c1b2b`, 40,433
+  bytes, 745 lines, posted verbatim on PR #157 as comment 6214276402.
+- **Result:** FAIL. Items 1, 3, 4, 6 and 7 of E4 returned PASS (including item 4 with zero required B6
+  field discrepancies on the stored capability record) and items 2 and 5 returned FAIL on two
+  substantive findings:
+  1. documented nested subcommand help (`agy mcp <subcommand> --help`, `agy plugin <subcommand> --help`,
+     `agy remote-control <subcommand> --help`, and `help` and `-h` forms) and `-h` flag forms were
+     omitted from the captured probe set;
+  2. `command -v agy` and the pre-probe and post-probe
+     `shasum -a 256 /Users/michaeldaley/.local/bin/agy` fingerprint checks were summarized in Section 1
+     without their full command, exit status, stdout and stderr capture blocks.
+  Two advisory findings (narrative wording on `init.model`, and four synthetic probe gaps in
+  `test/phase3a/evidence-pipeline.test.ts`) and one non-counting documentation finding (Task 60 `agy`
+  version cited as `1.1.13` instead of `1.1.12`) were also reported.
+- **Counted:** one round under rubric milestone 1 for the new builder (DEC-20261014-01 B2,
+  DEC-20261015-04 B13, DEC-20261016-03 B1): round **1** of 2 for the new builder under rubric
+  milestone 1 (overall rubric milestone 1 historical entries: **6**, consisting of 5 pre-reset rounds
+  plus round 1 for the new builder). Rubric milestone 4 stays at **3**. Rubric milestone 6 stands at
+  **1** (round 1 for the new builder).
+- **Ruling:** DEC-20261016-03 accepts the verdict, preserves the stored capability record
+  `2026-10-16T03:11:04.805Z-827ba22b4aa3.json` (`704f23d9b6d82834bc23bd84e3ee4a58dcb7732e200ce5b74a3ad24a19982cbb`)
+  and its embedded JSON block byte-for-byte unchanged, authorizes one correction commit on
+  `build/m25-task56-r1` (`session:antigravity/m25-task56-r2`) on the Founder's MacBook to complete the
+  help and fingerprint captures and strengthen `test/phase3a/evidence-pipeline.test.ts`, followed by a
+  fresh Codex re-review (`codex`) on the MacBook, and sets the MacBook host and runtime reading for
+  DEC-20261016-01.
+- **Not authorized here:** leaving draft or merging PR #157, closing M25, or certifying Antigravity for
+  live Phase 3A roles.
