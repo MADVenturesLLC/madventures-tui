@@ -1,0 +1,11 @@
+ADDENDUM 2 TO THE TASK 46 BUILDER PROMPT: one re-run of the full suite. Paste this into the Task 46 Antigravity session that stopped after its run task-199. It is signed by the Founder, and it is part of the builder prompt, as addendum 1 is.
+
+Your stop was correct. I rule as follows.
+
+1. The failure. In run task-199, the only failure was "forced cleanup accounts for grace escalation and reaping" in packages/supervisor/test/attestation.test.ts, a Task 45 test on main that your three paths do not touch. Its fixture is a Bun script that installs its SIGTERM handler only when it starts running, and the test aborts the probe on a fixed 100 ms timer. Under full-suite load the abort can arrive before the handler exists, so the child dies on SIGTERM and no SIGKILL follows. That is a timing defect in the Task 45 test, not in Task 46. Your description of the fixture as a bash subshell with trap was inexact; correct it in your report.
+2. One re-run. Before anything else, confirm that the three staged files still have the SHA-256 values your stop report gives: be70eb8699bcac172c8ca1a169659ef7ce0cd8bf6d5d29f32481a297c8883e72 for packages/supervisor/src/build.ts, cd64eaebc96964e2dc6dd2868d98f8a16c020d2e304ddc1603f59fde5be96b69 for packages/supervisor/src/index.ts, and 8f9d311aaa51b58661fc6c5ce1d13b9e7cdb7f504eff97b050af9c5d16151591 for packages/supervisor/test/build-rollback.test.ts, and that no other tracked file differs from the binding base. Then run bare bun test once more, in the foreground, under the PATH of addendum 1, and wait for it to exit.
+3. If that run shows 0 fail, it is the D4 full-suite result. Continue with the commit, the two pull request files, the attribution-shaped-line check and attribution-shape-check.sh, and your final report. Record run task-199, its full failure output and this addendum by its SHA-256 under deviations, in the report and in the pull request description.
+4. If that run shows any failure or error, stop and report it verbatim. Do not run it again, and do not change any test.
+5. You change no file outside the three paths of C1. The Task 45 test stays as it is; I will rule on it separately.
+
+Everything else in the builder prompt, addendum 1 and the acts they name is unchanged.
