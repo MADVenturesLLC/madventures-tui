@@ -1148,12 +1148,14 @@ Round 2's resolution, recorded above as pending, is now closed:
      (reproduced counterexample: `No provider metadata is present; init.model, however, is accepted as identity evidence.`).
 - **Counted:** one round under rubric milestone 1 (DEC-20261017-01 B1/B7, Spec §7.6): round **3** of 2 for
   Gemini Antigravity under rubric milestone 1 (overall rubric milestone 1 historical entries: **9**, consisting
-  of 5 pre-reset rounds plus 3 rounds for Gemini Antigravity). Reassignment is mandatory under Spec §7.6
+  of 5 pre-reset rounds plus 4 post-reset Task 56 verdict entries: 3 counted rounds for Gemini Antigravity
+  and 1 uncounted round under DEC-20261017-01). Reassignment is mandatory under Spec §7.6
   ("more than two correction rounds on one milestone" and "the same substantive defect recurs after a claimed
   correction"). Rubric milestone 4 stays at **3**. Rubric milestone 6 stands at **1**.
 - **Ruling:** DEC-20261017-02 accepts the review report, reassigns Gemini Antigravity under Spec §7.6,
   preserves the sound implementation, 92 probe captures, report markdown, and capability records unchanged under
-  Plan §11.4, and authorizes successor builder Codex CLI (`session:codex/m25-task56-r5`) on the Founder's MacBook
+  Plan §11.4, amends DEC-20261014-01 B4 to permit independent Gemini Antigravity Tier-2 review of Codex work,
+  authorizes successor builder Codex CLI (`session:codex/m25-task56-r5`) on the Founder's MacBook
   to apply the exact correction for `assertNoUnacceptedIdentityClaim` on top of `ae1bc8178c6ce78f750925443c54422d359a2ff7`,
   followed by fresh independent Tier-2 review by Gemini Antigravity (`antigravity`) on the MacBook.
 - **Not authorized here:** leaving draft or merging PR #157, closing M25, or certifying Antigravity for live Phase 3A roles.
