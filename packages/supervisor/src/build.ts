@@ -35,6 +35,7 @@ import {
   type RuntimeBrokerDeps,
   type RuntimeBrokerSources,
 } from "../../broker/src/runtime-broker";
+import { projectSnapshot } from "../../broker/src/snapshot";
 import type { LaunchExecution, LaunchPlan } from "./preflight";
 
 /**
@@ -856,6 +857,7 @@ export async function runTransactionalBuildWithDependencies(
             return failAt(step, "activation_failed");
           }
           const { state: beforeState, head: beforeHead } = replayLedgerState(ledger);
+          const beforeSnapshot = await client.getSnapshot();
           const readyIds = children.map((child) => child.executionId);
           const activatedEvent: SessionLifecycleEventV1 = {
             protocol_version: PROTOCOL_VERSION,
@@ -884,6 +886,39 @@ export async function runTransactionalBuildWithDependencies(
           try {
             activeSnapshot = await client.getSnapshot();
           } catch {}
+          if (activeSnapshot === null || activeSnapshot.phase !== "active") {
+            const stamp: StampedBrokerSnapshot = activeSnapshot ?? beforeSnapshot;
+            try {
+              activeSnapshot = Object.freeze({
+                ...projectSnapshot(currentBroker.snapshotProjectionInput()),
+                snapshotSeq: stamp.snapshotSeq,
+                connected: stamp.connected,
+              });
+            } catch {}
+            if (activeSnapshot === null || activeSnapshot.phase !== "active") {
+              // Durable activation succeeds even when every subsequent snapshot read fails.
+              activeSnapshot = Object.freeze({
+                ...beforeSnapshot,
+                phase: "active" as const,
+                fencingToken: beforeState.fencingToken ?? 1,
+                tokenState: "valid" as const,
+                activeWriterExecutionId: beforeSnapshot.activeWriterExecutionId ?? envelope.initial_writer,
+                ledgerSeq: sessionActivatedRow.sequence,
+                snapshotSeq: stamp.snapshotSeq,
+                eventLog: Object.freeze([
+                  ...beforeSnapshot.eventLog,
+                  Object.freeze({
+                    seq: sessionActivatedRow.sequence,
+                    type: activatedEvent.event_type,
+                    actor: activatedEvent.actor,
+                    fencingToken: activatedEvent.fencing_token,
+                    hash: sessionActivatedRow.event_hash,
+                    timestamp: sessionActivatedRow.created_at,
+                  }),
+                ]),
+              });
+            }
+          }
           try {
             observeLifecycle?.({
               snapshotSeq: localObservationSeq,

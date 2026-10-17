@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, expect, spyOn, test } from "bun:test";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -26,6 +26,7 @@ import {
   type PartialBuildState,
 } from "../src/build";
 import * as supervisorIndex from "../src/index";
+import { RuntimeBroker } from "../../broker/src/runtime-broker";
 
 const roots: string[] = [];
 const statesToClean: PartialBuildState[] = [];
@@ -519,6 +520,57 @@ test("no active snapshot is exposed before both startup records are durable", as
     expect(obsActivateResult.state.sessionActivatedRow).not.toBeNull();
     expect(obsActivateResult.state.resources.some((r) => r.step === "issue_token")).toBe(true);
     expect(obsActivateResult.state.resources.some((r) => r.step === "activate")).toBe(true);
+  }
+
+  // DEC-20261017-03 B4: snapshot collection cannot reverse a durable activation.
+  const readProjection = RuntimeBroker.prototype.snapshotProjectionInput;
+  for (const fault of ["reject_once", "reject_always", "inactive"] as const) {
+    let activeReads = 0;
+    const projection = spyOn(RuntimeBroker.prototype, "snapshotProjectionInput").mockImplementation(function (this: RuntimeBroker) {
+      const input = readProjection.call(this);
+      if (input.lifecycle.phase === "active") {
+        activeReads += 1;
+        if (fault === "reject_always" || (fault === "reject_once" && activeReads === 1)) {
+          throw new Error("SYNTHETIC-ACTIVE-SNAPSHOT-READ-ERROR");
+        }
+        if (fault === "inactive") {
+          return { ...input, lifecycle: { ...input.lifecycle, phase: "starting" as const } };
+        }
+      }
+      return input;
+    });
+    try {
+      const fSnapshot = makeBuildFixture(`ses-task46-snapshot-${fault}`);
+      const snapshotResult = await fSnapshot.run();
+      expect(snapshotResult.ok).toBe(true);
+      expect(activeReads).toBeGreaterThanOrEqual(2);
+      if (snapshotResult.ok) {
+        expect(snapshotResult.snapshot.phase).toBe("active");
+        expect(snapshotResult.snapshot.fencingToken).toBe(1);
+        expect(snapshotResult.snapshot.tokenState).toBe("valid");
+        expect(snapshotResult.snapshot.activeWriterExecutionId).toBe("builder");
+        expect(snapshotResult.snapshot.ledgerSeq).toBe(3);
+        expect(snapshotResult.snapshot.eventLog.map((entry) => entry.type)).toEqual([
+          "session_open",
+          "fencing_token_issued",
+          "session_activated",
+        ]);
+        expect(snapshotResult.snapshot.eventLog[2]!.hash).toBe(snapshotResult.state.sessionActivatedRow!.event_hash);
+        expect(snapshotResult.steps).toEqual(BUILD_STEPS);
+        expect(snapshotResult.state.completedSteps).toEqual(BUILD_STEPS);
+        expect(snapshotResult.state.fencingTokenIssued).toBe(true);
+        expect(snapshotResult.state.sessionActivatedRow!.sequence).toBe(3);
+        expect(snapshotResult.state.resources.map((resource) => resource.step)).toEqual(
+          result.ok ? result.state.resources.map((resource) => resource.step) : [],
+        );
+        expect(snapshotResult.state.ledger!.readAfter(0)).toHaveLength(3);
+        projection.mockRestore();
+        const nextSnapshot = await snapshotResult.state.client!.getSnapshot();
+        expect(nextSnapshot.snapshotSeq).toBe(snapshotResult.snapshot.snapshotSeq + 1);
+      }
+    } finally {
+      projection.mockRestore();
+    }
   }
 });
 
