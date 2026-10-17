@@ -1,4 +1,4 @@
-# DEC-20261017-03 — Native agent v0: new app authorization, credential shape and sequencing
+# DEC-20261017-04 — Native agent v0: new app authorization, credential shape and sequencing
 
 Act identifier: `FOUNDER-ACT-20261017-NATIVE-AGENT-V0`
 
