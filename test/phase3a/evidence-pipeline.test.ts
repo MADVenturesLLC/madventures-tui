@@ -208,10 +208,13 @@ function assertNoUnacceptedIdentityClaim(text: string): void {
         /\b(?:no|not|never|neither|nor|none|cannot|fails?|failing|failed|ineligible|rejected|omits?|omitted|absent|unaccepted)\b/i,
       );
       expect(clause).not.toMatch(
-        /(?:^|[,;:]|\b(?:and|but|while|whereas|yet|however)\b)\s*(?:[-*]\s+)?(?:the\s+|a\s+|an\s+)?(?:agy\s+)?[`"']?(?:config get model|init\.model|--model|requested-model echo)[`"']?(?:\s+flag)?\s+(?:is|are|was|were)?\s*(?:accepted|passing|valid|sufficient)\b/i,
+        /(?:^|[,;:]|\b(?:and|but|while|whereas|yet|however|so|because|since|although|though|therefore|thus|hence)\b)\s*(?!(?:neither|nor|no|not)\b)(?:[-*]\s+)?(?:the\s+|a\s+|an\s+)?(?:agy\s+)?[`"']?(?:config get model|init\.model|--model|requested-model echo)[`"']?(?:\s+flag)?\s+(?:is|are|was|were)?\s*(?!(?:not|never|neither|fails?\s+to\s+be|ineligible\s+as)\b)(?:accepted|passing|valid|sufficient)\b/i,
       );
       expect(clause).not.toMatch(
-        /(?:^|[,;:]|\b(?:and|but|while|whereas|yet|however)\b)\s*(?:[-*]\s+)?(?:the\s+|a\s+|an\s+)?(?:agy\s+)?[`"']?(?:config get model|init\.model|--model|requested-model echo)[`"']?(?:\s+flag)?\s+(?:pass(?:es)?|qualif(?:y|ies)|satisf(?:y|ies))\b/i,
+        /(?:^|[,;:]|\b(?:and|but|while|whereas|yet|however|so|because|since|although|though|therefore|thus|hence)\b)\s*(?!(?:neither|nor|no|not)\b)(?:[-*]\s+)?(?:the\s+|a\s+|an\s+)?(?:agy\s+)?[`"']?(?:config get model|init\.model|--model|requested-model echo)[`"']?(?:\s+flag)?\s+(?!(?:does|do|did)?\s*(?:not|never|fails?\s+to)\b)(?:pass(?:es)?|qualif(?:y|ies)|satisf(?:y|ies))\b/i,
+      );
+      expect(clause).not.toMatch(
+        /(?<!\b(?:neither|nor|no|not|never)\s+(?:(?:the|a|an|any)\s+)?(?:agy\s+)?[`"']?)(?<!\bnor\s+(?:any\s+)?[`"']?(?:config get model|init\.model|--model|requested-model echo)[`"']?(?:\s+flag)?\s+or\s+(?:(?:the|a|an|any)\s+)?(?:agy\s+)?[`"']?)(?:config get model|init\.model|--model|requested-model echo)\b[`"']?(?:\s+flag)?\)?(?:\s+(?!not\b|never\b|neither\b|nor\b|none\b|cannot\b|fails?\b|failing\b|failed\b|ineligible\b|rejected\b|unaccepted\b)[`"'\w()-]+){0,6}\s+\b(?:accept(?:s|ed|able|ing)?|pass(?:es|ing)?|qualif(?:y|ies|ied|ying)|satisf(?:y|ies|ied|ying)|valid|sufficient)\b/i,
       );
     }
   }
