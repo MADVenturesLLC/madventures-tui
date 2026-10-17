@@ -19,7 +19,7 @@ A4. **Drafting record (`DEC-20261015-05` B7).** These rulings were checked again
 
 ## Part B: Founder rulings
 
-B1. **Round accounting.** Under plan §11.3 and `DEC-20261016-05` B8, Finding 2 is a substantive builder defect under rubric milestone 1. Rubric milestone 1 advances to Round 2 for the new builder. Finding 3 is a documentary gap that carries no separate round.
+B1. **Round accounting.** Under plan §11.3 and `DEC-20261016-05` B8, Finding 2 is a substantive builder defect under rubric milestone 1. Rubric milestone 1 advances to Round 2 for the new builder, recorded in `docs/verification/phase-3a-correction-rounds.md`. Finding 3 is a documentary gap that carries no separate round.
 
 B2. **Supervisor attestation timing race rule on macOS (modifying `DEC-20261016-03` B5 and `DEC-20261016-04` B8).** The test `packages/supervisor/test/attestation.test.ts` is outside Task 56 scope and exhibits the known 100 ms `AbortController` timing race analyzed in `DEC-20261016-01` A3. If `packages/supervisor/test/attestation.test.ts` fails during `bun test` with the signal sequence mismatch on line 71, verification of the full suite is satisfied if running `bun test packages/supervisor/test/attestation.test.ts` alone in foreground achieves at least one clean pass (21 pass, 0 fail) in up to three sequential attempts. If it fails all three attempts or fails on any other assertion or file, the stop rule of `DEC-20261016-04` B8 applies.
 
@@ -39,11 +39,13 @@ B8. **The review (`DEC-20261016-05` B8).** A fresh Codex session on my MacBook t
 
 B9. **Order on the MacBook (`DEC-20261016-05` B9).** This build and its review run one session at a time, before or after the Task 46 correction build and its review as I direct in the builder prompts, and never at the same time as either.
 
-## Part C: Scope
+## Part C: Scope and filing
 
-C1. One commit on `build/m25-task56-r1`, on top of `e1f3cda892250b91ccb25b6e0409dcb5a2a10da9`, that changes `test/phase3a/evidence-pipeline.test.ts` (and `docs/verification/2026-08-12-antigravity-surface-investigation.md` only if necessary for consistency). Every other path stays byte-identical to `be996b1fd7ccbc1f5fdee914b1e9de31020b8461`, including `bun.lock`, every manifest, the adapter registry and `packages/adapter-antigravity`.
+C1. Under `DEC-20261015-05` B3, this act is filed on `main` together with the Task 56 round 2 review verdict entry in `docs/verification/phase-3a-correction-rounds.md` before the Round 3 correction build starts.
 
-C2. Outside the clone, the builder writes only its scratch files and the pull request description at `/Users/michaeldaley/task56-r1-pr/pr-body-r3.md`.
+C2. One commit on `build/m25-task56-r1`, on top of `e1f3cda892250b91ccb25b6e0409dcb5a2a10da9`, that changes `test/phase3a/evidence-pipeline.test.ts` (and `docs/verification/2026-08-12-antigravity-surface-investigation.md` only if necessary for consistency). Every other path stays byte-identical to `be996b1fd7ccbc1f5fdee914b1e9de31020b8461`, including `bun.lock`, every manifest, the adapter registry and `packages/adapter-antigravity`.
+
+C3. Outside the clone, the builder writes only its scratch files and the pull request description at `/Users/michaeldaley/task56-r1-pr/pr-body-r3.md`.
 
 ## Part D: Verification
 
@@ -75,7 +77,7 @@ E2. The builder makes no GitHub call. I push the commit to `build/m25-task56-r1`
 - Re-executing `agy` probes, running `agy update`, `agy install`, or any install, restore, update or downgrade of `agy`.
 - Any sign-in, sign-out or configuration change, and any live or governed session of a real surface.
 - Deleting, moving or modifying either capability record: `2026-10-16T03:11:04.805Z-827ba22b4aa3.json` (`704f23d9b6d82834bc23bd84e3ee4a58dcb7732e200ce5b74a3ad24a19982cbb`) or `2026-10-16T20:43:50.078Z-a4502aaf310b.json` (`0b7e9d47a31d4e9439ad1846f949f57518defcebfe3ef6ab0dbbfa98673ee983`).
-- Any change outside C1.
+- Any change outside C2.
 - Leaving draft or merging pull request 157 before the review of B8 passes.
 
 ## Part G: Signature

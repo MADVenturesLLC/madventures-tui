@@ -1051,3 +1051,48 @@ Round 2's resolution, recorded above as pending, is now closed:
   DEC-20261016-01.
 - **Not authorized here:** leaving draft or merging PR #157, closing M25, or certifying Antigravity for
   live Phase 3A roles.
+
+## Task 56 review verdict FAIL (rubric milestone 1 round 2 for the new builder)
+
+- **Recorded:** 2026-10-16, under FOUNDER-ACT-20261016-TASK56-REVIEW-CORRECTION
+  (`docs/decisions/DEC-20261016-06-task56-review-correction.md`) B1 and C1, for the review of
+  FOUNDER-ACT-20261016-TASK56-HELP-SCOPE-CORRECTION
+  (`docs/decisions/DEC-20261016-05-task56-help-scope-correction.md`) B8.
+- **Plan milestone:** M25, Task 56. **Rubric milestone:** 1.
+- **Head reviewed:** `e1f3cda892250b91ccb25b6e0409dcb5a2a10da9`, the Task 56 round 2 commit on PR #157
+  (`build/m25-task56-r1`), built by `session:antigravity/m25-task56-r2` from binding base
+  `be996b1fd7ccbc1f5fdee914b1e9de31020b8461` on the Founder's MacBook. Stored capability record
+  `/Users/michaeldaley/Library/Application Support/MADVentures/madventures-tui/capability/antigravity/2026-10-16T20:43:50.078Z-a4502aaf310b.json`,
+  SHA-256 `0b7e9d47a31d4e9439ad1846f949f57518defcebfe3ef6ab0dbbfa98673ee983`. Superseded record
+  `2026-10-16T03:11:04.805Z-827ba22b4aa3.json` (`704f23d9b6d82834bc23bd84e3ee4a58dcb7732e200ce5b74a3ad24a19982cbb`).
+- **Reviewer:** `codex`, independent and non-authoring, in a fresh session and clone on the Founder's
+  MacBook (`/Users/michaeldaley/madventures-tui-m25-task56-codex-r2`), reporting a model based on GPT-6
+  with no exact model identifier exposed.
+- **Verdict text SHA-256:** `6dd5f67cc191ffaedb13f3f9d5756c42e57f39ce244ba337a1c8014ce498891a`, 31,163
+  bytes, 391 lines, saved at `/Users/michaeldaley/task56-r2-input/codex-review-r2.md`.
+- **Result:** FAIL. Items 1 to 6 returned PASS (all 79 permitted help commands captured once, 92 total
+  capture blocks, capability record verified, required failure fields match). Item 7 halted at failure
+  stop before deliberate break testing. Findings:
+  1. Substantive / blocking stop: `packages/supervisor/test/attestation.test.ts:71` failed in `bun test`
+     and on a single foreground rerun (20 pass, 1 fail) due to the known macOS timer race analyzed in
+     `DEC-20261016-01` A3;
+  2. Substantive builder defect: `assertNoUnacceptedIdentityClaim` in
+     `test/phase3a/evidence-pipeline.test.ts` split on punctuation including internal periods, consuming
+     the dot in `init.model` and allowing `init.model is accepted as identity evidence.` to bypass
+     rejection;
+  3. Non-counting documentary gap: tests did not cite the two ratified stop and command evidence records
+     (`builder-stop-r2-reinvestigation.txt` and `builder-step3-commands-r2.txt`).
+- **Counted:** one round under rubric milestone 1 for the new builder (DEC-20261014-01 B2,
+  DEC-20261015-04 B13, DEC-20261016-05 B8, DEC-20261016-06 B1): round **2** of 2 for the new builder
+  under rubric milestone 1 (overall rubric milestone 1 historical entries: **7**, consisting of 5
+  pre-reset rounds plus rounds 1 and 2 for the new builder). Rubric milestone 4 stays at **3**. Rubric
+  milestone 6 stands at **1** (round 1 for the new builder).
+- **Ruling:** DEC-20261016-06 accepts the review stop, clarifies the macOS supervisor attestation test
+  timing race rule (up to 3 foreground runs satisfying verification if at least 1 passes 21/21 clean),
+  preserves the verified 92 probe captures and capability record `2026-10-16T20:43:50.078Z-a4502aaf310b.json`
+  unchanged, authorizes one correction commit on `build/m25-task56-r1` (`session:antigravity/m25-task56-r3`)
+  on the Founder's MacBook to correct `assertNoUnacceptedIdentityClaim` and add documentary evidence
+  citations in `test/phase3a/evidence-pipeline.test.ts`, followed by fresh Codex re-review (`codex`) on
+  the MacBook.
+- **Not authorized here:** leaving draft or merging PR #157, closing M25, or certifying Antigravity for
+  live Phase 3A roles.
