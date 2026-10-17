@@ -1159,3 +1159,43 @@ Round 2's resolution, recorded above as pending, is now closed:
   to apply the exact correction for `assertNoUnacceptedIdentityClaim` on top of `ae1bc8178c6ce78f750925443c54422d359a2ff7`,
   followed by fresh independent Tier-2 review by Gemini Antigravity (`antigravity`) on the MacBook.
 - **Not authorized here:** leaving draft or merging PR #157, closing M25, or certifying Antigravity for live Phase 3A roles.
+
+## Task 46 review verdict FAIL (rubric milestone 6 round 2 for the builder, reassignment under Spec §7.6)
+
+- **Recorded:** 2026-10-17, under FOUNDER-ACT-20261017-TASK46-REASSIGNMENT
+  (`docs/decisions/DEC-20261017-03-task46-reassignment.md`) B1 and C1, for the review of
+  FOUNDER-ACT-20261016-TASK46-CORRECTION
+  (`docs/decisions/DEC-20261016-02-task46-correction.md`) B10.
+- **Plan milestone:** M21, Task 46. **Rubric milestone:** 6.
+- **Head reviewed:** `eb36c0a391e1d9113a612c72279d2b685cfeb07c`, the Task 46 round 2 commit on PR #155
+  (`build/m21-task46-r1`), built by `session:antigravity/m21-task46-r2` from binding base
+  `1ee5a1d5c37fb2c1a77f8b9bf952179c3530f438` on the Founder's MacBook.
+- **Reviewer:** `codex`, independent and non-authoring, in a fresh session and clone on the Founder's
+  MacBook (`/Users/michaeldaley/madventures-tui-m21-task46-codex-r2`), reporting a model based on GPT-6
+  with no exact model identifier exposed.
+- **Verdict text SHA-256:** `d91ea907898b053ffb4afc50d16bf81e4c2d7fe60c1a8a79a9f8ed548017c107`, 26,031
+  bytes, 261 lines, saved at `/Users/michaeldaley/task46-r2-input/codex-review-r2.md`.
+- **Result:** FAIL. Items 1 to 5 returned PASS. Items 6 and 8 halted on verification stops:
+  1. Substantive source defect: in `packages/supervisor/src/build.ts:878-885` and line 941, if
+     `activeSnapshot = await client.getSnapshot()` rejects or throws after `session_activated` is
+     committed to SQLite, `build.ts` falls through to
+     `if (activeSnapshot === null || activeSnapshot.phase !== "active") return failAt("activate", "activation_failed")`,
+     returning a failure result after a durable activation, breaching DEC-20261016-02 B4 and Addendum 3 Reading B item 2;
+  2. Blocking verification stop: `packages/supervisor/test/attestation.test.ts:84`
+     (`malformed JSON and every incorrect auth predicate fail closed`) timed out at 5011.63 ms under
+     multi-file test load on macOS Darwin arm64, outside the narrow signal-sequence exception of
+     DEC-20261017-02 B5.
+- **Counted:** one round under rubric milestone 6 for Gemini Antigravity (DEC-20261016-02 B10,
+  Spec §7.6): round **2** of 2 for Gemini Antigravity under rubric milestone 6 (total rubric milestone 6
+  rounds: **2**). Reassignment is mandatory under Spec §7.6 ("the same substantive defect recurs after a
+  claimed correction"). Rubric milestone 1 stands at **3** (reassigned). Rubric milestone 4 stays at **3**.
+  Rubric milestone 6 stands at **2** (reassigned).
+- **Ruling:** DEC-20261017-03 accepts the review report, reassigns Gemini Antigravity under Spec §7.6,
+  preserves the sound implementation of B2, B3, B5, and B6 in candidate commit `eb36c0a391e1d9113a612c72279d2b685cfeb07c`
+  unchanged under Plan §11.4, amends DEC-20261014-01 B4 to permit independent Gemini Antigravity Tier-2 review
+  of Codex work on Task 46, expands the macOS supervisor attestation test timing exception to cover process-scheduling
+  load timeouts on `attestation.test.ts:84` when verified by isolated rerun, authorizes successor builder
+  Codex CLI (`session:codex/m21-task46-r3`) on the Founder's MacBook to implement the durable-activation snapshot
+  fallback on top of `eb36c0a391e1d9113a612c72279d2b685cfeb07c`, followed by fresh independent Tier-2 review
+  by Gemini Antigravity (`antigravity`) on the MacBook.
+- **Not authorized here:** leaving draft or merging PR #155, closing M21, or Task 47.
