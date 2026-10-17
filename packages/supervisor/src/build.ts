@@ -89,8 +89,8 @@ export interface BuildHostResource {
 export interface BuildChildResource {
   readonly executionId: string;
   readonly hostPid: number;
-  readonly childPid: number;
-  readonly pgid: number;
+  readonly childPid: number | null;
+  readonly pgid: number | null;
   readonly killPgid: () => void;
 }
 
@@ -162,7 +162,7 @@ export type CreatedBuildResource =
 /**
  * PartialBuildState records, in creation order, every resource the build
  * created so Task 47's rollbackBuild can consume it in reverse order
- * (DEC-20261014-03 B2 and B3 as ruled in PR 153 comment 6203414147).
+ * (DEC-20261014-03 B2 and B3; DEC-20261016-02 B2 and B4).
  */
 export interface PartialBuildState {
   readonly sessionId: string;
@@ -197,7 +197,10 @@ export interface BuildInput {
   readonly sessionId: string;
   readonly envelope: TaskEnvelopeV1;
   readonly plan: LaunchPlan;
-  readonly injectFailureAt?: (typeof BUILD_STEPS)[number];
+  readonly injectFailureAt?: BuildStep;
+}
+
+export interface BuildDependencies {
   readonly registration?: (surface: SurfaceId) => BuildSurfaceRegistration | undefined;
   readonly spawnHost?: (descriptor: HostLaunchDescriptor) => PtyHostHandle;
   readonly sources?: RuntimeBrokerSources;
@@ -206,6 +209,8 @@ export interface BuildInput {
   readonly onStep?: (observation: BuildStepObservation) => void | Promise<void>;
   readonly childLaunchTimeoutMs?: number;
 }
+
+export type BuildWithDependenciesInput = BuildInput & BuildDependencies;
 
 export type BuildResult =
   | {
@@ -223,7 +228,6 @@ export type BuildResult =
     };
 
 const DEFAULT_CHILD_LAUNCH_TIMEOUT_MS = 5_000;
-const lifelinesWithBind = new WeakMap<BuildLifelineResource, (fn: () => void) => void>();
 
 function createDefaultSources(): RuntimeBrokerSources {
   let seq = 0;
@@ -278,10 +282,10 @@ async function awaitChildLaunchAndReady(
         deadlinePromise,
       ]);
       if (next.kind === "timeout") {
-        throw new Error(`child launch timed out for execution ${host.executionId}`);
+        throw new Error("child_launch_timeout");
       }
       if (next.res.done) {
-        throw new Error(`host fact stream ended before ready for execution ${host.executionId}`);
+        throw new Error("host_fact_stream_ended");
       }
       const frame = next.res.value;
       if (frame.kind === "launched") {
@@ -293,7 +297,7 @@ async function awaitChildLaunchAndReady(
       } else if (frame.kind === "ready") {
         readyObserved = true;
       } else if (frame.kind === "exited") {
-        throw new Error(`child exited before ready for execution ${host.executionId}`);
+        throw new Error("child_exited_before_ready");
       }
     }
     return launchedFact;
@@ -332,21 +336,72 @@ function defaultFailureCodeForStep(step: BuildStep): BuildFailureCode {
   }
 }
 
+function formatFailureDetail(
+  step: BuildStep,
+  failure: BuildFailureCode,
+  executionIds: readonly string[] = [],
+): string {
+  const validIds = executionIds.filter(
+    (id): id is string => typeof id === "string" && id.length > 0 && /^[A-Za-z0-9._:-]+$/.test(id),
+  );
+  if (validIds.length === 1) {
+    return `step=${step} execution=${validIds[0]} failure=${failure}`;
+  }
+  if (validIds.length > 1) {
+    return `step=${step} executions=${validIds.join(",")} failure=${failure}`;
+  }
+  return `step=${step} failure=${failure}`;
+}
+
 /**
  * Execute the ordered transactional build of Phase 3A Milestone M21 Task 46.
  *
- * On failure at any step, stops immediately at that step without appending
- * session_activated, without exposing an active snapshot, and without
- * unwinding, returning PartialBuildState with every resource created in
- * creation order so Task 47's rollbackBuild can tear it down in reverse order.
+ * Production entry point exported by the package index (DEC-20261016-02 B3):
+ * uses ADAPTER_REGISTRY, spawnPtyHost, and default sources.
  */
 export async function runTransactionalBuild(input: BuildInput): Promise<BuildResult> {
-  const { sessionId, envelope, plan } = input;
-  const sources = input.sources ?? createDefaultSources();
+  const safeInput: BuildInput =
+    input !== null && typeof input === "object"
+      ? {
+          sessionId: input.sessionId,
+          envelope: input.envelope,
+          plan: input.plan,
+          ...(input.injectFailureAt !== undefined ? { injectFailureAt: input.injectFailureAt } : {}),
+        }
+      : ({} as BuildInput);
+  return runTransactionalBuildWithDependencies(safeInput);
+}
+
+/**
+ * Internal module-only test seam (not exported from the package index).
+ * Runs the identical twelve build steps while allowing tests to supply
+ * fixture registrations, host spawners, deterministic sources, terminators,
+ * and observers (DEC-20261016-02 B3).
+ */
+export async function runTransactionalBuildWithDependencies(
+  input: BuildWithDependenciesInput,
+  overrides: BuildDependencies = {},
+): Promise<BuildResult> {
+  const rawInput = (input !== null && typeof input === "object" ? input : {}) as Partial<BuildWithDependenciesInput>;
+  const sessionId = typeof rawInput.sessionId === "string" ? rawInput.sessionId : "";
+  const envelope = rawInput.envelope as TaskEnvelopeV1;
+  const plan = rawInput.plan as LaunchPlan;
+  const injectFailureAt = rawInput.injectFailureAt;
+
+  const sources = overrides.sources ?? rawInput.sources ?? createDefaultSources();
   const resolveRegistration: (surface: SurfaceId) => BuildSurfaceRegistration | undefined =
-    input.registration ?? ((surface: SurfaceId) => ADAPTER_REGISTRY.get(surface));
-  const spawnHost = input.spawnHost ?? spawnPtyHost;
-  const childLaunchTimeoutMs = input.childLaunchTimeoutMs ?? DEFAULT_CHILD_LAUNCH_TIMEOUT_MS;
+    overrides.registration ??
+    rawInput.registration ??
+    ((surface: SurfaceId) => ADAPTER_REGISTRY.get(surface));
+  const spawnHost = overrides.spawnHost ?? rawInput.spawnHost ?? spawnPtyHost;
+  const terminateGovernedProcesses =
+    overrides.terminateGovernedProcesses ?? rawInput.terminateGovernedProcesses;
+  const observeLifecycle = overrides.observeLifecycle ?? rawInput.observeLifecycle;
+  const onStep = overrides.onStep ?? rawInput.onStep;
+  const childLaunchTimeoutMs =
+    overrides.childLaunchTimeoutMs ??
+    rawInput.childLaunchTimeoutMs ??
+    DEFAULT_CHILD_LAUNCH_TIMEOUT_MS;
 
   const completedSteps: BuildStep[] = [];
   const resources: CreatedBuildResource[] = [];
@@ -357,9 +412,11 @@ export async function runTransactionalBuild(input: BuildInput): Promise<BuildRes
   let currentBroker: RuntimeBroker | null = null;
   let brokerHandle: RuntimeBroker | null = null;
   let client: InProcessBrokerClient | null = null;
+  const preparedDescriptors: HostLaunchDescriptor[] = [];
   const lifelines: BuildLifelineResource[] = [];
   const hosts: BuildHostResource[] = [];
   const children: BuildChildResource[] = [];
+  const childResourceIndices = new Map<number, number>();
   const reattestations: LiveReattestationRecord[] = [];
   const adapters: BuildAdapterHandle[] = [];
   let fencingToken: number | null = null;
@@ -398,7 +455,7 @@ export async function runTransactionalBuild(input: BuildInput): Promise<BuildRes
     },
     sources,
     terminateGovernedProcesses:
-      input.terminateGovernedProcesses ??
+      terminateGovernedProcesses ??
       (async () => {
         for (const host of hosts) {
           try {
@@ -410,20 +467,20 @@ export async function runTransactionalBuild(input: BuildInput): Promise<BuildRes
         }
       }),
     observe: (obs) => {
-      input.observeLifecycle?.(obs);
+      observeLifecycle?.(obs);
     },
   });
 
   const failAt = (
     step: BuildStep,
     failure: BuildFailureCode,
-    detail: string,
+    executionIds: readonly string[] = [],
   ): BuildResult =>
     Object.freeze({
       ok: false as const,
       failedStep: step,
       failure,
-      detail,
+      detail: formatFailureDetail(step, failure, executionIds),
       partialState: snapshotPartialState(),
     });
 
@@ -431,14 +488,27 @@ export async function runTransactionalBuild(input: BuildInput): Promise<BuildRes
 
   for (let index = 0; index < BUILD_STEPS.length; index += 1) {
     const step = BUILD_STEPS[index]!;
+    let currentExecutionIds: readonly string[] = [];
 
-    if (input.injectFailureAt === step) {
-      return failAt(step, "injected_failure", `injected failure at step ${step}`);
+    if (injectFailureAt === step) {
+      return failAt(step, "injected_failure");
     }
 
     try {
       switch (step) {
         case "storage": {
+          if (
+            sessionId.length === 0 ||
+            plan === undefined ||
+            plan === null ||
+            typeof plan.storageRoot !== "string" ||
+            plan.repositoryFingerprint === undefined ||
+            plan.repositoryFingerprint === null ||
+            envelope === undefined ||
+            envelope === null
+          ) {
+            return failAt(step, "storage_failed");
+          }
           storage = createSessionStorage(
             plan.storageRoot,
             sessionId,
@@ -451,7 +521,7 @@ export async function runTransactionalBuild(input: BuildInput): Promise<BuildRes
 
         case "ledger_open": {
           if (storage === null) {
-            return failAt(step, "ledger_open_failed", "storage not initialized before ledger_open");
+            return failAt(step, "ledger_open_failed");
           }
           ledgerPath = join(storage.ledgerDir, "ledger.sqlite3");
           ledger = new Ledger(ledgerPath);
@@ -460,8 +530,8 @@ export async function runTransactionalBuild(input: BuildInput): Promise<BuildRes
         }
 
         case "session_open": {
-          if (ledger === null) {
-            return failAt(step, "session_open_failed", "ledger not opened before session_open");
+          if (ledger === null || !Array.isArray(envelope.executions)) {
+            return failAt(step, "session_open_failed");
           }
           const sessionOpenEvent: SessionLifecycleEventV1 = {
             protocol_version: PROTOCOL_VERSION,
@@ -488,7 +558,7 @@ export async function runTransactionalBuild(input: BuildInput): Promise<BuildRes
 
         case "broker": {
           if (ledger === null) {
-            return failAt(step, "broker_failed", "ledger not opened before broker construction");
+            return failAt(step, "broker_failed");
           }
           const deps = makeBrokerDeps(ledger);
           currentBroker = new RuntimeBroker(deps);
@@ -535,7 +605,7 @@ export async function runTransactionalBuild(input: BuildInput): Promise<BuildRes
 
         case "client": {
           if (brokerHandle === null) {
-            return failAt(step, "client_failed", "broker not constructed before client construction");
+            return failAt(step, "client_failed");
           }
           client = createInProcessBrokerClient(brokerHandle, { kind: "founder_tui" });
           resources.push(Object.freeze({ step: "client", client }));
@@ -543,57 +613,100 @@ export async function runTransactionalBuild(input: BuildInput): Promise<BuildRes
         }
 
         case "lifelines": {
-          if (plan.executions.length !== envelope.executions.length) {
-            return failAt(step, "lifeline_failed", "launch plan execution count does not match envelope");
+          if (
+            !Array.isArray(plan.executions) ||
+            !Array.isArray(envelope.executions) ||
+            plan.executions.length === 0 ||
+            plan.executions.length !== envelope.executions.length
+          ) {
+            return failAt(step, "lifeline_failed");
           }
           for (let i = 0; i < plan.executions.length; i += 1) {
-            const execution = plan.executions[i]!;
-            const envelopeExecution = envelope.executions[i]!;
-            let closeTarget: (() => void) | null = null;
+            const execution = plan.executions[i];
+            const envelopeExecution = envelope.executions[i];
+            const execId = envelopeExecution?.execution_id;
+            currentExecutionIds = typeof execId === "string" && execId.length > 0 ? [execId] : [];
+            if (
+              execution === undefined ||
+              envelopeExecution === undefined ||
+              typeof execId !== "string" ||
+              execId.length === 0 ||
+              execution.surface !== envelopeExecution.surface ||
+              typeof execution.executablePath !== "string" ||
+              execution.executablePath.length === 0 ||
+              typeof execution.artifactSha256 !== "string" ||
+              execution.artifactSha256.length === 0 ||
+              !Array.isArray(execution.arguments) ||
+              execution.environment === null ||
+              typeof execution.environment !== "object"
+            ) {
+              return failAt(step, "lifeline_failed", currentExecutionIds);
+            }
             const descriptor: HostLaunchDescriptor = Object.freeze({
               path: execution.executablePath,
               sha256: execution.artifactSha256,
               argv: Object.freeze([...execution.arguments]),
               env: Object.freeze({ ...execution.environment }),
-              executionId: envelopeExecution.execution_id,
+              executionId: execId,
             });
-            const lifeline: BuildLifelineResource = Object.freeze({
-              executionId: envelopeExecution.execution_id,
-              descriptor,
-              close: () => {
-                closeTarget?.();
-              },
-            });
-            lifelinesWithBind.set(lifeline, (fn) => {
-              closeTarget = fn;
-            });
-            lifelines.push(lifeline);
-            resources.push(Object.freeze({ step: "lifelines", lifeline }));
+            preparedDescriptors.push(descriptor);
           }
+          currentExecutionIds = [];
           break;
         }
 
         case "hosts": {
-          for (const lifeline of lifelines) {
-            const handle = spawnHost(lifeline.descriptor);
-            lifelinesWithBind.get(lifeline)?.(() => {
-              handle.closeStdin();
+          if (preparedDescriptors.length === 0) {
+            return failAt(step, "host_spawn_failed");
+          }
+          for (const descriptor of preparedDescriptors) {
+            currentExecutionIds = [descriptor.executionId];
+            const handle = spawnHost(descriptor);
+            const lifeline: BuildLifelineResource = Object.freeze({
+              executionId: descriptor.executionId,
+              descriptor,
+              close: () => {
+                handle.closeStdin();
+              },
             });
+            lifelines.push(lifeline);
+            resources.push(Object.freeze({ step: "lifelines", lifeline }));
+
             const host: BuildHostResource = Object.freeze({
-              executionId: lifeline.executionId,
+              executionId: descriptor.executionId,
               hostPid: handle.hostPid,
               handle,
             });
             hosts.push(host);
             resources.push(Object.freeze({ step: "hosts", host }));
+
+            const instructedChild: BuildChildResource = Object.freeze({
+              executionId: descriptor.executionId,
+              hostPid: handle.hostPid,
+              childPid: null,
+              pgid: null,
+              killPgid: () => {
+                handle.killPgid();
+              },
+            });
+            const childIdx = children.push(instructedChild) - 1;
+            const resourceIdx =
+              resources.push(Object.freeze({ step: "children", child: instructedChild })) - 1;
+            childResourceIndices.set(childIdx, resourceIdx);
           }
+          currentExecutionIds = [];
           break;
         }
 
         case "children": {
-          for (const host of hosts) {
+          if (hosts.length === 0 || hosts.length !== preparedDescriptors.length) {
+            return failAt(step, "child_launch_failed");
+          }
+          for (let i = 0; i < hosts.length; i += 1) {
+            const host = hosts[i]!;
+            currentExecutionIds = [host.executionId];
             const launched = await awaitChildLaunchAndReady(host, childLaunchTimeoutMs);
-            const child: BuildChildResource = Object.freeze({
+            const readyChild: BuildChildResource = Object.freeze({
               executionId: host.executionId,
               hostPid: launched.hostPid,
               childPid: launched.childPid,
@@ -602,9 +715,13 @@ export async function runTransactionalBuild(input: BuildInput): Promise<BuildRes
                 host.handle.killPgid();
               },
             });
-            children.push(child);
-            resources.push(Object.freeze({ step: "children", child }));
+            children[i] = readyChild;
+            const resourceIdx = childResourceIndices.get(i);
+            if (resourceIdx !== undefined) {
+              resources[resourceIdx] = Object.freeze({ step: "children", child: readyChild });
+            }
           }
+          currentExecutionIds = [];
           break;
         }
 
@@ -614,19 +731,23 @@ export async function runTransactionalBuild(input: BuildInput): Promise<BuildRes
             const envelopeExecution = envelope.executions[i];
             const host = hosts[i];
             const child = children[i];
-            if (envelopeExecution === undefined || host === undefined || child === undefined) {
-              return failAt(step, "reattestation_failed", "missing execution, host, or child for re-attestation");
+            const execId = envelopeExecution?.execution_id;
+            currentExecutionIds = typeof execId === "string" && execId.length > 0 ? [execId] : [];
+            if (
+              envelopeExecution === undefined ||
+              host === undefined ||
+              child === undefined ||
+              child.childPid === null ||
+              child.pgid === null
+            ) {
+              return failAt(step, "reattestation_failed", currentExecutionIds);
             }
             if (execution.surface !== envelopeExecution.surface) {
-              return failAt(step, "reattestation_failed", `surface mismatch for ${envelopeExecution.execution_id}`);
+              return failAt(step, "reattestation_failed", currentExecutionIds);
             }
             const reg = resolveRegistration(execution.surface);
             if (reg === undefined || typeof reg.live_attester !== "function") {
-              return failAt(
-                step,
-                "reattestation_failed",
-                `surface ${String(execution.surface)} has no live actual-session attester`,
-              );
+              return failAt(step, "reattestation_failed", currentExecutionIds);
             }
             const verdict = await reg.live_attester({
               executionId: envelopeExecution.execution_id,
@@ -638,32 +759,16 @@ export async function runTransactionalBuild(input: BuildInput): Promise<BuildRes
               child,
             });
             if (!verdict.ok) {
-              return failAt(
-                step,
-                "reattestation_failed",
-                `live re-attestation failed for ${envelopeExecution.execution_id}: ${verdict.reason}`,
-              );
+              return failAt(step, "reattestation_failed", currentExecutionIds);
             }
             if (verdict.evidenceKind !== "actual_session") {
-              return failAt(
-                step,
-                "reattestation_failed",
-                `live re-attestation for ${envelopeExecution.execution_id} is not actual_session`,
-              );
+              return failAt(step, "reattestation_failed", currentExecutionIds);
             }
             if (verdict.provider !== envelopeExecution.provider || verdict.provider !== reg.provider) {
-              return failAt(
-                step,
-                "reattestation_failed",
-                `live re-attestation provider mismatch for ${envelopeExecution.execution_id}`,
-              );
+              return failAt(step, "reattestation_failed", currentExecutionIds);
             }
             if (verdict.model !== envelopeExecution.model) {
-              return failAt(
-                step,
-                "reattestation_failed",
-                `live re-attestation model mismatch for ${envelopeExecution.execution_id}`,
-              );
+              return failAt(step, "reattestation_failed", currentExecutionIds);
             }
             const record: LiveReattestationRecord = Object.freeze({
               executionId: envelopeExecution.execution_id,
@@ -676,19 +781,22 @@ export async function runTransactionalBuild(input: BuildInput): Promise<BuildRes
             reattestations.push(record);
             resources.push(Object.freeze({ step: "reattest", reattestation: record }));
           }
+          currentExecutionIds = [];
           break;
         }
 
         case "adapters": {
           if (brokerHandle === null) {
-            return failAt(step, "adapter_failed", "broker not constructed before adapter construction");
+            return failAt(step, "adapter_failed");
           }
           for (let i = 0; i < plan.executions.length; i += 1) {
             const execution = plan.executions[i]!;
             const envelopeExecution = envelope.executions[i];
             const host = hosts[i];
+            const execId = envelopeExecution?.execution_id;
+            currentExecutionIds = typeof execId === "string" && execId.length > 0 ? [execId] : [];
             if (envelopeExecution === undefined || host === undefined) {
-              return failAt(step, "adapter_failed", "missing execution or host for adapter construction");
+              return failAt(step, "adapter_failed", currentExecutionIds);
             }
             const adapterClient = createInProcessBrokerClient(brokerHandle, {
               kind: "execution",
@@ -706,12 +814,13 @@ export async function runTransactionalBuild(input: BuildInput): Promise<BuildRes
             adapters.push(adapter);
             resources.push(Object.freeze({ step: "adapters", adapter }));
           }
+          currentExecutionIds = [];
           break;
         }
 
         case "issue_token": {
           if (ledger === null || currentBroker === null) {
-            return failAt(step, "issue_token_failed", "ledger or broker not ready before issue_token");
+            return failAt(step, "issue_token_failed");
           }
           const { state: beforeState, head: beforeHead } = replayLedgerState(ledger);
           const issuedEvent = issueInitialToken(sessionId, envelope.initial_writer, {
@@ -725,13 +834,6 @@ export async function runTransactionalBuild(input: BuildInput): Promise<BuildRes
           fencingTokenRow = ledger.append(issuedEvent);
           fencingToken = issuedEvent.fencing_token;
           fencingTokenIssued = true;
-          currentBroker = new RuntimeBroker(makeBrokerDeps(ledger));
-          localObservationSeq += 1;
-          input.observeLifecycle?.({
-            snapshotSeq: localObservationSeq,
-            phase: currentBroker.snapshotProjectionInput().lifecycle.phase,
-            ledgerSeq: fencingTokenRow.sequence,
-          });
           resources.push(
             Object.freeze({
               step: "issue_token",
@@ -739,12 +841,19 @@ export async function runTransactionalBuild(input: BuildInput): Promise<BuildRes
               row: fencingTokenRow,
             }),
           );
+          currentBroker = new RuntimeBroker(makeBrokerDeps(ledger));
+          localObservationSeq += 1;
+          observeLifecycle?.({
+            snapshotSeq: localObservationSeq,
+            phase: currentBroker.snapshotProjectionInput().lifecycle.phase,
+            ledgerSeq: fencingTokenRow.sequence,
+          });
           break;
         }
 
         case "activate": {
           if (ledger === null || currentBroker === null || client === null || fencingTokenRow === null) {
-            return failAt(step, "activation_failed", "prerequisites missing before activate");
+            return failAt(step, "activation_failed");
           }
           const { state: beforeState, head: beforeHead } = replayLedgerState(ledger);
           const readyIds = children.map((child) => child.executionId);
@@ -767,42 +876,70 @@ export async function runTransactionalBuild(input: BuildInput): Promise<BuildRes
           };
           reduceLedgerEvent(beforeState, activatedEvent);
           sessionActivatedRow = ledger.append(activatedEvent);
-          currentBroker = new RuntimeBroker(makeBrokerDeps(ledger));
-          localObservationSeq += 1;
-          input.observeLifecycle?.({
-            snapshotSeq: localObservationSeq,
-            phase: currentBroker.snapshotProjectionInput().lifecycle.phase,
-            ledgerSeq: sessionActivatedRow.sequence,
-          });
           resources.push(Object.freeze({ step: "activate", row: sessionActivatedRow }));
-          activeSnapshot = await client.getSnapshot();
+          try {
+            currentBroker = new RuntimeBroker(makeBrokerDeps(ledger));
+          } catch {}
+          localObservationSeq += 1;
+          try {
+            activeSnapshot = await client.getSnapshot();
+          } catch {}
+          try {
+            observeLifecycle?.({
+              snapshotSeq: localObservationSeq,
+              phase:
+                currentBroker !== null
+                  ? currentBroker.snapshotProjectionInput().lifecycle.phase
+                  : "active",
+              ledgerSeq: sessionActivatedRow.sequence,
+            });
+          } catch {}
           break;
         }
       }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "step execution failed";
-      return failAt(step, defaultFailureCodeForStep(step), message);
-    }
 
-    completedSteps.push(step);
-
-    if (input.onStep !== undefined) {
-      const currentPhase: LifecyclePhase | null =
-        currentBroker !== null ? currentBroker.snapshotProjectionInput().lifecycle.phase : null;
-      await input.onStep(
-        Object.freeze({
-          step,
-          index,
-          phase: currentPhase,
-          ledgerEventTypes: ledgerEventTypesOf(ledger),
-          activeSnapshotExposed: activeSnapshot !== null && activeSnapshot.phase === "active",
-        }),
-      );
+      if (step === "activate" && sessionActivatedRow !== null) {
+        completedSteps.push(step);
+        if (onStep !== undefined) {
+          try {
+            const currentPhase: LifecyclePhase | null =
+              currentBroker !== null
+                ? currentBroker.snapshotProjectionInput().lifecycle.phase
+                : "active";
+            await onStep(
+              Object.freeze({
+                step,
+                index,
+                phase: currentPhase,
+                ledgerEventTypes: ledgerEventTypesOf(ledger),
+                activeSnapshotExposed: activeSnapshot !== null && activeSnapshot.phase === "active",
+              }),
+            );
+          } catch {}
+        }
+      } else {
+        if (onStep !== undefined) {
+          const currentPhase: LifecyclePhase | null =
+            currentBroker !== null ? currentBroker.snapshotProjectionInput().lifecycle.phase : null;
+          await onStep(
+            Object.freeze({
+              step,
+              index,
+              phase: currentPhase,
+              ledgerEventTypes: ledgerEventTypesOf(ledger),
+              activeSnapshotExposed: activeSnapshot !== null && activeSnapshot.phase === "active",
+            }),
+          );
+        }
+        completedSteps.push(step);
+      }
+    } catch {
+      return failAt(step, defaultFailureCodeForStep(step), currentExecutionIds);
     }
   }
 
   if (activeSnapshot === null || activeSnapshot.phase !== "active") {
-    return failAt("activate", "activation_failed", "active snapshot was not produced");
+    return failAt("activate", "activation_failed");
   }
 
   return Object.freeze({

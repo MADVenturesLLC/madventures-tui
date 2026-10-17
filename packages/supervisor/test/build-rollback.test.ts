@@ -15,14 +15,17 @@ import type { LaunchPlan } from "../src/preflight";
 import {
   BUILD_STEPS,
   runTransactionalBuild,
+  runTransactionalBuildWithDependencies,
   type BuildInput,
   type BuildResult,
   type BuildStep,
   type BuildStepObservation,
   type BuildSurfaceRegistration,
+  type BuildWithDependenciesInput,
   type LiveSurfaceAttester,
   type PartialBuildState,
 } from "../src/build";
+import * as supervisorIndex from "../src/index";
 
 const roots: string[] = [];
 const statesToClean: PartialBuildState[] = [];
@@ -232,9 +235,9 @@ function makeBuildFixture(sessionId = "ses-task46-001") {
     nextEventId: () => `evt-task46-${(eventSeq += 1)}`,
   };
 
-  const run = async (overrides: Partial<BuildInput> = {}): Promise<BuildResult> =>
+  const run = async (overrides: Partial<BuildWithDependenciesInput> = {}): Promise<BuildResult> =>
     trackResult(
-      await runTransactionalBuild({
+      await runTransactionalBuildWithDependencies({
         sessionId,
         envelope,
         plan,
@@ -284,23 +287,51 @@ test("the build executes the twelve steps in the specified order", async () => {
   if (result.ok) {
     expect(result.steps).toEqual([...BUILD_STEPS]);
     expect(result.state.completedSteps).toEqual([...BUILD_STEPS]);
-    const resourceSteps: BuildStep[] = [];
-    for (const r of result.state.resources) {
-      if (resourceSteps[resourceSteps.length - 1] !== r.step) {
-        resourceSteps.push(r.step);
+    expect(result.state.resources.map((r) => r.step)).toEqual([
+      "storage",
+      "ledger_open",
+      "session_open",
+      "broker",
+      "client",
+      "lifelines",
+      "hosts",
+      "children",
+      "lifelines",
+      "hosts",
+      "children",
+      "reattest",
+      "reattest",
+      "adapters",
+      "adapters",
+      "issue_token",
+      "activate",
+    ]);
+    for (const child of result.state.children) {
+      expect(typeof child.childPid).toBe("number");
+      expect(child.childPid!).toBeGreaterThan(0);
+      expect(typeof child.pgid).toBe("number");
+      expect(child.pgid!).toBeGreaterThan(0);
+    }
+    for (const res of result.state.resources) {
+      if (res.step === "children") {
+        expect(typeof res.child.childPid).toBe("number");
+        expect(res.child.childPid!).toBeGreaterThan(0);
+        expect(typeof res.child.pgid).toBe("number");
+        expect(res.child.pgid!).toBeGreaterThan(0);
       }
     }
-    expect(resourceSteps).toEqual([...BUILD_STEPS]);
   }
 
-  // Verify injectFailureAt stops at the injected step and records partial state in creation order.
-  const fInjected = makeBuildFixture("ses-task46-inject-hosts");
-  const failedAtHosts = await fInjected.run({
+  // B2: lifelines validates and prepares launch descriptors and records NO resource in PartialBuildState.
+  const fInjectedHosts = makeBuildFixture("ses-task46-inject-hosts");
+  const failedAtHosts = await fInjectedHosts.run({
     injectFailureAt: "hosts",
   });
   expect(failedAtHosts.ok).toBe(false);
   if (!failedAtHosts.ok) {
     expect(failedAtHosts.failedStep).toBe("hosts");
+    expect(failedAtHosts.failure).toBe("injected_failure");
+    expect(failedAtHosts.detail).toBe("step=hosts failure=injected_failure");
     expect(failedAtHosts.partialState.completedSteps).toEqual([
       "storage",
       "ledger_open",
@@ -309,8 +340,59 @@ test("the build executes the twelve steps in the specified order", async () => {
       "client",
       "lifelines",
     ]);
+    expect(failedAtHosts.partialState.lifelines).toHaveLength(0);
     expect(failedAtHosts.partialState.hosts).toHaveLength(0);
+    expect(failedAtHosts.partialState.children).toHaveLength(0);
+    expect(failedAtHosts.partialState.resources.map((r) => r.step)).toEqual([
+      "storage",
+      "ledger_open",
+      "session_open",
+      "broker",
+      "client",
+    ]);
     expect(failedAtHosts.partialState.fencingTokenIssued).toBe(false);
+  }
+
+  // B2: hosts calls spawnPtyHost once per execution and at that moment records, in creation order,
+  // the lifeline, the host, and the instructed child launch (with childPid/pgid null before children).
+  const fInjectedChildren = makeBuildFixture("ses-task46-inject-children");
+  const failedAtChildren = await fInjectedChildren.run({
+    injectFailureAt: "children",
+  });
+  expect(failedAtChildren.ok).toBe(false);
+  if (!failedAtChildren.ok) {
+    expect(failedAtChildren.failedStep).toBe("children");
+    expect(failedAtChildren.failure).toBe("injected_failure");
+    expect(failedAtChildren.detail).toBe("step=children failure=injected_failure");
+    expect(failedAtChildren.partialState.completedSteps).toEqual([
+      "storage",
+      "ledger_open",
+      "session_open",
+      "broker",
+      "client",
+      "lifelines",
+      "hosts",
+    ]);
+    expect(failedAtChildren.partialState.lifelines).toHaveLength(2);
+    expect(failedAtChildren.partialState.hosts).toHaveLength(2);
+    expect(failedAtChildren.partialState.children).toHaveLength(2);
+    expect(failedAtChildren.partialState.resources.map((r) => r.step)).toEqual([
+      "storage",
+      "ledger_open",
+      "session_open",
+      "broker",
+      "client",
+      "lifelines",
+      "hosts",
+      "children",
+      "lifelines",
+      "hosts",
+      "children",
+    ]);
+    for (const child of failedAtChildren.partialState.children) {
+      expect(child.childPid).toBeNull();
+      expect(child.pgid).toBeNull();
+    }
   }
 });
 
@@ -361,7 +443,7 @@ test("no active snapshot is exposed before both startup records are durable", as
     ]);
   }
 
-  // Also verify that if failure is injected at activate (after issue_token succeeded),
+  // Verify that if failure is injected at activate (after issue_token succeeded),
   // fencing_token_issued stays in the ledger, recorded in PartialBuildState,
   // session_activated is not appended, no unwind occurs, and no active snapshot is exposed.
   const fFailActivate = makeBuildFixture("ses-task46-fail-activate");
@@ -379,6 +461,65 @@ test("no active snapshot is exposed before both startup records are durable", as
     const snap = await failedActivate.partialState.client!.getSnapshot();
     expect(snap.phase).toBe("starting");
   }
+
+  // B4: Observer throwing at storage never rejects; returns { ok: false } with partialState.
+  const fObsStorage = makeBuildFixture("ses-task46-obs-storage");
+  const obsStorageResult = await fObsStorage.run({
+    onStep: (obs) => {
+      if (obs.step === "storage") {
+        throw new Error("SYNTHETIC-STORAGE-OBSERVER-ERROR");
+      }
+    },
+  });
+  expect(obsStorageResult.ok).toBe(false);
+  if (!obsStorageResult.ok) {
+    expect(obsStorageResult.failedStep).toBe("storage");
+    expect(obsStorageResult.failure).toBe("storage_failed");
+    expect(obsStorageResult.detail).toBe("step=storage failure=storage_failed");
+    expect(obsStorageResult.partialState.storage).not.toBeNull();
+    expect(obsStorageResult.partialState.resources.map((r) => r.step)).toEqual(["storage"]);
+  }
+
+  // B4: Observer throwing at issue_token never rejects and preserves fencing_token_issued in resources.
+  const fObsToken = makeBuildFixture("ses-task46-obs-token");
+  const obsTokenResult = await fObsToken.run({
+    observeLifecycle: (obs) => {
+      if (obs.ledgerSeq === 2) {
+        throw new Error("SYNTHETIC-TOKEN-OBSERVER-ERROR");
+      }
+    },
+  });
+  expect(obsTokenResult.ok).toBe(false);
+  if (!obsTokenResult.ok) {
+    expect(obsTokenResult.failedStep).toBe("issue_token");
+    expect(obsTokenResult.failure).toBe("issue_token_failed");
+    expect(obsTokenResult.detail).toBe("step=issue_token failure=issue_token_failed");
+    expect(obsTokenResult.partialState.fencingTokenIssued).toBe(true);
+    expect(obsTokenResult.partialState.fencingTokenRow).not.toBeNull();
+    expect(obsTokenResult.partialState.resources.some((r) => r.step === "issue_token")).toBe(true);
+  }
+
+  // B4: Once session_activated is durable in SQLite, observer exceptions cannot change the result or omit resources.
+  const fObsActivate = makeBuildFixture("ses-task46-obs-activate");
+  const obsActivateResult = await fObsActivate.run({
+    observeLifecycle: (obs) => {
+      if (obs.phase === "active") {
+        throw new Error("SYNTHETIC-ACTIVATE-LIFECYCLE-OBSERVER-ERROR");
+      }
+    },
+    onStep: (obs) => {
+      if (obs.step === "activate") {
+        throw new Error("SYNTHETIC-ACTIVATE-STEP-OBSERVER-ERROR");
+      }
+    },
+  });
+  expect(obsActivateResult.ok).toBe(true);
+  if (obsActivateResult.ok) {
+    expect(obsActivateResult.snapshot.phase).toBe("active");
+    expect(obsActivateResult.state.sessionActivatedRow).not.toBeNull();
+    expect(obsActivateResult.state.resources.some((r) => r.step === "issue_token")).toBe(true);
+    expect(obsActivateResult.state.resources.some((r) => r.step === "activate")).toBe(true);
+  }
 });
 
 test("the build exposes no TUI step in Phase 3A", async () => {
@@ -386,6 +527,17 @@ test("the build exposes no TUI step in Phase 3A", async () => {
   expect((BUILD_STEPS as readonly string[]).includes("tui")).toBe(false);
   for (const step of BUILD_STEPS) {
     expect(step.toLowerCase()).not.toContain("tui");
+  }
+
+  // B3 & D3: Package index exports BUILD_STEPS and runTransactionalBuild(input) with only
+  // { sessionId, envelope, plan, injectFailureAt? }, and exports no dependency-injection function.
+  const indexKeys = Object.keys(supervisorIndex);
+  expect(indexKeys).toContain("BUILD_STEPS");
+  expect(indexKeys).toContain("runTransactionalBuild");
+  expect(indexKeys).not.toContain("runTransactionalBuildWithDependencies");
+  expect(indexKeys).not.toContain("runPurePreflightWithDependencies");
+  for (const key of indexKeys) {
+    expect(key).not.toMatch(/WithDependencies/);
   }
 
   const f = makeBuildFixture("ses-task46-no-tui");
@@ -396,24 +548,44 @@ test("the build exposes no TUI step in Phase 3A", async () => {
     expect((result.state.completedSteps as readonly string[]).includes("tui")).toBe(false);
     expect(result.state.resources.some((r) => (r.step as string) === "tui")).toBe(false);
   }
+
+  // B3: Production runTransactionalBuild ignores extra test-seam properties if passed at runtime.
+  const fProd = makeBuildFixture("ses-task46-prod-boundary");
+  let stepObserverCalled = false;
+  const prodResult = trackResult(
+    await supervisorIndex.runTransactionalBuild({
+      sessionId: fProd.sessionId,
+      envelope: fProd.envelope,
+      plan: fProd.plan,
+      registration: fProd.registration,
+      onStep: () => {
+        stepObserverCalled = true;
+      },
+    } as unknown as BuildInput),
+  );
+  expect(stepObserverCalled).toBe(false);
+  expect(prodResult.ok).toBe(false);
+  if (!prodResult.ok) {
+    expect(prodResult.failedStep).toBe("reattest");
+  }
 });
 
 test("re-attestation failure before activation prevents any active snapshot", async () => {
   // Case 1: Default ADAPTER_REGISTRY registrations have no live_attester in Phase 3A (B4),
-  // so reattest must fail closed under spec section 9.13.
+  // so reattest must fail closed under spec section 9.13 via production runTransactionalBuild.
   const fDefault = makeBuildFixture("ses-task46-reattest-default");
   const defaultResult = trackResult(
     await runTransactionalBuild({
       sessionId: fDefault.sessionId,
       envelope: fDefault.envelope,
       plan: fDefault.plan,
-      sources: fDefault.sources,
     }),
   );
   expect(defaultResult.ok).toBe(false);
   if (!defaultResult.ok) {
     expect(defaultResult.failedStep).toBe("reattest");
     expect(defaultResult.failure).toBe("reattestation_failed");
+    expect(defaultResult.detail).toBe("step=reattest execution=builder failure=reattestation_failed");
     expect(defaultResult.partialState.completedSteps).toEqual([
       "storage",
       "ledger_open",
@@ -462,6 +634,9 @@ test("re-attestation failure before activation prevents any active snapshot", as
   if (!mismatchResult.ok) {
     expect(mismatchResult.failedStep).toBe("reattest");
     expect(mismatchResult.failure).toBe("reattestation_failed");
+    expect(mismatchResult.detail).toBe(
+      "step=reattest execution=reviewer failure=reattestation_failed",
+    );
     expect(mismatchResult.partialState.fencingTokenIssued).toBe(false);
     expect(mismatchResult.partialState.fencingToken).toBeNull();
     const rows = mismatchResult.partialState.ledger!.readAfter(0);
@@ -469,5 +644,77 @@ test("re-attestation failure before activation prevents any active snapshot", as
     expect(eventTypes).toEqual(["session_open"]);
     const snap = await mismatchResult.partialState.client!.getSnapshot();
     expect(snap.phase).toBe("starting");
+  }
+
+  // Case 3 (B6): Fixture live_attester returns a provider mismatch on the second execution while model matches.
+  const fProviderMismatch = makeBuildFixture("ses-task46-reattest-provider");
+  const providerMismatchResult = await fProviderMismatch.run({
+    registration: (surface) => {
+      const base = ADAPTER_REGISTRY.get(surface);
+      if (!base) return undefined;
+      return {
+        ...base,
+        live_attester: ({ executionId, model, registration }) => ({
+          ok: true,
+          evidenceKind: "actual_session",
+          provider: executionId === "reviewer" ? "wrong-live-provider" : registration.provider,
+          model,
+        }),
+      };
+    },
+  });
+  expect(providerMismatchResult.ok).toBe(false);
+  if (!providerMismatchResult.ok) {
+    expect(providerMismatchResult.failedStep).toBe("reattest");
+    expect(providerMismatchResult.failure).toBe("reattestation_failed");
+    expect(providerMismatchResult.detail).toBe(
+      "step=reattest execution=reviewer failure=reattestation_failed",
+    );
+    expect(providerMismatchResult.partialState.fencingTokenIssued).toBe(false);
+    expect(providerMismatchResult.partialState.fencingToken).toBeNull();
+    const rows = providerMismatchResult.partialState.ledger!.readAfter(0);
+    const eventTypes = rows.map((r) => (JSON.parse(r.event_json) as { event_type: string }).event_type);
+    expect(eventTypes).toEqual(["session_open"]);
+    const snap = await providerMismatchResult.partialState.client!.getSnapshot();
+    expect(snap.phase).toBe("starting");
+  }
+
+  // Case 4 (B5): Metadata-only detail never includes raw attester reason or raw exception text.
+  const fRawAttester = makeBuildFixture("ses-task46-raw-attester");
+  const rawAttesterResult = await fRawAttester.run({
+    registration: (surface) => {
+      const base = ADAPTER_REGISTRY.get(surface);
+      if (!base) return undefined;
+      return {
+        ...base,
+        live_attester: () => ({
+          ok: false,
+          reason: "SYNTHETIC-RAW-ATTESTER-SECRET-TEXT",
+        }),
+      };
+    },
+  });
+  expect(rawAttesterResult.ok).toBe(false);
+  if (!rawAttesterResult.ok) {
+    expect(rawAttesterResult.failedStep).toBe("reattest");
+    expect(rawAttesterResult.failure).toBe("reattestation_failed");
+    expect(rawAttesterResult.detail).toBe(
+      "step=reattest execution=builder failure=reattestation_failed",
+    );
+    expect(rawAttesterResult.detail).not.toContain("SYNTHETIC-RAW-ATTESTER-SECRET-TEXT");
+  }
+
+  const fRawSpawn = makeBuildFixture("ses-task46-raw-spawn");
+  const rawSpawnResult = await fRawSpawn.run({
+    spawnHost: () => {
+      throw new Error("SYNTHETIC-RAW-SPAWN-EXCEPTION-TEXT");
+    },
+  });
+  expect(rawSpawnResult.ok).toBe(false);
+  if (!rawSpawnResult.ok) {
+    expect(rawSpawnResult.failedStep).toBe("hosts");
+    expect(rawSpawnResult.failure).toBe("host_spawn_failed");
+    expect(rawSpawnResult.detail).toBe("step=hosts execution=builder failure=host_spawn_failed");
+    expect(rawSpawnResult.detail).not.toContain("SYNTHETIC-RAW-SPAWN-EXCEPTION-TEXT");
   }
 });

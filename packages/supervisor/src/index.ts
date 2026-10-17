@@ -19,12 +19,8 @@ export type {
   BuildLifelineResource,
   BuildResult,
   BuildStep,
-  BuildStepObservation,
-  BuildSurfaceRegistration,
   CreatedBuildResource,
-  LiveReattestationInput,
   LiveReattestationRecord,
   LiveReattestationResult,
-  LiveSurfaceAttester,
   PartialBuildState,
 } from "./build";
