@@ -1122,3 +1122,38 @@ Round 2's resolution, recorded above as pending, is now closed:
 - **Counted:** no round under Plan §11.3 (the builder followed verbatim B3 instructions, and full verification was halted by the out-of-scope harness race before deliberate breaks could run; resolved as a prompt and specification gap by specifying the exact robust assertion). Rubric milestone 1 stays at round **2** of 2 for the new builder (overall rubric milestone 1 historical entries: **8**, consisting of 5 pre-reset rounds plus rounds 1 and 2 for the new builder). Rubric milestone 4 stays at **3**. Rubric milestone 6 stands at **1** (round 1 for the new builder).
 - **Ruling:** DEC-20261017-01 accepts the review stop, clarifies the macOS supervisor attestation test timing race rule to cover line 50 alongside line 71, specifies the exact robust assertion for `assertNoUnacceptedIdentityClaim`, preserves the verified 92 probe captures and capability record unchanged, authorizes one correction commit on `build/m25-task56-r1` (`session:antigravity/m25-task56-r4`) on the Founder's MacBook, followed by fresh Codex re-review (`codex`) on the MacBook. Any substantive defect in Round 4 requires immediate reassignment under Spec §7.6.
 - **Not authorized here:** leaving draft or merging PR #157, closing M25, or certifying Antigravity for live Phase 3A roles.
+
+## Task 56 review verdict FAIL (rubric milestone 1 round 3 for the builder, reassignment under Spec §7.6)
+
+- **Recorded:** 2026-10-17, under FOUNDER-ACT-20261017-TASK56-REASSIGNMENT
+  (`docs/decisions/DEC-20261017-02-task56-reassignment.md`) B1 and C1, for the review of
+  FOUNDER-ACT-20261017-TASK56-R4-CORRECTION
+  (`docs/decisions/DEC-20261017-01-task56-r4-correction.md`) B7.
+- **Plan milestone:** M25, Task 56. **Rubric milestone:** 1.
+- **Head reviewed:** `ae1bc8178c6ce78f750925443c54422d359a2ff7`, the Task 56 round 4 commit on PR #157
+  (`build/m25-task56-r1`), built by `session:antigravity/m25-task56-r4` from binding base
+  `be996b1fd7ccbc1f5fdee914b1e9de31020b8461` on the Founder's MacBook. Stored capability record
+  `/Users/michaeldaley/Library/Application Support/MADVentures/madventures-tui/capability/antigravity/2026-10-16T20:43:50.078Z-a4502aaf310b.json`,
+  SHA-256 `0b7e9d47a31d4e9439ad1846f949f57518defcebfe3ef6ab0dbbfa98673ee983`. Superseded record
+  `2026-10-16T03:11:04.805Z-827ba22b4aa3.json` (`704f23d9b6d82834bc23bd84e3ee4a58dcb7732e200ce5b74a3ad24a19982cbb`).
+- **Reviewer:** `codex`, independent and non-authoring, in a fresh session and clone on the Founder's
+  MacBook (`/Users/michaeldaley/madventures-tui-m25-task56-codex-r2`), reporting a model based on GPT-6
+  with no exact model identifier exposed.
+- **Verdict text SHA-256:** `c89a4050d0af828c92eff2610ab8528a5cd68d9d0e204a7383ae7437c45eb6ed`, 34,862
+  bytes, 326 lines, saved at `/Users/michaeldaley/task56-r2-input/codex-review-r4.md`.
+- **Result:** FAIL. Items 1 to 6 returned PASS. Full test suite verification satisfied under `DEC-20261017-01`
+  B2 (line 50 signal mismatch in full suite, isolated attempt 2 passed 21 pass, 0 fail). Finding:
+  1. Substantive test-guard defect: `assertNoUnacceptedIdentityClaim` in `test/phase3a/evidence-pipeline.test.ts`
+     permitted affirmative identity-acceptance claims separated from the primitive by parenthetical punctuation
+     (reproduced counterexample: `No provider metadata is present; init.model, however, is accepted as identity evidence.`).
+- **Counted:** one round under rubric milestone 1 (DEC-20261017-01 B1/B7, Spec §7.6): round **3** of 2 for
+  Gemini Antigravity under rubric milestone 1 (overall rubric milestone 1 historical entries: **9**, consisting
+  of 5 pre-reset rounds plus 3 rounds for Gemini Antigravity). Reassignment is mandatory under Spec §7.6
+  ("more than two correction rounds on one milestone" and "the same substantive defect recurs after a claimed
+  correction"). Rubric milestone 4 stays at **3**. Rubric milestone 6 stands at **1**.
+- **Ruling:** DEC-20261017-02 accepts the review report, reassigns Gemini Antigravity under Spec §7.6,
+  preserves the sound implementation, 92 probe captures, report markdown, and capability records unchanged under
+  Plan §11.4, and authorizes successor builder Codex CLI (`session:codex/m25-task56-r5`) on the Founder's MacBook
+  to apply the exact correction for `assertNoUnacceptedIdentityClaim` on top of `ae1bc8178c6ce78f750925443c54422d359a2ff7`,
+  followed by fresh independent Tier-2 review by Gemini Antigravity (`antigravity`) on the MacBook.
+- **Not authorized here:** leaving draft or merging PR #157, closing M25, or certifying Antigravity for live Phase 3A roles.
