@@ -37,6 +37,21 @@ interface CapturedCommandBlock {
 
 const BINARY_PATH = "/Users/michaeldaley/.local/bin/agy";
 
+/**
+ * Ratified stop and command evidence records establishing that nested
+ * `agy plugin <subcommand>` and `agy plugins <subcommand>` treat `--help`,
+ * `-h`, and `-help` as positional arguments rather than help flags on
+ * `agy 1.4.0` (`DEC-20261016-05` B2, B3 item 3; `DEC-20261016-06` B4).
+ */
+const RATIFIED_STOP_RECORD_PATH =
+  "/Users/michaeldaley/task56-r2-input/builder-stop-r2-reinvestigation.txt";
+const RATIFIED_STOP_RECORD_SHA256 =
+  "949be70ec95ba91e0500f352306a084861b87d7b246069c0af049bd3a6f04c87";
+const RATIFIED_COMMANDS_RECORD_PATH =
+  "/Users/michaeldaley/task56-r2-input/builder-step3-commands-r2.txt";
+const RATIFIED_COMMANDS_RECORD_SHA256 =
+  "a0ab3bba19c2dcb0da4f2e95e89c7d9b5a33bfc63e5cf804fb4afd471f9449d5";
+
 const TOP_LEVEL_HELP_COMMANDS: readonly string[] = [
   `${BINARY_PATH} --help < /dev/null`,
   `${BINARY_PATH} -h < /dev/null`,
@@ -179,10 +194,12 @@ function hasKeyRecursive(value: unknown, targetKey: string): boolean {
 }
 
 function assertNoUnacceptedIdentityClaim(text: string): void {
-  const clauses = text.split(/[.!?\n]+/);
+  const clauses = text.split(/(?:[.!?](?=\s|$)\s*|\n+)/);
   for (const clause of clauses) {
     if (
-      /\b(?:config get model|init\.model|--model|requested-model echo)\b/i.test(clause) &&
+      /(?:^|[^A-Za-z0-9_])(?:config get model|init\.model|--model|requested-model echo)\b/i.test(
+        clause,
+      ) &&
       /\b(?:pass(?:es|ing)?|accept(?:s|ed|able|ing)?|qualif(?:y|ies|ied|ying)|satisf(?:y|ies|ied|ying)|valid|sufficient)\b/i.test(
         clause,
       )
@@ -191,10 +208,10 @@ function assertNoUnacceptedIdentityClaim(text: string): void {
         /\b(?:no|not|never|neither|nor|none|cannot|fails?|failing|failed|ineligible|rejected|omits?|omitted|absent|unaccepted)\b/i,
       );
       expect(clause).not.toMatch(
-        /(?:^|[,;])\s*(?:agy\s+)?(?:config get model|init\.model|--model|a?\s*requested-model echo)\s+(?:is|are|was|were)?\s*(?:accepted|passing|valid|sufficient)\b/i,
+        /(?:^|[,;:]|\b(?:and|but|while|whereas|yet|however)\b)\s*(?:[-*]\s+)?(?:the\s+|a\s+|an\s+)?(?:agy\s+)?[`"']?(?:config get model|init\.model|--model|requested-model echo)[`"']?(?:\s+flag)?\s+(?:is|are|was|were)?\s*(?:accepted|passing|valid|sufficient)\b/i,
       );
       expect(clause).not.toMatch(
-        /(?:^|[,;])\s*(?:agy\s+)?(?:config get model|init\.model|--model|a?\s*requested-model echo)\s+(?:pass(?:es)?|qualif(?:y|ies)|satisf(?:y|ies))\b/i,
+        /(?:^|[,;:]|\b(?:and|but|while|whereas|yet|however)\b)\s*(?:[-*]\s+)?(?:the\s+|a\s+|an\s+)?(?:agy\s+)?[`"']?(?:config get model|init\.model|--model|requested-model echo)[`"']?(?:\s+flag)?\s+(?:pass(?:es)?|qualif(?:y|ies)|satisf(?:y|ies))\b/i,
       );
     }
   }
@@ -273,6 +290,7 @@ test("a failing investigation still persists a record and a report", () => {
   const blockBytes = blocks[0]!;
   const record = parseCapabilityRecord(JSON.parse(blockBytes) as Record<string, unknown>);
   expect(record.overall).toBe("fail");
+  expect(record.identity_attestation.result).toBe("fail");
   expect(blockBytes).toBe(JSON.stringify(record));
 
   const storedFileBytes = `${blockBytes}\n`;
@@ -361,6 +379,17 @@ test("a failing investigation still persists a record and a report", () => {
     expect(found.length).toBe(1);
   }
 
+  // Per DEC-20261016-05 B2, B3 item 3 and DEC-20261016-06 B4, the ratified stop
+  // and command evidence records establish that passing --help, -h, or -help to
+  // nested `agy plugin <subcommand>` or `agy plugins <subcommand>` invokes
+  // subcommand handlers with those flags as positional arguments (e.g.
+  // `plugins.(*Manager).Uninstall`). Those forms are prohibited from execution
+  // and the committed report must cite both ratified evidence records and their
+  // SHA-256 digests.
+  expect(report).toContain(RATIFIED_STOP_RECORD_PATH);
+  expect(report).toContain(RATIFIED_STOP_RECORD_SHA256);
+  expect(report).toContain(RATIFIED_COMMANDS_RECORD_PATH);
+  expect(report).toContain(RATIFIED_COMMANDS_RECORD_SHA256);
   for (const capture of captures) {
     expect(capture.command).not.toMatch(/\/agy\s+plugins?\s+\S+\s+(?:--help|-h|-help)\b/);
   }
