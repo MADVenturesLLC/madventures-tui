@@ -7,8 +7,8 @@ import { describe, expect, test } from "bun:test";
 import { parseArgs, runCli, HELP_TEXT, type CliIo, type ProcessHooks } from "../src/cli";
 import { verifyChain, readEvents, listSessions } from "../src/events";
 import { openNewSession } from "../src/session";
-import { lockPath, lockExists } from "../src/lock";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { lockExists } from "../src/lock";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 

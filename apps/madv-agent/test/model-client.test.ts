@@ -8,7 +8,7 @@ import { describe, expect, test } from "bun:test";
 import { streamChatCompletion } from "../src/model-client";
 import { runTurn } from "../src/turn";
 import { EventWriter, readEvents, type SessionEvent } from "../src/events";
-import { ProxyRefusedError, ProxyRequestError, SseFrameError } from "../src/proxy-error";
+import { ProxyRefusedError, SseFrameError } from "../src/proxy-error";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
