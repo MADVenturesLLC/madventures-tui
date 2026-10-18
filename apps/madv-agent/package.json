@@ -1,0 +1,17 @@
+{
+  "name": "@madventures/madv-agent",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "madv-agent": "./src/cli.ts"
+  },
+  "dependencies": {
+    "@opentui/core": "^0.5.1",
+    "@opentui/react": "^0.5.1",
+    "react": "^19.2.6"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.18"
+  }
+}
