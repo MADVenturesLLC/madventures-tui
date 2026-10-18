@@ -44,6 +44,19 @@ including by rule (even if added to the allowlist):
 The dropped NAMES (never values) are recorded as the session's `env_scrub`
 event in `.madv-agent/sessions/<id>/events.jsonl`.
 
+## The hash chain — how to verify it from outside
+
+Each line of `events.jsonl` is one JSON object
+`{seq, ts, type, payload, prev_hash, hash}`. The stored `hash` is the sha256
+hex digest of `JSON.stringify({payload, prev_hash, seq, ts, type})` — the
+five fields with keys inserted in alphabetical order (payload, prev_hash,
+seq, ts, type), JSON.stringify's compact separators, no whitespace — and the
+`prev_hash` of seq 1 is sixty-four `0` characters. To verify: for every line
+in order, recompute that digest and compare it to the stored `hash`, and
+check each line's `prev_hash` equals the previous line's `hash`. An
+independent verifier living in `apps/madv-agent/test/chain-verifiability.test.ts`
+fails on any mutated byte or re-ordered event.
+
 ## What it refuses
 
 - **A second concurrent instance in the same project.** The lock file
