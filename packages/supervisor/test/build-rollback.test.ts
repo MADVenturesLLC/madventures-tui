@@ -1,17 +1,22 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   ADAPTER_REGISTRY,
   PROTOCOL_VERSION,
   parseSurfaceId,
+  parseCapabilityRecord,
   parseTaskEnvelope,
   sha256CanonicalSync,
   type SurfaceId,
   type TaskEnvelopeV1,
 } from "@madventures/protocol";
 import type { LaunchPlan } from "../src/preflight";
+import { INITIAL_LIFECYCLE_STATE, Ledger, reduceLedgerEvent } from "@madventures/ledger";
+import { writeCapabilityRecord } from "@madventures/storage";
+import * as buildModule from "../src/build";
+import * as hostModule from "../../broker/src/pty-host-supervisor";
 import {
   BUILD_STEPS,
   runTransactionalBuild,
@@ -24,9 +29,12 @@ import {
   type BuildWithDependenciesInput,
   type LiveSurfaceAttester,
   type PartialBuildState,
+  type RollbackOutcome,
 } from "../src/build";
 import * as supervisorIndex from "../src/index";
 import { RuntimeBroker } from "../../broker/src/runtime-broker";
+
+const { rollbackBuild } = buildModule;
 
 const roots: string[] = [];
 const statesToClean: PartialBuildState[] = [];
@@ -72,7 +80,8 @@ async function cleanupPartialState(state: PartialBuildState): Promise<void> {
 
 afterEach(async () => {
   for (const state of statesToClean.splice(0)) {
-    await cleanupPartialState(state);
+    if (state.sessionActivatedRow === null) await rollbackBuild(state);
+    else await cleanupPartialState(state);
   }
   for (const root of roots.splice(0)) {
     rmSync(root, { recursive: true, force: true });
@@ -770,3 +779,266 @@ test("re-attestation failure before activation prevents any active snapshot", as
     expect(rawSpawnResult.detail).not.toContain("SYNTHETIC-RAW-SPAWN-EXCEPTION-TEXT");
   }
 });
+
+function processSurvives(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ESRCH") return false;
+    throw error;
+  }
+}
+
+async function waitForAbsence(predicate: () => boolean): Promise<void> {
+  const deadline = performance.now() + 1_000;
+  while (!predicate() && performance.now() < deadline) await Bun.sleep(10);
+}
+
+function descriptorCount(): number {
+  return readdirSync("/dev/fd").length;
+}
+
+function capabilityFixture(f: ReturnType<typeof makeBuildFixture>) {
+  const registration = f.registration(f.envelope.executions[0]!.surface)!;
+  const record = parseCapabilityRecord({
+    surface: registration.surface, provider: registration.provider,
+    requested_model: f.envelope.executions[0]!.model, role_eligibility: ["builder"],
+    independence_domain: registration.independence_domain, organization_id: registration.organization_id,
+    cli_version: registration.supported_versions[0]!,
+    binary_path: f.plan.executions[0]!.executablePath,
+    binary_sha256: f.plan.executions[0]!.artifactSha256,
+    evaluated_at: "2026-10-18T00:00:00.000Z", expires_at: "2026-11-17T00:00:00.000Z",
+    host: { arch: "arm64", macos_version: "15.0", macos_build: "24A335",
+      bun_version: "1.4.2", bun_path: "/fixture/bin/bun", bun_sha256: "b".repeat(64),
+      term: "xterm-256color", shell: "/bin/zsh" },
+    identity_attestation: { result: "pass", primitive: "fixture-probe", sanitized_facts: "synthetic fixture" },
+    auth_readiness: { result: "no_primitive", primitive: null },
+    pty: { result: "pass", observed_ms: { spawn: 1 } },
+    independent_review_eligible: false, limitations: ["synthetic fixture"], overall: "fail",
+    redaction_rules_applied: [],
+  });
+  const path = writeCapabilityRecord(f.plan.storageRoot, f.envelope.repository, f.envelope.worktree, record);
+  const bytes = readFileSync(path);
+  return { path, bytes };
+}
+
+async function observeChildren(state: PartialBuildState): Promise<number[]> {
+  const pids: number[] = [];
+  for (const host of state.hosts) {
+    for await (const fact of host.handle.facts()) {
+      if (fact.kind === "launched") pids.push(fact.childPid);
+      if (fact.kind === "ready") break;
+    }
+  }
+  expect(pids).toHaveLength(state.children.length);
+  return pids;
+}
+
+const rollbackFailureCodes = {
+  storage: "storage_failed",
+  ledger_open: "ledger_open_failed",
+  session_open: "session_open_failed",
+  broker: "broker_failed",
+  client: "client_failed",
+  lifelines: "lifeline_failed",
+  hosts: "host_spawn_failed",
+  children: "child_launch_failed",
+  reattest: "reattestation_failed",
+  adapters: "adapter_failed",
+  issue_token: "issue_token_failed",
+  activate: "injected_failure",
+} as const;
+
+for (const step of BUILD_STEPS) {
+  test(`rollback after step ${step} leaves no partial session`, async () => {
+    const f = makeBuildFixture(`ses-task47-${step}`);
+    const capability = capabilityFixture(f);
+    const baseline = descriptorCount();
+    // Durable activation cannot fail; inject immediately before its commit instead.
+    const result = await f.run(step === "activate" ? { injectFailureAt: step } : {
+      onStep: ({ step: observed }) => {
+        if (observed === step) throw new Error("SYNTHETIC-ROLLBACK-FAILURE");
+      },
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected a typed build failure");
+    expect(result).toMatchObject({ ok: false, failedStep: step, failure: rollbackFailureCodes[step] });
+    const state: PartialBuildState = result.partialState;
+    expect(state.sessionActivatedRow).toBeNull();
+    const childPids = await observeChildren(state);
+    for (const pid of [...childPids, ...state.hosts.map(host => host.hostPid)]) {
+      expect(processSurvives(pid)).toBe(true);
+    }
+    if (state.ledger !== null) expect(descriptorCount()).toBeGreaterThan(baseline);
+    const survivingAtHostCleanup: string[] = [];
+    const escalate = hostModule.escalateWedgedHost;
+    const containment = step === "children" ? spyOn(hostModule, "escalateWedgedHost").mockImplementation(async (...args) => {
+      for (const pid of childPids) {
+        if (processSurvives(pid)) survivingAtHostCleanup.push(`surviving child PID ${pid}`);
+      }
+      return escalate(...args);
+    }) : null;
+    let outcome: RollbackOutcome;
+    const appendBatch = state.fencingTokenIssued ? spyOn(state.ledger!, "appendMany") : null;
+    try {
+      outcome = await rollbackBuild(result.partialState);
+      if (appendBatch !== null) {
+        expect(appendBatch).toHaveBeenCalledTimes(1);
+        expect(appendBatch).toHaveBeenCalledWith([
+          expect.objectContaining({ event_type: "session_abort" }),
+          expect.objectContaining({ event_type: "fencing_token_invalidated" }),
+        ]);
+      }
+    } finally {
+      containment?.mockRestore();
+      appendBatch?.mockRestore();
+    }
+    statesToClean.splice(statesToClean.indexOf(state), 1);
+    expect(survivingAtHostCleanup).toEqual([]);
+    expect(outcome).toEqual({
+      sessionId: state.sessionId,
+      completedSteps: state.completedSteps,
+      hostsKilled: state.hosts.length,
+      childrenKilled: state.children.length,
+      descriptorsClosed: expect.any(Number),
+      sessionDirRemoved: state.sessionOpenRow === null,
+      abortAppended: state.sessionOpenRow !== null,
+    });
+    expect(outcome.descriptorsClosed).toBeGreaterThanOrEqual(state.lifelines.length + (state.ledger === null ? 0 : 1));
+    for (const pid of [...childPids, ...state.hosts.map(host => host.hostPid)]) {
+      expect(processSurvives(pid)).toBe(false);
+    }
+    for (const client of [...state.adapters.map(adapter => adapter.client), ...(state.client ? [state.client] : [])]) {
+      expect((await client.output("builder")[Symbol.asyncIterator]().next()).done).toBe(true);
+      await expect(client.getSnapshot()).rejects.toThrow();
+    }
+    if (state.broker !== null) expect(() => state.broker!.snapshotProjectionInput()).toThrow();
+    if (state.sessionOpenRow !== null) {
+      expect(existsSync(state.storage!.sessionDir)).toBe(true);
+      const ledger = new Ledger(state.ledgerPath!);
+      try {
+        const events = ledger.readAfter(0).map(row => JSON.parse(row.event_json));
+        expect(events.filter(event => event.event_type === "session_abort")).toHaveLength(1);
+        expect(events.filter(event => event.event_type === "fencing_token_invalidated")).toHaveLength(state.fencingTokenIssued ? 1 : 0);
+        const lifecycle = events.reduce(reduceLedgerEvent, INITIAL_LIFECYCLE_STATE);
+        expect(lifecycle.phase).toBe("closed");
+        expect(lifecycle.tokenUsable).toBe(false);
+        expect(lifecycle.tokenState).not.toBe("valid");
+        if (state.fencingTokenIssued) expect(events.slice(-2).map(event => event.event_type)).toEqual(["session_abort", "fencing_token_invalidated"]);
+        expect(ledger.verify().valid).toBe(true);
+      } finally {
+        ledger.close();
+      }
+    } else {
+      expect(existsSync(join(f.plan.storageRoot, "sessions", f.sessionId))).toBe(false);
+    }
+    expect(readFileSync(capability.path)).toEqual(capability.bytes);
+    await waitForAbsence(() => descriptorCount() <= baseline);
+    expect(descriptorCount()).toBeLessThanOrEqual(baseline);
+  }, 15_000);
+}
+
+test("rollback before session_open removes the session directory", async () => {
+  for (const step of ["ledger_open", "session_open"] as const) {
+    const f = makeBuildFixture(`ses-task47-remove-${step}`);
+    const result = await f.run({ injectFailureAt: step });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected a typed build failure");
+    const state = result.partialState;
+    expect(state.sessionOpenRow).toBeNull();
+    expect(existsSync(state.storage!.sessionDir)).toBe(true);
+    const outcome: RollbackOutcome = await rollbackBuild(state);
+    statesToClean.splice(statesToClean.indexOf(state), 1);
+    expect(existsSync(state.storage!.sessionDir)).toBe(false);
+    expect(outcome.sessionDirRemoved).toBe(true);
+    expect(outcome.abortAppended).toBe(false);
+  }
+  const f = makeBuildFixture("ses-task47-existing");
+  const prior = await f.run({ injectFailureAt: "broker" });
+  if (prior.ok) throw new Error("expected a typed build failure");
+  await rollbackBuild(prior.partialState);
+  statesToClean.splice(statesToClean.indexOf(prior.partialState), 1);
+  const evidence = readFileSync(prior.partialState.ledgerPath!);
+  const retry = await f.run({ injectFailureAt: "ledger_open" });
+  if (retry.ok) throw new Error("expected existing storage to be rejected");
+  expect(retry.failedStep).toBe("storage");
+  expect(retry.partialState.storage).toBeNull();
+  expect((await rollbackBuild(retry.partialState)).sessionDirRemoved).toBe(false);
+  statesToClean.splice(statesToClean.indexOf(retry.partialState), 1);
+  expect(readFileSync(prior.partialState.ledgerPath!)).toEqual(evidence);
+});
+
+test("rollback never deletes a capability record", async () => {
+  const f = makeBuildFixture("ses-task47-capability");
+  const capability = capabilityFixture(f);
+  const result = await f.run({ injectFailureAt: "ledger_open" });
+  if (result.ok) throw new Error("expected a typed build failure");
+  const state = result.partialState;
+  const forged: PartialBuildState = { ...state, storage: {
+    ...state.storage!, sessionDir: `${state.storage!.root}/sessions/../capability`,
+  } };
+  await expect(rollbackBuild(forged)).rejects.toThrow();
+  expect(readFileSync(capability.path)).toEqual(capability.bytes);
+  const outcome: RollbackOutcome = await rollbackBuild(state);
+  statesToClean.splice(statesToClean.indexOf(state), 1);
+  expect(outcome.sessionDirRemoved).toBe(true);
+  expect(readFileSync(capability.path)).toEqual(capability.bytes);
+});
+
+test("rollback uses the same containment path as live interruption", async () => {
+  const f = makeBuildFixture("ses-task47-containment");
+  const result = await f.run({ injectFailureAt: "reattest" });
+  if (result.ok) throw new Error("expected a typed build failure");
+  const state = result.partialState;
+  const containment = spyOn(hostModule, "escalateWedgedHost");
+  try {
+    const outcome: RollbackOutcome = await rollbackBuild(state);
+    statesToClean.splice(statesToClean.indexOf(state), 1);
+    expect(containment).toHaveBeenCalledTimes(state.hosts.length);
+    expect(outcome.hostsKilled).toBe(2);
+    expect(outcome.childrenKilled).toBe(2);
+    for (const host of state.hosts) expect(processSurvives(host.hostPid)).toBe(false);
+    for (const child of state.children) expect(processSurvives(child.childPid!)).toBe(false);
+  } finally {
+    containment.mockRestore();
+  }
+  const late = makeBuildFixture("ses-task47-late-child");
+  const lateResult = await late.run({ injectFailureAt: "children" });
+  if (lateResult.ok) throw new Error("expected a typed build failure");
+  expect(lateResult.partialState.children.every(child => child.childPid === null)).toBe(true);
+  const lateOutcome = await rollbackBuild(lateResult.partialState);
+  statesToClean.splice(statesToClean.indexOf(lateResult.partialState), 1);
+  const latePids = await observeChildren(lateResult.partialState);
+  expect(lateOutcome.childrenKilled).toBe(2);
+  for (const pid of latePids) expect(processSurvives(pid)).toBe(false);
+
+  for (const fault of ["ledger_write", "host_send"] as const) {
+    const f = makeBuildFixture(`ses-task47-error-${fault}`);
+    const baseline = descriptorCount();
+    const failed = await f.run({ injectFailureAt: "reattest", ...(fault === "host_send" ? {
+      spawnHost: (descriptor: hostModule.HostLaunchDescriptor) => {
+        const handle = hostModule.spawnPtyHost(descriptor);
+        return { ...handle, send: () => { throw new Error("SYNTHETIC-HOST-SEND-FAILURE"); } };
+      },
+    } : {}) });
+    if (failed.ok) throw new Error("expected a typed build failure");
+    const state = failed.partialState;
+    const append = fault === "ledger_write" ? spyOn(state.ledger!, "appendMany").mockImplementation(() => {
+      throw new Error("SYNTHETIC-LEDGER-WRITE-FAILURE");
+    }) : null;
+    try {
+      await expect(rollbackBuild(state)).rejects.toThrow("rollback_failed");
+      for (const host of state.hosts) expect(processSurvives(host.hostPid)).toBe(false);
+      for (const child of state.children) expect(processSurvives(child.childPid!)).toBe(false);
+      await expect(state.client!.getSnapshot()).rejects.toThrow();
+      expect(() => state.ledger!.readAfter(0)).toThrow();
+      await waitForAbsence(() => descriptorCount() <= baseline);
+      expect(descriptorCount()).toBeLessThanOrEqual(baseline);
+    } finally {
+      append?.mockRestore();
+      await cleanupPartialState(state);
+      statesToClean.splice(statesToClean.indexOf(state), 1);
+    }
+  }
+}, 15_000);
