@@ -1,8 +1,10 @@
-import { join } from "node:path";
+import { existsSync, realpathSync } from "node:fs";
+import { join, resolve, sep } from "node:path";
 import {
   GENESIS_HASH,
   INITIAL_LIFECYCLE_STATE,
   Ledger,
+  computeEventHash,
   reduceLedgerEvent,
   type LedgerRow,
   type LifecyclePhase,
@@ -11,13 +13,15 @@ import {
 import {
   ADAPTER_REGISTRY,
   PROTOCOL_VERSION,
+  canonicalJson,
   type AdapterRegistrationV1,
   type SessionLifecycleEventV1,
   type SurfaceId,
   type TaskEnvelopeV1,
 } from "@madventures/protocol";
-import { createSessionStorage, type SessionStorage } from "@madventures/storage";
-import { issueInitialToken } from "../../broker/src/fencing";
+import { createSessionStorage, rollbackSessionStorage, type SessionStorage } from "@madventures/storage";
+import { invalidateToken, issueInitialToken } from "../../broker/src/fencing";
+import { HOST_DEADLINES_MS, terminateChildGroup } from "../../pty-host/src/signals";
 import {
   createInProcessBrokerClient,
   type InProcessBrokerClient,
@@ -25,6 +29,7 @@ import {
 } from "../../broker/src/in-process-client";
 import {
   spawnPtyHost,
+  escalateWedgedHost,
   type HostLaunchDescriptor,
   type PtyHostHandle,
 } from "../../broker/src/pty-host-supervisor";
@@ -184,6 +189,171 @@ export interface PartialBuildState {
   readonly fencingTokenRow: LedgerRow | null;
   readonly fencingTokenIssued: boolean;
   readonly sessionActivatedRow: LedgerRow | null;
+}
+
+export interface RollbackOutcome {
+  readonly sessionId: string;
+  readonly completedSteps: readonly BuildStep[];
+  readonly hostsKilled: number;
+  readonly childrenKilled: number;
+  readonly descriptorsClosed: number;
+  readonly sessionDirRemoved: boolean;
+  readonly abortAppended: boolean;
+}
+
+const closeBuildBroker = new WeakMap<RuntimeBroker, () => void>();
+const rollbacks = new WeakMap<PartialBuildState, Promise<RollbackOutcome>>();
+
+function rollbackProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code !== "ESRCH";
+  }
+}
+
+/** Roll back an incomplete startup; a durable activation is never an abort. */
+export function rollbackBuild(state: PartialBuildState): Promise<RollbackOutcome> {
+  const existing = rollbacks.get(state);
+  if (existing !== undefined) return existing;
+  const rollback = unwindBuild(state);
+  rollbacks.set(state, rollback);
+  return rollback;
+}
+
+async function unwindBuild(state: PartialBuildState): Promise<RollbackOutcome> {
+  if (state.sessionActivatedRow !== null) throw new Error("rollback_requires_incomplete_startup");
+  const errors: unknown[] = [];
+  const attempt = async (action: () => void | Promise<void>): Promise<void> => {
+    try { await action(); } catch (error) { errors.push(error); }
+  };
+  let abortAppended = false;
+  let descriptorsClosed = 0;
+  let sessionDirRemoved = false;
+  const closedLifelines = new Set<BuildLifelineResource>();
+  const childPids = new Set(state.children.flatMap(child => child.childPid === null ? [] : [child.childPid]));
+  const hostsKilled = state.hosts.filter(host => rollbackProcessAlive(host.hostPid)).length;
+
+  for (const adapter of [...state.adapters].reverse()) await attempt(() => adapter.disconnect());
+  await attempt(() => {
+    if (state.sessionOpenRow === null || state.ledger === null) return;
+    const { state: lifecycle, head } = replayLedgerState(state.ledger);
+    const opened = JSON.parse(state.sessionOpenRow.event_json) as SessionLifecycleEventV1;
+    const sources = createDefaultSources();
+    const abort: SessionLifecycleEventV1 = {
+      protocol_version: PROTOCOL_VERSION,
+      event_id: sources.nextEventId(),
+      session_id: state.sessionId,
+      event_type: "session_abort",
+      actor: "madbridge",
+      task_envelope_hash: opened.task_envelope_hash,
+      repository_fingerprint: opened.repository_fingerprint,
+      fencing_token: lifecycle.fencingToken,
+      reason_code: null,
+      created_at: sources.now(),
+      previous_event_hash: head,
+      payload: { abort_reason: "build_failed" },
+    };
+    const aborted = reduceLedgerEvent(lifecycle, abort);
+    if (state.fencingTokenIssued) {
+      const invalidation = invalidateToken(aborted, "rollback", null, {
+        taskEnvelopeHash: opened.task_envelope_hash,
+        repositoryFingerprint: opened.repository_fingerprint,
+        previousEventHash: computeEventHash(head, canonicalJson(abort)),
+        eventId: sources.nextEventId(),
+        createdAt: sources.now(),
+      });
+      reduceLedgerEvent(aborted, invalidation);
+      state.ledger.appendMany([abort, invalidation]);
+    } else {
+      state.ledger.append(abort);
+    }
+    abortAppended = true;
+  });
+
+  for (const child of [...state.children].reverse()) await attempt(async () => {
+    if (child.pgid === null) return; // The host's launched fact supplies late identities below.
+    await terminateChildGroup(child.pgid, () => {}, { emitStarted: false, seams: {
+      signalProcessGroup: (pgid, signal) => {
+        try { process.kill(-pgid, signal); } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+        }
+      },
+      groupIsAlive: pgid => rollbackProcessAlive(-pgid),
+    } });
+    if ((child.childPid !== null && rollbackProcessAlive(child.childPid)) || rollbackProcessAlive(-child.pgid)) {
+      throw new Error(`rollback: surviving child PID ${child.childPid}`);
+    }
+  });
+
+  for (const host of [...state.hosts].reverse()) await attempt(async () => {
+    const child = state.children.find(child => child.executionId === host.executionId);
+    let pgid = child?.pgid ?? 0;
+    const localChildren = new Set(child?.childPid == null ? [] : [child.childPid]);
+    let settled = false;
+    let bypassed = false;
+    const facts = (async () => {
+      for await (const fact of host.handle.facts()) {
+        if (fact.kind === "launched") {
+          pgid = fact.pgid;
+          localChildren.add(fact.childPid);
+          childPids.add(fact.childPid);
+          if (bypassed) host.handle.killPgid();
+        }
+      }
+    })().catch(error => { errors.push(error); }).finally(() => { settled = true; });
+    const started = performance.now();
+    let delegated = false;
+    await attempt(async () => {
+      delegated = (await escalateWedgedHost(host.handle, pgid, host.hostPid)).state === "S1";
+      bypassed = !delegated;
+      if (bypassed) host.handle.killPgid();
+    });
+    const lifeline = state.lifelines.find(line => line.executionId === host.executionId);
+    await attempt(() => {
+      if (lifeline !== undefined) {
+        lifeline.close(); closedLifelines.add(lifeline); descriptorsClosed += 1;
+      } else host.handle.closeStdin();
+    });
+    const absent = () => settled && !rollbackProcessAlive(host.hostPid)
+      && [...localChildren].every(pid => !rollbackProcessAlive(pid))
+      && (pgid <= 1 || !rollbackProcessAlive(-pgid));
+    while (!absent() && performance.now() - started < HOST_DEADLINES_MS.outerBound) await Bun.sleep(10);
+    if (!absent() && delegated) {
+      // S1 acknowledges delegation; only an expired completion bound permits bypass.
+      await escalateWedgedHost(host.handle, pgid, host.hostPid);
+      bypassed = true;
+      host.handle.killPgid();
+    }
+    const finalDeadline = performance.now() + HOST_DEADLINES_MS.terminationStarted;
+    while (!absent() && performance.now() < finalDeadline) await Bun.sleep(10);
+    host.handle.killPgid(); // Include a launched fact that arrived after initial escalation.
+    if (!absent()) throw new Error(`rollback_host_containment_incomplete pid=${host.hostPid}`);
+    await facts;
+    descriptorsClosed += 1;
+  });
+
+  for (const lifeline of [...state.lifelines].reverse()) {
+    if (!closedLifelines.has(lifeline)) await attempt(() => { lifeline.close(); descriptorsClosed += 1; });
+  }
+  for (const adapter of [...state.adapters].reverse()) await attempt(() => adapter.client.close());
+  if (state.client !== null) await attempt(() => state.client!.close());
+  if (state.broker !== null) closeBuildBroker.get(state.broker)?.();
+  if (state.ledger !== null) await attempt(() => { state.ledger!.close(); descriptorsClosed += 1; });
+  if (state.storage !== null && state.sessionOpenRow === null) await attempt(() => {
+    const storage = state.storage!;
+    const boundary = resolve(storage.root, "sessions") + sep;
+    const directory = resolve(storage.sessionDir);
+    if (!directory.startsWith(boundary) || directory !== resolve(boundary, state.sessionId)
+      || realpathSync(directory) !== resolve(realpathSync(storage.root), "sessions", state.sessionId)) {
+      throw new Error("rollback_session_directory_outside_boundary");
+    }
+    sessionDirRemoved = rollbackSessionStorage({ ...storage, sessionDir: directory }, false) === "removed";
+  });
+  if (errors.length > 0) throw new AggregateError(errors, "rollback_failed");
+  return Object.freeze({ sessionId: state.sessionId, completedSteps: state.completedSteps,
+    hostsKilled, childrenKilled: childPids.size, descriptorsClosed, sessionDirRemoved, abortAppended });
 }
 
 export interface BuildStepObservation {
@@ -510,6 +680,9 @@ export async function runTransactionalBuildWithDependencies(
           ) {
             return failAt(step, "storage_failed");
           }
+          if (existsSync(join(plan.storageRoot, "sessions", sessionId))) {
+            return failAt(step, "storage_failed");
+          }
           storage = createSessionStorage(
             plan.storageRoot,
             sessionId,
@@ -563,18 +736,22 @@ export async function runTransactionalBuildWithDependencies(
           }
           const deps = makeBrokerDeps(ledger);
           currentBroker = new RuntimeBroker(deps);
+          const openBroker = (): RuntimeBroker => {
+            if (currentBroker === null) throw new Error("build_broker_closed");
+            return currentBroker;
+          };
           const delegate = Object.create(RuntimeBroker.prototype) as RuntimeBroker;
           Object.defineProperties(delegate, {
             snapshotSeq: {
-              get: () => currentBroker!.snapshotSeq,
+              get: () => openBroker().snapshotSeq,
               enumerable: true,
             },
             snapshotProjectionInput: {
-              value: () => currentBroker!.snapshotProjectionInput(),
+              value: () => openBroker().snapshotProjectionInput(),
             },
             activate: {
               value: (writer: string, readyIds: readonly string[]) =>
-                currentBroker!.activate(writer, readyIds),
+                openBroker().activate(writer, readyIds),
             },
             interrupt: {
               value: (
@@ -585,7 +762,7 @@ export async function runTransactionalBuildWithDependencies(
                 sourceEventId: Parameters<RuntimeBroker["interrupt"]>[4],
                 reportedBy: Parameters<RuntimeBroker["interrupt"]>[5],
               ) =>
-                currentBroker!.interrupt(
+                openBroker().interrupt(
                   reason,
                   detail,
                   severity,
@@ -595,10 +772,11 @@ export async function runTransactionalBuildWithDependencies(
                 ),
             },
             founderClose: {
-              value: (commandId: string) => currentBroker!.founderClose(commandId),
+              value: (commandId: string) => openBroker().founderClose(commandId),
             },
           });
           const createdBroker = Object.freeze(delegate) as RuntimeBroker;
+          closeBuildBroker.set(createdBroker, () => { currentBroker = null; });
           brokerHandle = createdBroker;
           resources.push(Object.freeze({ step: "broker", broker: createdBroker }));
           break;

@@ -9,7 +9,7 @@ export {
 export { runPurePreflight } from "./preflight";
 export type { PreflightInput, PreflightFailure, PreflightOk, PreflightResult, LaunchPlan, LaunchExecution } from "./preflight";
 
-export { BUILD_STEPS, runTransactionalBuild } from "./build";
+export { BUILD_STEPS, runTransactionalBuild, rollbackBuild } from "./build";
 export type {
   BuildAdapterHandle,
   BuildChildResource,
@@ -23,4 +23,5 @@ export type {
   LiveReattestationRecord,
   LiveReattestationResult,
   PartialBuildState,
+  RollbackOutcome,
 } from "./build";
