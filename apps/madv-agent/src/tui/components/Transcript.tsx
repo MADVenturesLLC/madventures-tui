@@ -1,11 +1,12 @@
 // apps/madv-agent/src/tui/components/Transcript.tsx
 // The transcript pane: the session so far, reconstructed from the event
 // stream (never from a side store). Presentation only.
+// TranscriptLine lives in src/bootstrap.ts (outside src/tui/) and is
+// re-exported here for presentation callers.
 
-export interface TranscriptLine {
-  kind: "user" | "assistant" | "system";
-  text: string;
-}
+import type { TranscriptLine } from "../../bootstrap";
+
+export type { TranscriptLine };
 
 const KIND_PREFIX: Record<TranscriptLine["kind"], string> = {
   user: "you › ",

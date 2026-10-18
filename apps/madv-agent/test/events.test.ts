@@ -7,11 +7,14 @@ import {
   EventWriter,
   canonicalJson,
   eventHash,
+  isValidSessionId,
   readEvents,
   reconstructTranscript,
   verifyChain,
   GENESIS_HASH,
   listSessions,
+  SESSION_ID_PATTERN,
+  newSessionId,
 } from "../src/events";
 import { openNewSession, openSessionForResume } from "../src/session";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
@@ -140,5 +143,56 @@ describe("hash-chained events (design §3)", () => {
     const summaryB = sessions.find((s) => s.id === b.id)!;
     expect(summaryB.eventCount).toBe(2);
     expect(summaryB.lastHash).toBe(b.writer.tailHash());
+  });
+
+  test("D1 BITE: an empty or truncated events file fails verification and resume", () => {
+    const dir = tempProject();
+    const opened = openNewSession(dir, { kept: {}, dropped: [] }, { pid: process.pid, argv: [] });
+    const file = opened.writer.filePath;
+
+    // Truncate to zero bytes — exactly the state D1 forbade accepting.
+    writeFileSync(file, "");
+    expect(readEvents(file)).toHaveLength(0);
+    const verdict = verifyChain(readEvents(file));
+    expect(verdict.ok).toBe(false);
+    expect(verdict.errors.some((e) => e.includes("chain is empty"))).toBe(true);
+
+    // Resume must refuse, naming the session AND the file.
+    try {
+      openSessionForResume(dir, opened.id);
+      throw new Error("expected openSessionForResume to throw");
+    } catch (err) {
+      expect((err as Error).message).toContain(opened.id);
+      expect((err as Error).message).toContain(file);
+      expect((err as Error).message).toContain("empty event stream");
+    }
+  });
+
+  test("D6 BITE: session ids come from a crypto source — identical Math.random still yields distinct ids", () => {
+    const originalRandom = Math.random;
+    Math.random = () => 0.5; // pin the legacy source: a Math.random id would repeat
+    try {
+      const a = newSessionId();
+      const b = newSessionId();
+      expect(a).not.toBe(b);
+    } finally {
+      Math.random = originalRandom;
+    }
+    expect(SESSION_ID_PATTERN.test(newSessionId())).toBe(true);
+  });
+
+  test("D2: session ids that are not session ids are rejected by the pattern", () => {
+    for (const bad of [
+      "../../etc/passwd",
+      "../..",
+      "s-20261018T223857-ZZ00aa", // non-hex tail
+      "s-20261018T223857-070ca0/extra",
+      "",
+      ".",
+      "s-short",
+    ]) {
+      expect(isValidSessionId(bad)).toBe(false);
+    }
+    expect(isValidSessionId("s-20261018T223857-070ca0")).toBe(true);
   });
 });

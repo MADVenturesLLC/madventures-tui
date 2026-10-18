@@ -5,14 +5,18 @@
 
 import {
   EventWriter,
+  isValidSessionId,
   newSessionId,
   readEvents,
   sessionFile,
   sessionExists,
+  sessionsDir,
   verifyChain,
   type SessionEvent,
 } from "./events";
 import type { ScrubResult } from "./scrub";
+import { realpathSync } from "node:fs";
+import { join, dirname } from "node:path";
 
 export interface OpenedSession {
   id: string;
@@ -47,12 +51,41 @@ export function openSessionForResume(
   sessionId: string,
   verifyFn: (events: SessionEvent[]) => { ok: boolean; errors: string[] } = verifyChain,
 ): OpenedSession {
+  // D2: the id comes from the command line. Refuse anything that is not a
+  // session id BEFORE it is ever joined onto a path.
+  if (!isValidSessionId(sessionId)) {
+    throw new Error(
+      `refused: "${sessionId}" is not a session id (expected s-<timestamp>-<hex>)`,
+    );
+  }
+  const dir = sessionsDir(projectDir);
+  const file = sessionFile(projectDir, sessionId);
+  // D2, belt and braces: the resolved session directory must still live in
+  // the resolved sessions directory — a symlink cannot walk the id out.
+  try {
+    if (realpathSync(dirname(file)) !== realpathSync(join(dir, sessionId))) {
+      throw new Error(
+        `refused: session ${sessionId} resolves outside this project's sessions directory`,
+      );
+    }
+  } catch (err) {
+    if (err instanceof Error && err.message.startsWith("refused:")) throw err;
+    throw new Error(`no such session in this project: ${sessionId}`);
+  }
   if (!sessionExists(projectDir, sessionId)) {
     throw new Error(`no such session in this project: ${sessionId}`);
   }
-  const writer = new EventWriter(sessionFile(projectDir, sessionId));
+  const writer = new EventWriter(file);
   writer.loadExisting();
-  const events = readEvents(sessionFile(projectDir, sessionId));
+  const events = readEvents(file);
+  // D1: an empty or truncated file is not a session — refuse explicitly,
+  // naming the session and the file.
+  if (events.length === 0) {
+    throw new Error(
+      `refused: session ${sessionId} has an empty event stream (${file}) — ` +
+        `a chain of zero events is not a resumable session`,
+    );
+  }
   const verdict = verifyFn(events);
   if (!verdict.ok) {
     throw new Error(

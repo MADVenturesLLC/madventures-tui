@@ -3,7 +3,7 @@
 // is THE append-only, hash-chained record. There is no second store: resume
 // reconstructs the transcript from these events alone.
 
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, appendFileSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 
@@ -13,7 +13,8 @@ export type SessionEventType =
   | "session_start"
   | "env_scrub"
   | "user_message"
-  | "assistant_message";
+  | "assistant_message"
+  | "stream_error";
 
 export interface SessionEvent {
   seq: number;
@@ -67,9 +68,23 @@ export function sessionFile(projectDir: string, sessionId: string): string {
   return join(sessionsDir(projectDir), sessionId, "events.jsonl");
 }
 
+/**
+ * Session ids are generated here and accepted ONLY here: the strict pattern
+ * is also the resume-side validation (path traversal refused — see
+ * openSessionForResume in session.ts). Cryptographically sound source: the
+ * id names a file on disk (CodeQL: no Math.random for names).
+ */
+export const SESSION_ID_PATTERN = /^s-\d{8}T\d{6}-[0-9a-f]{6}$/;
+
+export function isValidSessionId(id: string): boolean {
+  return SESSION_ID_PATTERN.test(id);
+}
+
 export function newSessionId(now: Date = new Date()): string {
   const stamp = now.toISOString().replace(/[-:]/g, "").replace(/\..+$/, "");
-  const rand = Math.random().toString(16).slice(2, 8).padStart(6, "0");
+  // 6 hex chars, cryptographically sourced (D6) — same length/format as the
+  // ids already on disk so existing sessions stay resumable.
+  const rand = randomBytes(3).toString("hex");
   return `s-${stamp}-${rand}`;
 }
 
@@ -150,6 +165,12 @@ export interface ChainVerification {
 /** Verify the file's own hash chain: every record recomputed and linked. */
 export function verifyChain(events: SessionEvent[]): ChainVerification {
   const errors: string[] = [];
+  if (events.length === 0) {
+    // A chain of zero events must not verify — an empty or truncated file is
+    // not a session (D1).
+    errors.push("the chain is empty: zero events is not a verifiable session");
+    return { ok: false, errors };
+  }
   let prev = GENESIS_HASH;
   for (const event of events) {
     const expected = eventHash(event);

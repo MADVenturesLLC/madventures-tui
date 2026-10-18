@@ -5,7 +5,7 @@
 // shape only; the model is pinned server-side by the proxy.
 
 import { chatCompletionsUrl } from "./proxy";
-import { ProxyRefusedError, ProxyRequestError } from "./proxy-error";
+import { ProxyRefusedError, ProxyRequestError, SseFrameError } from "./proxy-error";
 
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
@@ -118,7 +118,12 @@ export async function streamChatCompletion(opts: StreamOptions): Promise<StreamR
         try {
           chunk = JSON.parse(data) as ChatCompletionChunk;
         } catch {
-          continue; // not JSON — skip the line; the chain is authoritative
+          // D4: a malformed frame is an explicit error, never a silent skip —
+          // dropping it could pass partial content off as a success.
+          const excerpt = data.length > 200 ? `${data.slice(0, 200)}…` : data;
+          throw new SseFrameError(
+            `malformed SSE frame from the proxy at ${proxyUrl}: ${JSON.stringify(excerpt)} is not JSON`,
+          );
         }
         if (typeof chunk.model === "string" && model === null) model = chunk.model;
         const delta = chunk.choices?.[0]?.delta?.content;

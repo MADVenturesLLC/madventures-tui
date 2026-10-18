@@ -22,7 +22,9 @@ import {
 } from "./events";
 import { openNewSession, openSessionForResume } from "./session";
 import { runTurn } from "./turn";
-import { ProxyRefusedError } from "./proxy-error";
+import { ProxyRefusedError, ProxyRequestError } from "./proxy-error";
+import type { ProjectLock } from "./lock";
+import type { TuiBootstrap } from "./bootstrap";
 
 export interface ParsedArgs {
   projectDir?: string;
@@ -77,6 +79,47 @@ export interface CliIo {
   stderr: (text: string) => void;
   /** Mutate the live process environment during the scrub. */
   deleteEnv: (name: string) => void;
+  /**
+   * D3 test seam: where exit/signal handlers are registered, so tests can
+   * prove the lock is released on every TUI exit path. Defaults to the real
+   * process.
+   */
+  processHooks?: ProcessHooks;
+  /** D3 test seam: the TUI implementation. Defaults to ./tui/main. */
+  tui?: (bootstrap: TuiBootstrap) => Promise<void>;
+}
+
+export interface ProcessHooks {
+  onExit: (cb: () => void) => void;
+  onSignal: (cb: () => void) => void;
+  /** How the signal handler terminates the process (injectable for tests). */
+  exit: (code: number) => void;
+}
+
+export const REAL_PROCESS_HOOKS: ProcessHooks = {
+  onExit: (cb) => {
+    process.on("exit", cb);
+  },
+  onSignal: (cb) => {
+    process.on("SIGINT", cb);
+    process.on("SIGTERM", cb);
+  },
+  exit: (code) => {
+    process.exit(code);
+  },
+};
+
+/**
+ * D3: the lock is released on EVERY exit path — normal return, process.exit,
+ * SIGINT, SIGTERM. (A SIGKILL leaves a stale lock; the dead-holder reclaim
+ * handles that.) Previously only --prompt and listing paths released.
+ */
+export function wireLockRelease(lock: ProjectLock, hooks: ProcessHooks): void {
+  hooks.onExit(() => lock.release());
+  hooks.onSignal(() => {
+    lock.release();
+    hooks.exit(130);
+  });
 }
 
 export const HELP_TEXT = `madv-agent v0 (stage N1) — model client, streaming, credential path
@@ -212,17 +255,28 @@ export async function runCli(io: CliIo): Promise<CliExit> {
           io.stderr(`madv-agent: REFUSED — ${err.message}`);
           return { code: 5 };
         }
+        if (err instanceof ProxyRequestError) {
+          // D4: a mid-stream failure (e.g. a malformed SSE frame) is an
+          // explicit error — recorded as a stream_error event by runTurn and
+          // surfaced here. Never a silent partial success.
+          io.stderr(`madv-agent: STREAM ERROR — ${err.message}`);
+          return { code: 6 };
+        }
         throw err;
       }
     }
 
     // ── Full-screen TUI. Imported lazily so headless modes never load it. ──
-    const { runTui } = await import("./tui/main");
+    // D3: the lock is released on EVERY exit path — normal TUI return,
+    // process.exit from onExit, SIGINT/SIGTERM — via the exit wiring below.
+    // The finally above deliberately does NOT release on this path: when
+    // runCli returns here the TUI is (or may still be) live.
+    wireLockRelease(lock, io.processHooks ?? REAL_PROCESS_HOOKS);
     const lines = initialTranscript.map((m) => ({
       kind: m.role,
       text: m.content,
     }));
-    await runTui({
+    const bootstrap: TuiBootstrap = {
       projectDirName: projectName,
       sessionId,
       initialLines: lines,
@@ -231,13 +285,22 @@ export async function runCli(io: CliIo): Promise<CliExit> {
       runTurn: (userText, onDelta) =>
         runTurn(writer, userText, { proxyUrl, onDelta }),
       onExit: () => {
-        lock.release();
+        // The exit wiring (registered above) releases the lock; exiting
+        // runs it. This branch covers both the Ctrl+C route and a renderer
+        // that finishes on its own.
         process.exit(0);
       },
-    });
+    };
+    if (io.tui !== undefined) {
+      await io.tui(bootstrap);
+    } else {
+      const { runTui } = await import("./tui/main");
+      await runTui(bootstrap);
+    }
     return { code: 0 };
   } finally {
-    // The TUI path releases the lock via onExit; headless paths reach here.
+    // Headless paths (--prompt, listing) release here. The TUI path is
+    // covered by wireLockRelease on every exit path instead.
     if (parsed.prompt !== undefined || parsed.resumeId === null) {
       lock.release();
     }

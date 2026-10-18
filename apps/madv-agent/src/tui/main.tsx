@@ -3,23 +3,16 @@
 // apps/madbridge conventions (createCliRenderer + createRoot).
 // The caller (cli.ts) has already scrubbed the environment, acquired the
 // project lock, and opened/resumed the session before this runs.
+// TuiBootstrap lives in src/bootstrap.ts (outside src/tui/) and is
+// re-exported here for compatibility.
 
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
 import type { ReactNode } from "react";
 import { App } from "./App";
-import type { TranscriptLine } from "./components/Transcript";
-import type { TurnResult } from "../turn";
+import type { TuiBootstrap } from "../bootstrap";
 
-export interface TuiBootstrap {
-  projectDirName: string;
-  sessionId: string;
-  initialLines: TranscriptLine[];
-  initialTailHash: string;
-  scrubCount: number;
-  runTurn: (userText: string, onDelta: (delta: string) => void) => Promise<TurnResult>;
-  onExit: () => void;
-}
+export type { TuiBootstrap };
 
 export async function runTui(bootstrap: TuiBootstrap): Promise<void> {
   const renderer = await createCliRenderer();

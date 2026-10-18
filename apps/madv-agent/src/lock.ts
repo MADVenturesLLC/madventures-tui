@@ -2,16 +2,15 @@
 // One active session per project directory (design §2). The lock file
 // .madv-agent/lock makes a second concurrent instance refuse to start, so two
 // processes can never write one event stream.
+//
+// Creation is atomic WITH content (D5): the pid is written to a unique temp
+// file first, then hard-linked onto the lock path — link(2) fails with EEXIST
+// if the lock exists, so the lock file can never be observed empty. A reader
+// therefore always sees a holder pid; an unparseable lock is corruption, not
+// a creation window, and is reclaimed.
 
-import {
-  closeSync,
-  mkdirSync,
-  openSync,
-  readFileSync,
-  rmSync,
-  writeSync,
-  existsSync,
-} from "node:fs";
+import { linkSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync, existsSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 
 export function lockPath(projectDir: string): string {
@@ -68,15 +67,28 @@ export function acquireProjectLock(projectDir: string): ProjectLock {
   mkdirSync(parent, { recursive: true });
 
   for (let attempt = 0; attempt < 2; attempt++) {
-    let fd: number;
+    // D5: write the pid into a unique temp file FIRST, then link(2) it onto
+    // the lock path. link is atomic and fails with EEXIST when the lock
+    // exists, so content and creation are one step — no empty-lock window.
+    const temp = join(parent, `.lock.${process.pid}.${randomUUID()}`);
+    writeFileSync(temp, `${process.pid}\n`);
+    let linked = false;
     try {
-      // O_CREAT|O_EXCL: creation is the lock — atomic on local filesystems.
-      fd = openSync(path, "wx");
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+      try {
+        linkSync(temp, path);
+        linked = true;
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
+      }
+    } finally {
+      unlinkSync(temp);
+    }
+
+    if (!linked) {
       const holder = readHolderPid(path);
       if (holder === null) {
-        // Unparseable lock: stale, reclaim.
+        // Unparseable lock: corrupt (never a creation window — see above),
+        // reclaim.
         rmSync(path, { force: true });
         continue;
       }
@@ -89,11 +101,7 @@ export function acquireProjectLock(projectDir: string): ProjectLock {
       rmSync(path, { force: true });
       continue;
     }
-    try {
-      writeSync(fd, `${process.pid}\n`);
-    } finally {
-      closeSync(fd);
-    }
+
     let released = false;
     return {
       path,

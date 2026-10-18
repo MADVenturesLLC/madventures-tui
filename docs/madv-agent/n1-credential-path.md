@@ -69,8 +69,13 @@ fails on any mutated byte or re-ordered event.
   fails with an explicit refusal that names the proxy URL (exit code 5 in
   `--prompt` mode). Never a fallback, never a silent degrade: this agent
   holds no provider key and will not use one.
+- **A broken stream.** A malformed SSE frame from the proxy is an error, not
+  a partial reply: the turn is recorded as a `stream_error` event in the
+  session's chain and surfaced on stderr with exit code 6 in `--prompt` mode.
+  A partial reply is never recorded as an `assistant_message`.
 - **A tampered event stream.** `--resume <id>` verifies the session's hash
-  chain first; a broken chain refuses to resume (exit code 4).
+  chain first; a broken chain — or an empty/truncated one, which is not a
+  chain at all — refuses to resume (exit code 4).
 
 ## What N1 does not do
 

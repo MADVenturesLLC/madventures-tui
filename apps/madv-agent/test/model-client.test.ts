@@ -8,7 +8,7 @@ import { describe, expect, test } from "bun:test";
 import { streamChatCompletion } from "../src/model-client";
 import { runTurn } from "../src/turn";
 import { EventWriter, readEvents, type SessionEvent } from "../src/events";
-import { ProxyRefusedError } from "../src/proxy-error";
+import { ProxyRefusedError, ProxyRequestError, SseFrameError } from "../src/proxy-error";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -88,6 +88,76 @@ describe("streaming model client", () => {
     expect((events[0] as { payload: { content: string } }).payload.content).toBe("count for me");
     expect((events[1] as { payload: { content: string } }).payload.content).toBe("one two");
     expect((events[1] as { payload: { model: string } }).payload.model).toBe(model);
+  });
+});
+
+describe("malformed SSE frames are errors, not silent partials (D4)", () => {
+  test("a malformed data: frame throws SseFrameError naming the frame", async () => {
+    const response = sseResponse(
+      [
+        sseChunk(1, "good prefix ", "glm-5.3-flash:cloud"),
+        "data: {not json at all\n\n",
+        sseChunk(2, "never arrives", "glm-5.3-flash:cloud"),
+      ],
+      "glm-5.3-flash:cloud",
+    );
+    let caught: unknown = null;
+    try {
+      await streamChatCompletion({
+        proxyUrl: "http://127.0.0.1:14933",
+        messages: [{ role: "user", content: "hi" }],
+        fetchImpl: async () => response,
+      });
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(SseFrameError);
+    expect((caught as Error).message).toContain("malformed SSE frame");
+    expect((caught as Error).message).toContain("{not json at all");
+  });
+
+  test("D4 BITE: the failed turn is recorded as stream_error, never as a reply", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "madv-agent-d4-"));
+    const writer = new EventWriter(join(dir, "events.jsonl"));
+    const deltas: string[] = [];
+    const response = sseResponse(
+      [
+        sseChunk(1, "partial ", "glm-5.3-flash:cloud"),
+        "data: [[broken\n\n",
+      ],
+      "glm-5.3-flash:cloud",
+    );
+    let caught: unknown = null;
+    try {
+      await runTurn(writer, "ask something", {
+        proxyUrl: "http://127.0.0.1:14933",
+        onDelta: (d) => deltas.push(d),
+        fetchImpl: async () => response,
+      });
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(SseFrameError);
+    expect(deltas).toEqual(["partial "]); // the delta did render live…
+
+    const events = readEvents(writer.filePath) as SessionEvent[];
+    // …but the stream records an ERROR, never an assistant reply.
+    expect(events.map((e) => e.type)).toEqual(["user_message", "stream_error"]);
+    const payload = events[1]!.payload as { reason: string; recorded_as: string };
+    expect(payload.recorded_as).toBe("error");
+    expect(payload.reason).toContain("malformed SSE frame");
+    expect(JSON.stringify(events)).not.toContain('"type":"assistant_message"');
+  });
+
+  test("an empty content stream with no error frame still completes as a (legitimately empty) reply", async () => {
+    // [DONE] with zero deltas is not a malformed frame: it ends cleanly.
+    const response = sseResponse([], "glm-5.3-flash:cloud");
+    const result = await streamChatCompletion({
+      proxyUrl: "http://127.0.0.1:14933",
+      messages: [{ role: "user", content: "hi" }],
+      fetchImpl: async () => response,
+    });
+    expect(result.content).toBe("");
   });
 });
 

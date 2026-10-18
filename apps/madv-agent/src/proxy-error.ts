@@ -21,3 +21,14 @@ export class ProxyRequestError extends Error {
     this.status = status;
   }
 }
+
+/**
+ * A malformed SSE frame from the proxy. Never silently skipped (D4): the
+ * call must fail loudly rather than return partial content as a success.
+ */
+export class SseFrameError extends ProxyRequestError {
+  constructor(message: string) {
+    super(message, 502);
+    this.name = "SseFrameError";
+  }
+}

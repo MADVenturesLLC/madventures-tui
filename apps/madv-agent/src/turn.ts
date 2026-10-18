@@ -2,6 +2,10 @@
 // One N1 turn: user message event → streamed model call through the proxy →
 // assistant message event. Deltas are surfaced live through onDelta as they
 // arrive, before the assistant message event is appended.
+//
+// D4: a stream that fails mid-flight (malformed SSE frame, error status) is
+// recorded as a stream_error event — never as a successful reply. The error
+// is then rethrown so the caller surfaces it.
 
 import {
   EventWriter,
@@ -10,6 +14,7 @@ import {
   type SessionEvent,
 } from "./events";
 import { streamChatCompletion, type StreamResult } from "./model-client";
+import { ProxyRequestError } from "./proxy-error";
 
 export interface TurnDeps {
   /** The proxy base URL — the only model endpoint the agent will call. */
@@ -45,16 +50,35 @@ export async function runTurn(
     proxyUrl: deps.proxyUrl,
     messages,
   };
-  if (deps.onDelta !== undefined) streamOpts.onDelta = deps.onDelta;
   if (deps.fetchImpl !== undefined) streamOpts.fetchImpl = deps.fetchImpl;
   if (deps.signal !== undefined) streamOpts.signal = deps.signal;
 
-  const result = await streamChatCompletion(streamOpts);
+  let streamed = 0;
+  try {
+    const result = await streamChatCompletion({
+      ...streamOpts,
+      onDelta: (delta) => {
+        streamed += delta.length;
+        deps.onDelta?.(delta);
+      },
+    });
 
-  const assistantEvent = writer.append("assistant_message", {
-    content: result.content,
-    model: result.model,
-  });
+    const assistantEvent = writer.append("assistant_message", {
+      content: result.content,
+      model: result.model,
+    });
 
-  return { ...result, userEvent, assistantEvent };
+    return { ...result, userEvent, assistantEvent };
+  } catch (err) {
+    // D4: the failed turn is an error EVENT in the stream — a partial or
+    // empty reply is never recorded as an assistant_message.
+    if (err instanceof ProxyRequestError) {
+      writer.append("stream_error", {
+        reason: err.message.slice(0, 500),
+        streamed_chars: streamed,
+        recorded_as: "error",
+      });
+    }
+    throw err;
+  }
 }

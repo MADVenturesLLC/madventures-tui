@@ -4,7 +4,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { acquireProjectLock, lockExists, LockHeldError } from "../src/lock";
-import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync, mkdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -78,5 +78,60 @@ describe("project lock (design §2)", () => {
     lock.release();
     expect(lockExists(dir)).toBe(true);
     rmSync(other, { force: true });
+  });
+
+  test("D5 BITE: two simultaneous starts produce exactly one lock holder", async () => {
+    // The race D5 fixed: with create-then-write, a second process could
+    // observe an empty lock and reclaim it, letting both start. Content is
+    // now atomic with creation (temp file + link(2)), so the loser always
+    // sees a live holder pid.
+    const src = join(import.meta.dir, "..", "src", "lock.ts");
+    const childScript = [
+      `import { acquireProjectLock, LockHeldError } from ${JSON.stringify(src)};`,
+      `const project = process.argv[2];`,
+      `try {`,
+      `  const lock = acquireProjectLock(project);`,
+      `  console.log("ACQUIRED");`,
+      `  await new Promise((r) => setTimeout(r, 300));`,
+      `  lock.release();`,
+      `  process.exit(0);`,
+      `} catch (e) {`,
+      `  if (e instanceof LockHeldError) { console.log("REFUSED"); process.exit(3); }`,
+      `  console.log("ERROR " + String(e));`,
+      `  process.exit(1);`,
+      `}`,
+    ].join("\n");
+    const scriptPath = join(tempProject(), "child.ts");
+    writeFileSync(scriptPath, childScript);
+
+    // Several rounds: every round must yield exactly one holder.
+    for (let round = 0; round < 5; round++) {
+      const dir = tempProject();
+      const [a, b] = await Promise.all([
+        Bun.spawn(["bun", "run", scriptPath, dir], { stdout: "pipe", stderr: "pipe" }),
+        Bun.spawn(["bun", "run", scriptPath, dir], { stdout: "pipe", stderr: "pipe" }),
+      ]);
+      const [outA, outB] = await Promise.all([
+        new Response(a.stdout).text(),
+        new Response(b.stdout).text(),
+      ]);
+      const exitA = await a.exited;
+      const exitB = await b.exited;
+      const acquired = [outA, outB].filter((o) => o.includes("ACQUIRED"));
+      const refused = [outA, outB].filter((o) => o.includes("REFUSED"));
+      expect(acquired).toHaveLength(1);
+      expect(refused).toHaveLength(1);
+      expect([exitA, exitB].sort()).toEqual([0, 3]);
+      expect(lockExists(dir)).toBe(false); // the sole holder released on exit
+    }
+  });
+
+  test("D5: the lock file is never observable without holder content", async () => {
+    const dir = tempProject();
+    const lock = acquireProjectLock(dir);
+    // Immediately after acquisition the holder pid is already there —
+    // content and creation are one atomic step.
+    expect(readFileSync(lock.path, "utf8").trim()).toBe(String(process.pid));
+    lock.release();
   });
 });
