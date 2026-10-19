@@ -8,12 +8,16 @@ import {
   canonicalPairKey,
   CardinalityError,
   evaluatePairEligibility,
+  evaluatePairEligibilityWithDependencies,
   parsePairConstraints,
   PairConstraintsError,
   type PairConstraintsV1,
+  type PairEligibilityFailure,
 } from "../src/pair-constraints";
 import { parseSurfaceId, type SurfaceId } from "../src/surface-id";
 import { parseTaskEnvelope, PROTOCOL_VERSION, type ExecutionIdentity } from "../src";
+import * as protocol from "../src";
+import { ADAPTER_REGISTRY, type AdapterRegistrationV1 } from "../src/adapter-registry";
 
 // ─── Fixtures ───
 
@@ -314,4 +318,81 @@ test("pair eligibility rejects envelope_constraint_weaker", () => {
 test("pair eligibility accepts a distinct builder and independent reviewer", () => {
   const result = evaluate([builderExecution(), reviewerExecution()]);
   expect(result.ok).toBe(true);
+});
+
+function fixturePair() {
+  const executions = [
+    builderExecution({ surface: parseSurfaceId("pair-seam-builder"), provider: "fixture-builder-provider", independence_domain: "fixture-builder-domain" }),
+    reviewerExecution({ surface: parseSurfaceId("pair-seam-reviewer"), provider: "fixture-reviewer-provider", independence_domain: "fixture-reviewer-domain" }),
+  ] as const;
+  const registrations = new Map<SurfaceId, AdapterRegistrationV1>(executions.map(execution => [execution.surface, {
+    surface: execution.surface, executable_name: execution.surface,
+    provider: execution.provider, independence_domain: execution.independence_domain,
+    organization_id: execution.provider, supported_versions: ["1.0.0"],
+    identity_probe: { argv: [], parse: "json" }, auth_readiness_probe: null,
+    non_interactive_flags: [], environment_allowlist_ref: "antigravity-v1",
+    auth_failure_detection: [], limitations: ["Controlled pair-admission regression."],
+  }]));
+  const registration = (surface: SurfaceId) => registrations.get(surface);
+  const run = (pair: readonly ExecutionIdentity[] = executions, constraints = STRICT, organizations: ReadonlyMap<SurfaceId, string> = new Map()) =>
+    evaluatePairEligibilityWithDependencies(pair, constraints, organizations, { registration });
+  return { executions, registrations, registration, run };
+}
+
+test("fixture pair admission is isolated from public eligibility and package exports", () => {
+  const f = fixturePair(), before = [...ADAPTER_REGISTRY];
+  const denied = { ok: false, failure: "surface_not_admitted" } as const;
+  expect(evaluatePairEligibility(f.executions, STRICT, new Map())).toEqual(denied);
+  expect(f.run()).toEqual({ ok: true });
+  expect(Reflect.apply(evaluatePairEligibility, undefined, [f.executions, STRICT, new Map(), { registration: f.registration }])).toEqual(denied);
+  expect(protocol.evaluatePairEligibility(f.executions, STRICT, new Map())).toEqual(denied);
+  expect(evaluatePairEligibilityWithDependencies(f.executions, STRICT, new Map(), { registration: () => undefined })).toEqual(denied);
+  expect(f.run()).toEqual({ ok: true });
+  expect([...ADAPTER_REGISTRY]).toEqual(before);
+  for (const execution of f.executions) expect(ADAPTER_REGISTRY.has(execution.surface)).toBe(false);
+  expect(Object.keys(protocol)).not.toContain("evaluatePairEligibilityWithDependencies");
+});
+
+test("the fixture resolver preserves pair rejection rules and their precedence", () => {
+  const f = fixturePair(), [builder, reviewer] = f.executions;
+  const cases: readonly (readonly [PairEligibilityFailure, Partial<ExecutionIdentity>])[] = [
+    ["duplicate_execution_id", { execution_id: builder.execution_id, role: "observer" }],
+    ["observer_not_active", { role: "observer", provider: builder.provider }],
+    ["role_composition", { role: "builder" }],
+    ["provider_not_distinct", { provider: ` ${builder.provider.toUpperCase()} `, independence_domain: builder.independence_domain }],
+    ["independence_domain_not_distinct", { independence_domain: builder.independence_domain.toUpperCase().replaceAll("-", " ") }],
+    ["self_review", { surface: builder.surface }],
+    ["surface_not_admitted", { surface: parseSurfaceId("missing-fixture") }],
+  ];
+  for (const [failure, overrides] of cases) {
+    expect(f.run([builder, { ...reviewer, ...overrides }])).toEqual({ ok: false, failure });
+  }
+  expect(() => f.run([builder])).toThrow(CardinalityError);
+  expect(() => f.run([builder, reviewer, builder])).toThrow(CardinalityError);
+  for (const change of [
+    { require_distinct_providers: false }, { require_distinct_independence_domains: false },
+    { prohibit_self_review: false }, { required_roles: ["builder", "builder"] },
+  ]) {
+    const constraints = { ...STRICT, ...change } as unknown as PairConstraintsV1;
+    expect(f.run(f.executions, constraints)).toEqual({ ok: false, failure: "envelope_constraint_weaker" });
+    expect(f.run([builder, { ...reviewer, surface: parseSurfaceId("missing-fixture") }], constraints))
+      .toEqual({ ok: false, failure: "surface_not_admitted" });
+  }
+  const original = f.registrations.get(reviewer.surface)!;
+  f.registrations.set(reviewer.surface, { ...original, organization_id: ` ${builder.provider.toUpperCase()} ` });
+  expect(f.run()).toEqual({ ok: false, failure: "common_review_control" });
+  expect(f.run([builder, { ...reviewer, surface: builder.surface }])).toEqual({ ok: false, failure: "self_review" });
+  const supplied = new Map([[reviewer.surface, "separate-fixture-organization"]]);
+  expect(f.run(f.executions, STRICT, supplied)).toEqual({ ok: true });
+});
+
+test("fixture allowed pairs narrow eligibility without weakening any rule", () => {
+  const f = fixturePair(), [builder, reviewer] = f.executions;
+  const constraints: PairConstraintsV1 = { ...STRICT, allowed_surface_pairs: [[reviewer.surface, builder.surface]] };
+  expect(f.run(f.executions, constraints)).toEqual({ ok: true });
+  expect(f.run([reviewer, builder], constraints)).toEqual({ ok: true });
+  expect(f.run(f.executions, { ...STRICT, allowed_surface_pairs: [] })).toEqual({ ok: false, failure: "surface_not_admitted" });
+  expect(f.run(f.executions, { ...STRICT, allowed_surface_pairs: [[builder.surface, parseSurfaceId("other-fixture")]] }))
+    .toEqual({ ok: false, failure: "surface_not_admitted" });
+  expect(f.run([builder, { ...reviewer, provider: builder.provider }], constraints)).toEqual({ ok: false, failure: "provider_not_distinct" });
 });
