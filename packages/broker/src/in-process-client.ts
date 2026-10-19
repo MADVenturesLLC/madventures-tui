@@ -340,12 +340,26 @@ export function createInProcessBrokerClient(
   }
 
   async function request(command: BrokerCommand): Promise<BrokerResult> {
+    // Evaluate and dispatch the same values even when the caller supplies getters.
+    const captured = { ...command };
+    const commandId = captured.commandId;
     const snapshot = projectSnapshot(broker.snapshotProjectionInput());
-    const legality = evaluateCommandLegality(command, snapshot, evaluatedPrincipal);
+    const legality = evaluateCommandLegality(captured, snapshot, evaluatedPrincipal);
     if (!legality.ok) {
-      return { ok: false, commandId: command.commandId, error: legality.error, detail: legality.detail };
+      return { ok: false, commandId, error: legality.error, detail: legality.detail };
     }
-    return { ok: true, commandId: command.commandId, acceptedSnapshotSeq: deliveredSeq };
+    switch (captured.kind) {
+      case "session_pause":
+        await broker.pause(commandId);
+        break;
+      case "session_resume":
+        await broker.resume(commandId);
+        break;
+      case "session_close":
+        await broker.founderClose(commandId);
+        break;
+    }
+    return { ok: true, commandId, acceptedSnapshotSeq: deliveredSeq };
   }
 
   async function publish(event: BridgeEventV1): Promise<BrokerResult> {

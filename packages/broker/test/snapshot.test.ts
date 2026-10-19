@@ -15,9 +15,9 @@ import {
   SNAPSHOT_PROJECTION_REFUSAL_REASONS,
 } from "../src/snapshot";
 import type { SnapshotProjectionInput, SnapshotProjectionRefusalReason } from "../src/snapshot";
-import type { BrokerSnapshot } from "../src/client";
+import type { BrokerSnapshot, ExecutionSnapshot } from "../src/client";
 import type { LedgerRow, LifecycleState } from "@madventures/ledger";
-import { PROTOCOL_VERSION } from "@madventures/protocol";
+import { PROTOCOL_VERSION, parseSurfaceId } from "@madventures/protocol";
 import type { RepositoryFingerprint } from "@madventures/protocol";
 
 // ─── Fixtures ───
@@ -518,4 +518,52 @@ test("pendingApprovals projects the empty collection and every D9-null member pr
   for (const member of D9_NULL_MEMBERS) {
     expect(Object.hasOwn(snapshot, member)).toBe(true);
   }
+});
+
+test("Task49 prerequisite projects execution facts without sharing the collection or nested identity", () => {
+  const executions: ExecutionSnapshot[] = [{
+    identity: {
+      execution_id: WRITER_B,
+      role: "builder",
+      surface: parseSurfaceId("claude-code"),
+      model: "model-snapshot",
+      provider: "provider-snapshot",
+      independence_domain: "domain-snapshot",
+      effort: "high",
+    },
+    state: "ready",
+    hostPid: 101,
+    childPid: 102,
+    processGroupId: 102,
+    executablePath: "/fixture/claude-code",
+    executableSha256: "f".repeat(64),
+    exitCode: null,
+    exitSignal: null,
+  }];
+  const expected = structuredClone(executions);
+  const input = baseInput({ executions });
+  const first = projectSnapshot(input);
+  const second = projectSnapshot(input);
+
+  expect(first.executions).toEqual(expected);
+  expect(first.executions).not.toBe(executions);
+  expect(first.executions?.[0]).not.toBe(executions[0]);
+  expect(first.executions?.[0]?.identity).not.toBe(executions[0]!.identity);
+  expect(first.executions).not.toBe(second.executions);
+  expect(first.executions?.[0]?.identity).not.toBe(second.executions?.[0]?.identity);
+  Object.assign(first.executions![0]!.identity, { model: "changed-output" });
+  expect(executions).toEqual(expected);
+  expect(second.executions).toEqual(expected);
+  Object.assign(executions[0]!, { state: "failed" });
+  Object.assign(executions[0]!.identity, { model: "changed-source" });
+  expect(second.executions).toEqual(expected);
+});
+
+test("Task49 prerequisite keeps absent and null executions null and preserves an explicit empty collection", () => {
+  expect(projectSnapshot(baseInput()).executions).toBeNull();
+  expect(projectSnapshot(baseInput({ executions: null })).executions).toBeNull();
+  const executions: ExecutionSnapshot[] = [];
+  const snapshot = projectSnapshot(baseInput({ executions }));
+  expect(snapshot.executions).toEqual([]);
+  expect(snapshot.executions).not.toBe(executions);
 });
