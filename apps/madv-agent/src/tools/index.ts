@@ -18,7 +18,6 @@ import {
   readFileSync,
   readdirSync,
   realpathSync,
-  statSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, isAbsolute, join, relative } from "node:path";

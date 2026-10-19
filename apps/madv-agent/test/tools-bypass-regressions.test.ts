@@ -14,7 +14,7 @@
 //       could repaint it and show something other than what would run.
 
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assertArgv, assertPath, PolicyRefusal } from "../src/policy";

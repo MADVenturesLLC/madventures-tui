@@ -4,7 +4,7 @@
 
 import { describe, expect, test } from "bun:test";
 import { acquireProjectLock, lockExists, LockHeldError } from "../src/lock";
-import { mkdtempSync, writeFileSync, rmSync, mkdirSync, readFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -81,18 +81,24 @@ describe("project lock (design §2)", () => {
   });
 
   test("D5 BITE: two simultaneous starts produce exactly one lock holder", async () => {
-    // The race D5 fixed: with create-then-write, a second process could
-    // observe an empty lock and reclaim it, letting both start. Content is
-    // now atomic with creation (temp file + link(2)), so the loser always
-    // sees a live holder pid.
+    // Determinism by barrier, not by luck. Both children announce READY and
+    // then wait for a go-file, so neither can finish before the other starts:
+    // the loser must see a LIVE holder and refuse. (The earlier version relied
+    // on timing and could serialise on a slow runner, letting both acquire —
+    // that is a flaky test, not a passing one. The atomicity property itself is
+    // pinned deterministically in lock-atomicity.test.ts.)
     const src = join(import.meta.dir, "..", "src", "lock.ts");
     const childScript = [
       `import { acquireProjectLock, LockHeldError } from ${JSON.stringify(src)};`,
+      `import { writeFileSync, existsSync } from "node:fs";`,
       `const project = process.argv[2];`,
+      `const go = process.argv[3];`,
+      `writeFileSync(project + "/.ready-" + process.pid, "1");`,
+      `for (let i = 0; i < 2000 && !existsSync(go); i++) await new Promise((r) => setTimeout(r, 5));`,
       `try {`,
       `  const lock = acquireProjectLock(project);`,
       `  console.log("ACQUIRED");`,
-      `  await new Promise((r) => setTimeout(r, 300));`,
+      `  await new Promise((r) => setTimeout(r, 400));`,
       `  lock.release();`,
       `  process.exit(0);`,
       `} catch (e) {`,
@@ -104,70 +110,33 @@ describe("project lock (design §2)", () => {
     const scriptPath = join(tempProject(), "child.ts");
     writeFileSync(scriptPath, childScript);
 
-    // F3: Also run a poller that checks the lock file during the race.
-    // If the atomicity defect were present (create empty, write pid later),
-    // the poller could observe an empty or partial lock file.
-    const pollerScript = [
-      `import { lockPath, readHolderPid } from ${JSON.stringify(src)};`,
-      `import { existsSync, readFileSync } from "node:fs";`,
-      `const project = process.argv[2];`,
-      `const path = lockPath(project);`,
-      `let observedEmpty = false;`,
-      `let observedPartial = false;`,
-      `// Wait a bit for the race to start`,
-      `await new Promise((r) => setTimeout(r, 100));`,
-      `for (let i = 0; i < 200; i++) {`,
-      `  if (existsSync(path)) {`,
-      `    const content = readFileSync(path, "utf8");`,
-      `    if (content.trim() === "") {`,
-      `      observedEmpty = true;`,
-      `    }`,
-      `    const pid = readHolderPid(path);`,
-      `    if (pid === null) {`,
-      `      observedPartial = true;`,
-      `    }`,
-      `  }`,
-      `  await new Promise((r) => setTimeout(r, 2));`,
-      `}`,
-      `if (observedEmpty) {`,
-      `  console.log("OBSERVED_EMPTY");`,
-      `  process.exit(1);`,
-      `}`,
-      `if (observedPartial) {`,
-      `  console.log("OBSERVED_PARTIAL");`,
-      `  process.exit(1);`,
-      `}`,
-      `console.log("NO_EMPTY_OR_PARTIAL");`,
-      `process.exit(0);`,
-    ].join("\n");
-    const pollerPath = join(tempProject(), "poller.ts");
-    writeFileSync(pollerPath, pollerScript);
-
-    // Several rounds: every round must yield exactly one holder.
-    for (let round = 0; round < 5; round++) {
+    for (let round = 0; round < 3; round++) {
       const dir = tempProject();
-      const [a, b, poller] = await Promise.all([
-        Bun.spawn(["bun", "run", scriptPath, dir], { stdout: "pipe", stderr: "pipe" }),
-        Bun.spawn(["bun", "run", scriptPath, dir], { stdout: "pipe", stderr: "pipe" }),
-        Bun.spawn(["bun", "run", pollerPath, dir], { stdout: "pipe", stderr: "pipe" }),
-      ]);
-      const [outA, outB, outPoller] = await Promise.all([
+      const go = join(dir, ".go");
+      const a = Bun.spawn(["bun", "run", scriptPath, dir, go], { stdout: "pipe", stderr: "pipe" });
+      const b = Bun.spawn(["bun", "run", scriptPath, dir, go], { stdout: "pipe", stderr: "pipe" });
+
+      // Wait until both children are parked on the barrier, then release them.
+      const ready = async (): Promise<void> => {
+        for (let i = 0; i < 2000; i++) {
+          const marks = readdirSync(dir).filter((n: string) => n.startsWith(".ready-"));
+          if (marks.length >= 2) return;
+          await new Promise((r) => setTimeout(r, 5));
+        }
+        throw new Error("children never reached the barrier");
+      };
+      await ready();
+      writeFileSync(go, "1");
+
+      const [outA, outB] = await Promise.all([
         new Response(a.stdout).text(),
         new Response(b.stdout).text(),
-        new Response(poller.stdout).text(),
       ]);
-      const exitA = await a.exited;
-      const exitB = await b.exited;
-      const exitPoller = await poller.exited;
-      const acquired = [outA, outB].filter((o) => o.includes("ACQUIRED"));
-      const refused = [outA, outB].filter((o) => o.includes("REFUSED"));
-      expect(acquired).toHaveLength(1);
-      expect(refused).toHaveLength(1);
+      const [exitA, exitB] = await Promise.all([a.exited, b.exited]);
+      expect([outA, outB].filter((o) => o.includes("ACQUIRED"))).toHaveLength(1);
+      expect([outA, outB].filter((o) => o.includes("REFUSED"))).toHaveLength(1);
       expect([exitA, exitB].sort()).toEqual([0, 3]);
-      expect(lockExists(dir)).toBe(false); // the sole holder released on exit
-      // F3: the poller must not have observed an empty or partial lock
-      expect(outPoller).toContain("NO_EMPTY_OR_PARTIAL");
-      expect(exitPoller).toBe(0);
+      expect(lockExists(dir)).toBe(false);
     }
   });
 
