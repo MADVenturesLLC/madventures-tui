@@ -22,7 +22,7 @@ import { streamChatCompletion, type StreamResult } from "./model-client";
 import { ProxyRequestError } from "./proxy-error";
 import { PolicyRefusal } from "./policy";
 import { TOOL_PROTOCOL_PROMPT, parseToolCalls, toolByName, type ToolOutcome } from "./tools";
-import type { Approver, ApprovalDecision, ApprovalRequest } from "./approval";
+import { summarizeApproval, type Approver, type ApprovalDecision, type ApprovalRequest } from "./approval";
 
 export interface TurnDeps {
   /** The proxy base URL — the only model endpoint the agent will call. */
@@ -176,7 +176,9 @@ export async function runTurn(
         const decision = await approver(req);
         writer.append("approval", {
           tool: def.name,
-          summary: req.summary,
+          // The event carries what the human was shown, not the raw argument
+          // text: an audit trail of a prompt nobody saw is not an audit trail.
+          summary: summarizeApproval(req),
           granted: decision.granted,
           by: decision.by,
           ...(decision.reason === undefined ? {} : { reason: decision.reason }),

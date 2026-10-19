@@ -49,6 +49,20 @@ export function scriptedApprover(answers: boolean[], by = "scripted(test)"): App
 const AFFIRMATIVE = new Set(["y", "yes"]);
 
 /**
+ * B4: a tool argument is attacker-influenced text. Control characters in it
+ * (newlines, carriage returns, escapes) can repaint the approval prompt and
+ * show the human something other than the action that will run. Sanitise
+ * before display: keep printable ASCII, escape everything else and cap it.
+ */
+export function sanitizeForDisplay(text: string, limit = 400): string {
+  const escaped = text.replace(/[\u0000-\u001f\u007f-\u009f]/g, (c) => {
+    const code = c.charCodeAt(0).toString(16).padStart(2, "0");
+    return `\\x${code}`;
+  });
+  return escaped.length > limit ? `${escaped.slice(0, limit)}…` : escaped;
+}
+
+/**
  * Ask on the terminal. Defaults to DENY on empty input, EOF, or anything that
  * is not an explicit yes — the gate fails closed.
  */
@@ -61,9 +75,9 @@ export function terminalApprover(opts?: {
   return async (req) => {
     output.write(
       `\n── approval required ─────────────────────────────\n` +
-        `  tool:    ${req.tool} (${req.kind})\n` +
-        `  action:  ${req.summary}\n` +
-        `  detail:  ${req.detail}\n` +
+        `  tool:    ${sanitizeForDisplay(req.tool, 80)} (${req.kind})\n` +
+        `  action:  ${sanitizeForDisplay(req.summary)}\n` +
+        `  detail:  ${sanitizeForDisplay(req.detail)}\n` +
         `  approve? [y/N] `,
     );
     const rl = createInterface({ input, output, terminal: false });
@@ -92,5 +106,5 @@ export function terminalApprover(opts?: {
 
 /** Render the request as the single line that goes into the event stream. */
 export function summarizeApproval(req: ApprovalRequest): string {
-  return `${req.tool}: ${req.summary}`;
+  return `${sanitizeForDisplay(req.tool, 80)}: ${sanitizeForDisplay(req.summary)}`;
 }

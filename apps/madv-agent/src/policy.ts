@@ -14,7 +14,7 @@
 //   - use-time re-checking, so the path checked is the path used.
 
 import { assertWithinAllowedPath } from "@madventures/policy";
-import { lstatSync } from "node:fs";
+import { lstatSync, realpathSync } from "node:fs";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 
 /** Write targets refused even inside an allow-listed project root. */
@@ -65,7 +65,10 @@ export function assertPath({ projectDir, path, mode }: PathTarget): string {
   }
 
   if (mode === "write") {
-    const top = rel.split(sep)[0] ?? "";
+    // B2: compare case-insensitively. On darwin `.GIT/hooks/pre-commit` and
+    // `.Madv-Agent/sessions/...` address the same directories as their
+    // lowercase forms, so a case-sensitive comparison is a bypass.
+    const top = (rel.split(sep)[0] ?? "").toLowerCase();
     if ((HARD_DENY_WRITE as readonly string[]).includes(top)) {
       throw new PolicyRefusal(
         `refused: writing to ${top}/** is forbidden — the session stream and git internals ` +
@@ -112,12 +115,35 @@ export function assertArgv(argv: unknown): string[] {
     if (typeof a !== "string") throw new PolicyRefusal("refused: shell argv entries must be strings");
     out.push(a);
   }
-  const head = (out[0] ?? "").split("/").pop() ?? "";
+  const rawHead = out[0] ?? "";
+  const head = rawHead.split("/").pop() ?? "";
   if (SHELLS.includes(head)) {
     throw new PolicyRefusal(
       `refused: ${head} is a shell — the shell tool runs argv directly and will not ` +
         `interpret a command string`,
     );
+  }
+  // B3: a symlink named anything at all can point at a shell. Resolve the
+  // program and judge what it actually is; refuse a symlink outright.
+  try {
+    const st = lstatSync(rawHead);
+    if (st.isSymbolicLink()) {
+      throw new PolicyRefusal(
+        `refused: argv[0] (${rawHead}) is a symlink — the program must be a real file`,
+      );
+    }
+    const real = realpathSync(rawHead);
+    const realHead = real.split("/").pop() ?? "";
+    if (SHELLS.includes(realHead)) {
+      throw new PolicyRefusal(
+        `refused: argv[0] resolves to ${realHead}, a shell — the shell tool runs argv directly`,
+      );
+    }
+  } catch (err) {
+    if (err instanceof PolicyRefusal) throw err;
+    // A bare command name (e.g. `bun`) is resolved by PATH at spawn time; there
+    // is nothing to lstat. Only absolute/relative paths are checked here.
+    if (rawHead.includes("/")) throw err;
   }
   if (out.includes("-c")) {
     throw new PolicyRefusal("refused: `-c` is not accepted — the shell tool runs argv, not a script string");

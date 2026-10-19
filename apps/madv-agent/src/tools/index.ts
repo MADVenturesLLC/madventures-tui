@@ -8,14 +8,20 @@
 
 import { spawnSync } from "node:child_process";
 import {
+  closeSync,
+  constants as fsConstants,
   existsSync,
+  fstatSync,
+  lstatSync,
   mkdirSync,
+  openSync,
   readFileSync,
   readdirSync,
+  realpathSync,
   statSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join, relative } from "node:path";
+import { dirname, isAbsolute, join, relative } from "node:path";
 import { assertArgv, assertPathAtUse, PolicyRefusal } from "../policy";
 
 export type ToolKind = "read" | "write" | "execute";
@@ -42,6 +48,7 @@ export interface ToolDef {
   run: (args: Record<string, unknown>, ctx: ToolContext) => ToolOutcome;
 }
 
+const { O_NOFOLLOW, O_RDONLY, O_WRONLY, O_CREAT, O_TRUNC } = fsConstants;
 const READ_CAP = 200_000;
 const OUTPUT_CAP = 16_000;
 const SHELL_TIMEOUT_MS = 20_000;
@@ -64,9 +71,27 @@ export const readFileTool: ToolDef = {
   describe: (a) => `read ${String(a.path ?? "")}`,
   run(args, ctx) {
     const abs = assertPathAtUse({ projectDir: ctx.projectDir, path: str(args, "path"), mode: "read" });
-    const st = statSync(abs);
-    if (!st.isFile()) throw new PolicyRefusal(`refused: ${args.path} is not a regular file`);
-    const text = readFileSync(abs, "utf8").slice(0, READ_CAP);
+    // O_NOFOLLOW: the leaf is opened as itself or not at all. This closes the
+    // gap between the use-time lstat and the open; the parent-directory race
+    // remains and is documented as residual.
+    let fd: number;
+    try {
+      fd = openSync(abs, O_RDONLY | O_NOFOLLOW);
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === "ELOOP" || code === "EMLINK") {
+        throw new PolicyRefusal(`refused: ${args.path} became a symlink — refusing to follow it`);
+      }
+      throw err;
+    }
+    let text: string;
+    try {
+      const st = fstatSync(fd);
+      if (!st.isFile()) throw new PolicyRefusal(`refused: ${args.path} is not a regular file`);
+      text = readFileSync(fd, "utf8").slice(0, READ_CAP);
+    } finally {
+      closeSync(fd);
+    }
     return { ok: true, summary: `read ${relative(ctx.projectDir, abs)} (${text.length} chars)`, output: text };
   },
 };
@@ -105,15 +130,26 @@ export const searchTool: ToolDef = {
         const full = join(dir, name);
         let st;
         try {
-          st = statSync(full);
+          // B1: lstat, not stat — a symlinked directory or file inside the
+          // root can point anywhere, so it is skipped rather than followed.
+          st = lstatSync(full);
         } catch {
           continue;
         }
+        if (st.isSymbolicLink()) continue;
         if (st.isDirectory()) {
           walk(full);
           continue;
         }
         if (!st.isFile() || st.size > 1_000_000) continue;
+        // Belt and braces: the entry's real path must still be inside the root.
+        try {
+          const real = realpathSync(full);
+          const relReal = relative(ctx.projectDir, real);
+          if (relReal.startsWith("..") || isAbsolute(relReal)) continue;
+        } catch {
+          continue;
+        }
         scanned += 1;
         let text: string;
         try {
@@ -154,7 +190,22 @@ export const writeFileTool: ToolDef = {
     // target, and the project root itself is a legitimate parent.
     assertPathAtUse({ projectDir: ctx.projectDir, path: dirname(abs), mode: "read" });
     mkdirSync(dirname(abs), { recursive: true });
-    writeFileSync(abs, content, "utf8");
+    // O_NOFOLLOW: never write through a symlink planted at the leaf.
+    let fd: number;
+    try {
+      fd = openSync(abs, O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW, 0o644);
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === "ELOOP" || code === "EMLINK") {
+        throw new PolicyRefusal(`refused: ${args.path} became a symlink — refusing to write through it`);
+      }
+      throw err;
+    }
+    try {
+      writeFileSync(fd, content, "utf8");
+    } finally {
+      closeSync(fd);
+    }
     return {
       ok: true,
       summary: `wrote ${relative(ctx.projectDir, abs)} (${content.length} chars)`,

@@ -30,9 +30,12 @@ earlier decision:
 3. **Use-time re-check**: the resolved path is `lstat`ed again, and a path that is a symlink at that moment is
    refused.
 
-**Residual, named rather than hidden:** a file swapped between our `lstat` and the actual `open(2)` is not
-refused — closing that window needs `O_NOFOLLOW` on the open itself, which N3 does not do. The window is
-narrow (microseconds, inside one process), and it is stated here instead of being described as closed.
+**Residual, named rather than hidden.** Reads and writes open with `O_NOFOLLOW`, so a leaf swapped for a
+symlink between the check and the syscall is refused by the kernel (`ELOOP`) rather than followed. What
+remains open is the **parent-directory race**: if a directory *above* the leaf is replaced with a symlink
+between our resolution and the `open(2)`, the open can land outside the root — closing that needs
+`openat(2)`-style directory-fd walking, which N3 does not do. The window is narrow and inside one process,
+and it is stated here instead of being described as closed.
 
 ## The approval gate
 
@@ -75,3 +78,14 @@ does not re-ask for what was already denied.
 
 Each of these carries a mutation proof in the stage's build report: with the check removed, the named test
 fails.
+
+### Bypasses found in verification, now regressions
+
+`test/tools-bypass-regressions.test.ts` holds four tests that **fail on the first N3 head** (`3890ef2`):
+
+| | Bypass | Fix |
+| :--- | :--- | :--- |
+| B1 | `search` walked with `stat()` and followed symlinks out of the root | `lstat` per entry, skip symlinks, realpath containment per file (two independent layers; removing either alone still holds, removing both fails the test) |
+| B2 | the write-deny compared the first segment case-sensitively, so `.GIT/hooks/…` addressed `.git/hooks/…` on this filesystem | compare case-insensitively |
+| B3 | `shell` judged `argv[0]` by basename, so a symlink named `tool` pointing at `/bin/sh` ran a shell | resolve `argv[0]`; refuse a symlink and refuse anything that resolves to a shell |
+| B4 | the approval prompt printed raw argument text, so control characters could repaint it | `sanitizeForDisplay`: escape control characters, cap length; the recorded event carries what the human was shown |
