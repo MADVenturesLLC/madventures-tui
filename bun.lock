@@ -40,6 +40,10 @@
         "@types/react": "^19.2.18",
       },
     },
+    "apps/madv-agent": {
+      "name": "@madventures/madv-agent",
+      "version": "0.1.0",
+    },
     "apps/projector-mc": {
       "name": "@mad/projector-mc",
       "version": "0.1.0",
@@ -282,6 +286,8 @@
     "@madventures/ledger": ["@madventures/ledger@workspace:packages/ledger"],
 
     "@madventures/madbridge": ["@madventures/madbridge@workspace:apps/madbridge"],
+
+    "@madventures/madv-agent": ["@madventures/madv-agent@workspace:apps/madv-agent"],
 
     "@madventures/policy": ["@madventures/policy@workspace:packages/policy"],
 
