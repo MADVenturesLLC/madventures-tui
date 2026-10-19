@@ -14,7 +14,14 @@ export type SessionEventType =
   | "env_scrub"
   | "user_message"
   | "assistant_message"
-  | "stream_error";
+  | "stream_error"
+  /* N3: the tool path. A call is recorded before it is authorised, the
+     decision is recorded before it is acted on, and the result is recorded
+     whether it succeeded, failed or was refused — so a replay shows refusals,
+     not just the calls that happened to run. */
+  | "tool_call"
+  | "approval"
+  | "tool_result";
 
 export interface SessionEvent {
   seq: number;
@@ -210,6 +217,26 @@ export function reconstructTranscript(events: SessionEvent[]): TranscriptMessage
         role: "assistant",
         content: typeof payload.content === "string" ? payload.content : "",
         model: typeof payload.model === "string" ? payload.model : null,
+        seq: event.seq,
+      });
+    } else if (event.type === "tool_result") {
+      // N3: the tool path is part of the conversation the model must see on
+      // resume, refusals included — otherwise a resumed session would ask for
+      // the same refused action again with no memory of the refusal.
+      const payload = event.payload as {
+        tool?: unknown;
+        status?: unknown;
+        summary?: unknown;
+        output?: unknown;
+      };
+      const tool = typeof payload.tool === "string" ? payload.tool : "tool";
+      const status = typeof payload.status === "string" ? payload.status : "unknown";
+      const summary = typeof payload.summary === "string" ? payload.summary : "";
+      const output = typeof payload.output === "string" ? payload.output : "";
+      transcript.push({
+        role: "user",
+        content: `TOOL_RESULT ${tool} [${status}] ${summary}${output ? `\n${output}` : ""}`,
+        model: null,
         seq: event.seq,
       });
     }
