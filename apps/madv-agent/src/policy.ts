@@ -8,9 +8,11 @@
 // @madventures/policy (packages/policy), which already implements the
 // fail-closed ordering: textual containment → lstat component walk → realpath
 // containment. This module adds the two rules that package does not carry:
-//   - the hard write-deny on `.madv-agent/**` and `.git/**` (the session stream
-//     must not be forgeable by the agent that writes it, and git internals are
-//     never the agent's to touch);
+//   - the hard write-deny on `.madv-agent/**` and `.git/**` for write_file: the
+//     session stream must not be forgeable by the file tool that the agent
+//     uses to write it, and git internals are not its to touch. This is a
+//     write_file rule — `shell` runs with the user's authority and can write
+//     these paths, which the docs state rather than imply;
 //   - use-time re-checking, so the path checked is the path used.
 
 import { assertWithinAllowedPath } from "@madventures/policy";
@@ -81,8 +83,8 @@ export function assertPath({ projectDir, path, mode }: PathTarget): string {
     const top = (rel.split(sep)[0] ?? "").toLowerCase();
     if ((HARD_DENY_WRITE as readonly string[]).includes(top)) {
       throw new PolicyRefusal(
-        `refused: writing to ${top}/** is forbidden — the session stream and git internals ` +
-          `must not be writable by the agent that they record`,
+        `refused: write_file may not write ${top}/** — the session stream and git internals ` +
+          `are not the file tool's to touch`,
       );
     }
   }

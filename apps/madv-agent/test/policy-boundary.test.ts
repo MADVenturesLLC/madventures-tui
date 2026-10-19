@@ -47,7 +47,7 @@ describe("policy boundary (N3)", () => {
       ".git/config",
     ]) {
       expect(() => assertPath({ projectDir: root, path: bad, mode: "write" })).toThrow(
-        /must not be writable by the agent/,
+        /write_file may not write/,
       );
     }
     // Reading them is not the same question, and writes elsewhere are fine.

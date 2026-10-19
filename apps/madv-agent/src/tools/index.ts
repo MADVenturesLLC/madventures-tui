@@ -4,7 +4,7 @@
 //
 // `shell` takes an argv array and refuses to invoke a SHELL INTERPRETER (a
 // name-based rule: sh/bash/zsh/…, plus `-c`). That is a guard-rail, NOT a
-// sandbox — `bun -e`, `python3 -c`, `awk 'BEGIN{system(...)}'` and any program
+// sandbox — `bun -e`, `node -e`, `awk 'BEGIN{system(...)}'` and any program
 // that spawns children are still expressible. `shell` runs with the user's
 // authority, so it can write anywhere the user can, including the session
 // stream and .git; the hard write-deny in policy.ts is a write_file rule and

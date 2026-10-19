@@ -52,7 +52,7 @@ describe("N3 bypass regressions", () => {
     const root = project();
     for (const bad of [".GIT/hooks/pre-commit", ".Madv-Agent/sessions/x/events.jsonl", ".Git/config"]) {
       expect(() => assertPath({ projectDir: root, path: bad, mode: "write" })).toThrow(
-        /must not be writable by the agent/,
+        /write_file may not write/,
       );
     }
   });

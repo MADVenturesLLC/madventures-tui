@@ -18,8 +18,9 @@ Stage N3 of `madv-agent` v0, under `ISSUED-FOUNDER-madv-agent-N3-AUTHORIZATION-r
 `shell` runs an **argv array** and refuses to invoke a **shell interpreter**: it resolves `argv[0]` (through
 PATH for bare names, against the project directory for relative ones), then refuses anything whose *resolved*
 basename is `sh`, `bash`, `zsh`, `dash`, `ksh`, `ksh93`, `mksh`, `fish`, `csh`, `tcsh`, `nu`, `xonsh`,
-`elvish`, `yash` or `ash`, plus any argv containing `-c`. A symlink is **resolved, not refused** — `/usr/bin/sh`
-is itself a symlink on macOS — and it is the resolution target that decides.
+`elvish`, `yash` or `ash`, plus any argv containing `-c`. A symlink is **resolved, not refused** — a project file `./tool`
+that links to `/bin/sh` is refused *because it resolves to `sh`*, while a link to `/bin/ls` is allowed — and it
+is the resolution target that decides.
 
 **That is a name-based rule, and it does not prevent code execution.** Measured on this head:
 `bun -e '…'`, `node -e`, `perl -e`, `awk 'BEGIN{system(…)}'`, `find -exec`, a Makefile, and any program that
@@ -93,7 +94,7 @@ does not re-ask for what was already denied.
 | Criterion | Test |
 | :--- | :--- |
 | reads bounded by the root | `test/policy-boundary.test.ts` — traversal, absolute escape, symlink out |
-| writes bounded; stream not forgeable | same file — `.madv-agent/**`, `.git/**` refused inside the root |
+| `write_file` bounded; the stream not forgeable **through it** | same file — `.madv-agent/**` and `.git/**` refused inside the root. Scoped: `shell` can still write those paths (see §What `shell` is) |
 | path checked is path used | same file — TOCTOU: authorised, swapped to a symlink, refused at use |
 | approval per invocation; denial recorded | `test/tools-approval-replay.test.ts` |
 | `shell` is argv, pinned and bounded | same file — `sh -c` refused, plain argv runs |
@@ -109,6 +110,19 @@ deltas** and the **tool-event lines**. Both are sanitised (`sanitizeStream` keep
 everything else), because an ESC sequence in a delta can move the cursor, recolour text or erase the line the
 human is reading — and a human reading a redrawn terminal is not giving informed consent.
 
+### Errata — claims that were published and then corrected
+
+Records survive mistakes; that is the point of them. Each of these was written here or in a commit message,
+found overstated by independent verification, and corrected:
+
+| Where | What it said | What is true |
+| :--- | :--- | :--- |
+| commit `3890ef2` subject | "four tools behind the project-root boundary" | The project-root boundary is a rule about `read_file`, `search` and `write_file`. `shell` is approved arbitrary execution with the user's authority. The commit is **not rewritten** — rewriting published history would invalidate the review trail; this table is the correction of record. |
+| this page, first revision | `.madv-agent/**` and `.git/**` are "never writable"; "the stream is not forgeable" | Those are `write_file` rules. `shell` can write both paths. |
+| this page, first revision | `python3 -c '…'` listed as an allowed evasion | Refused by the `-c` rule; it is not an evasion. |
+| this page, first revision | "refuse a symlink" | Symlinks are resolved and the *target* decides. |
+| this page, first revision | B1: "two independent layers; removing either alone still holds" | Removing the `lstat`/skip layer fails the test; removing the realpath layer alone does not. Measured, both. |
+
 ### Bypasses found in verification, now regressions
 
 `test/tools-bypass-regressions.test.ts` holds four tests that **fail on the first N3 head** (`3890ef2`):
@@ -117,5 +131,5 @@ human is reading — and a human reading a redrawn terminal is not giving inform
 | :--- | :--- | :--- |
 | B1 | `search` walked with `stat()` and followed symlinks out of the root | `lstat` per entry, skip symlinks, plus realpath containment per file. Measured: removing the `lstat`/skip layer **fails** the test; removing only the realpath layer does **not** (the walk already refuses to descend), so the realpath check is defence in depth for forms the walk does not cover, not the primary control |
 | B2 | the write-deny compared the first segment case-sensitively, so `.GIT/hooks/…` addressed `.git/hooks/…` on this filesystem | compare case-insensitively |
-| B3 | `shell` judged `argv[0]` by basename, so a symlink named `tool` pointing at `/bin/sh` ran a shell | resolve `argv[0]`; refuse a symlink and refuse anything that resolves to a shell |
+| B3 | `shell` judged `argv[0]` by basename, so a symlink named `tool` pointing at `/bin/sh` ran a shell | resolve `argv[0]` and refuse it when the resolved target is a shell |
 | B4 | the approval prompt printed raw argument text, so control characters could repaint it | `sanitizeForDisplay`: escape control characters, cap length; the recorded event carries what the human was shown |
