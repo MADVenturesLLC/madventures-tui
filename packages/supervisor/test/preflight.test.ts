@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
-import { ADAPTER_REGISTRY, sha256CanonicalSync, type AdapterRegistrationV1 } from "@madventures/protocol";
+import { ADAPTER_REGISTRY, parseSurfaceId, sha256CanonicalSync, type AdapterRegistrationV1, type ExecutionIdentity, type SurfaceId } from "@madventures/protocol";
 import { MissingRequiredVariableError, buildAllowlistedEnvironment } from "../src/environment";
 import { runPurePreflight, runPurePreflightWithDependencies, type PreflightInput, type PreflightDependencies, type PreflightFailure } from "../src/preflight";
 import { runBoundedProbe } from "../src/attestation";
@@ -71,6 +71,32 @@ function fixture() {
     run: (extra: Partial<PreflightDependencies> = {}) => runPurePreflightWithDependencies(input, { ...deps, ...extra }) };
 }
 
+function fixtureWithUnregisteredSurfaces() {
+  const f = fixture();
+  const executions: ExecutionIdentity[] = ["builder", "reviewer"].map((name, index) => ({
+    execution_id: name, role: index === 0 ? "builder" : "independent-reviewer",
+    surface: parseSurfaceId(`pair-seam-${name}`), model: f.model,
+    provider: `fixture-${name}-provider`, independence_domain: `fixture-${name}-domain`, effort: "high",
+  }));
+  const registrations = new Map<SurfaceId, AdapterRegistrationV1>(executions.map(execution => [execution.surface, {
+    surface: execution.surface, executable_name: execution.surface,
+    provider: execution.provider, independence_domain: execution.independence_domain,
+    organization_id: execution.provider, supported_versions: ["2.1.296"],
+    identity_probe: { argv: [], parse: "json" }, auth_readiness_probe: { argv: ["auth", "status"], parse: "json" },
+    non_interactive_flags: [], environment_allowlist_ref: "antigravity-v1",
+    auth_failure_detection: [], limitations: ["Controlled pair-admission regression."],
+  }]));
+  const executable = readFileSync(join(f.bin, "madbridge-claude-v5"));
+  for (const registration of registrations.values()) {
+    writeFileSync(join(f.bin, registration.executable_name), executable, { mode: 0o700 });
+    expect(ADAPTER_REGISTRY.has(registration.surface)).toBe(false);
+  }
+  f.envelope.executions = executions;
+  f.sign();
+  f.deps.registration = surface => registrations.get(surface);
+  return { ...f, registrations, executions };
+}
+
 async function failure(f: ReturnType<typeof fixture>, code: PreflightFailure, extra: Partial<PreflightDependencies> = {}) {
   const r = await f.run(extra);
   expect(r.ok).toBe(false);
@@ -100,6 +126,36 @@ test("preflight fails with auth_not_ready", async () => {
   f.input.installation.installation_uid++; await failure(f, "auth_not_ready");
 });
 test("preflight fails with pair_ineligible", async () => { const f = fixture(); await failure(f, "pair_ineligible", { registration: s => ADAPTER_REGISTRY.get(s) }); });
+test("preflight threads its fixture registration resolver through pair eligibility", async () => {
+  const f = fixtureWithUnregisteredSurfaces();
+  const result = await f.run();
+  expect(result).toMatchObject({ ok: true });
+  if (result.ok) expect(result.plan.executions.map(execution => execution.surface)).toEqual(f.executions.map(execution => execution.surface));
+});
+test("public preflight rejects fixture dependencies before and after a test-seam call", async () => {
+  const f = fixtureWithUnregisteredSurfaces(), before = [...ADAPTER_REGISTRY];
+  const denied = { ok: false, failure: "executable_unresolved", detail: "executable_unresolved" } as const;
+  expect(await runPurePreflight(f.input)).toEqual(denied);
+  expect((await f.run()).ok).toBe(true);
+  let calls = 0;
+  const overrides = { ...f.deps, registration: (surface: SurfaceId) => { calls++; return f.registrations.get(surface); } };
+  expect(await Reflect.apply(runPurePreflight, undefined, [f.input, overrides])).toEqual(denied);
+  expect(await runPurePreflight({ ...f.input, ...overrides })).toEqual(denied);
+  expect(await runPurePreflight(f.input)).toEqual(denied);
+  expect(calls).toBe(0);
+  expect([...ADAPTER_REGISTRY]).toEqual(before);
+});
+test("fixture preflight keeps pair policy and registration overrides local to each call", async () => {
+  const f = fixtureWithUnregisteredSurfaces();
+  await failure(f, "executable_unresolved", { registration: () => undefined });
+  expect((await f.run()).ok).toBe(true);
+  const [builder, reviewer] = f.executions;
+  const original = f.registrations.get(reviewer!.surface)!;
+  f.registrations.set(reviewer!.surface, { ...original, organization_id: builder!.provider });
+  await failure(f, "pair_ineligible");
+  f.registrations.set(reviewer!.surface, original);
+  expect((await f.run()).ok).toBe(true);
+});
 test("preflight fails with storage_root_invalid", async () => { const f = fixture(); f.input.storageRootOverride = join(f.repo, "storage"); await failure(f, "storage_root_invalid"); });
 test("preflight fails with host_capability_missing", async () => { const f = fixture(); f.input.hostCapabilities.pty = false; await failure(f, "host_capability_missing"); });
 test("preflight fails with capability_record_stale", async () => { const f = fixture(); await failure(f, "capability_record_stale", { freshRecord: () => null }); });

@@ -3,10 +3,11 @@ import { userInfo } from "node:os";
 import { basename, isAbsolute, join, resolve, sep } from "node:path";
 import {
   ADAPTER_REGISTRY, CardinalityError, assertActiveSurfaceCardinality,
-  evaluatePairEligibility, parseTaskEnvelope,
+  parseTaskEnvelope,
   type AdapterRegistrationV1, type CapabilityRecordV1, type ObservedSurfaceFacts,
   type SurfaceId,
 } from "@madventures/protocol";
+import { evaluatePairEligibilityWithDependencies } from "../../protocol/src/pair-constraints";
 import { latestFreshRecord, proposeStorageRoot, validateStorageRoot } from "@madventures/storage";
 import { buildAllowlistedEnvironment, MissingRequiredVariableError } from "./environment";
 import { IDENTITY_PROBE_INPUT, runBoundedProbe } from "./attestation";
@@ -181,7 +182,9 @@ export async function runPurePreflightWithDependencies(input: PreflightInput, ov
     if (execution.provider !== admitted[index]!.provider) return fail("identity_mismatch");
   }
   const organizations = new Map(admitted.map(r => [r.surface, r.organization_id] as const));
-  if (!evaluatePairEligibility(envelope.executions, envelope.pair_constraints, organizations).ok) return fail("pair_ineligible");
+  if (!evaluatePairEligibilityWithDependencies(envelope.executions, envelope.pair_constraints, organizations, {
+    registration: d.registration,
+  }).ok) return fail("pair_ineligible");
   let storageRoot: string;
   try {
     storageRoot = proposeStorageRoot(input.storageRootOverride === undefined ? {} : { MADV_STORAGE_DIR: input.storageRootOverride }, repo.root, repo.worktree);
