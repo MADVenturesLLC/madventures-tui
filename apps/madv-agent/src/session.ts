@@ -16,7 +16,6 @@ import {
 } from "./events";
 import type { ScrubResult } from "./scrub";
 import { realpathSync } from "node:fs";
-import { join, dirname } from "node:path";
 
 export interface OpenedSession {
   id: string;
