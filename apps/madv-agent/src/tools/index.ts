@@ -2,9 +2,14 @@
 // The four v0 tools (design §5) and the wire protocol the model uses to call
 // them. Every tool reaches the project ONLY through policy.ts, at use time.
 //
-// `shell` takes an argv array. It is not a shell: no command string, no `-c`,
-// no shell binary. That is the difference between a tool that can run a test
-// and a tool that can run anything.
+// `shell` takes an argv array and refuses to invoke a SHELL INTERPRETER (a
+// name-based rule: sh/bash/zsh/…, plus `-c`). That is a guard-rail, NOT a
+// sandbox — `bun -e`, `python3 -c`, `awk 'BEGIN{system(...)}'` and any program
+// that spawns children are still expressible. `shell` runs with the user's
+// authority, so it can write anywhere the user can, including the session
+// stream and .git; the hard write-deny in policy.ts is a write_file rule and
+// does not constrain a child process. The control for `shell` is the per-call
+// approval carrying the exact argv. Confinement is a separate design stage.
 
 import { spawnSync } from "node:child_process";
 import {
@@ -91,7 +96,7 @@ export const readFileTool: ToolDef = {
     } finally {
       closeSync(fd);
     }
-    return { ok: true, summary: `read ${relative(ctx.projectDir, abs)} (${text.length} chars)`, output: text };
+    return { ok: true, summary: `read ${relative(realpathSync(ctx.projectDir), abs)} (${text.length} chars)`, output: text };
   },
 };
 
@@ -159,7 +164,7 @@ export const searchTool: ToolDef = {
         }
         text.split("\n").forEach((line, i) => {
           if (hits.length < 200 && re.test(line)) {
-            hits.push(`${relative(ctx.projectDir, full)}:${i + 1}: ${line.slice(0, 200)}`);
+            hits.push(`${relative(realpathSync(ctx.projectDir), full)}:${i + 1}: ${line.slice(0, 200)}`);
           }
         });
       }
@@ -208,8 +213,8 @@ export const writeFileTool: ToolDef = {
     }
     return {
       ok: true,
-      summary: `wrote ${relative(ctx.projectDir, abs)} (${content.length} chars)`,
-      output: `wrote ${relative(ctx.projectDir, abs)}`,
+      summary: `wrote ${relative(realpathSync(ctx.projectDir), abs)} (${content.length} chars)`,
+      output: `wrote ${relative(realpathSync(ctx.projectDir), abs)}`,
     };
   },
 };
@@ -220,7 +225,7 @@ export const shellTool: ToolDef = {
   needsApproval: true,
   describe: (a) => `run: ${Array.isArray(a.argv) ? a.argv.join(" ") : "(invalid argv)"}`,
   run(args, ctx) {
-    const argv = assertArgv(args.argv);
+    const argv = assertArgv(args.argv, ctx.projectDir);
     const cwd = assertPathAtUse({ projectDir: ctx.projectDir, path: ".", mode: "read" });
     const [cmd, ...rest] = argv as [string, ...string[]];
     if (cmd === undefined) throw new PolicyRefusal("refused: shell requires argv[0]");

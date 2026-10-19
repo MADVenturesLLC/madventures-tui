@@ -22,7 +22,7 @@ import {
 } from "./events";
 import { openNewSession, openSessionForResume } from "./session";
 import { runTurn } from "./turn";
-import { terminalApprover, type Approver } from "./approval";
+import { sanitizeStream, sanitizeForDisplay, terminalApprover, type Approver } from "./approval";
 import { ProxyRefusedError, ProxyRequestError } from "./proxy-error";
 import type { ProjectLock } from "./lock";
 import type { TuiBootstrap } from "./bootstrap";
@@ -254,12 +254,14 @@ export async function runCli(io: CliIo): Promise<CliExit> {
           // unless a caller injected an approver (tests do).
           approver: io.approver ?? terminalApprover(),
           onDelta: (delta) => {
-            // Live: deltas go out as they arrive.
-            io.stdout(delta);
+            // Live: deltas go out as they arrive, sanitised — model output is
+            // not a trusted source for terminal control sequences (N4).
+            io.stdout(sanitizeStream(delta));
           },
           onToolEvent: (e) => {
             const verdict = e.granted === undefined ? "" : e.granted ? " [approved]" : " [DENIED]";
-            io.stderr(`\n· ${e.type} ${e.tool}: ${e.summary}${verdict}\n`);
+            // N4: the summary carries model-authored argument text.
+            io.stderr(`\n· ${sanitizeForDisplay(e.type, 40)} ${sanitizeForDisplay(e.tool, 60)}: ${sanitizeForDisplay(e.summary)}${verdict}\n`);
           },
         });
         io.stdout(""); // newline after the streamed deltas

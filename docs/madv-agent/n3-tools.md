@@ -13,9 +13,25 @@ Stage N3 of `madv-agent` v0, under `ISSUED-FOUNDER-madv-agent-N3-AUTHORIZATION-r
 | `write_file` | write | **yes** | Writes one file inside the project root, creating parent directories that are themselves inside the root. |
 | `shell` | execute | **yes** | Runs an **argv array** with cwd pinned to the project root, a 20 s timeout, a 256 KiB buffer and a 16 000-char event cap. |
 
-`shell` is not a shell. It refuses `sh`, `bash`, `zsh`, `dash`, `ksh`, `fish`, `csh`, `tcsh` as the command,
-and refuses `-c` as an argument, because those turn an argv into an interpreter for a string. "Run the tests"
-is expressible. "Run this string" is not.
+### What `shell` is, stated precisely
+
+`shell` runs an **argv array** and refuses to invoke a **shell interpreter**: it resolves `argv[0]` (through
+PATH for bare names, against the project directory for relative ones) and refuses `sh`, `bash`, `zsh`, `dash`,
+`ksh`, `ksh93`, `mksh`, `fish`, `csh`, `tcsh`, `nu`, `xonsh`, `elvish`, `yash`, `ash`, plus `-c`.
+
+**That is a name-based rule, and it does not prevent code execution.** `bun -e '…'`, `node -e`, `python3 -c`,
+`perl -e`, `awk 'BEGIN{system(…)}'`, `find -exec`, a Makefile, and any program that spawns what it likes are
+all still expressible as argv. The rule stops the *casual* `sh -c "<string>"` path and the obvious aliases; it
+is a guard-rail, not a sandbox.
+
+**`shell` runs with this user's authority.** It can therefore create, modify or delete anything the user can,
+including `.madv-agent/sessions/**` and `.git/**`. The **hard write-deny is a `write_file` rule** — it stops
+the *agent's file tool* from forging its own audit stream or editing git internals; it does not constrain a
+program that `shell` runs, and the docs said otherwise until an independent verifier called it.
+
+**The control for `shell` is the approval**, one invocation at a time, showing the exact argv. If confinement
+is wanted — a sandbox that restricts what the child can touch — that is a separate design stage, not a
+property of this one.
 
 ## The boundary
 
@@ -78,6 +94,13 @@ does not re-ask for what was already denied.
 
 Each of these carries a mutation proof in the stage's build report: with the check removed, the named test
 fails.
+
+### Terminal output is not trusted either
+
+Model-authored text reaches the terminal in two more places besides the approval prompt: the **streamed
+deltas** and the **tool-event lines**. Both are sanitised (`sanitizeStream` keeps newline and tab, escapes
+everything else), because an ESC sequence in a delta can move the cursor, recolour text or erase the line the
+human is reading — and a human reading a redrawn terminal is not giving informed consent.
 
 ### Bypasses found in verification, now regressions
 

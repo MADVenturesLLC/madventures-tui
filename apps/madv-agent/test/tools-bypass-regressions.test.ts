@@ -18,6 +18,8 @@ import { mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assertArgv, assertPath, PolicyRefusal } from "../src/policy";
+import { sanitizeStream } from "../src/approval";
+import { writeFileSync as writeFile } from "node:fs";
 import { searchTool } from "../src/tools";
 import { sanitizeForDisplay } from "../src/approval";
 
@@ -68,6 +70,14 @@ describe("N3 bypass regressions", () => {
     expect(() => assertArgv(["/bin/sh", "script.sh"])).toThrow(PolicyRefusal);
     // A real, non-shell program still passes.
     expect(assertArgv(["echo", "hello"])).toEqual(["echo", "hello"]);
+
+    // N1: a RELATIVE argv[0] is resolved against the project dir, not against
+    // whatever cwd this process happens to have. `./tool` in another directory
+    // must not be judged by the wrong file.
+    const elsewhere = mkdtempSync(join(tmpdir(), "madv-elsewhere-"));
+    writeFile(join(elsewhere, "tool"), "#!/bin/sh\n");
+    expect(() => assertArgv(["./tool"], elsewhere)).not.toThrow();
+    expect(() => assertArgv(["./tool"], root)).toThrow();  // no such program in the project
   });
 
   test("B4: control characters cannot repaint the approval prompt", () => {
@@ -87,5 +97,13 @@ describe("N3 bypass regressions", () => {
     expect(bidi).toContain("safe");
     const zeroWidth = sanitizeForDisplay("a\u200Bb");
     expect(zeroWidth).toContain("\\u200b");
+
+    // N4: what goes to the TERMINAL is sanitised too — an ESC sequence in a
+    // streamed delta or a tool summary can move the cursor or erase the line
+    // the human is reading, whatever the prompt does.
+    const ansi = sanitizeStream("ok\u001b[2Jclear\u001b[1;31mred");
+    expect(ansi).not.toContain("\u001b");
+    expect(ansi).toContain("\\x1b");
+    expect(sanitizeStream("line one\nline two\ttab")).toBe("line one\nline two\ttab");
   });
 });

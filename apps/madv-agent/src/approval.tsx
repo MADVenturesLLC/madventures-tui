@@ -117,6 +117,28 @@ export function terminalApprover(opts?: {
   };
 }
 
+/**
+ * N4: model output and tool summaries go to the terminal too. A delta carrying
+ * ESC sequences can move the cursor, recolour text or erase the line the human
+ * is reading; sanitise before writing, keeping only newline and tab.
+ */
+export function sanitizeStream(text: string): string {
+  let out = "";
+  for (const ch of text) {
+    const code = ch.codePointAt(0) ?? 0;
+    if (ch === "\n" || ch === "\t") {
+      out += ch;
+    } else if (code >= 0x20 && code <= 0x7e) {
+      out += ch;
+    } else if (code <= 0xff) {
+      out += `\\x${code.toString(16).padStart(2, "0")}`;
+    } else {
+      out += `\\u${code.toString(16).padStart(4, "0")}`;
+    }
+  }
+  return out;
+}
+
 /** Render the request as the single line that goes into the event stream. */
 export function summarizeApproval(req: ApprovalRequest): string {
   return `${sanitizeForDisplay(req.tool, 80)}: ${sanitizeForDisplay(req.summary)}`;

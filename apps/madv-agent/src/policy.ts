@@ -116,7 +116,7 @@ export function assertPathAtUse(target: PathTarget): string {
 /** Shells are refused outright: the tool takes argv, never a command string. */
 const SHELLS = ["sh", "bash", "zsh", "dash", "ksh", "ksh93", "mksh", "fish", "csh", "tcsh", "nu", "xonsh", "elvish", "yash", "ash"];
 
-export function assertArgv(argv: unknown): string[] {
+export function assertArgv(argv: unknown, projectDir?: string): string[] {
   if (!Array.isArray(argv) || argv.length === 0) {
     throw new PolicyRefusal("refused: shell requires a non-empty argv array");
   }
@@ -132,9 +132,16 @@ export function assertArgv(argv: unknown): string[] {
   // kernel would actually execute, not the name it was called by. `sh` by name,
   // `./tool` that links to bash, and a PATH entry that resolves to a shell are
   // all the same thing: a shell.
+  // N1: a relative path (`./tool`, `bin/x`) must be resolved against the
+  // PROJECT directory — the directory the tool actually runs in — not against
+  // whatever cwd this process happened to have.
+  const base = projectDir === undefined ? process.cwd() : realpathSync(projectDir);
   const candidates = rawHead.includes("/")
-    ? [rawHead]
-    : (process.env.PATH ?? "").split(":").filter((d) => d.length > 0).map((d) => `${d}/${rawHead}`);
+    ? [isAbsolute(rawHead) ? rawHead : resolve(base, rawHead)]
+    : (process.env.PATH ?? "")
+        .split(":")
+        .filter((d) => d.length > 0)
+        .map((d) => `${d}/${rawHead}`);
 
   let resolvedProgram: string | null = null;
   for (const candidate of candidates) {
@@ -151,6 +158,15 @@ export function assertArgv(argv: unknown): string[] {
     } catch {
       continue;
     }
+  }
+
+  // An explicit path that resolves to nothing inside the project is refused:
+  // "the program is not there" is a better answer than a spawn failure deep in
+  // the tool, and it keeps a relative argv from being judged by the wrong file.
+  if (rawHead.includes("/") && resolvedProgram === null) {
+    throw new PolicyRefusal(
+      `refused: argv[0] (${rawHead}) does not resolve to a program under ${projectDir ?? "the working directory"}`,
+    );
   }
 
   const nameToJudge = (resolvedProgram ?? rawHead).split("/").pop() ?? "";
