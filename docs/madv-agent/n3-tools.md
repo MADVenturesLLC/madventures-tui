@@ -118,6 +118,7 @@ found overstated by independent verification, and corrected:
 | Where | What it said | What is true |
 | :--- | :--- | :--- |
 | commit `3890ef2` subject | "four tools behind the project-root boundary" | The project-root boundary is a rule about `read_file`, `search` and `write_file`. `shell` is approved arbitrary execution with the user's authority. The commit is **not rewritten** — rewriting published history would invalidate the review trail; this table is the correction of record. |
+| commit `3890ef2` body | "`shell` … \"run the tests\" is expressible, \"run this string\" is not" | Only the *shell-string* form is refused. `bun -e`, `node -e`, `perl -e`, `awk 'BEGIN{system(…)}'`, `find -exec` and any spawning program run arbitrary code as argv. What is refused is invoking an interpreter named as a shell, and `-c`. |
 | this page, first revision | `.madv-agent/**` and `.git/**` are "never writable"; "the stream is not forgeable" | Those are `write_file` rules. `shell` can write both paths. |
 | this page, first revision | `python3 -c '…'` listed as an allowed evasion | Refused by the `-c` rule; it is not an evasion. |
 | this page, first revision | "refuse a symlink" | Symlinks are resolved and the *target* decides. |
