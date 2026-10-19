@@ -13,6 +13,31 @@ import { linkSync, mkdirSync, readFileSync, rmSync, unlinkSync, writeFileSync, e
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 
+/**
+ * The filesystem operations the lock needs, injectable so a test can pin the
+ * creation ORDER deterministically instead of hoping to sample a race window.
+ */
+export interface LockFs {
+  linkSync: typeof linkSync;
+  mkdirSync: typeof mkdirSync;
+  readFileSync: typeof readFileSync;
+  rmSync: typeof rmSync;
+  unlinkSync: typeof unlinkSync;
+  writeFileSync: typeof writeFileSync;
+  existsSync: typeof existsSync;
+}
+
+const realFs: LockFs = {
+  linkSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  unlinkSync,
+  writeFileSync,
+  existsSync,
+};
+
+
 export function lockPath(projectDir: string): string {
   return join(projectDir, ".madv-agent", "lock");
 }
@@ -42,9 +67,9 @@ function processAlive(pid: number): boolean {
   }
 }
 
-export function readHolderPid(path: string): number | null {
+export function readHolderPid(path: string, fs: LockFs = realFs): number | null {
   try {
-    const raw = readFileSync(path, "utf8").trim();
+    const raw = fs.readFileSync(path, "utf8").trim();
     const pid = Number.parseInt(raw, 10);
     return Number.isInteger(pid) ? pid : null;
   } catch {
@@ -61,35 +86,35 @@ export interface ProjectLock {
  * Acquire the project lock. Refuses while a live process holds it; a lock
  * left by a dead process (crash) is stale and may be reclaimed.
  */
-export function acquireProjectLock(projectDir: string): ProjectLock {
+export function acquireProjectLock(projectDir: string, fs: LockFs = realFs): ProjectLock {
   const path = lockPath(projectDir);
   const parent = join(path, "..");
-  mkdirSync(parent, { recursive: true });
+  fs.mkdirSync(parent, { recursive: true });
 
   for (let attempt = 0; attempt < 2; attempt++) {
     // D5: write the pid into a unique temp file FIRST, then link(2) it onto
     // the lock path. link is atomic and fails with EEXIST when the lock
     // exists, so content and creation are one step — no empty-lock window.
     const temp = join(parent, `.lock.${process.pid}.${randomUUID()}`);
-    writeFileSync(temp, `${process.pid}\n`);
+    fs.writeFileSync(temp, `${process.pid}\n`);
     let linked = false;
     try {
       try {
-        linkSync(temp, path);
+        fs.linkSync(temp, path);
         linked = true;
       } catch (err) {
         if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
       }
     } finally {
-      unlinkSync(temp);
+      fs.unlinkSync(temp);
     }
 
     if (!linked) {
-      const holder = readHolderPid(path);
+      const holder = readHolderPid(path, fs);
       if (holder === null) {
         // Unparseable lock: corrupt (never a creation window — see above),
         // reclaim.
-        rmSync(path, { force: true });
+        fs.rmSync(path, { force: true });
         continue;
       }
       // Any live holder refuses — including this process: two instances in
@@ -98,7 +123,7 @@ export function acquireProjectLock(projectDir: string): ProjectLock {
         throw new LockHeldError(path, holder);
       }
       // Stale (dead holder): reclaim.
-      rmSync(path, { force: true });
+      fs.rmSync(path, { force: true });
       continue;
     }
 
@@ -108,12 +133,12 @@ export function acquireProjectLock(projectDir: string): ProjectLock {
       release: () => {
         if (released) return;
         released = true;
-        const current = readHolderPid(path);
-        if (current === process.pid) rmSync(path, { force: true });
+        const current = readHolderPid(path, fs);
+        if (current === process.pid) fs.rmSync(path, { force: true });
       },
     };
   }
-  throw new LockHeldError(path, readHolderPid(path) ?? -1);
+  throw new LockHeldError(path, readHolderPid(path, fs) ?? -1);
 }
 
 /** Whether a lock file currently exists (does not probe liveness). */
