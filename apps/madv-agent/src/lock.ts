@@ -42,7 +42,7 @@ function processAlive(pid: number): boolean {
   }
 }
 
-function readHolderPid(path: string): number | null {
+export function readHolderPid(path: string): number | null {
   try {
     const raw = readFileSync(path, "utf8").trim();
     const pid = Number.parseInt(raw, 10);

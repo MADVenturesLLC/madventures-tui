@@ -219,6 +219,8 @@ export async function runCli(io: CliIo): Promise<CliExit> {
         resumed = openSessionForResume(projectDir, parsed.resumeId);
       } catch (err) {
         io.stderr(`madv-agent: ${err instanceof Error ? err.message : String(err)}`);
+        // F2: release the lock on failed resume before returning
+        lock.release();
         return { code: 4 };
       }
       sessionId = resumed.id;
@@ -301,6 +303,7 @@ export async function runCli(io: CliIo): Promise<CliExit> {
   } finally {
     // Headless paths (--prompt, listing) release here. The TUI path is
     // covered by wireLockRelease on every exit path instead.
+    // F2: also release on failed resume path (when resumeId !== undefined but failed)
     if (parsed.prompt !== undefined || parsed.resumeId === null) {
       lock.release();
     }

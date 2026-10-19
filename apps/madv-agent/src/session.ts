@@ -60,12 +60,14 @@ export function openSessionForResume(
   }
   const dir = sessionsDir(projectDir);
   const file = sessionFile(projectDir, sessionId);
-  // D2, belt and braces: the resolved session directory must still live in
-  // the resolved sessions directory — a symlink cannot walk the id out.
+  // D2, belt and braces: the resolved session file must still live under the
+  // resolved sessions directory — a symlink cannot walk the id out.
   try {
-    if (realpathSync(dirname(file)) !== realpathSync(join(dir, sessionId))) {
+    const resolvedFile = realpathSync(file);
+    const resolvedDir = realpathSync(dir);
+    if (!resolvedFile.startsWith(resolvedDir + "/")) {
       throw new Error(
-        `refused: session ${sessionId} resolves outside this project's sessions directory`,
+        `refused: session ${sessionId} resolves outside this project's sessions directory (resolved to ${resolvedFile}, expected under ${resolvedDir})`,
       );
     }
   } catch (err) {

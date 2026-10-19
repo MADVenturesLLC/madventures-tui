@@ -104,25 +104,70 @@ describe("project lock (design §2)", () => {
     const scriptPath = join(tempProject(), "child.ts");
     writeFileSync(scriptPath, childScript);
 
+    // F3: Also run a poller that checks the lock file during the race.
+    // If the atomicity defect were present (create empty, write pid later),
+    // the poller could observe an empty or partial lock file.
+    const pollerScript = [
+      `import { lockPath, readHolderPid } from ${JSON.stringify(src)};`,
+      `import { existsSync, readFileSync } from "node:fs";`,
+      `const project = process.argv[2];`,
+      `const path = lockPath(project);`,
+      `let observedEmpty = false;`,
+      `let observedPartial = false;`,
+      `// Wait a bit for the race to start`,
+      `await new Promise((r) => setTimeout(r, 100));`,
+      `for (let i = 0; i < 200; i++) {`,
+      `  if (existsSync(path)) {`,
+      `    const content = readFileSync(path, "utf8");`,
+      `    if (content.trim() === "") {`,
+      `      observedEmpty = true;`,
+      `    }`,
+      `    const pid = readHolderPid(path);`,
+      `    if (pid === null) {`,
+      `      observedPartial = true;`,
+      `    }`,
+      `  }`,
+      `  await new Promise((r) => setTimeout(r, 2));`,
+      `}`,
+      `if (observedEmpty) {`,
+      `  console.log("OBSERVED_EMPTY");`,
+      `  process.exit(1);`,
+      `}`,
+      `if (observedPartial) {`,
+      `  console.log("OBSERVED_PARTIAL");`,
+      `  process.exit(1);`,
+      `}`,
+      `console.log("NO_EMPTY_OR_PARTIAL");`,
+      `process.exit(0);`,
+    ].join("\n");
+    const pollerPath = join(tempProject(), "poller.ts");
+    writeFileSync(pollerPath, pollerScript);
+
     // Several rounds: every round must yield exactly one holder.
     for (let round = 0; round < 5; round++) {
       const dir = tempProject();
-      const [a, b] = await Promise.all([
+      const [a, b, poller] = await Promise.all([
         Bun.spawn(["bun", "run", scriptPath, dir], { stdout: "pipe", stderr: "pipe" }),
         Bun.spawn(["bun", "run", scriptPath, dir], { stdout: "pipe", stderr: "pipe" }),
+        Bun.spawn(["bun", "run", pollerPath, dir], { stdout: "pipe", stderr: "pipe" }),
       ]);
-      const [outA, outB] = await Promise.all([
+      const [outA, outB, outPoller] = await Promise.all([
         new Response(a.stdout).text(),
         new Response(b.stdout).text(),
+        new Response(poller.stdout).text(),
       ]);
       const exitA = await a.exited;
       const exitB = await b.exited;
+      const exitPoller = await poller.exited;
       const acquired = [outA, outB].filter((o) => o.includes("ACQUIRED"));
       const refused = [outA, outB].filter((o) => o.includes("REFUSED"));
       expect(acquired).toHaveLength(1);
       expect(refused).toHaveLength(1);
       expect([exitA, exitB].sort()).toEqual([0, 3]);
       expect(lockExists(dir)).toBe(false); // the sole holder released on exit
+      // F3: the poller must not have observed an empty or partial lock
+      expect(outPoller).toContain("NO_EMPTY_OR_PARTIAL");
+      expect(exitPoller).toBe(0);
     }
   });
 
