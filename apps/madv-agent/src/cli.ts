@@ -22,6 +22,7 @@ import {
 } from "./events";
 import { openNewSession, openSessionForResume } from "./session";
 import { runTurn } from "./turn";
+import { terminalApprover, type Approver } from "./approval";
 import { ProxyRefusedError, ProxyRequestError } from "./proxy-error";
 import type { ProjectLock } from "./lock";
 import type { TuiBootstrap } from "./bootstrap";
@@ -87,6 +88,11 @@ export interface CliIo {
   processHooks?: ProcessHooks;
   /** D3 test seam: the TUI implementation. Defaults to ./tui/main. */
   tui?: (bootstrap: TuiBootstrap) => Promise<void>;
+  /**
+   * N3: the approval gate. Defaults to the terminal approver, which blocks and
+   * fails closed on anything that is not an explicit yes. Tests inject one.
+   */
+  approver?: Approver;
 }
 
 export interface ProcessHooks {
@@ -243,9 +249,17 @@ export async function runCli(io: CliIo): Promise<CliExit> {
       try {
         const result = await runTurn(writer, parsed.prompt, {
           proxyUrl,
+          projectDir,
+          // N3: the CLI path asks on the terminal, one invocation at a time,
+          // unless a caller injected an approver (tests do).
+          approver: io.approver ?? terminalApprover(),
           onDelta: (delta) => {
             // Live: deltas go out as they arrive.
             io.stdout(delta);
+          },
+          onToolEvent: (e) => {
+            const verdict = e.granted === undefined ? "" : e.granted ? " [approved]" : " [DENIED]";
+            io.stderr(`\n· ${e.type} ${e.tool}: ${e.summary}${verdict}\n`);
           },
         });
         io.stdout(""); // newline after the streamed deltas
@@ -285,7 +299,14 @@ export async function runCli(io: CliIo): Promise<CliExit> {
       initialTailHash: writer.tailHash(),
       scrubCount: scrub.dropped.length,
       runTurn: (userText, onDelta) =>
-        runTurn(writer, userText, { proxyUrl, onDelta }),
+        runTurn(writer, userText, {
+          proxyUrl,
+          projectDir,
+          // N3: reads work in the TUI; anything needing approval is refused
+          // until the interactive dialog lands (N4). No silent auto-approve.
+          ...(io.approver === undefined ? {} : { approver: io.approver }),
+          onDelta,
+        }),
       onExit: () => {
         // The exit wiring (registered above) releases the lock; exiting
         // runs it. This branch covers both the Ctrl+C route and a renderer

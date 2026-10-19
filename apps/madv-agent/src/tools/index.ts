@@ -1,0 +1,248 @@
+// apps/madv-agent/src/tools/index.ts
+// The four v0 tools (design §5) and the wire protocol the model uses to call
+// them. Every tool reaches the project ONLY through policy.ts, at use time.
+//
+// `shell` takes an argv array. It is not a shell: no command string, no `-c`,
+// no shell binary. That is the difference between a tool that can run a test
+// and a tool that can run anything.
+
+import { spawnSync } from "node:child_process";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname, join, relative } from "node:path";
+import { assertArgv, assertPathAtUse, PolicyRefusal } from "../policy";
+
+export type ToolKind = "read" | "write" | "execute";
+
+export interface ToolContext {
+  projectDir: string;
+}
+
+export interface ToolOutcome {
+  ok: boolean;
+  /** One line for the transcript and the event stream. */
+  summary: string;
+  /** Bounded output returned to the model. */
+  output?: string;
+}
+
+export interface ToolDef {
+  name: string;
+  kind: ToolKind;
+  /** True when the call must be approved by a human before it runs. */
+  needsApproval: boolean;
+  /** One line shown in the approval dialog. */
+  describe: (args: Record<string, unknown>) => string;
+  run: (args: Record<string, unknown>, ctx: ToolContext) => ToolOutcome;
+}
+
+const READ_CAP = 200_000;
+const OUTPUT_CAP = 16_000;
+const SHELL_TIMEOUT_MS = 20_000;
+
+function str(args: Record<string, unknown>, key: string): string {
+  const v = args[key];
+  if (typeof v !== "string") throw new PolicyRefusal(`refused: \`${key}\` must be a string`);
+  return v;
+}
+
+function cap(text: string, limit = OUTPUT_CAP): string {
+  if (text.length <= limit) return text;
+  return `${text.slice(0, limit)}\n…[truncated ${text.length - limit} chars]`;
+}
+
+export const readFileTool: ToolDef = {
+  name: "read_file",
+  kind: "read",
+  needsApproval: false,
+  describe: (a) => `read ${String(a.path ?? "")}`,
+  run(args, ctx) {
+    const abs = assertPathAtUse({ projectDir: ctx.projectDir, path: str(args, "path"), mode: "read" });
+    const st = statSync(abs);
+    if (!st.isFile()) throw new PolicyRefusal(`refused: ${args.path} is not a regular file`);
+    const text = readFileSync(abs, "utf8").slice(0, READ_CAP);
+    return { ok: true, summary: `read ${relative(ctx.projectDir, abs)} (${text.length} chars)`, output: text };
+  },
+};
+
+const SKIP_DIRS = new Set([".git", ".madv-agent", "node_modules", "dist", "build", ".next"]);
+
+export const searchTool: ToolDef = {
+  name: "search",
+  kind: "read",
+  needsApproval: false,
+  describe: (a) => `search /${String(a.pattern ?? "")}/ in ${String(a.path ?? ".")}`,
+  run(args, ctx) {
+    const pattern = str(args, "pattern");
+    const sub = typeof args.path === "string" ? args.path : ".";
+    const root = assertPathAtUse({ projectDir: ctx.projectDir, path: sub, mode: "read" });
+    let re: RegExp;
+    try {
+      re = new RegExp(pattern);
+    } catch {
+      throw new PolicyRefusal(`refused: ${pattern} is not a valid regular expression`);
+    }
+
+    const hits: string[] = [];
+    let scanned = 0;
+    const walk = (dir: string): void => {
+      if (hits.length >= 200 || scanned >= 4000) return;
+      let entries: string[];
+      try {
+        entries = readdirSync(dir);
+      } catch {
+        return;
+      }
+      for (const name of entries) {
+        if (hits.length >= 200 || scanned >= 4000) return;
+        if (SKIP_DIRS.has(name)) continue;
+        const full = join(dir, name);
+        let st;
+        try {
+          st = statSync(full);
+        } catch {
+          continue;
+        }
+        if (st.isDirectory()) {
+          walk(full);
+          continue;
+        }
+        if (!st.isFile() || st.size > 1_000_000) continue;
+        scanned += 1;
+        let text: string;
+        try {
+          text = readFileSync(full, "utf8");
+        } catch {
+          continue;
+        }
+        text.split("\n").forEach((line, i) => {
+          if (hits.length < 200 && re.test(line)) {
+            hits.push(`${relative(ctx.projectDir, full)}:${i + 1}: ${line.slice(0, 200)}`);
+          }
+        });
+      }
+    };
+    walk(root);
+
+    return {
+      ok: true,
+      summary: `search /${pattern}/ → ${hits.length} hit(s) in ${scanned} file(s)`,
+      output: hits.join("\n") || "(no matches)",
+    };
+  },
+};
+
+export const writeFileTool: ToolDef = {
+  name: "write_file",
+  kind: "write",
+  needsApproval: true,
+  describe: (a) => `write ${String(a.path ?? "")} (${String(a.content ?? "").length} chars)`,
+  run(args, ctx) {
+    const content = str(args, "content");
+    if (content.length > READ_CAP) {
+      throw new PolicyRefusal(`refused: content is ${content.length} chars, over the ${READ_CAP} cap`);
+    }
+    const abs = assertPathAtUse({ projectDir: ctx.projectDir, path: str(args, "path"), mode: "write" });
+    // The parent must also be inside the root — creating it must not walk out.
+    // Containment only (mode "read"): the write-deny above already ruled on the
+    // target, and the project root itself is a legitimate parent.
+    assertPathAtUse({ projectDir: ctx.projectDir, path: dirname(abs), mode: "read" });
+    mkdirSync(dirname(abs), { recursive: true });
+    writeFileSync(abs, content, "utf8");
+    return {
+      ok: true,
+      summary: `wrote ${relative(ctx.projectDir, abs)} (${content.length} chars)`,
+      output: `wrote ${relative(ctx.projectDir, abs)}`,
+    };
+  },
+};
+
+export const shellTool: ToolDef = {
+  name: "shell",
+  kind: "execute",
+  needsApproval: true,
+  describe: (a) => `run: ${Array.isArray(a.argv) ? a.argv.join(" ") : "(invalid argv)"}`,
+  run(args, ctx) {
+    const argv = assertArgv(args.argv);
+    const cwd = assertPathAtUse({ projectDir: ctx.projectDir, path: ".", mode: "read" });
+    const [cmd, ...rest] = argv as [string, ...string[]];
+    if (cmd === undefined) throw new PolicyRefusal("refused: shell requires argv[0]");
+    const res = spawnSync(cmd, rest, {
+      cwd,
+      timeout: SHELL_TIMEOUT_MS,
+      encoding: "utf8",
+      maxBuffer: 256 * 1024,
+      shell: false,
+      env: { PATH: process.env.PATH ?? "/usr/bin:/bin" },
+    });
+    const stdout = res.stdout ?? "";
+    const stderr = res.stderr ?? "";
+    const timedOut = res.error !== undefined && (res.error as NodeJS.ErrnoException).code === "ETIMEDOUT";
+    const code = res.status ?? -1;
+    return {
+      ok: !timedOut && code === 0,
+      summary: timedOut
+        ? `timed out after ${SHELL_TIMEOUT_MS}ms: ${argv.join(" ")}`
+        : `exit ${code}: ${argv.join(" ")}`,
+      output: cap(`$ ${argv.join(" ")}\n${stdout}${stderr ? `\n[stderr]\n${stderr}` : ""}`),
+    };
+  },
+};
+
+export const TOOLS: ReadonlyArray<ToolDef> = [readFileTool, searchTool, writeFileTool, shellTool];
+
+export function toolByName(name: string): ToolDef | undefined {
+  return TOOLS.find((t) => t.name === name);
+}
+
+/** The system prompt that teaches the model the wire protocol. */
+export const TOOL_PROTOCOL_PROMPT = [
+  "You are madv-agent, working inside a project directory.",
+  "You may use exactly four tools: read_file, search, write_file, shell.",
+  "To call one, reply with a fenced block and nothing else in it:",
+  "```madv-tool",
+  '{"tool":"read_file","args":{"path":"src/index.ts"}}',
+  "```",
+  "read_file: {path}. search: {pattern, path?}. write_file: {path, content}. shell: {argv: [cmd, ...args]}.",
+  "shell takes an ARGV ARRAY and never a shell string; it will refuse `sh -c`.",
+  "Every path must be inside the project root. write_file and shell require human approval.",
+  "After a tool result you will be given the outcome; continue the task or answer.",
+  "If you can answer without a tool, answer directly.",
+].join("\n");
+
+export interface ToolCall {
+  tool: string;
+  args: Record<string, unknown>;
+}
+
+/** Parse tool calls out of a model reply. Unknown shapes are ignored. */
+export function parseToolCalls(content: string): ToolCall[] {
+  const calls: ToolCall[] = [];
+  const re = /```madv-tool\s*\n([\s\S]*?)```/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(content)) !== null) {
+    const body = m[1]?.trim();
+    if (!body) continue;
+    try {
+      const parsed = JSON.parse(body) as { tool?: unknown; args?: unknown };
+      if (typeof parsed.tool !== "string") continue;
+      const args =
+        parsed.args !== null && typeof parsed.args === "object"
+          ? (parsed.args as Record<string, unknown>)
+          : {};
+      calls.push({ tool: parsed.tool, args });
+    } catch {
+      // A malformed block is not a tool call; the model sees its own text and
+      // can correct on the next turn.
+    }
+  }
+  return calls;
+}
+
+export { existsSync };

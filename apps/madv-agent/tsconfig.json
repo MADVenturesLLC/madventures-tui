@@ -1,6 +1,8 @@
 {
   "compilerOptions": {
-    "lib": ["ESNext"],
+    "lib": [
+      "ESNext"
+    ],
     "target": "ES2022",
     "module": "ESNext",
     "moduleDetection": "force",
@@ -15,7 +17,24 @@
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
     "noImplicitOverride": true,
-    "types": ["bun"]
+    "types": [
+      "bun"
+    ],
+    "baseUrl": ".",
+    "paths": {
+      "@madventures/policy": [
+        "../../packages/policy/src/index.ts"
+      ],
+      "@madventures/protocol": [
+        "../../packages/protocol/src/index.ts"
+      ],
+      "@madventures/ledger": [
+        "../../packages/ledger/src/index.ts"
+      ]
+    }
   },
-  "include": ["src", "test"]
+  "include": [
+    "src",
+    "test"
+  ]
 }
