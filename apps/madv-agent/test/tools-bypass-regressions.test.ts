@@ -38,6 +38,12 @@ describe("N3 bypass regressions", () => {
     expect(res.ok).toBe(true);
     expect(res.output ?? "").not.toContain("TOKEN_LEAK_CANARY");
     expect(res.summary).toContain("0 hit");
+
+    // POSITIVE CONTROL (R2): with the root comparison unresolvable, this search
+    // returned 0 hits for everything and the test above passed for the wrong
+    // reason. A search that finds nothing inside the root is broken, not safe.
+    const inside = searchTool.run({ pattern: "nothing secret here" }, { projectDir: root });
+    expect(inside.output ?? "").toContain("inside.txt");
   });
 
   test("B2: the hard write-deny is case-insensitive on this filesystem", () => {
@@ -53,11 +59,15 @@ describe("N3 bypass regressions", () => {
     const root = project();
     const link = join(root, "innocent-tool");
     symlinkSync("/bin/sh", link);
-    expect(() => assertArgv([link, "-c", "echo pwned"])).toThrow(/is a symlink/);
+    // R1: argv[0] is RESOLVED, so an innocent-looking name that points at a
+    // shell is refused for what it is.
+    expect(() => assertArgv([link, "echo", "pwned"])).toThrow(/is a shell/);
 
-    // And a real path that RESOLVES to a shell is refused even when the name
-    // looks harmless (`/bin/sh` itself, and a copy-free hard link target).
+    // And a bare name is resolved through PATH, not skipped.
+    expect(() => assertArgv(["sh", "script.sh"])).toThrow(/is a shell/);
     expect(() => assertArgv(["/bin/sh", "script.sh"])).toThrow(PolicyRefusal);
+    // A real, non-shell program still passes.
+    expect(assertArgv(["echo", "hello"])).toEqual(["echo", "hello"]);
   });
 
   test("B4: control characters cannot repaint the approval prompt", () => {
@@ -69,5 +79,13 @@ describe("N3 bypass regressions", () => {
     expect(safe).toContain("\\x0d");
     // A long argument is capped rather than allowed to scroll the prompt away.
     expect(sanitizeForDisplay("a".repeat(1000)).length).toBeLessThan(420);
+
+    // R3: bidi and other Unicode FORMAT characters are not control codes, and
+    // they can reorder text without being visible. They must be escaped too.
+    const bidi = sanitizeForDisplay("safe\u202Egnp.exe");
+    expect(bidi).toContain("\\u202e");
+    expect(bidi).toContain("safe");
+    const zeroWidth = sanitizeForDisplay("a\u200Bb");
+    expect(zeroWidth).toContain("\\u200b");
   });
 });

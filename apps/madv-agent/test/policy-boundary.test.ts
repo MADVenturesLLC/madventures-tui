@@ -7,7 +7,7 @@
 //     authorisation and use is refused at use time).
 
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { assertArgv, assertPath, assertPathAtUse, PolicyRefusal } from "../src/policy";
@@ -26,7 +26,9 @@ describe("policy boundary (N3)", () => {
       expect(() => assertPath({ projectDir: root, path: bad, mode: "read" })).toThrow(PolicyRefusal);
     }
     // A legitimate path resolves.
-    expect(assertPath({ projectDir: root, path: "src/a.ts", mode: "read" })).toBe(join(root, "src/a.ts"));
+    expect(assertPath({ projectDir: root, path: "src/a.ts", mode: "read" })).toBe(
+      join(realpathSync(root), "src/a.ts"),
+    );
   });
 
   test("BITE: a symlink pointing out of the root is refused", () => {
@@ -49,7 +51,9 @@ describe("policy boundary (N3)", () => {
       );
     }
     // Reading them is not the same question, and writes elsewhere are fine.
-    expect(assertPath({ projectDir: root, path: "src/new.ts", mode: "write" })).toBe(join(root, "src/new.ts"));
+    expect(assertPath({ projectDir: root, path: "src/new.ts", mode: "write" })).toBe(
+      join(realpathSync(root), "src/new.ts"),
+    );
   });
 
   test("BITE (TOCTOU): a path that becomes a symlink before use is refused at use time", () => {
@@ -58,7 +62,9 @@ describe("policy boundary (N3)", () => {
     writeFileSync(join(outside, "secret.txt"), "do not read\n");
 
     // Authorised now, as a regular file…
-    expect(assertPath({ projectDir: root, path: "src/a.ts", mode: "read" })).toBe(join(root, "src/a.ts"));
+    expect(assertPath({ projectDir: root, path: "src/a.ts", mode: "read" })).toBe(
+      join(realpathSync(root), "src/a.ts"),
+    );
 
     // …swapped for a symlink before the caller gets to use it.
     const fs = require("node:fs") as typeof import("node:fs");

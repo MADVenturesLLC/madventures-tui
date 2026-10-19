@@ -55,11 +55,24 @@ const AFFIRMATIVE = new Set(["y", "yes"]);
  * before display: keep printable ASCII, escape everything else and cap it.
  */
 export function sanitizeForDisplay(text: string, limit = 400): string {
-  const escaped = text.replace(/[\u0000-\u001f\u007f-\u009f]/g, (c) => {
-    const code = c.charCodeAt(0).toString(16).padStart(2, "0");
-    return `\\x${code}`;
-  });
-  return escaped.length > limit ? `${escaped.slice(0, limit)}…` : escaped;
+  // R3: allow-list printable ASCII. Escaping "control characters" is not enough:
+  // bidi overrides (U+202E), line/paragraph separators (U+2028/9), zero-width
+  // joiners and other format characters can reorder or hide the text of a
+  // consent prompt without being control codes. Anything outside 0x20–0x7E is
+  // escaped, so the prompt can only ever show what the action contains.
+  let out = "";
+  for (const ch of text) {
+    const code = ch.codePointAt(0) ?? 0;
+    if (code >= 0x20 && code <= 0x7e) {
+      out += ch;
+    } else if (code <= 0xff) {
+      out += `\\x${code.toString(16).padStart(2, "0")}`;
+    } else {
+      out += `\\u${code.toString(16).padStart(4, "0")}`;
+    }
+    if (out.length > limit) break;
+  }
+  return out.length > limit ? `${out.slice(0, limit)}…` : out;
 }
 
 /**

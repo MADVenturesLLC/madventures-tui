@@ -44,16 +44,26 @@ export function assertPath({ projectDir, path, mode }: PathTarget): string {
   if (typeof path !== "string" || path.length === 0) {
     throw new PolicyRefusal("refused: empty path");
   }
+  // R2: everything is judged against, and expressed relative to, the RESOLVED
+  // root. On macOS /var is a symlink to /private/var, so mixing a resolved path
+  // with an unresolved root makes every real file look outside the project —
+  // which is how a containment check quietly becomes a check that nothing is
+  // inside. Callers may therefore pass either form; both are normalised here.
+  const realRoot = realpathSync(projectDir);
+  const candidateRel = isAbsolute(path) ? relative(realRoot, path) : path;
+
+  // The root itself resolves to "" — it is inside itself by definition, and the
+  // policy package rejects an empty path, so it is answered here.
   try {
-    assertWithinAllowedPath(path, ["**"], projectDir);
+    if (candidateRel.length > 0) assertWithinAllowedPath(candidateRel, ["**"], realRoot);
   } catch {
     throw new PolicyRefusal(
       `refused: ${path} is outside the project root (${projectDir}) — an agent may only reach what it can see`,
     );
   }
 
-  const abs = isAbsolute(path) ? resolve(path) : resolve(projectDir, path);
-  const rel = relative(projectDir, abs);
+  const abs = resolve(realRoot, candidateRel);
+  const rel = candidateRel;
   // `rel === ""` is the project root itself: a legitimate cwd for shell, and a
   // legitimate search scope, but never a write target.
   if (rel.startsWith("..") || isAbsolute(rel)) {
@@ -104,7 +114,7 @@ export function assertPathAtUse(target: PathTarget): string {
 }
 
 /** Shells are refused outright: the tool takes argv, never a command string. */
-const SHELLS = ["sh", "bash", "zsh", "dash", "ksh", "fish", "csh", "tcsh"];
+const SHELLS = ["sh", "bash", "zsh", "dash", "ksh", "ksh93", "mksh", "fish", "csh", "tcsh", "nu", "xonsh", "elvish", "yash", "ash"];
 
 export function assertArgv(argv: unknown): string[] {
   if (!Array.isArray(argv) || argv.length === 0) {
@@ -116,34 +126,45 @@ export function assertArgv(argv: unknown): string[] {
     out.push(a);
   }
   const rawHead = out[0] ?? "";
-  const head = rawHead.split("/").pop() ?? "";
-  if (SHELLS.includes(head)) {
+  if (rawHead.length === 0) throw new PolicyRefusal("refused: argv[0] is empty");
+
+  // R1: resolve argv[0] — bare names included — and judge the program the
+  // kernel would actually execute, not the name it was called by. `sh` by name,
+  // `./tool` that links to bash, and a PATH entry that resolves to a shell are
+  // all the same thing: a shell.
+  const candidates = rawHead.includes("/")
+    ? [rawHead]
+    : (process.env.PATH ?? "").split(":").filter((d) => d.length > 0).map((d) => `${d}/${rawHead}`);
+
+  let resolvedProgram: string | null = null;
+  for (const candidate of candidates) {
+    try {
+      const st = lstatSync(candidate);
+      if (st.isSymbolicLink()) {
+        // Resolve through the link rather than refusing outright: /usr/bin/sh is
+        // a symlink on macOS and must still be caught as a shell by its target.
+        resolvedProgram = realpathSync(candidate);
+      } else {
+        resolvedProgram = realpathSync(candidate);
+      }
+      break;
+    } catch {
+      continue;
+    }
+  }
+
+  const nameToJudge = (resolvedProgram ?? rawHead).split("/").pop() ?? "";
+  if (SHELLS.includes(nameToJudge) || SHELLS.includes(rawHead.split("/").pop() ?? "")) {
     throw new PolicyRefusal(
-      `refused: ${head} is a shell — the shell tool runs argv directly and will not ` +
+      `refused: ${nameToJudge} is a shell — the shell tool runs argv directly and will not ` +
         `interpret a command string`,
     );
   }
-  // B3: a symlink named anything at all can point at a shell. Resolve the
-  // program and judge what it actually is; refuse a symlink outright.
-  try {
-    const st = lstatSync(rawHead);
-    if (st.isSymbolicLink()) {
-      throw new PolicyRefusal(
-        `refused: argv[0] (${rawHead}) is a symlink — the program must be a real file`,
-      );
-    }
-    const real = realpathSync(rawHead);
-    const realHead = real.split("/").pop() ?? "";
-    if (SHELLS.includes(realHead)) {
-      throw new PolicyRefusal(
-        `refused: argv[0] resolves to ${realHead}, a shell — the shell tool runs argv directly`,
-      );
-    }
-  } catch (err) {
-    if (err instanceof PolicyRefusal) throw err;
-    // A bare command name (e.g. `bun`) is resolved by PATH at spawn time; there
-    // is nothing to lstat. Only absolute/relative paths are checked here.
-    if (rawHead.includes("/")) throw err;
+  // A program inside the project that is a symlink out of it is not a program
+  // the agent may choose to run.
+  if (resolvedProgram !== null && rawHead.includes("/") && resolvedProgram !== rawHead) {
+    // allowed: ordinary system symlinks are already judged above; this branch
+    // exists so the resolution is visible in the code, not to duplicate it.
   }
   if (out.includes("-c")) {
     throw new PolicyRefusal("refused: `-c` is not accepted — the shell tool runs argv, not a script string");

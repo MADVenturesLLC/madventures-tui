@@ -144,7 +144,8 @@ export const searchTool: ToolDef = {
         // Belt and braces: the entry's real path must still be inside the root.
         try {
           const real = realpathSync(full);
-          const relReal = relative(ctx.projectDir, real);
+          // R2: both sides resolved — on macOS the root is a symlinked /var.
+          const relReal = relative(realpathSync(ctx.projectDir), real);
           if (relReal.startsWith("..") || isAbsolute(relReal)) continue;
         } catch {
           continue;
