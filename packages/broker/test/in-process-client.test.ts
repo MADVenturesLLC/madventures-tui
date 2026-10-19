@@ -5,9 +5,10 @@
 // RuntimeBroker — no fake ledger, no wrapper, no callback, no seam.
 // Phase 3A M10 Task 23 (plan Task 23; Founder Decision DEC-20260930-02 Parts
 // B to D) appends four named tests for the sequence invariants, nine in all.
+// The Task 49 prerequisite adds three tests for durable governance dispatch.
 
 import { expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as barrel from "../src/index";
@@ -67,7 +68,10 @@ function sessionOpen(sessionId = SESSION_ID, eventId = "evt-open-22"): SessionLi
   };
 }
 
-function makeBroker(ledger: Ledger): RuntimeBroker {
+function makeBroker(
+  ledger: Ledger,
+  terminateGovernedProcesses: RuntimeBrokerDeps["terminateGovernedProcesses"] = async () => {},
+): RuntimeBroker {
   let tick = 0;
   let generated = 0;
   const deps: RuntimeBrokerDeps = {
@@ -80,7 +84,7 @@ function makeBroker(ledger: Ledger): RuntimeBroker {
       },
       nextEventId: () => `evt-22-${(generated += 1)}`,
     },
-    terminateGovernedProcesses: async () => {},
+    terminateGovernedProcesses,
     observe: () => {},
   };
   return new RuntimeBroker(deps);
@@ -105,6 +109,19 @@ function eventTypesOf(broker: RuntimeBroker): string[] {
 const PAUSE_COMMAND: BrokerCommand = {
   kind: "session_pause",
   commandId: "cmd-pause-22",
+  sessionId: SESSION_ID,
+  reason: "test",
+};
+
+const RESUME_COMMAND: BrokerCommand = {
+  kind: "session_resume",
+  commandId: "cmd-resume-22",
+  sessionId: SESSION_ID,
+};
+
+const CLOSE_COMMAND: BrokerCommand = {
+  kind: "session_close",
+  commandId: "cmd-close-22",
   sessionId: SESSION_ID,
   reason: "test",
 };
@@ -278,11 +295,11 @@ test("snapshotSeq is strictly increasing by one", async () => {
   // DEC-20260929-01 B1 item 2: the accessor hands out no reference into
   // broker state. Rewriting every part of a returned input leaves the broker's
   // later inputs, later snapshots and later request() results unchanged.
-  const observer = createInProcessBrokerClient(broker, FOUNDER_PRINCIPAL);
+  const observer = createInProcessBrokerClient(broker, { kind: "execution", executionId: WRITER_A });
   const pristine = structuredClone(broker.snapshotProjectionInput());
   const snapshotBefore = withoutSeq(await observer.getSnapshot());
   const resultBefore = await observer.request(PAUSE_COMMAND);
-  expect(resultBefore.ok).toBe(true);
+  expect(resultBefore).toMatchObject({ ok: false, error: "unauthorized" });
   const tampered = broker.snapshotProjectionInput() as unknown as TamperableProjectionInput;
   tampered.lifecycle.phase = "closed";
   tampered.lifecycle.tokenState = "invalidated";
@@ -536,6 +553,7 @@ test("a command carrying a foreign sessionId fails with session_mismatch", async
     (accepted as { acceptedSnapshotSeq: number }).acceptedSnapshotSeq = 999;
     (accepted as { commandId: string }).commandId = "forged";
   });
+  expect((await founderClient.request(RESUME_COMMAND)).ok).toBe(true);
   expect(await founderClient.request(PAUSE_COMMAND)).toEqual(acceptedCopy);
   const event = { event_id: "evt-publish-22" } as never;
   const published = await founderClient.publish(event);
@@ -550,6 +568,156 @@ test("a command carrying a foreign sessionId fails with session_mismatch", async
   await founderClient.close();
 
   await client.close();
+});
+
+test("Task49 prerequisite dispatches pause and resume without changing the fencing token", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "madv-client-lifecycle-"));
+  const ledger = new Ledger(join(dir, "ledger.sqlite3"));
+  ledger.append(sessionOpen());
+  const broker = makeBroker(ledger);
+  const client = createInProcessBrokerClient(broker, FOUNDER_PRINCIPAL);
+  try {
+    await broker.activate(WRITER_A, EXECUTION_IDS);
+    const active = await client.getSnapshot();
+    expect(await client.request(PAUSE_COMMAND)).toEqual({
+      ok: true,
+      commandId: PAUSE_COMMAND.commandId,
+      acceptedSnapshotSeq: active.snapshotSeq,
+    });
+    const paused = await client.getSnapshot();
+    expect(paused.phase).toBe("paused");
+    expect(paused.tokenState).toBe("valid");
+    expect(paused.fencingToken).toBe(active.fencingToken);
+    expect(paused.activeWriterExecutionId).toBe(WRITER_A);
+    expect(await client.request(RESUME_COMMAND)).toEqual({
+      ok: true,
+      commandId: RESUME_COMMAND.commandId,
+      acceptedSnapshotSeq: paused.snapshotSeq,
+    });
+    const resumed = await client.getSnapshot();
+    expect(resumed.phase).toBe("active");
+    expect(resumed.tokenState).toBe("valid");
+    expect(resumed.fencingToken).toBe(active.fencingToken);
+    expect(resumed.activeWriterExecutionId).toBe(WRITER_A);
+    expect(eventTypesOf(broker).slice(-2)).toEqual(["session_paused", "session_resumed"]);
+    expect(eventTypesOf(broker).filter((type) => type === "fencing_token_issued")).toHaveLength(1);
+  } finally {
+    await client.close();
+    ledger.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("Task49 prerequisite rejected governance commands do not mutate the ledger", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "madv-client-refusal-"));
+  const ledger = new Ledger(join(dir, "ledger.sqlite3"));
+  ledger.append(sessionOpen());
+  const broker = makeBroker(ledger);
+  const founder = createInProcessBrokerClient(broker, FOUNDER_PRINCIPAL);
+  const execution = createInProcessBrokerClient(broker, { kind: "execution", executionId: WRITER_A });
+  const commands = [PAUSE_COMMAND, RESUME_COMMAND, CLOSE_COMMAND];
+  try {
+    await broker.activate(WRITER_A, EXECUTION_IDS);
+    const activeRows = ledger.readAfter(0);
+    for (const command of commands) {
+      expect(await execution.request(command)).toMatchObject({ ok: false, error: "unauthorized" });
+      expect(await founder.request({ ...command, sessionId: "ses-foreign-999" })).toMatchObject({
+        ok: false, error: "session_mismatch",
+      });
+      expect(await founder.request({ ...command, extra: true } as unknown as BrokerCommand)).toMatchObject({
+        ok: false, error: "invalid_command",
+      });
+      expect(ledger.readAfter(0)).toEqual(activeRows);
+    }
+    expect(await founder.request(RESUME_COMMAND)).toMatchObject({ ok: false, error: "session_not_writable" });
+    expect(ledger.readAfter(0)).toEqual(activeRows);
+
+    expect((await founder.request(PAUSE_COMMAND)).ok).toBe(true);
+    expect((await founder.getSnapshot()).phase).toBe("paused");
+    const pausedRows = ledger.readAfter(0);
+    for (const command of [PAUSE_COMMAND, CLOSE_COMMAND]) {
+      expect(await founder.request(command)).toMatchObject({ ok: false, error: "session_not_writable" });
+      expect(ledger.readAfter(0)).toEqual(pausedRows);
+    }
+    expect((await founder.request(RESUME_COMMAND)).ok).toBe(true);
+    expect((await founder.request(CLOSE_COMMAND)).ok).toBe(true);
+    const closedRows = ledger.readAfter(0);
+    for (const command of commands) {
+      expect(await founder.request(command)).toMatchObject({ ok: false, error: "session_not_writable" });
+      expect(ledger.readAfter(0)).toEqual(closedRows);
+    }
+  } finally {
+    await founder.close();
+    await execution.close();
+    ledger.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("Task49 prerequisite session_close awaits termination between invalidation and closed", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "madv-client-close-"));
+  const ledger = new Ledger(join(dir, "ledger.sqlite3"));
+  ledger.append(sessionOpen());
+  let releaseTermination!: () => void;
+  const termination = new Promise<void>((resolve) => { releaseTermination = resolve; });
+  let terminationCalls = 0;
+  const broker = makeBroker(ledger, async () => {
+    terminationCalls += 1;
+    await termination;
+  });
+  const client = createInProcessBrokerClient(broker, FOUNDER_PRINCIPAL);
+  let request: ReturnType<InProcessBrokerClient["request"]> | undefined;
+  try {
+    await broker.activate(WRITER_A, EXECUTION_IDS);
+    const active = await client.getSnapshot();
+    const command = { ...CLOSE_COMMAND };
+    request = client.request(command);
+    expect(await isPending(request)).toBe(true);
+    command.commandId = "forged-after-dispatch";
+    expect(terminationCalls).toBe(1);
+    expect(eventTypesOf(broker).slice(-2)).toEqual(["session_closing", "fencing_token_invalidated"]);
+    const closing = await client.getSnapshot();
+    expect(closing.phase).toBe("closing");
+    expect(closing.tokenState).toBe("invalidated");
+    expect(closing.fencingToken).toBe(active.fencingToken);
+
+    releaseTermination();
+    expect(await request).toMatchObject({ ok: true, commandId: CLOSE_COMMAND.commandId });
+    const closed = await client.getSnapshot();
+    expect(closed.phase).toBe("closed");
+    expect(closed.tokenState).toBe("invalidated");
+    expect(eventTypesOf(broker).slice(-3)).toEqual([
+      "session_closing", "fencing_token_invalidated", "session_closed",
+    ]);
+    const closingEvent = JSON.parse(ledger.readAfter(0).at(-3)!.event_json) as SessionLifecycleEventV1;
+    expect(closingEvent.payload).toMatchObject({ command_id: CLOSE_COMMAND.commandId });
+  } finally {
+    releaseTermination();
+    await request?.catch(() => undefined);
+    await client.close();
+    ledger.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("Task49 prerequisite dispatch uses the same command kind that passed authorization", async () => {
+  const { ledger, broker } = await activeBroker();
+  const client = createInProcessBrokerClient(broker, { kind: "execution", executionId: WRITER_A });
+  let reads = 0;
+  const command = {
+    get kind() { return ++reads === 1 ? "pty_terminate" : "session_close"; },
+    commandId: "mutable-kind", sessionId: SESSION_ID, executionId: WRITER_A, reason: "founder_request",
+  } as BrokerCommand;
+  try {
+    const before = ledger.readAfter(0);
+    expect((await client.request(command)).ok).toBe(true);
+    expect(ledger.readAfter(0)).toEqual(before);
+    expect((await client.getSnapshot()).phase).toBe("active");
+    expect(reads).toBe(1);
+  } finally {
+    await client.close();
+    ledger.close();
+  }
 });
 
 // ─── Helpers for the DEC-20260930-02 sequence-invariant tests ───

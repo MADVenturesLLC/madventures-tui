@@ -25,10 +25,11 @@ import {
 } from "../src/fencing";
 import type { FencingRecordContext } from "../src/fencing";
 import { RuntimeBroker, RuntimeBrokerError } from "../src/runtime-broker";
+import type { ExecutionSnapshot } from "../src/client";
 import type { LifecycleObservation, RuntimeBrokerDeps, RuntimeBrokerProvenance } from "../src/runtime-broker";
 import { GENESIS_HASH, INITIAL_LIFECYCLE_STATE, Ledger, ReducerError, reduceLedgerEvent } from "@madventures/ledger";
 import type { LedgerRow, LifecycleState } from "@madventures/ledger";
-import { PROTOCOL_VERSION } from "@madventures/protocol";
+import { PROTOCOL_VERSION, parseSurfaceId } from "@madventures/protocol";
 import type { LedgerEventV1, RepositoryFingerprint, SessionLifecycleEventV1 } from "@madventures/protocol";
 import { parseSessionLifecycleEvent } from "../../protocol/src/lifecycle-events";
 import type { LifecycleContext } from "../../protocol/src/lifecycle-events";
@@ -740,6 +741,150 @@ function expectEventLevelChain(entries: readonly DurableLifecycle[]): void {
     expect(entry.row.previous_hash).toBe(previous);
   });
 }
+
+function task49Executions(): ExecutionSnapshot[] {
+  return T19_EXECUTION_IDS.map((executionId, index) => ({
+    identity: {
+      execution_id: executionId,
+      role: index === 0 ? "builder" : "independent-reviewer",
+      surface: parseSurfaceId(index === 0 ? "claude-code" : "antigravity"),
+      model: `fixture-model-${index}`,
+      provider: `fixture-provider-${index}`,
+      independence_domain: `fixture-domain-${index}`,
+      effort: "high",
+    },
+    state: "ready",
+    hostPid: 100 + index,
+    childPid: 200 + index,
+    processGroupId: 200 + index,
+    executablePath: `/fixture/execution-${index}`,
+    executableSha256: "f".repeat(64),
+    exitCode: null,
+    exitSignal: null,
+  }));
+}
+
+test("Task49 prerequisite pause and resume persist canonical events without changing the token", async () => {
+  const { h, broker } = await activatedBroker();
+  try {
+    const initial = broker.snapshotProjectionInput().lifecycle;
+    await broker.pause("cmd-pause-task49");
+    expect(broker.snapshotProjectionInput().lifecycle).toEqual({ ...initial, phase: "paused" });
+    await broker.resume("cmd-resume-task49");
+    expect(broker.snapshotProjectionInput().lifecycle).toEqual(initial);
+
+    const entries = durable(h.ledger);
+    expect(typesOf(entries)).toEqual([
+      "session_open", "fencing_token_issued", "session_activated", "session_paused", "session_resumed",
+    ]);
+    for (const [index, commandId] of [[3, "cmd-pause-task49"], [4, "cmd-resume-task49"]] as const) {
+      const event = entries[index]!.event;
+      expect(event.payload).toEqual({ command_id: commandId, authorized_by: "founder" });
+      expect(event.session_id).toBe(T19_SESSION_ID);
+      expect(event.actor).toBe("madbridge");
+      expect(event.fencing_token).toBe(initial.fencingToken);
+      expect(event.reason_code).toBeNull();
+      expect(parseSessionLifecycleEvent(asRaw(event), {
+        envelopeExecutionIds: [...T19_EXECUTION_IDS], openIncidentId: null, openReasonCode: null,
+      })).toEqual(event);
+    }
+    expectEventLevelChain(entries);
+    expect(h.ledger.verify()).toEqual({ valid: true, count: 5, head: entries[4]!.row.event_hash });
+    expect(replay(h.ledger.readAfter(0))).toEqual(initial);
+    expect(h.observations.slice(-2).map(({ phase, ledgerSeq }) => ({ phase, ledgerSeq }))).toEqual([
+      { phase: "paused", ledgerSeq: 4 }, { phase: "active", ledgerSeq: 5 },
+    ]);
+    expect(h.terminatorCalls).toEqual([]);
+  } finally {
+    h.ledger.close();
+  }
+});
+
+test("Task49 prerequisite pause and resume refuse invalid phases without adding ledger rows", async () => {
+  const ledger = openLedger();
+  ledger.append(sessionOpen());
+  const h = harness(ledger);
+  const broker = new RuntimeBroker(h.deps);
+  const assertRefused = async (command: "pause" | "resume") => {
+    const rows = ledger.readAfter(0);
+    const observations = [...h.observations];
+    const before = broker.snapshotProjectionInput().lifecycle;
+    const error = await rejection(() => broker[command](`cmd-refused-${command}`));
+    expect(error).toBeInstanceOf(RuntimeBrokerError);
+    expect((error as RuntimeBrokerError).kind).toBe("invalid_phase");
+    expect(ledger.readAfter(0)).toEqual(rows);
+    expect(h.observations).toEqual(observations);
+    expect(broker.snapshotProjectionInput().lifecycle).toEqual(before);
+  };
+  try {
+    await assertRefused("pause");
+    await assertRefused("resume");
+    await broker.activate(T19_WRITER, T19_EXECUTION_IDS);
+    await assertRefused("resume");
+    await broker.pause("cmd-first-pause");
+    await assertRefused("pause");
+    await broker.resume("cmd-first-resume");
+    await assertRefused("resume");
+    await broker.founderClose(T19_COMMAND_ID);
+    await assertRefused("pause");
+    await assertRefused("resume");
+    expect(h.terminatorCalls).toHaveLength(1);
+  } finally {
+    ledger.close();
+  }
+});
+
+test("Task49 prerequisite activation retains isolated execution snapshots and omission preserves null", async () => {
+  const { h: omitted, broker: withoutExecutions } = await activatedBroker();
+  try {
+    expect(withoutExecutions.snapshotProjectionInput().executions).toBeNull();
+  } finally {
+    omitted.ledger.close();
+  }
+
+  const ledger = openLedger();
+  ledger.append(sessionOpen());
+  const broker = new RuntimeBroker(harness(ledger).deps);
+  const executions = task49Executions();
+  const expected = structuredClone(executions);
+  try {
+    await broker.activate(T19_WRITER, T19_EXECUTION_IDS, executions);
+    Object.assign(executions[0]!, { state: "failed" });
+    Object.assign(executions[0]!.identity, { model: "changed-source" });
+    executions.pop();
+    const input = broker.snapshotProjectionInput();
+    expect(input.executions).toEqual(expected);
+    Object.assign(input.executions![0]!, { childPid: -1 });
+    Object.assign(input.executions![0]!.identity, { model: "changed-output" });
+    expect(broker.snapshotProjectionInput().executions).toEqual(expected);
+  } finally {
+    ledger.close();
+  }
+});
+
+test("Task49 prerequisite reconstruction retains isolated execution facts without permitting reactivation", async () => {
+  const { h } = await activatedBroker();
+  const executions = task49Executions();
+  const expected = structuredClone(executions);
+  const broker = new RuntimeBroker({ ...h.deps, executions });
+  try {
+    Object.assign(executions[0]!.identity, { model: "changed-source" });
+    executions.pop();
+    const input = broker.snapshotProjectionInput();
+    expect(input.executions).toEqual(expected);
+    Object.assign(input.executions![0]!.identity, { model: "changed-output" });
+    expect(broker.snapshotProjectionInput().executions).toEqual(expected);
+
+    const rows = h.ledger.readAfter(0);
+    const refused = await rejection(() => broker.activate(T19_WRITER, T19_EXECUTION_IDS, []));
+    expect(refused).toBeInstanceOf(RuntimeBrokerError);
+    expect((refused as RuntimeBrokerError).kind).toBe("invalid_phase");
+    expect(h.ledger.readAfter(0)).toEqual(rows);
+    expect(broker.snapshotProjectionInput().executions).toEqual(expected);
+  } finally {
+    h.ledger.close();
+  }
+});
 
 // ─── Task 19 plan-named tests ───
 

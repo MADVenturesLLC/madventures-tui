@@ -1,0 +1,108 @@
+import { expect, spyOn, test } from "bun:test";
+import { existsSync } from "node:fs";
+import * as build from "../src/build";
+import type { BuildInput, BuildResult } from "../src/build";
+import { RuntimeBroker } from "../../broker/src/runtime-broker";
+import { startFixtureSession } from "../../../test/phase3a/runtime-harness";
+
+async function captureFixtureBuild() {
+  const original = build.runTransactionalBuildWithDependencies;
+  let captured: { input: BuildInput; result: BuildResult } | undefined;
+  const capture = spyOn(build, "runTransactionalBuildWithDependencies").mockImplementation(async (input, deps) => {
+    const result = await original(input, deps);
+    captured = { input, result };
+    return result;
+  });
+  try {
+    const session = await startFixtureSession();
+    if (captured === undefined || !captured.result.ok) {
+      await session.close();
+      throw new Error("expected a captured successful build");
+    }
+    return { session, input: captured.input, result: captured.result };
+  } finally {
+    capture.mockRestore();
+  }
+}
+
+test("Task49 prerequisite build projects actual launch facts and dispatches pause and resume through its broker delegate", async () => {
+  const { session, input, result } = await captureFixtureBuild();
+  try {
+    const expected = input.envelope.executions.map((identity, index) => {
+      const child = result.state.children[index]!;
+      const launch = input.plan.executions[index]!;
+      expect(child.executionId).toBe(identity.execution_id);
+      expect(launch.surface).toBe(identity.surface);
+      for (const pid of [child.hostPid, child.childPid, child.pgid]) {
+        expect(pid).toBeGreaterThan(0);
+        expect(() => process.kill(pid!, 0)).not.toThrow();
+      }
+      return {
+        identity: structuredClone(identity), state: "ready" as const, hostPid: child.hostPid,
+        childPid: child.childPid, processGroupId: child.pgid,
+        executablePath: launch.executablePath, executableSha256: launch.artifactSha256,
+        exitCode: null, exitSignal: null,
+      };
+    });
+    expect(expected).toHaveLength(2);
+    expect(result.snapshot.executions).toEqual(expected);
+    const active = await session.client.getSnapshot();
+    expect(active.phase).toBe("active");
+    expect(active.executions).toEqual(expected);
+    expect(active.tokenState).toBe("valid");
+    expect(active.fencingToken).toBeGreaterThan(0);
+    const write = {
+      kind: "pty_input" as const, commandId: "prereq-input", sessionId: active.sessionId,
+      executionId: "builder", fencingToken: active.fencingToken!, bytes: new Uint8Array([0, 27, 255]),
+    };
+    expect((await session.client.request(write)).ok).toBe(true);
+    expect((await session.client.request({
+      kind: "session_pause", commandId: "prereq-pause", sessionId: active.sessionId, reason: "test",
+    })).ok).toBe(true);
+    const paused = await session.client.getSnapshot();
+    expect(paused.phase).toBe("paused");
+    expect(paused.fencingToken).toBe(active.fencingToken);
+    expect((await session.client.request(write)).ok).toBe(false);
+    expect((await session.client.request({
+      kind: "session_resume", commandId: "prereq-resume", sessionId: active.sessionId,
+    })).ok).toBe(true);
+    const resumed = await session.client.getSnapshot();
+    expect(resumed.phase).toBe("active");
+    expect(resumed.fencingToken).toBe(active.fencingToken);
+    expect(resumed.executions).toEqual(expected);
+    Object.assign(active.executions![0]!.identity, { execution_id: "forged" });
+    expect((await session.client.getSnapshot()).executions).toEqual(expected);
+  } finally {
+    await session.close();
+  }
+  expect(existsSync(session.storage.sessionDir)).toBe(false);
+}, 20_000);
+
+test("Task49 prerequisite durable activation fallback retains execution launch facts", async () => {
+  const original = RuntimeBroker.prototype.snapshotProjectionInput;
+  let activeReads = 0;
+  const projection = spyOn(RuntimeBroker.prototype, "snapshotProjectionInput").mockImplementation(function (this: RuntimeBroker) {
+    const input = original.call(this);
+    if (input.lifecycle.phase === "active") {
+      activeReads += 1;
+      throw new Error("injected active projection failure");
+    }
+    return input;
+  });
+  let captured: Awaited<ReturnType<typeof captureFixtureBuild>> | undefined;
+  try {
+    captured = await captureFixtureBuild();
+    projection.mockRestore();
+    const { result, session } = captured;
+    expect(activeReads).toBeGreaterThanOrEqual(2);
+    expect(result.snapshot.phase).toBe("active");
+    expect(result.snapshot.executions).toHaveLength(2);
+    expect(result.snapshot.executions).toEqual((await session.client.getSnapshot()).executions);
+    expect(result.state.ledger!.readAfter(0).map(row => JSON.parse(row.event_json).event_type)).toEqual([
+      "session_open", "fencing_token_issued", "session_activated",
+    ]);
+  } finally {
+    projection.mockRestore();
+    await captured?.session.close();
+  }
+}, 20_000);

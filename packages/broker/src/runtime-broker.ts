@@ -10,13 +10,13 @@
 // the row the Ledger actually returned through the canonical reducer; every
 // observation is published only after that fold. Lifecycle legality is owned by
 // `reduceLedgerEvent`, durability by `Ledger`, and fencing record construction
-// by the Task 18 helpers. This module holds no process identifier, no process
-// handle, no registry, no clock, and no source of randomness.
+// by the Task 18 helpers. Retained execution snapshots carry launch facts,
+// never process handles, a registry, a clock, or a source of randomness.
 //
 // Construction derives the lifecycle projection, the session identity, and the
-// durable chain head from the injected Ledger's own rows. Nothing session-scoped
-// is injected: a projection, a session id, a durable-head seed, or a pre-built
-// fencing context would each be a second source of truth beside the chain.
+// durable chain head from the injected Ledger's own rows. Execution launch
+// facts may be supplied separately; lifecycle and fencing authority remain
+// entirely derived from the chain.
 
 import { GENESIS_HASH, INITIAL_LIFECYCLE_STATE, computeEventHash, reduceLedgerEvent } from "@madventures/ledger";
 import type { Ledger, LedgerRow, LifecyclePhase, LifecycleState } from "@madventures/ledger";
@@ -32,6 +32,7 @@ import type {
 import { invalidateToken, issueInitialToken } from "./fencing";
 import type { FencingRecordContext } from "./fencing";
 import type { SnapshotProjectionInput } from "./snapshot";
+import type { ExecutionSnapshot } from "./client";
 
 // ─── Dependency contract ───
 
@@ -75,6 +76,8 @@ export interface RuntimeBrokerDeps {
   readonly ledger: Ledger;
   readonly provenance: RuntimeBrokerProvenance;
   readonly sources: RuntimeBrokerSources;
+  /** Launch facts retained across build-time reconstruction, never lifecycle authority. */
+  readonly executions?: readonly ExecutionSnapshot[] | null;
   /**
    * Required. Awaited after durable `session_closing` and before
    * `session_closed` is appended.
@@ -138,6 +141,7 @@ export class RuntimeBroker {
   private readonly deps: RuntimeBrokerDeps;
   private readonly sessionId: string;
   private state: LifecycleState;
+  private executionSnapshots: readonly ExecutionSnapshot[] | null;
   /** The durable chain head: seeded from the replayed rows, advanced only from rows the Ledger returns. */
   private head: string;
   /** M8-local monotonic observation sequence; not the M9 snapshot contract. */
@@ -161,6 +165,7 @@ export class RuntimeBroker {
     }
     this.sessionId = state.sessionId;
     this.state = state;
+    this.executionSnapshots = deps.executions == null ? null : structuredClone(deps.executions);
   }
 
   get snapshotSeq(): number {
@@ -182,6 +187,7 @@ export class RuntimeBroker {
       lifecycle: structuredClone(this.state),
       ledgerRows: this.deps.ledger.readAfter(0),
       provenance: structuredClone(this.deps.provenance),
+      executions: this.executionSnapshots === null ? null : structuredClone(this.executionSnapshots),
     };
   }
 
@@ -192,7 +198,11 @@ export class RuntimeBroker {
    * aborted and its token invalidated in one atomic batch, and no `active`
    * observation is ever published.
    */
-  async activate(writerExecutionId: string, readyExecutionIds: readonly string[]): Promise<void> {
+  async activate(
+    writerExecutionId: string,
+    readyExecutionIds: readonly string[],
+    executionSnapshots?: readonly ExecutionSnapshot[],
+  ): Promise<void> {
     requireReadinessSet(readyExecutionIds);
     if (this.state.phase !== "starting" || this.state.tokenState !== "not_issued") {
       throw new RuntimeBrokerError(
@@ -200,7 +210,9 @@ export class RuntimeBroker {
         `activation requires phase starting with no issued token, found ${this.state.phase} with token ${this.state.tokenState}`,
       );
     }
+    const executions = executionSnapshots === undefined ? this.executionSnapshots : structuredClone(executionSnapshots);
     this.persist(issueInitialToken(this.sessionId, writerExecutionId, this.fencingContext()));
+    this.executionSnapshots = executions;
     try {
       this.persist(
         this.record(
@@ -217,6 +229,20 @@ export class RuntimeBroker {
         { cause: error },
       );
     }
+  }
+
+  async pause(commandId: string): Promise<void> {
+    if (this.state.phase !== "active") {
+      throw new RuntimeBrokerError("invalid_phase", `pause requires phase active, found ${this.state.phase}`);
+    }
+    this.persist(this.record("session_paused", { command_id: commandId, authorized_by: "founder" }, null));
+  }
+
+  async resume(commandId: string): Promise<void> {
+    if (this.state.phase !== "paused") {
+      throw new RuntimeBrokerError("invalid_phase", `resume requires phase paused, found ${this.state.phase}`);
+    }
+    this.persist(this.record("session_resumed", { command_id: commandId, authorized_by: "founder" }, null));
   }
 
   /**

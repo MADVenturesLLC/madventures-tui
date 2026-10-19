@@ -41,6 +41,7 @@ import {
   type RuntimeBrokerSources,
 } from "../../broker/src/runtime-broker";
 import { projectSnapshot } from "../../broker/src/snapshot";
+import type { ExecutionSnapshot } from "../../broker/src/client";
 import type { LaunchExecution, LaunchPlan } from "./preflight";
 
 /**
@@ -750,8 +751,14 @@ export async function runTransactionalBuildWithDependencies(
               value: () => openBroker().snapshotProjectionInput(),
             },
             activate: {
-              value: (writer: string, readyIds: readonly string[]) =>
-                openBroker().activate(writer, readyIds),
+              value: (writer: string, readyIds: readonly string[], executions?: readonly ExecutionSnapshot[]) =>
+                openBroker().activate(writer, readyIds, executions),
+            },
+            pause: {
+              value: (commandId: string) => openBroker().pause(commandId),
+            },
+            resume: {
+              value: (commandId: string) => openBroker().resume(commandId),
             },
             interrupt: {
               value: (
@@ -1037,6 +1044,16 @@ export async function runTransactionalBuildWithDependencies(
           const { state: beforeState, head: beforeHead } = replayLedgerState(ledger);
           const beforeSnapshot = await client.getSnapshot();
           const readyIds = children.map((child) => child.executionId);
+          const executions: readonly ExecutionSnapshot[] = envelope.executions.map((identity, index) => {
+            const child = children[index]!;
+            const launch = plan.executions[index]!;
+            return {
+              identity: structuredClone(identity), state: "ready",
+              hostPid: child.hostPid, childPid: child.childPid, processGroupId: child.pgid,
+              executablePath: launch.executablePath, executableSha256: launch.artifactSha256,
+              exitCode: null, exitSignal: null,
+            };
+          });
           const activatedEvent: SessionLifecycleEventV1 = {
             protocol_version: PROTOCOL_VERSION,
             event_id: sources.nextEventId(),
@@ -1058,7 +1075,8 @@ export async function runTransactionalBuildWithDependencies(
           sessionActivatedRow = ledger.append(activatedEvent);
           resources.push(Object.freeze({ step: "activate", row: sessionActivatedRow }));
           try {
-            currentBroker = new RuntimeBroker(makeBrokerDeps(ledger));
+            // The build already issued its token; replay activation without issuing it again.
+            currentBroker = new RuntimeBroker({ ...makeBrokerDeps(ledger), executions });
           } catch {}
           localObservationSeq += 1;
           try {
@@ -1078,6 +1096,7 @@ export async function runTransactionalBuildWithDependencies(
               activeSnapshot = Object.freeze({
                 ...beforeSnapshot,
                 phase: "active" as const,
+                executions: structuredClone(executions),
                 fencingToken: beforeState.fencingToken ?? 1,
                 tokenState: "valid" as const,
                 activeWriterExecutionId: beforeSnapshot.activeWriterExecutionId ?? envelope.initial_writer,

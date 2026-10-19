@@ -20,17 +20,19 @@
 // and the legacy TUI type of the same name is never imported, aliased, or
 // treated as authoritative.
 
-import type { BrokerSnapshot, IncidentSnapshot, LedgerEntrySnapshot } from "./client";
+import type { BrokerSnapshot, ExecutionSnapshot, IncidentSnapshot, LedgerEntrySnapshot } from "./client";
 import type { LedgerRow, LifecycleState } from "@madventures/ledger";
 import type { RepositoryFingerprint } from "@madventures/protocol";
 
 /**
  * The production projection input (D10-R1 B1). `ledgerRows` is the ledger's
- * `readAfter(0)` output in ascending sequence order. There is no other input.
+ * `readAfter(0)` output in ascending sequence order. Execution facts come
+ * from the broker's retained launch snapshots when available.
  */
 export interface SnapshotProjectionInput {
   readonly lifecycle: LifecycleState;
   readonly ledgerRows: readonly LedgerRow[];
+  readonly executions?: readonly ExecutionSnapshot[] | null;
   readonly provenance: {
     readonly taskEnvelopeHash: string;
     readonly repositoryFingerprint: RepositoryFingerprint;
@@ -226,7 +228,8 @@ function toIncidentSnapshot(incident: LifecycleState["incident"]): IncidentSnaps
  * - `activeWriterExecutionId` is recovered from the chain, or null.
  * - `snapshotSeq` is null: the M9 per-published-snapshot sequence belongs
  *   to Task 22, and the projector never manufactures one (B4).
- * - `connected`, `task`, `permissionSummary`, `executions`,
+ * - `executions` is a copy of supplied launch facts, or null when unavailable.
+ * - `connected`, `task`, `permissionSummary`,
  *   `ownershipState`, `queueDepth`, `pendingTransfers`, `verification`,
  *   `review` are null, meaning "not produced": no authoritative source
  *   exists at this base, and null is never a default or a placeholder.
@@ -289,7 +292,7 @@ export function projectSnapshot(input: SnapshotProjectionInput): BrokerSnapshot 
     taskEnvelopeHash: provenance.taskEnvelopeHash,
     task: null,
     repositoryFingerprint,
-    executions: null,
+    executions: input.executions == null ? null : structuredClone(input.executions),
     activeWriterExecutionId: recoverActiveWriterExecutionId(lifecycle, parsedRows),
     fencingToken: lifecycle.fencingToken,
     tokenState: lifecycle.tokenState,
