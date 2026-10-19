@@ -16,12 +16,15 @@ Stage N3 of `madv-agent` v0, under `ISSUED-FOUNDER-madv-agent-N3-AUTHORIZATION-r
 ### What `shell` is, stated precisely
 
 `shell` runs an **argv array** and refuses to invoke a **shell interpreter**: it resolves `argv[0]` (through
-PATH for bare names, against the project directory for relative ones) and refuses `sh`, `bash`, `zsh`, `dash`,
-`ksh`, `ksh93`, `mksh`, `fish`, `csh`, `tcsh`, `nu`, `xonsh`, `elvish`, `yash`, `ash`, plus `-c`.
+PATH for bare names, against the project directory for relative ones), then refuses anything whose *resolved*
+basename is `sh`, `bash`, `zsh`, `dash`, `ksh`, `ksh93`, `mksh`, `fish`, `csh`, `tcsh`, `nu`, `xonsh`,
+`elvish`, `yash` or `ash`, plus any argv containing `-c`. A symlink is **resolved, not refused** — `/usr/bin/sh`
+is itself a symlink on macOS — and it is the resolution target that decides.
 
-**That is a name-based rule, and it does not prevent code execution.** `bun -e '…'`, `node -e`, `python3 -c`,
-`perl -e`, `awk 'BEGIN{system(…)}'`, `find -exec`, a Makefile, and any program that spawns what it likes are
-all still expressible as argv. The rule stops the *casual* `sh -c "<string>"` path and the obvious aliases; it
+**That is a name-based rule, and it does not prevent code execution.** Measured on this head:
+`bun -e '…'`, `node -e`, `perl -e`, `awk 'BEGIN{system(…)}'`, `find -exec`, a Makefile, and any program that
+spawns what it likes are all still expressible as argv. (`python3 -c '…'` is *refused* — by the `-c` rule, not
+by anything specific to Python.) The rule stops the *casual* `sh -c "<string>"` path and the obvious aliases; it
 is a guard-rail, not a sandbox.
 
 **`shell` runs with this user's authority.** It can therefore create, modify or delete anything the user can,
@@ -41,14 +44,18 @@ earlier decision:
 1. **Containment** is delegated to `@madventures/policy` (`assertWithinAllowedPath`), which does textual
    rejection of `..` and absolute escapes, an `lstat` walk rejecting any symlink component, and realpath
    containment against the project root.
-2. **Hard write-deny**: `.madv-agent/**` and `.git/**` are never writable, even inside the root. The session
-   stream must not be forgeable by the agent it records, and git internals are not the agent's to touch.
+2. **Hard write-deny — a `write_file` rule.** `write_file` refuses `.madv-agent/**` and `.git/**`, so the
+   agent's own file tool cannot forge the stream that records it or edit git internals. This constrains
+   `write_file` only: `shell` runs with the user's authority and can write those paths (see above). The
+   boundary is a rule about the file tool, not about the machine.
 3. **Use-time re-check**: the resolved path is `lstat`ed again, and a path that is a symlink at that moment is
    refused.
 
 **Residual, named rather than hidden.** Reads and writes open with `O_NOFOLLOW`, so a leaf swapped for a
-symlink between the check and the syscall is refused by the kernel (`ELOOP`) rather than followed. What
-remains open is the **parent-directory race**: if a directory *above* the leaf is replaced with a symlink
+symlink between the check and the syscall is refused by the kernel (`ELOOP`) rather than followed. A **hard
+link** inside the root to a file outside it is indistinguishable by path — the same inode is reachable by a
+name that is genuinely inside the project — so the boundary cannot see it; only ownership or MAC would. And
+what remains open besides that is the **parent-directory race**: if a directory *above* the leaf is replaced with a symlink
 between our resolution and the `open(2)`, the open can land outside the root — closing that needs
 `openat(2)`-style directory-fd walking, which N3 does not do. The window is narrow and inside one process,
 and it is stated here instead of being described as closed.
@@ -108,7 +115,7 @@ human is reading — and a human reading a redrawn terminal is not giving inform
 
 | | Bypass | Fix |
 | :--- | :--- | :--- |
-| B1 | `search` walked with `stat()` and followed symlinks out of the root | `lstat` per entry, skip symlinks, realpath containment per file (two independent layers; removing either alone still holds, removing both fails the test) |
+| B1 | `search` walked with `stat()` and followed symlinks out of the root | `lstat` per entry, skip symlinks, plus realpath containment per file. Measured: removing the `lstat`/skip layer **fails** the test; removing only the realpath layer does **not** (the walk already refuses to descend), so the realpath check is defence in depth for forms the walk does not cover, not the primary control |
 | B2 | the write-deny compared the first segment case-sensitively, so `.GIT/hooks/…` addressed `.git/hooks/…` on this filesystem | compare case-insensitively |
 | B3 | `shell` judged `argv[0]` by basename, so a symlink named `tool` pointing at `/bin/sh` ran a shell | resolve `argv[0]`; refuse a symlink and refuse anything that resolves to a shell |
 | B4 | the approval prompt printed raw argument text, so control characters could repaint it | `sanitizeForDisplay`: escape control characters, cap length; the recorded event carries what the human was shown |
