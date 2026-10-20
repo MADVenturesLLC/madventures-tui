@@ -27,6 +27,26 @@ import {
 } from "node:fs";
 import { dirname, isAbsolute, join, relative } from "node:path";
 import { assertArgv, assertPathAtUse, PolicyRefusal } from "../policy";
+import { scrubEnvironment } from "../scrub";
+
+/**
+ * The environment a child process may see: everything the agent itself has,
+ * minus every name the scrub drops. `shell` is approved arbitrary execution, so
+ * this is not a security boundary — it is the difference between a toolchain
+ * that works and one that fails on a missing HOME. Secrets stay out because the
+ * agent's own environment no longer has them and the scrub is re-applied.
+ */
+export function childEnvironment(
+  env: Record<string, string | undefined>,
+): Record<string, string> {
+  // The child sees exactly what the agent kept. Adding names here would be
+  // theatre: the entry scrub has already deleted them from process.env, so a
+  // later re-add has nothing to add. The toolchain homes live in the entry
+  // allowlist (scrub.ts) for that reason.
+  const { kept } = scrubEnvironment(env);
+  return { ...kept };
+}
+
 
 export type ToolKind = "read" | "write" | "execute";
 
@@ -235,7 +255,14 @@ export const shellTool: ToolDef = {
       encoding: "utf8",
       maxBuffer: 256 * 1024,
       shell: false,
-      env: { PATH: process.env.PATH ?? "/usr/bin:/bin" },
+      // The child gets the agent's OWN environment, not PATH alone. Passing
+      // PATH alone breaks every toolchain that needs HOME: `go vet` cannot find
+      // GOMODCACHE, `cargo` cannot find its home, `npm` cannot find its cache —
+      // the agent then cannot run the gates it is asked to run. The agent's
+      // environment was already scrubbed at entry (design §6), and it is
+      // scrubbed AGAIN here, so a variable that reappears is still dropped by
+      // name before a child sees it.
+      env: childEnvironment(process.env),
     });
     const stdout = res.stdout ?? "";
     const stderr = res.stderr ?? "";
