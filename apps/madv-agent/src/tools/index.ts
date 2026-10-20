@@ -27,6 +27,48 @@ import {
 } from "node:fs";
 import { dirname, isAbsolute, join, relative } from "node:path";
 import { assertArgv, assertPathAtUse, PolicyRefusal } from "../policy";
+import { scrubEnvironment } from "../scrub";
+
+/**
+ * The environment a child process may see: everything the agent itself has,
+ * minus every name the scrub drops. `shell` is approved arbitrary execution, so
+ * this is not a security boundary — it is the difference between a toolchain
+ * that works and one that fails on a missing HOME. Secrets stay out because the
+ * agent's own environment no longer has them and the scrub is re-applied.
+ */
+export function childEnvironment(
+  env: Record<string, string | undefined>,
+): Record<string, string> {
+  // Toolchain homes are PATHS, not capabilities: without them `go`, `cargo`,
+  // `npm` and `mvn` cannot find their caches and every gate the agent is asked
+  // to run fails for a reason that has nothing to do with its work. They are
+  // added on top of the scrubbed set, and anything that looks like a credential
+  // is still refused even if a name slips into this list.
+  const TOOLCHAIN = [
+    "GOPATH",
+    "GOMODCACHE",
+    "GOCACHE",
+    "GOFLAGS",
+    "GOROOT",
+    "CARGO_HOME",
+    "RUSTUP_HOME",
+    "NPM_CONFIG_CACHE",
+    "NODE_PATH",
+    "JAVA_HOME",
+    "CC",
+    "CFLAGS",
+    "LDFLAGS",
+  ];
+  const { kept } = scrubEnvironment(env);
+  const child: Record<string, string> = { ...kept };
+  const secretish = /KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|AUTH/i;
+  for (const name of TOOLCHAIN) {
+    if (secretish.test(name)) continue;
+    const value = env[name];
+    if (typeof value === "string" && value.length > 0) child[name] = value;
+  }
+  return child;
+}
 
 export type ToolKind = "read" | "write" | "execute";
 
@@ -235,7 +277,14 @@ export const shellTool: ToolDef = {
       encoding: "utf8",
       maxBuffer: 256 * 1024,
       shell: false,
-      env: { PATH: process.env.PATH ?? "/usr/bin:/bin" },
+      // The child gets the agent's OWN environment, not PATH alone. Passing
+      // PATH alone breaks every toolchain that needs HOME: `go vet` cannot find
+      // GOMODCACHE, `cargo` cannot find its home, `npm` cannot find its cache —
+      // the agent then cannot run the gates it is asked to run. The agent's
+      // environment was already scrubbed at entry (design §6), and it is
+      // scrubbed AGAIN here, so a variable that reappears is still dropped by
+      // name before a child sees it.
+      env: childEnvironment(process.env),
     });
     const stdout = res.stdout ?? "";
     const stderr = res.stderr ?? "";
