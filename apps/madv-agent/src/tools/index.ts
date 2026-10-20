@@ -39,36 +39,14 @@ import { scrubEnvironment } from "../scrub";
 export function childEnvironment(
   env: Record<string, string | undefined>,
 ): Record<string, string> {
-  // Toolchain homes are PATHS, not capabilities: without them `go`, `cargo`,
-  // `npm` and `mvn` cannot find their caches and every gate the agent is asked
-  // to run fails for a reason that has nothing to do with its work. They are
-  // added on top of the scrubbed set, and anything that looks like a credential
-  // is still refused even if a name slips into this list.
-  const TOOLCHAIN = [
-    "GOPATH",
-    "GOMODCACHE",
-    "GOCACHE",
-    "GOFLAGS",
-    "GOROOT",
-    "CARGO_HOME",
-    "RUSTUP_HOME",
-    "NPM_CONFIG_CACHE",
-    "NODE_PATH",
-    "JAVA_HOME",
-    "CC",
-    "CFLAGS",
-    "LDFLAGS",
-  ];
+  // The child sees exactly what the agent kept. Adding names here would be
+  // theatre: the entry scrub has already deleted them from process.env, so a
+  // later re-add has nothing to add. The toolchain homes live in the entry
+  // allowlist (scrub.ts) for that reason.
   const { kept } = scrubEnvironment(env);
-  const child: Record<string, string> = { ...kept };
-  const secretish = /KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|AUTH/i;
-  for (const name of TOOLCHAIN) {
-    if (secretish.test(name)) continue;
-    const value = env[name];
-    if (typeof value === "string" && value.length > 0) child[name] = value;
-  }
-  return child;
+  return { ...kept };
 }
+
 
 export type ToolKind = "read" | "write" | "execute";
 

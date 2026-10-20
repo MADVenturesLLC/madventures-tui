@@ -25,6 +25,21 @@ export const ENV_ALLOWLIST: readonly string[] = [
   "LANG",
   "LC_ALL",
   "TZ",
+  // Toolchain homes. These are PATHS the agent needs in order to run a build
+  // or a test — `go vet` cannot find its module cache without GOMODCACHE, and
+  // `cargo`/`npm` have the same shape. They are allowlisted HERE, at entry, so
+  // the child process inherits them; a list that only re-added them later could
+  // never work, because the entry scrub has already deleted them by then.
+  "GOPATH",
+  "GOMODCACHE",
+  "GOCACHE",
+  "GOFLAGS",
+  "GOROOT",
+  "CARGO_HOME",
+  "RUSTUP_HOME",
+  "NPM_CONFIG_CACHE",
+  "NODE_PATH",
+  "JAVA_HOME",
   "NO_COLOR",
   "DISPLAY",
   // Loopback-only auth plumbing (never a credential value)
