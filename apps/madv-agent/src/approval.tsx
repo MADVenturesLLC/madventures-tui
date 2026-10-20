@@ -49,6 +49,20 @@ export function scriptedApprover(answers: boolean[], by = "scripted(test)"): App
 const AFFIRMATIVE = new Set(["y", "yes"]);
 
 /**
+ * Unattended runs (an orchestrator driving a build with no human at the
+ * terminal) must not borrow the Founder's authority. This approver grants, but
+ * every event it writes says who really granted it, so a transcript can never
+ * be mistaken for the Founder's approval.
+ */
+export function orchestratorApprover(by = "orchestrator(unattended)"): Approver {
+  return async (req) => ({
+    granted: true,
+    by,
+    reason: `unattended run — ${req.tool} granted by ${by}, not by the Founder`,
+  });
+}
+
+/**
  * The first real run recorded `answered "]y"` and DENIED a command the Founder
  * had approved: a paste or an escape sequence left residue around the letter,
  * and an exact-match against "y" then read his yes as a no. A gate that turns a

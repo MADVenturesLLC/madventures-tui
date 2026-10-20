@@ -22,7 +22,15 @@ import {
 } from "./events";
 import { openNewSession, openSessionForResume } from "./session";
 import { runTurn } from "./turn";
-import { sanitizeStream, sanitizeForDisplay, terminalApprover, type Approver } from "./approval";
+import {
+  sanitizeStream,
+  sanitizeForDisplay,
+  terminalApprover,
+  orchestratorApprover,
+  type Approver,
+  type ApprovalDecision,
+  type ApprovalRequest,
+} from "./approval";
 import { ProxyRefusedError, ProxyRequestError } from "./proxy-error";
 import type { ProjectLock } from "./lock";
 import type { TuiBootstrap } from "./bootstrap";
@@ -34,6 +42,8 @@ export interface ParsedArgs {
   maxRounds?: number;
   /** Per shell call. Real toolchains need minutes, not seconds. */
   shellTimeoutMs?: number;
+  /** Unattended: grant approvals as the orchestrator, never as the Founder. */
+  approveUnattended?: boolean;
   help: boolean;
 }
 
@@ -76,6 +86,8 @@ export function parseArgs(argv: string[]): ParsedArgs {
         throw new Error(`--max-rounds must be a whole number 1..200 (got ${raw})`);
       }
       parsed.maxRounds = n;
+    } else if (arg === "--approve-unattended") {
+      parsed.approveUnattended = true;
     } else if (arg === "--shell-timeout") {
       const raw = value();
       // F2 discipline: parse strictly. "90s" and "1e3" are mistakes, not values.
@@ -282,7 +294,9 @@ export async function runCli(io: CliIo): Promise<CliExit> {
           ...(parsed.shellTimeoutMs === undefined ? {} : { shellTimeoutMs: parsed.shellTimeoutMs }),
           // N3: the CLI path asks on the terminal, one invocation at a time,
           // unless a caller injected an approver (tests do).
-          approver: io.approver ?? terminalApprover(),
+          approver:
+            io.approver ??
+            (parsed.approveUnattended === true ? orchestratorApprover() : terminalApprover()),
           onDelta: (delta) => {
             // Live: deltas go out as they arrive, sanitised — model output is
             // not a trusted source for terminal control sequences (N4).
@@ -324,19 +338,44 @@ export async function runCli(io: CliIo): Promise<CliExit> {
       kind: m.role,
       text: m.content,
     }));
+    let paneApprovalHandler:
+      | ((req: ApprovalRequest) => Promise<ApprovalDecision>)
+      | undefined;
     const bootstrap: TuiBootstrap = {
       projectDirName: projectName,
       sessionId,
       initialLines: lines,
       initialTailHash: writer.tailHash(),
       scrubCount: scrub.dropped.length,
+      registerApprovalHandler: (handler) => {
+        paneApprovalHandler = handler;
+        // Revocable: after unmount, requests are refused rather than parked on
+        // a promise nobody can resolve.
+        return () => {
+          if (paneApprovalHandler === handler) paneApprovalHandler = undefined;
+        };
+      },
       runTurn: (userText, onDelta) =>
         runTurn(writer, userText, {
           proxyUrl,
           projectDir,
-          // N3: reads work in the TUI; anything needing approval is refused
-          // until the interactive dialog lands (N4). No silent auto-approve.
-          ...(io.approver === undefined ? {} : { approver: io.approver }),
+          ...(parsed.shellTimeoutMs === undefined ? {} : { shellTimeoutMs: parsed.shellTimeoutMs }),
+          // N4: the pane answers. Before it mounts — or if it unmounts while a
+          // question is open — nothing answers, and nothing is approved.
+          approver:
+            io.approver ??
+            (parsed.approveUnattended === true
+              ? orchestratorApprover()
+              : async (req) => {
+              if (paneApprovalHandler === undefined) {
+                return {
+                  granted: false,
+                  by: "pane",
+                  reason: "no approval dialog is mounted — refused (fails closed)",
+                };
+              }
+              return paneApprovalHandler(req);
+            }),
           onDelta,
         }),
       onExit: () => {
