@@ -64,9 +64,14 @@ export function parseArgs(argv: string[]): ParsedArgs {
       parsed.resumeId = arg.slice("--resume=".length);
     } else if (arg === "--max-rounds") {
       const raw = value();
+      // F2: strict. `parseInt("12abc")` is 12, and parseInt("0x10") is 16 —
+      // a range check on the parsed value would accept both. Only digits.
+      if (!/^[0-9]+$/.test(raw)) {
+        throw new Error(`--max-rounds must be a whole number 1..200 (got ${raw})`);
+      }
       const n = Number.parseInt(raw, 10);
-      if (!Number.isInteger(n) || n < 1 || n > 200) {
-        throw new Error(`--max-rounds must be an integer 1..200 (got ${raw})`);
+      if (!Number.isSafeInteger(n) || n < 1 || n > 200) {
+        throw new Error(`--max-rounds must be a whole number 1..200 (got ${raw})`);
       }
       parsed.maxRounds = n;
     } else if (arg === "--prompt") {

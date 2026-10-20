@@ -164,3 +164,23 @@ describe("approval over a pipe", () => {
     expect(c.reason).toContain('answered "n"');
   });
 });
+
+describe("--max-rounds parsing (F2)", () => {
+  test("BITE: non-numeric, negative, zero and out-of-range values are refused", () => {
+    // parseArgs is exercised through the parser the CLI exports.
+    const bad = ["0", "-1", "abc", "12abc", "0x10", "201", ""];
+    for (const raw of bad) {
+      let threw = false;
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { parseArgs } = require("../src/cli") as { parseArgs: (a: string[]) => unknown };
+        parseArgs(["--max-rounds", raw]);
+      } catch {
+        threw = true;
+      }
+      expect(threw).toBe(true);
+    }
+    const { parseArgs } = require("../src/cli") as { parseArgs: (a: string[]) => { maxRounds?: number } };
+    expect(parseArgs(["--max-rounds", "40"]).maxRounds).toBe(40);
+  });
+});
