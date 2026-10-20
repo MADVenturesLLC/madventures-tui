@@ -85,6 +85,35 @@ export function terminalApprover(opts?: {
 }): Approver {
   const input = opts?.input ?? process.stdin;
   const output = opts?.output ?? process.stdout;
+
+  // ONE interface for the life of the approver. Creating one per request looks
+  // harmless until stdin is a pipe: the first interface consumes the buffered
+  // lines and every later request sees EOF, which fails closed on a stream the
+  // caller did answer. Answers are queued so a piped "y\ny\ny" works.
+  const queue: string[] = [];
+  const waiters: Array<(line: string) => void> = [];
+  let closed = false;
+  const rl = createInterface({ input, output, terminal: false });
+  rl.on("line", (line) => {
+    const waiter = waiters.shift();
+    if (waiter === undefined) queue.push(line.trim().toLowerCase());
+    else waiter(line.trim().toLowerCase());
+  });
+  rl.on("close", () => {
+    closed = true;
+    while (waiters.length > 0) {
+      const w = waiters.shift();
+      w?.("");
+    }
+  });
+
+  const nextAnswer = (): Promise<string> => {
+    const buffered = queue.shift();
+    if (buffered !== undefined) return Promise.resolve(buffered);
+    if (closed) return Promise.resolve("");
+    return new Promise<string>((resolve) => waiters.push(resolve));
+  };
+
   return async (req) => {
     output.write(
       `\n── approval required ─────────────────────────────\n` +
@@ -93,27 +122,13 @@ export function terminalApprover(opts?: {
         `  detail:  ${sanitizeForDisplay(req.detail)}\n` +
         `  approve? [y/N] `,
     );
-    const rl = createInterface({ input, output, terminal: false });
-    try {
-      const answer = await new Promise<string>((resolve) => {
-        let settled = false;
-        rl.once("line", (line) => {
-          settled = true;
-          resolve(line.trim().toLowerCase());
-        });
-        rl.once("close", () => {
-          if (!settled) resolve("");
-        });
-      });
-      const granted = AFFIRMATIVE.has(answer);
-      return {
-        granted,
-        by: "founder(terminal)",
-        ...(granted ? {} : { reason: answer === "" ? "no answer — refused (fails closed)" : `answered "${answer}"` }),
-      };
-    } finally {
-      rl.close();
-    }
+    const answer = await nextAnswer();
+    const granted = AFFIRMATIVE.has(answer);
+    return {
+      granted,
+      by: "founder(terminal)",
+      ...(granted ? {} : { reason: answer === "" ? "no answer — refused (fails closed)" : `answered "${answer}"` }),
+    };
   };
 }
 

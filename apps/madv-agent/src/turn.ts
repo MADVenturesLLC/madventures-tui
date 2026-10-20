@@ -37,8 +37,12 @@ export interface TurnDeps {
   onToolEvent?: (event: { type: string; tool: string; summary: string; granted?: boolean }) => void;
   fetchImpl?: (url: string, init?: RequestInit) => Promise<Response>;
   signal?: AbortSignal;
-  /** Bound on model→tool→model rounds. Default 6. */
+  /** Bound on model→tool→model rounds. Default 40 (a build task needs dozens). */
   maxRounds?: number;
+  /** Max tool calls executed from ONE reply. Default 4; the rest are refused. */
+  maxCallsPerRound?: number;
+  /** Consecutive identical calls that trip the loop breaker. Default 3. */
+  loopBreakerAfter?: number;
 }
 
 export interface TurnResult extends StreamResult {
@@ -46,6 +50,11 @@ export interface TurnResult extends StreamResult {
   assistantEvent: SessionEvent;
   /** How many tool calls were attempted (any outcome) in this turn. */
   toolCalls?: number;
+}
+
+function canonicalArgs(args: Record<string, unknown>): string {
+  const keys = Object.keys(args).sort();
+  return JSON.stringify(keys.map((k) => [k, args[k]]));
 }
 
 /** Fail closed: with no approver wired, nothing that needs approval runs. */
@@ -81,7 +90,14 @@ export async function runTurn(
   deps: TurnDeps,
 ): Promise<TurnResult> {
   const userEvent = writer.append("user_message", { content: userText });
-  const maxRounds = deps.maxRounds ?? 6;
+  const maxRounds = deps.maxRounds ?? 40;
+  const maxCallsPerRound = deps.maxCallsPerRound ?? 4;
+  const loopBreakerAfter = deps.loopBreakerAfter ?? 3;
+  // Loop guards. A live model will happily emit dozens of tool blocks in one
+  // reply, and the same call over and over; executing all of them burns the
+  // round budget and the operator's approvals without making progress.
+  let lastSignature: string | null = null;
+  let consecutiveRepeats = 0;
   const approver = deps.approver ?? denyAllApprover;
   let toolCalls = 0;
   let lastAssistant: SessionEvent | undefined;
@@ -134,8 +150,64 @@ export async function runTurn(
     lastAssistant = assistantEvent;
     lastStream = result;
 
-    const calls = parseToolCalls(result.content);
-    if (calls.length === 0) {
+    const allCalls = parseToolCalls(result.content);
+    if (allCalls.length === 0) {
+      return { ...result, userEvent, assistantEvent, toolCalls };
+    }
+
+    // One reply, one decision. Take up to maxCallsPerRound DISTINCT calls; every
+    // duplicate and every excess block is recorded as refused, so the model is
+    // told what happened instead of being silently obeyed or silently ignored.
+    const seen = new Set<string>();
+    const calls = [];
+    for (const call of allCalls) {
+      const sig = `${call.tool}:${canonicalArgs(call.args)}`;
+      if (seen.has(sig)) {
+        writer.append("tool_result", {
+          tool: call.tool,
+          status: "refused",
+          ok: false,
+          summary: "refused: duplicate call in the same reply — it was not run twice",
+          output: "",
+        });
+        continue;
+      }
+      seen.add(sig);
+      if (calls.length >= maxCallsPerRound) {
+        writer.append("tool_result", {
+          tool: call.tool,
+          status: "refused",
+          ok: false,
+          summary:
+            `refused: ${allCalls.length} calls in one reply, at most ${maxCallsPerRound} are run — ` +
+            `send one tool call per reply and wait for its result`,
+          output: "",
+        });
+        continue;
+      }
+      calls.push(call);
+    }
+
+    // Loop breaker: the same call, round after round, is not progress.
+    const roundSignature = calls.map((c) => `${c.tool}:${canonicalArgs(c.args)}`).join("|");
+    if (roundSignature.length > 0 && roundSignature === lastSignature) {
+      consecutiveRepeats += 1;
+    } else {
+      consecutiveRepeats = 0;
+      lastSignature = roundSignature;
+    }
+    if (consecutiveRepeats >= loopBreakerAfter) {
+      writer.append("stream_error", {
+        reason:
+          `loop breaker: the same tool call repeated ${consecutiveRepeats + 1} rounds in a row ` +
+          `(${roundSignature.slice(0, 200)}) — stopping instead of repeating it again`,
+        recorded_as: "error",
+      });
+      deps.onToolEvent?.({
+        type: "loop_breaker",
+        tool: "—",
+        summary: "the same call repeated; stopping",
+      });
       return { ...result, userEvent, assistantEvent, toolCalls };
     }
 
