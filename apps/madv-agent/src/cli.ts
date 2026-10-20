@@ -31,6 +31,7 @@ export interface ParsedArgs {
   projectDir?: string;
   resumeId?: string | null; // null = "--resume" alone (list sessions)
   prompt?: string;
+  maxRounds?: number;
   help: boolean;
 }
 
@@ -61,6 +62,18 @@ export function parseArgs(argv: string[]): ParsedArgs {
       }
     } else if (arg.startsWith("--resume=")) {
       parsed.resumeId = arg.slice("--resume=".length);
+    } else if (arg === "--max-rounds") {
+      const raw = value();
+      // F2: strict. `parseInt("12abc")` is 12, and parseInt("0x10") is 16 —
+      // a range check on the parsed value would accept both. Only digits.
+      if (!/^[0-9]+$/.test(raw)) {
+        throw new Error(`--max-rounds must be a whole number 1..200 (got ${raw})`);
+      }
+      const n = Number.parseInt(raw, 10);
+      if (!Number.isSafeInteger(n) || n < 1 || n > 200) {
+        throw new Error(`--max-rounds must be a whole number 1..200 (got ${raw})`);
+      }
+      parsed.maxRounds = n;
     } else if (arg === "--prompt") {
       parsed.prompt = value();
     } else if (arg.startsWith("--prompt=")) {
@@ -250,6 +263,7 @@ export async function runCli(io: CliIo): Promise<CliExit> {
         const result = await runTurn(writer, parsed.prompt, {
           proxyUrl,
           projectDir,
+          ...(parsed.maxRounds === undefined ? {} : { maxRounds: parsed.maxRounds }),
           // N3: the CLI path asks on the terminal, one invocation at a time,
           // unless a caller injected an approver (tests do).
           approver: io.approver ?? terminalApprover(),
