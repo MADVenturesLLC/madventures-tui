@@ -1,0 +1,6 @@
+ADDENDUM 1 TO THE PULL REQUEST 182 CORRECTION PROMPT: main has moved. Paste this into the correction session. It is signed by the Founder and is part of the correction prompt.
+
+1. The fact. After the correction prompt was signed, pull requests 180 and 181 merged. origin/main is now 1cd0781c7bcbe4a05dda401a734c628914e35b64. Its changes since 1bd41aeb58a12acfc0aae583ffecab80cd7eb0ea touch only paths under apps/madv-agent/.
+2. The ruling. Precondition 1 is read as follows: origin/main is 1cd0781c7bcbe4a05dda401a734c628914e35b64, or a descendant of it whose changes since 1bd41aeb58a12acfc0aae583ffecab80cd7eb0ea touch only paths under apps/madv-agent/. Run git diff --name-only 1bd41aeb58a12acfc0aae583ffecab80cd7eb0ea origin/main and report every path. Any path outside apps/madv-agent/ is a stop.
+3. Do not merge main into the branch and do not rebase it. The base of pull request 182 stays as it is; its description keeps 1bd41aeb58a12acfc0aae583ffecab80cd7eb0ea as the commit the branch was cut from and adds one line under Deviations naming this addendum by its SHA-256 and the main commit you observed.
+4. If you already stopped at precondition 1, resume from precondition 1 under this reading. Everything else in the correction prompt is unchanged.
