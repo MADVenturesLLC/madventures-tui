@@ -1,0 +1,60 @@
+#!/bin/sh
+# madv — start the madv-agent chat against the madmik3 loopback proxy.
+#
+# WHY THIS FILE EXISTS: the first version of this launcher `cd`-ed into the
+# repository to find `apps/madv-agent/src/cli.ts`, then exec'd bun. That made
+# the caller's `--project .` resolve against the REPOSITORY, not the directory
+# the human was standing in — so a run started in a worktree silently operated
+# on madventures-tui: reads were refused as "outside the project root" and the
+# shell ran in the wrong module. The fix is to never change directory and to
+# invoke the entry point by absolute path.
+set -eu
+
+SELF_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+APP_DIR=$(CDPATH= cd -- "$SELF_DIR/.." && pwd)
+ENTRY="$APP_DIR/src/cli.ts"
+BROKER="${MADMIK3_BIN:-$HOME/.local/bin/madmik3}"
+PROXY_URL="${MADV_AGENT_PROXY_URL:-http://127.0.0.1:14933}"
+
+# The key is read from the login keychain by the broker; the agent never holds
+# it. Nothing secret is exported here, and the agent scrubs its environment on
+# entry regardless.
+key() {
+  security find-generic-password -s madmik3-ollama-api-key -w 2>/dev/null \
+    || printf '%s' "${OLLAMA_API_KEY:-}"
+}
+
+PORT=${PROXY_URL##*:}
+PORT=${PORT%%/*}
+
+listening() {
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltn 2>/dev/null | grep -q "[:.]$PORT[[:space:]]" && return 0
+  fi
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1 && return 0
+  fi
+  if command -v nc >/dev/null 2>&1; then
+    nc -z 127.0.0.1 "$PORT" >/dev/null 2>&1 && return 0
+  fi
+  return 1
+}
+
+if ! listening; then
+  K=$(key)
+  if [ -z "$K" ]; then
+    echo "madv: no ollama-cloud key found (keychain item madmik3-ollama-api-key)" >&2
+    exit 3
+  fi
+  OLLAMA_API_KEY="$K" nohup "$BROKER" proxy --listen "127.0.0.1:$PORT" \
+    >/tmp/madmik3-proxy.log 2>&1 &
+  for _ in $(seq 1 40); do listening && break; sleep 0.25; done
+  listening || { echo "madv: proxy did not start on $PORT (see /tmp/madmik3-proxy.log)" >&2; exit 4; }
+fi
+
+# The agent's own environment is scrubbed at entry; these four are removed here
+# as well so no credential is even visible to the process before the scrub runs.
+exec env -u OLLAMA_API_KEY -u OPENAI_API_KEY -u GH_TOKEN -u GITHUB_TOKEN \
+  -u ANTHROPIC_AUTH_TOKEN -u MADMIK3_ADMIN_TOKEN \
+  MADV_AGENT_PROXY_URL="$PROXY_URL" \
+  bun "$ENTRY" "$@"

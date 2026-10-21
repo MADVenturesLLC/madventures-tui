@@ -52,6 +52,8 @@ export type ToolKind = "read" | "write" | "execute";
 
 export interface ToolContext {
   projectDir: string;
+  /** Per shell call. Bounded by the CLI; this is the value in force. */
+  shellTimeoutMs?: number;
 }
 
 export interface ToolOutcome {
@@ -75,7 +77,11 @@ export interface ToolDef {
 const { O_NOFOLLOW, O_RDONLY, O_WRONLY, O_CREAT, O_TRUNC } = fsConstants;
 const READ_CAP = 200_000;
 const OUTPUT_CAP = 16_000;
-const SHELL_TIMEOUT_MS = 20_000;
+// 20s was the first value, and the first real run died on it three times: a
+// cold `go test ./internal/broker/` needs minutes. The bound moved to the CLI
+// (--shell-timeout, 5..600s) so a human can widen it for a toolchain without
+// editing code, and the summary reports the value actually in force.
+const SHELL_TIMEOUT_MS = 120_000;
 
 function str(args: Record<string, unknown>, key: string): string {
   const v = args[key];
@@ -249,9 +255,10 @@ export const shellTool: ToolDef = {
     const cwd = assertPathAtUse({ projectDir: ctx.projectDir, path: ".", mode: "read" });
     const [cmd, ...rest] = argv as [string, ...string[]];
     if (cmd === undefined) throw new PolicyRefusal("refused: shell requires argv[0]");
+    const timeoutMs = ctx.shellTimeoutMs ?? SHELL_TIMEOUT_MS;
     const res = spawnSync(cmd, rest, {
       cwd,
-      timeout: SHELL_TIMEOUT_MS,
+      timeout: timeoutMs,
       encoding: "utf8",
       maxBuffer: 256 * 1024,
       shell: false,
@@ -271,7 +278,7 @@ export const shellTool: ToolDef = {
     return {
       ok: !timedOut && code === 0,
       summary: timedOut
-        ? `timed out after ${SHELL_TIMEOUT_MS}ms: ${argv.join(" ")}`
+        ? `timed out after ${timeoutMs}ms: ${argv.join(" ")}`
         : `exit ${code}: ${argv.join(" ")}`,
       output: cap(`$ ${argv.join(" ")}\n${stdout}${stderr ? `\n[stderr]\n${stderr}` : ""}`),
     };

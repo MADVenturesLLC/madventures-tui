@@ -43,6 +43,8 @@ export interface TurnDeps {
   maxCallsPerRound?: number;
   /** Consecutive identical calls that trip the loop breaker. Default 3. */
   loopBreakerAfter?: number;
+  /** Per shell call, in ms. Default 120000 — cold Go/Rust builds exceed 20s. */
+  shellTimeoutMs?: number;
 }
 
 export interface TurnResult extends StreamResult {
@@ -273,7 +275,10 @@ export async function runTurn(
       }
 
       try {
-        const outcome = def.run(call.args, { projectDir: deps.projectDir });
+        const outcome = def.run(call.args, {
+          projectDir: deps.projectDir,
+          ...(deps.shellTimeoutMs === undefined ? {} : { shellTimeoutMs: deps.shellTimeoutMs }),
+        });
         recordToolResult(writer, def.name, outcome, outcome.ok ? "ok" : "error");
         deps.onToolEvent?.({ type: "tool_result", tool: def.name, summary: outcome.summary });
       } catch (err) {

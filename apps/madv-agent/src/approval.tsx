@@ -49,6 +49,40 @@ export function scriptedApprover(answers: boolean[], by = "scripted(test)"): App
 const AFFIRMATIVE = new Set(["y", "yes"]);
 
 /**
+ * The first real run recorded `answered "]y"` and DENIED a command the Founder
+ * had approved: a paste or an escape sequence left residue around the letter,
+ * and an exact-match against "y" then read his yes as a no. A gate that turns a
+ * human's approval into a refusal is a defect, not a safety property — so
+ * normalise first: drop CSI sequences, bracketed-paste markers and anything
+ * that is not a letter, then accept the whole word.
+ *
+ * Deliberately NOT fuzzy: the letters must be exactly "y" or "yes". `yess`,
+ * `ny` and `ya` are refused, and the raw text is always recorded in the event so
+ * a denial can be audited.
+ */
+export function normaliseApprovalAnswer(raw: string): { answer: string; residue: boolean } {
+  // Terminal control sequences, then anything that is not A-Za-z.
+  //
+  // OSC is terminated by BEL *or* by ST ("ESC \") — the first version handled
+  // only BEL, so `ESC ] 0 ; x ST y` kept its payload and could read as a
+  // different answer than the human typed. Both terminators are handled now,
+  // and an unterminated OSC is dropped to the end of the line rather than
+  // leaving its body in the answer.
+  const stripped = raw
+    // OSC … BEL | OSC … ST
+    .replace(/\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)/g, "")
+    // an OSC with no terminator: drop the rest
+    .replace(/\u001b\].*$/g, "")
+    // CSI (incl. bracketed paste markers)
+    .replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, "")
+    // any remaining two-character escape
+    .replace(/\u001b[@-Z\\-_]/g, "")
+    .replace(/\u001b/g, "");
+  const answer = stripped.toLowerCase().replace(/[^a-z]/g, "");
+  return { answer, residue: answer !== raw.trim().toLowerCase() };
+}
+
+/**
  * B4: a tool argument is attacker-influenced text. Control characters in it
  * (newlines, carriage returns, escapes) can repaint the approval prompt and
  * show the human something other than the action that will run. Sanitise
@@ -96,8 +130,11 @@ export function terminalApprover(opts?: {
   const rl = createInterface({ input, output, terminal: false });
   rl.on("line", (line) => {
     const waiter = waiters.shift();
-    if (waiter === undefined) queue.push(line.trim().toLowerCase());
-    else waiter(line.trim().toLowerCase());
+    // The RAW line is what a human typed, and the audit trail records it. An
+    // earlier version lowercased and trimmed here, so every reason string
+    // claimed to quote the human and actually quoted a normalised copy.
+    if (waiter === undefined) queue.push(line);
+    else waiter(line);
   });
   rl.on("close", () => {
     closed = true;
@@ -122,12 +159,20 @@ export function terminalApprover(opts?: {
         `  detail:  ${sanitizeForDisplay(req.detail)}\n` +
         `  approve? [y/N] `,
     );
-    const answer = await nextAnswer();
+    const raw = await nextAnswer();
+    const { answer, residue } = normaliseApprovalAnswer(raw);
     const granted = AFFIRMATIVE.has(answer);
+    const reason = granted
+      ? residue
+        ? `answered "${raw}" — read as "${answer}" (escape/paste residue ignored)`
+        : undefined
+      : answer === "" || raw === ""
+        ? "no answer — refused (fails closed)"
+        : `answered "${raw}"`;
     return {
       granted,
       by: "founder(terminal)",
-      ...(granted ? {} : { reason: answer === "" ? "no answer — refused (fails closed)" : `answered "${answer}"` }),
+      ...(reason === undefined ? {} : { reason }),
     };
   };
 }

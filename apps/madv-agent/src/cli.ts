@@ -32,6 +32,8 @@ export interface ParsedArgs {
   resumeId?: string | null; // null = "--resume" alone (list sessions)
   prompt?: string;
   maxRounds?: number;
+  /** Per shell call. Real toolchains need minutes, not seconds. */
+  shellTimeoutMs?: number;
   help: boolean;
 }
 
@@ -74,6 +76,17 @@ export function parseArgs(argv: string[]): ParsedArgs {
         throw new Error(`--max-rounds must be a whole number 1..200 (got ${raw})`);
       }
       parsed.maxRounds = n;
+    } else if (arg === "--shell-timeout") {
+      const raw = value();
+      // F2 discipline: parse strictly. "90s" and "1e3" are mistakes, not values.
+      if (!/^[0-9]+$/.test(raw)) {
+        throw new Error(`--shell-timeout must be whole seconds 5..600 (got ${raw})`);
+      }
+      const secs = Number.parseInt(raw, 10);
+      if (!Number.isSafeInteger(secs) || secs < 5 || secs > 600) {
+        throw new Error(`--shell-timeout must be whole seconds 5..600 (got ${raw})`);
+      }
+      parsed.shellTimeoutMs = secs * 1000;
     } else if (arg === "--prompt") {
       parsed.prompt = value();
     } else if (arg.startsWith("--prompt=")) {
@@ -151,6 +164,8 @@ usage:
 
 options:
   --project <dir>   project directory (default: current directory)
+  --shell-timeout <s>  per shell call, whole seconds 5..600 (default 120).
+                    A cold Go/Rust build exceeds the old 20s default.
   --resume <id>     resume session <id>; the transcript is rebuilt from
                     .madv-agent/sessions/<id>/events.jsonl alone
   --resume          list the project's sessions
@@ -264,6 +279,7 @@ export async function runCli(io: CliIo): Promise<CliExit> {
           proxyUrl,
           projectDir,
           ...(parsed.maxRounds === undefined ? {} : { maxRounds: parsed.maxRounds }),
+          ...(parsed.shellTimeoutMs === undefined ? {} : { shellTimeoutMs: parsed.shellTimeoutMs }),
           // N3: the CLI path asks on the terminal, one invocation at a time,
           // unless a caller injected an approver (tests do).
           approver: io.approver ?? terminalApprover(),
