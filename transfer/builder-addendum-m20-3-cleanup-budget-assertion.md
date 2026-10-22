@@ -1,0 +1,10 @@
+ADDENDUM 3 TO THE M20 CORRECTIONS BUILDER PROMPT: the cleanup-budget test's readiness assertion. Paste this into the Codex session that stopped at its D2 breaks. It is signed by the Founder and is part of the builder prompt, as addenda 1 and 2 are.
+
+Your stop was correct: a deliberate break left every test passing. I rule as follows.
+
+1. The finding. In "cleanup budget exhaustion fails closed", the spawn wrapper delays the exit promise by 700 ms, so the runner escalates to SIGKILL and records it even when the child has already died on SIGTERM. The test's existing assertions therefore cannot tell whether the abort came after the fixture installed its SIGTERM handler, and a break that restores the fixed 100 ms abort under a delayed fixture start still passes.
+2. The ruling. DEC-20261016-01 B4 is read to allow, in that test only, one added assertion that the fixture's readiness signal had been observed at the moment the test aborted the probe. It is recorded when the abort is called, from the same marker file or line that gates the abort, and does not depend on the exit promise, the signal list or any timing. Every existing assertion and timing bound of that test stays byte-identical. No test is added, removed or renamed, and nothing else in attestation.test.ts changes beyond what the prompt already allows.
+3. Proof. Show the new assertion failing under the break of your stop, with the fixed 100 ms abort restored and the 250 ms startup delay in the scratch copy or under the test's own mkdtemp root, and passing without the break. Restore and confirm the file's SHA-256. Then run the remaining deliberate breaks, and D3 in full, as the prompt and addendum 2 say, including five consecutive isolated passes of attestation.test.ts with all 21 tests passing and no exception applied.
+4. If any other changed test's break passes, stop again; this addendum covers only the test of item 1. Under Deviations, record this addendum by its SHA-256, the break that passed, and the proof of item 3.
+
+Everything else in the builder prompt and addenda 1 and 2 is unchanged.
