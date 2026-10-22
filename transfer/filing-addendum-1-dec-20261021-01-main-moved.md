@@ -1,0 +1,8 @@
+ADDENDUM 1 TO THE DEC-20261021-01 FILING PROMPT: main has moved. Paste this as the second message of the filing session, immediately after the filing prompt, before the session does anything else. It is signed by the Founder and is part of the filing prompt.
+
+1. The fact. After the filing prompt was signed, pull request 183 merged as 3dc42f8b687fbd41cca45456f127e66114ce212c. Its changes since 86604e95617d9a925220f7affce5b6cdad92c9da touch exactly packages/supervisor/src/preflight.ts, packages/supervisor/test/preflight.test.ts and packages/supervisor/test/attestation.test.ts, which now holds the M20 corrections build.
+2. Precondition 1 is read as follows: origin/main is 3dc42f8b687fbd41cca45456f127e66114ce212c, or a descendant of it whose changes since that commit touch no path under docs/decisions/. Report every path changed since 86604e95617d9a925220f7affce5b6cdad92c9da; any path under docs/decisions/ is a stop.
+3. Precondition 5's last item is read at the commit the act names: packages/supervisor/test/preflight.test.ts at 86604e95617d9a925220f7affce5b6cdad92c9da holds twenty-five top-level test calls, read with git show 86604e95617d9a925220f7affce5b6cdad92c9da:packages/supervisor/test/preflight.test.ts; and test/phase3a/runtime-harness.ts on origin/main sets the envelope's repository from git rev-parse --path-format=absolute --git-common-dir. Report the count on origin/main as well; twenty-eight there is expected and is not a stop.
+4. Under Deviations in the pull request body, record this addendum by its SHA-256 and the main commit you observed.
+
+Everything else in the filing prompt is unchanged.
