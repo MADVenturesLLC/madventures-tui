@@ -1,0 +1,19 @@
+MERGE AUTHORIZATION: MADVenturesLLC/madventures-tui#184
+
+Authorized head: 224612d38671f02e80c567ee82164acbce306e0a
+Base when verified: main at 3dc42f8b687fbd41cca45456f127e66114ce212c
+Body when verified: SHA-256 e7a1bed3368e1f6bf0a3bb9373ba9358c4d881682a7a5d588a27c7058a06efd4, as gh api prints it with --jq .body
+
+I, Michael Daley, Founder of MAD Ventures, authorize the merge of this pull request at the exact head SHA above and at no other. Any push after this comment voids this authorization. In the short form of B5 of DEC-20261015-05, it cites the pull request body and does not restate it.
+
+1. Head, scope and body: one commit on the base adds exactly docs/decisions/DEC-20261021-01-merge-records-and-m20-rulings.md, SHA-256 1da36426da4fcb1eac7052096a1eaa6d99d57e4e50c8cf187a4e928f040d36df, byte for byte the transfer blob at commit 4c27933bbd55dfa3a5110c42f393b394fc99aa26. The session ran from the filing prompt with SHA-256 0c6e25502d16817f760b51c1a894bfb96d6251be526e8886afc352800ac4f1eb and its addendum 1 with SHA-256 ac4befb539ea70cb85137d316f3b88c3ed54585608c607f5b7df9823c686ea90. The body has zero square brackets and zero bare three-hyphen lines, and its only attribution-shaped lines are the three trailers for session:claude-code/tui-dec-20261021-01-filing. The drafting assistant merged this head locally onto the base with this body as the message; the changed path was exactly the one above, and attribution-shape-check.sh passed in main mode.
+2. Checks on this head: Verify, Verify (macOS), code-review, validate-code-review, attribution-shape, CodeQL, the four Analyze jobs, both tui-chaos runs, copilot-pull-request-reviewer and Cursor Security Agent: Security Reviewer succeeded; fork-pr-notice was skipped. The code-review runs that Copilot's review triggered, 39715315815 and 39715316433, are held as action_required; after the thread of item 3 is resolved, I re-run them one after the other and merge only when each has succeeded.
+3. Review: Copilot's review 5608818461, on this head, opened one thread. I rule on it here; no push is made, and I resolve the thread after posting this comment.
+   a. Comment 4344174193, on A3 of DEC-20261021-01: the finding is incorrect. decivantiq is my own GitHub account, from which I post every authorization and perform every merge, including this comment. Comment 6304280822 is therefore mine, as A3 says. The act stays as it is.
+4. Ready: under B4 of DEC-20261015-05, my guarded command marked this pull request ready at 2026-10-22T03:06:44Z, at the head above. No push has been made since.
+5. Filing: an earlier filing session stopped before any write, because it started without the agent identity and gh ran as my account. The session that filed this pull request ran as daley40-lab. The drafting assistant drafted the act, the prompt and this authorization, so this is not an independent review.
+6. Base at merge: main must be at the base SHA above, and the body must have the SHA-256 above as gh api prints it. If either differs, or GitHub does not report the merge state clean, this authorization does not cover the merge.
+7. Effect: this merge puts DEC-20261021-01 on main with Status ISSUED. It adds no round and closes no checkpoint.
+8. Not authorized by this comment: any change to a path beyond the one above, any edit of the act, and any further push to docs/dec-20261021-01-filing.
+
+Merge method: merge commit, head SHA pinned, no caller-supplied message. Post this comment before merging. Verify the merge commit on main immediately after: its first parent is the main head at the moment of merge and its second parent is 224612d38671f02e80c567ee82164acbce306e0a, the changed path against the first parent is exactly the one above, trailers are present and parseable, attribution-shape-check.sh main on the merge SHA passes, and the push runs on main are green. If that fails, stop; do not rewrite main.
