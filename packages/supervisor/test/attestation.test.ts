@@ -1,12 +1,25 @@
 import { afterEach, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { IDENTITY_PROBE_INPUT, runBoundedProbe as executeProbe, type ProbeRequest, type ProbeRuntime, type ProbeResult, parseIdentity, parseAuthReadiness } from "../src/attestation";
 
 const roots:string[]=[];
 const children: Bun.Subprocess[]=[];
-afterEach(async()=>{for(const p of children.splice(0)){try{p.kill("SIGKILL");}catch{}await p.exited;}for(const root of roots.splice(0))rmSync(root,{recursive:true,force:true});});
+const readiness: Promise<void>[]=[];
+afterEach(async()=>{try{await Promise.all(readiness.splice(0));}finally{for(const p of children.splice(0)){try{p.kill("SIGKILL");}catch{}await p.exited;}for(const root of roots.splice(0))rmSync(root,{recursive:true,force:true});}});
+function afterHandlerReady(req: ProbeRequest, abort: () => void): void {
+  const pending = (async () => {
+    const marker = join(dirname(req.executablePath), "handler-ready");
+    const deadline = performance.now() + 1000;
+    try {
+      while (!existsSync(marker) && performance.now() < deadline) await Bun.sleep(1);
+      expect(existsSync(marker)).toBe(true);
+    } finally { abort(); }
+  })();
+  void pending.catch(() => {}); // afterEach reports readiness failures after cleanup.
+  readiness.push(pending);
+}
 async function runBoundedProbe(req: ProbeRequest, rt: Partial<ProbeRuntime> = {}): Promise<ProbeResult> {
   const r=await executeProbe(req,{spawn:wrappedSpawn([]),...rt});
   expect(Object.keys(r).sort()).toEqual(["diagnostic","ok"]);
@@ -21,7 +34,7 @@ function request(source:string,kind:"identity"|"auth"="auth"):ProbeRequest {
   return {executablePath,arguments:[],environment:Object.freeze({}),signal:new AbortController().signal,stdin:kind==="identity"?IDENTITY_PROBE_INPUT:"",kind,model:"exact",supportedVersions:["2.1.296"]};
 }
 const passSource=`console.log(${JSON.stringify(JSON.stringify(auth))});`;
-const idle="process.on('SIGTERM',()=>{}); console.log('READY'); setInterval(()=>{},100);";
+const idle="process.on('SIGTERM',()=>{}); require('node:fs').writeFileSync(new URL('./handler-ready',import.meta.url),'ready'); console.log('READY'); setInterval(()=>{},100);";
 function wrappedSpawn(record:string[],delay=0):ProbeRuntime["spawn"] {
   return req=>{const p=Bun.spawn([req.executablePath,...req.arguments],{env:req.environment,stdin:new Blob([req.stdin]),stdout:"pipe",stderr:"pipe"});children.push(p);return {stdout:p.stdout,stderr:p.stderr,exited:p.exited.then(async code=>{if(delay)await Bun.sleep(delay);return code;}),kill:signal=>{record.push(signal);p.kill(signal as any);}};};
 }
@@ -46,7 +59,7 @@ test("spawn failure is bounded and fail closed",async()=>{const req=request(pass
 test("pre-spawn cancellation starts no child",async()=>{const req=request(passSource);const c=new AbortController();c.abort();req.signal=c.signal;let spawned=0;expect((await runBoundedProbe(req,{spawn:r=>{spawned++;return wrappedSpawn([])(r);}})).ok).toBe(false);expect(spawned).toBe(0);});
 test("post-spawn cancellation reaps within the cleanup budget",async()=>{
   const req=request(idle);const c=new AbortController();req.signal=c.signal;const signals:string[]=[];let ended=false;
-  const spawn:ProbeRuntime["spawn"]=r=>{const p=wrappedSpawn(signals)(r);setTimeout(()=>c.abort(),100);return {...p,exited:p.exited.then(code=>{ended=true;return code;})};};
+  const spawn:ProbeRuntime["spawn"]=r=>{const p=wrappedSpawn(signals)(r);afterHandlerReady(r,()=>c.abort());return {...p,exited:p.exited.then(code=>{ended=true;return code;})};};
   expect((await runBoundedProbe(req,{spawn})).ok).toBe(false);expect(signals).toEqual(["SIGTERM","SIGKILL"]);expect(ended).toBe(true);
 });
 test("signal termination fails closed",async()=>{expect((await runBoundedProbe(request("process.kill(process.pid,'SIGTERM');"))).ok).toBe(false);});
@@ -67,13 +80,15 @@ test("timeout uses a monotonic clock and forced SIGKILL",async()=>{
 },10000);
 test("forced cleanup accounts for grace escalation and reaping",async()=>{
   const req=request(idle);const c=new AbortController();req.signal=c.signal;const times:number[]=[];const signals:string[]=[];
-  const spawn:ProbeRuntime["spawn"]=r=>{const p=wrappedSpawn(signals)(r);setTimeout(()=>c.abort(),100);return {...p,kill:s=>{times.push(performance.now());p.kill(s);}};};
+  const spawn:ProbeRuntime["spawn"]=r=>{const p=wrappedSpawn(signals)(r);afterHandlerReady(r,()=>c.abort());return {...p,kill:s=>{times.push(performance.now());p.kill(s);}};};
   const start=performance.now();expect((await runBoundedProbe(req,{spawn})).ok).toBe(false);expect(signals).toEqual(["SIGTERM","SIGKILL"]);expect(times[1]!-times[0]!).toBeLessThan(550);expect(times[1]!-times[0]!).toBeGreaterThan(450);expect(performance.now()-start).toBeLessThan(1200);
 });
 test("cleanup budget exhaustion fails closed",async()=>{
   const req=request(idle);const c=new AbortController();req.signal=c.signal;const signals:string[]=[];
-  const spawn:ProbeRuntime["spawn"]=r=>{const p=wrappedSpawn(signals,700)(r);setTimeout(()=>c.abort(),100);return p;};
+  let readyAtAbort=false;const abort=c.abort.bind(c);c.abort=()=>{readyAtAbort=existsSync(join(dirname(req.executablePath),"handler-ready"));abort();};
+  const spawn:ProbeRuntime["spawn"]=r=>{const p=wrappedSpawn(signals,700)(r);afterHandlerReady(r,()=>c.abort());return p;};
   const start=performance.now();expect((await runBoundedProbe(req,{spawn})).ok).toBe(false);expect(performance.now()-start).toBeLessThan(1150);expect(signals).toEqual(["SIGTERM","SIGKILL"]);
+  expect(readyAtAbort).toBe(true);
 });
 test("auth parsing occurs only after clean exit and reaping",async()=>{
   let reaped=false,parsed=false;const req=request(passSource);
@@ -84,9 +99,9 @@ test("auth parsing occurs only after clean exit and reaping",async()=>{
 test("malformed JSON and every incorrect auth predicate fail closed",async()=>{
   const cases:unknown[]=["malformed",null,[],{},...Object.keys(auth).filter(k=>!['email','orgId','orgName'].includes(k)).flatMap(key=>{const missing={...auth} as Record<string,unknown>;delete missing[key];return [missing,{...auth,[key]:false},{...auth,[key]:"wrong"}];})];
   for(const value of cases){const text=typeof value==="string"?value:JSON.stringify(value);expect((await runBoundedProbe(request(`console.log(${JSON.stringify(text)});`))).ok).toBe(false);}
-});
+},10000);
 test("diagnostics contain only metadata on success and every failure",async()=>{
   const cases=[passSource,"console.log('RAW-PRIVATE-CANARY');",passSource+"process.exit(1);","process.stderr.write('RAW-PRIVATE-CANARY');process.kill(process.pid,'SIGTERM');","process.stdout.write('RAW-PRIVATE-CANARY'.repeat(5000));","process.stderr.write('RAW-PRIVATE-CANARY'.repeat(5000));"];
   for(const source of cases){const r=await runBoundedProbe(request(source));expect(Object.keys(r).sort()).toEqual(["diagnostic","ok"]);expect(Object.keys(r.diagnostic).sort()).toEqual(["exitCode","primitive","result","signal","stderrBytes","stdoutBytes"]);expect(JSON.stringify(r)).not.toContain("RAW-PRIVATE-CANARY");}
-  for(const mode of ["spawn","cancel","timeout","cleanup"]){const req=request(idle);const c=new AbortController();req.signal=c.signal;if(mode==="spawn")rmSync(req.executablePath);if(mode==="cancel")c.abort();let offset=0;const spawn:ProbeRuntime["spawn"]=r=>{const p=wrappedSpawn([],mode==="cleanup"?700:0)(r);setTimeout(()=>{offset=5001;c.abort();},100);return p;};const r=await runBoundedProbe(req,{spawn,now:()=>performance.now()+offset});expect(Object.keys(r.diagnostic).sort()).toEqual(["exitCode","primitive","result","signal","stderrBytes","stdoutBytes"]);expect(JSON.stringify(r)).not.toContain("RAW-PRIVATE-CANARY");}
+  for(const mode of ["spawn","cancel","timeout","cleanup"]){const req=request(idle);const c=new AbortController();req.signal=c.signal;if(mode==="spawn")rmSync(req.executablePath);if(mode==="cancel")c.abort();let offset=0;const spawn:ProbeRuntime["spawn"]=r=>{const p=wrappedSpawn([],mode==="cleanup"?700:0)(r);afterHandlerReady(r,()=>{offset=5001;c.abort();});return p;};const r=await runBoundedProbe(req,{spawn,now:()=>performance.now()+offset});expect(Object.keys(r.diagnostic).sort()).toEqual(["exitCode","primitive","result","signal","stderrBytes","stdoutBytes"]);expect(JSON.stringify(r)).not.toContain("RAW-PRIVATE-CANARY");}
 },10000);

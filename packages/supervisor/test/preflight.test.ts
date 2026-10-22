@@ -20,6 +20,7 @@ function fixture() {
   const git = (args: string[]) => {
     const p = Bun.spawnSync(["git", "--no-optional-locks", "-C", repo, ...args], { stdout: "pipe", stderr: "pipe" });
     expect(p.exitCode).toBe(0);
+    return p.stdout.toString().trim();
   };
   git(["init", "-q"]);
   git(["-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "--allow-empty", "-qm", "fixture"]);
@@ -34,7 +35,7 @@ function fixture() {
   const envelope: Record<string, unknown> = {
     protocol_version: "madbridge-protocol/v1", task_id: "fixture", authorization_reference: "FIXTURE-ONLY",
     repository: repo, worktree: join(root, "worktree"), branch: "fixture",
-    repository_fingerprint: { kind: "commit", git_sha: "a".repeat(40), sha256: "b".repeat(64) },
+    repository_fingerprint: { kind: "commit", git_sha: git(["rev-parse", "--verify", "HEAD"]), sha256: "b".repeat(64) },
     executions: [
       { execution_id: "builder", role: "builder", surface: "claude-code", model, provider: "anthropic", independence_domain: "anthropic", effort: "high" },
       { execution_id: "reviewer", role: "independent-reviewer", surface: "antigravity", model, provider: "google", independence_domain: "google", effort: "high" },
@@ -67,7 +68,7 @@ function fixture() {
     },
     freshRecord: () => ({ overall: "pass", requested_model: model, role_eligibility: ["builder", "independent-reviewer"], independent_review_eligible: true }) as any,
   };
-  return { root, repo, bin, temp, settings, model, input, envelope, sign, deps,
+  return { root, repo, git, bin, temp, settings, model, input, envelope, sign, deps,
     run: (extra: Partial<PreflightDependencies> = {}) => runPurePreflightWithDependencies(input, { ...deps, ...extra }) };
 }
 
@@ -106,8 +107,58 @@ async function failure(f: ReturnType<typeof fixture>, code: PreflightFailure, ex
 test("preflight fails with envelope_invalid", async () => { const f = fixture(); f.envelope.envelope_hash = "0".repeat(64); await failure(f, "envelope_invalid"); });
 test("preflight fails with cardinality", async () => { const f = fixture(); (f.envelope.executions as unknown[]).pop(); f.sign(); await failure(f, "cardinality"); });
 test("preflight fails with repository_fingerprint", async () => { const f = fixture(); f.input.repositoryRoot = f.root; await failure(f, "repository_fingerprint"); });
+test("preflight fails with repository_fingerprint when the envelope names another checkout or commit", async () => {
+  const f = fixture(), other = fixture();
+  const head = f.git(["rev-parse", "--verify", "HEAD"]);
+  const common = realpathSync(f.git(["rev-parse", "--path-format=absolute", "--git-common-dir"]));
+  expect(head).not.toBe("a".repeat(40));
+  for (const kind of ["commit", "working_tree"]) {
+    f.envelope.repository_fingerprint = { kind, git_sha: head, sha256: "b".repeat(64), ...(kind === "working_tree" ? { base_git_sha: "c".repeat(40) } : {}) };
+    for (const repository of [f.repo, common]) {
+      f.envelope.repository = repository;
+      f.sign();
+      expect((await f.run()).ok).toBe(true);
+    }
+    for (const repository of [other.repo, join(f.root, "missing-repository")]) {
+      f.envelope.repository = repository;
+      f.sign();
+      await failure(f, "repository_fingerprint");
+    }
+    f.envelope.repository = f.repo;
+    for (const worktree of [other.input.worktree, join(f.root, "missing-worktree")]) {
+      f.envelope.worktree = worktree;
+      f.sign();
+      await failure(f, "repository_fingerprint");
+    }
+    f.envelope.worktree = f.input.worktree;
+    const fingerprint = f.envelope.repository_fingerprint as Record<string, unknown>;
+    fingerprint.git_sha = "a".repeat(40);
+    f.sign();
+    await failure(f, "repository_fingerprint");
+    fingerprint.git_sha = head;
+    f.envelope.repository = other.repo;
+    f.input.ambient.HOME = f.root;
+    f.sign();
+    await failure(f, "repository_fingerprint");
+    f.input.ambient.HOME = f.input.installation.passwd_home;
+  }
+});
 test("preflight fails with executable_unresolved", async () => { const f = fixture(); rmSync(join(f.bin, "agy")); await failure(f, "executable_unresolved"); chmodSync(join(f.bin, "madbridge-claude-v5"), 0o600); await failure(f, "executable_unresolved"); });
 test("preflight fails with identity_mismatch", async () => { const f = fixture(); writeFileSync(join(f.bin, "madbridge-claude-v5"), `#!${process.execPath}\nconsole.log('{"type":"system","subtype":"init","model":"other","claude_code_version":"2.1.296"}');\n`); await failure(f, "identity_mismatch"); });
+test("preflight fails with identity_mismatch when the independence domain differs from the registration", async () => {
+  for (const index of [0, 1]) {
+    const f = fixture();
+    (f.envelope.executions as Record<string, unknown>[])[index]!.independence_domain = "unexpected-domain";
+    f.sign();
+    let probes = 0, records = 0;
+    await failure(f, "identity_mismatch", {
+      probe: async req => { probes++; return f.deps.probe!(req); },
+      freshRecord: (...args) => { records++; return f.deps.freshRecord!(...args); },
+    });
+    expect(probes).toBe(4);
+    expect(records).toBe(0);
+  }
+});
 test("preflight fails with auth_not_ready", async () => {
   const f = fixture();
   for (const content of ['{"apiKeyHelper":"never-run"}', '{"apiProvider":"firstParty"}', '{"customApiUrl":"fixture"}', '{"env":{"ANTHROPIC_BASE_URL":"fixture"}}', '{"env":{"TERM":"different"}}', '{"env":{"LANG":"unexpected"}}', 'malformed']) {
@@ -164,6 +215,11 @@ test("preflight fails with home_mismatch", async () => { const f = fixture(); f.
 function listing(root: string): unknown {
   return readdirSync(root, { withFileTypes: true }).sort((a,b) => a.name.localeCompare(b.name)).map(e => [e.name, e.isDirectory() ? listing(join(root,e.name)) : e.isFile() ? new Bun.CryptoHasher("sha256").update(readFileSync(join(root,e.name))).digest("hex") : "other"]);
 }
+test("the returned plan's repository fingerprint is frozen", async () => {
+  const result = await fixture().run();
+  expect(result.ok).toBe(true);
+  if (result.ok) expect(Object.isFrozen(result.plan.repositoryFingerprint)).toBe(true);
+});
 test("preflight creates nothing", async () => {
   const f = fixture();
   writeFileSync(join(f.input.worktree,"dirty-fixture"),"fixture dirty status");
