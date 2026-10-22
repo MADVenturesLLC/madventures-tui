@@ -33,7 +33,7 @@ B1. **One act, two tasks.** This act authorizes Task 24 and then Task 25, under 
 
 B2. **Publish legality, order and identity (Task 24).** `evaluatePublishLegality(event, snapshot, principal)` decides in this order, and no other:
 
-1. **Schema.** The event must parse with `parseBridgeEvent` from a structured clone of the input. A published `incident` must also carry a payload with exactly the three keys of `PublishedIncidentPayloadV1`: non-empty string `incident_id` and `reason`, and `severity` one of `low`, `medium` or `high`. Any failure is `invalid_command`.
+1. **Schema.** The event must parse with `parseBridgeEvent` from a structured clone of the input, and, because that parser checks only some fields, `publish-legality.ts` must also check that every `BridgeEventV1` field is present with its declared type: each string field a non-empty string, `parent_event_id` a non-empty string or `null`, `payload` a plain object, `payload_hash` and `task_envelope_hash` 64 lowercase hex characters, and `repository_fingerprint` an object with a valid `kind`, a 64-hex `sha256`, a 40-hex `git_sha` and, for `working_tree`, a 40-hex `base_git_sha`. A published `incident` must also carry a payload with exactly the three keys of `PublishedIncidentPayloadV1`: non-empty string `incident_id` and `reason`, and `severity` one of `low`, `medium` or `high`. Any failure is `invalid_command`.
 2. **Principal and identity.** A `founder_tui` principal publishing any event is `unauthorized`. An execution principal whose bound id differs from `event.sender_execution_id` is `unauthorized`. `event.session_id` differing from the snapshot's `sessionId` is `session_mismatch`. With `executions` null the result is `invariant_failure`, with detail `executions not produced by the snapshot`. A sender absent from `executions` is `execution_not_found`. `sender_role`, `sender_surface`, `sender_model` or `sender_provider` differing from that execution's identity, `task_envelope_hash` differing from the snapshot's `taskEnvelopeHash`, or `repository_fingerprint` not deep-equal to the snapshot's `repositoryFingerprint`, is `identity_mismatch`.
 3. **Reserved legacy type.** `pause`, `resume` and `session_close` are `unauthorized` in every phase.
 4. **Phase, incident and readiness.** The six-row `publish()` matrix of spec §9.3 applies as written. A sender whose state is not `ready`, in a phase and incident state that would otherwise be legal, is `invariant_failure`, as spec §9.3 predicate 6 rules for writer-only commands.
@@ -41,7 +41,7 @@ B2. **Publish legality, order and identity (Task 24).** `evaluatePublishLegality
 
 `BrokerResult.commandId` equals `event.event_id` on every path, including a schema failure where `event_id` is readable; where it is not, `commandId` is the empty string. `detail` names only the failing step and code, never event content.
 
-B3. **Ingestion of accepted ordinary events (Task 24; plan question i).** `RuntimeBroker` gains one method, `publish(event: BridgeEventV1): Promise<BrokerResult>`. It appends the accepted event with one `Ledger.append`, folds it through `reduceLedgerEvent`, publishes exactly one snapshot, and returns `ok: true` with that snapshot's `snapshotSeq` as `acceptedSnapshotSeq`. A failed append returns `ledger_write_failed` and publishes no snapshot. `InProcessBrokerClient.publish()` calls `evaluatePublishLegality` against the current snapshot and the bound principal, and calls `RuntimeBroker.publish` only for an accepted ordinary event. `verification`, `review` and `pendingTransfers` stay `null`: their fold is not authorized here and needs a later act, which also rules how ownership events are ingested.
+B3. **Ingestion of accepted ordinary events (Task 24; plan question i).** `RuntimeBroker` gains one method, `publish(event: BridgeEventV1)`. It appends the accepted event with one `Ledger.append`, folds it through `reduceLedgerEvent`, and publishes exactly one observation, and it resolves only after the row is durable. `InProcessBrokerClient.publish()` calls `evaluatePublishLegality` against the current snapshot and the bound principal, calls `RuntimeBroker.publish` only for an accepted ordinary event, and returns `ok: true` with `acceptedSnapshotSeq` stamped by that client exactly as `request()` stamps it for an accepted command; `RuntimeBroker` never supplies that number. If the append fails, as spec §§5.3 and 9.6 require, the broker publishes no observation of the event, calls its existing `interrupt` with reason `ledger_write_failed` and both source fields `null`, which runs the mandatory teardown, and the client returns `ledger_write_failed`; if the interruption itself cannot be persisted, next-start reconciliation records the unclean closure as it does now. `verification`, `review` and `pendingTransfers` stay `null`: their fold is not authorized here and needs a later act, which also rules how ownership events are ingested.
 
 B4. **References while nothing is produced (plan question ii).** `pendingApprovals` is the empty array by D9.2, so no published event can reference a pending approval: `action_accept` and `action_reject` fail with `approval_not_pending`. `pendingTransfers` is not produced, so `ownership_accept` and `ownership_reject` fail closed with `invariant_failure`, detail `pendingTransfers not produced by the snapshot`, and never with an ownership error that would assert a fact the snapshot did not produce. `ownership_request` and `ownership_release` reference no request. When a later act folds approvals or transfers, it rules the reference field and replaces these limbs.
 
@@ -49,19 +49,21 @@ B5. **Incidents before Task 25.** In Task 24, a published `incident` that passes
 
 B6. **`DEC-20260926-01` C4.** C4 is read to permit `InProcessBrokerClient.publish()` to reach `RuntimeBroker.publish` under B3 and `RuntimeBroker.publishIncident` under B7. Both stay reachable only through an in-process client the supervisor constructs with a bound principal. Nothing else in C4 changes: no socket, endpoint, daemon, subscription API or production output producer is authorized.
 
-B7. **The atomic incident pair (Task 25).** `RuntimeBroker.publishIncident(event: BridgeEventV1): Promise<BrokerResult>` builds the derived `session_interrupted` record. Its payload copies `incident_id`, `reason` and `severity`, sets `source_event_id` to the event's `event_id`, `reported_by_execution_id` to its `sender_execution_id`, and the reason code to `execution_reported_incident`. The method calls `Ledger.appendMany` exactly once, with the event and then the derived record, folds both rows, and publishes exactly one snapshot afterwards, in phase `interrupted`. It then runs the existing invalidation, closing and closed sequence, and returns `ok: true` only after the `session_interrupted` row is durable and the published phase is `interrupted`. A failed `appendMany` returns `ledger_write_failed`, appends nothing and publishes nothing. `InProcessBrokerClient.publish()` routes an incident that passes B2 steps 1 to 4 to `publishIncident`. Supervisor-originated interruptions keep both source fields `null`.
+B7. **The atomic incident pair (Task 25).** `RuntimeBroker.publishIncident(event: BridgeEventV1)`, the method plan Task 25 names, builds the derived `session_interrupted` record. Its payload copies `incident_id`, `reason` and `severity`, sets `source_event_id` to the event's `event_id`, `reported_by_execution_id` to its `sender_execution_id`, and the reason code to `execution_reported_incident`. The method calls `Ledger.appendMany` exactly once, with the event and then the derived record, folds both rows, and publishes exactly one snapshot afterwards, in phase `interrupted`. It then runs the existing invalidation, closing and closed sequence, and resolves only after the `session_interrupted` row is durable and the published phase is `interrupted`; the client then returns `ok: true` with `acceptedSnapshotSeq` stamped as B3 says. A failed `appendMany` appends nothing and publishes no observation of the pair; the broker then interrupts with reason `ledger_write_failed` and both source fields `null`, as B3 says, and the client returns `ledger_write_failed`. `InProcessBrokerClient.publish()` routes an incident that passes B2 steps 1 to 4 to `publishIncident`. Supervisor-originated interruptions keep both source fields `null`.
 
-B8. **Tests (Task 24).** `packages/broker/test/publish-legality.test.ts` holds exactly seventeen tests:
+B8. **Tests (Task 24).** `packages/broker/test/publish-legality.test.ts` holds exactly nineteen tests:
 
 - the thirteen plan Task 24 names, the six `publish row:` tests named for their rows;
 - `an accepted ordinary event is appended once and published in exactly one snapshot`;
 - `an ownership_accept fails closed while pendingTransfers is not produced`;
 - `a legal published incident fails closed until its atomic path exists`;
-- `a founder principal publishing any event is unauthorized`.
+- `a founder principal publishing any event is unauthorized`;
+- `a publish missing a required BridgeEventV1 field is invalid_command`;
+- `a failed append interrupts the session with ledger_write_failed`.
 
-Plan Task 24's "14 pass" is read as seventeen. No other test file changes, and every existing broker test passes unchanged.
+Plan Task 24's "14 pass" is read as nineteen. No other test file changes, and every existing broker test passes unchanged.
 
-B9. **Tests (Task 25).** `packages/broker/test/incident-atomicity.test.ts` holds exactly the five tests plan Task 25 names. In `publish-legality.test.ts`, the test `a legal published incident fails closed until its atomic path exists` is replaced by `a legal published incident takes the atomic incident path`, so that file still holds seventeen. Nothing else in that file changes.
+B9. **Tests (Task 25).** `packages/broker/test/incident-atomicity.test.ts` holds exactly six tests: the five plan Task 25 names and `a failed incident append interrupts the session with ledger_write_failed`. In `publish-legality.test.ts`, the test `a legal published incident fails closed until its atomic path exists` is replaced by `a legal published incident takes the atomic incident path`, so that file still holds nineteen. Nothing else in that file changes.
 
 B10. **Builder, reviewer, host.**
 
@@ -84,8 +86,8 @@ D1. **Baseline, each task:** `bun install --frozen-lockfile`, `bunx tsc --noEmit
 
 D2. **RED and breaks, each task:** the plan's named RED run, verbatim. Then one deliberate break per required behavior, each failing a named test and restored with its file's SHA-256 confirmed:
 
-- **Task 24:** each step of B2's order, B3's single append, each limb of B4, and B5.
-- **Task 25:** a second append call, a snapshot between the two rows, the copied source fields, and the return before `interrupted`.
+- **Task 24:** each step of B2's order, including the complete shape check, B3's single append, B3's interruption on a failed append, each limb of B4, and B5.
+- **Task 25:** a second append call, a snapshot between the two rows, the copied source fields, the return before `interrupted`, and the interruption on a failed append.
 
 D3. **Final, each task:**
 
@@ -99,11 +101,19 @@ D3. **Final, each task:**
 
 ## Part E: Builder binding and review
 
-E1. **Commits.** Each commit takes plan Task 24's or Task 25's commit subject. Its message and the pull request description end with these three trailers, for that task's Actor-Id, and no line after them:
+E1. **Commits.** Each commit takes plan Task 24's or Task 25's commit subject. Its message and the pull request description end with that task's three trailers, and no line after them. For Task 24:
 
 ```text
 Role-Id: builder
 Actor-Id: session:codex/m10-task24-r1
+Execution-Surface: codex
+```
+
+For Task 25:
+
+```text
+Role-Id: builder
+Actor-Id: session:codex/m10-task25-r1
 Execution-Surface: codex
 ```
 
