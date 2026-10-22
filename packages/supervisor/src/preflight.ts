@@ -133,7 +133,15 @@ export async function runPurePreflightWithDependencies(input: PreflightInput, ov
   catch (error) { return fail(error instanceof CardinalityError ? "cardinality" : "envelope_invalid"); }
   try { assertActiveSurfaceCardinality(envelope.executions); } catch { return fail("cardinality"); }
   let repo;
-  try { repo = fingerprint(input.repositoryRoot, input.worktree, d); } catch { return fail("repository_fingerprint"); }
+  try {
+    repo = fingerprint(input.repositoryRoot, input.worktree, d);
+    const repository = d.realpath(envelope.repository);
+    if (repository !== repo.root) {
+      const common = Bun.spawnSync(["git", "--no-optional-locks", "-C", repo.root, "rev-parse", "--path-format=absolute", "--git-common-dir"], { stdout: "pipe", stderr: "pipe" });
+      if (common.exitCode !== 0 || repository !== d.realpath(common.stdout.toString().trim())) return fail("repository_fingerprint");
+    }
+    if (d.realpath(envelope.worktree) !== repo.worktree || envelope.repository_fingerprint.git_sha !== repo.head) return fail("repository_fingerprint");
+  } catch { return fail("repository_fingerprint"); }
   if (input.ambient.HOME === undefined || input.ambient.HOME !== input.installation.passwd_home) return fail("home_mismatch");
   const registrations = envelope.executions.map(e => d.registration(e.surface));
   // Unknown registrations cannot supply an approved executable or environment.
@@ -179,7 +187,8 @@ export async function runPurePreflightWithDependencies(input: PreflightInput, ov
       arguments: Object.freeze([...registration.non_interactive_flags, "--model", execution.model]), environment }));
   }
   for (const [index, execution] of envelope.executions.entries()) {
-    if (execution.provider !== admitted[index]!.provider) return fail("identity_mismatch");
+    if (execution.provider !== admitted[index]!.provider
+      || execution.independence_domain !== admitted[index]!.independence_domain) return fail("identity_mismatch");
   }
   const organizations = new Map(admitted.map(r => [r.surface, r.organization_id] as const));
   if (!evaluatePairEligibilityWithDependencies(envelope.executions, envelope.pair_constraints, organizations, {
