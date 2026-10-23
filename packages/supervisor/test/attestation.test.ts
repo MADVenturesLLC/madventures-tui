@@ -85,9 +85,9 @@ test("forced cleanup accounts for grace escalation and reaping",async()=>{
 });
 test("cleanup budget exhaustion fails closed",async()=>{
   const req=request(idle);const c=new AbortController();req.signal=c.signal;const signals:string[]=[];
-  let readyAtAbort=false;const abort=c.abort.bind(c);c.abort=()=>{readyAtAbort=existsSync(join(dirname(req.executablePath),"handler-ready"));abort();};
+  let readyAtAbort=false,start=0;const abort=c.abort.bind(c);c.abort=()=>{readyAtAbort=existsSync(join(dirname(req.executablePath),"handler-ready"));start=performance.now();abort();};
   const spawn:ProbeRuntime["spawn"]=r=>{const p=wrappedSpawn(signals,700)(r);afterHandlerReady(r,()=>c.abort());return p;};
-  const start=performance.now();expect((await runBoundedProbe(req,{spawn})).ok).toBe(false);expect(performance.now()-start).toBeLessThan(1150);expect(signals).toEqual(["SIGTERM","SIGKILL"]);
+  expect((await runBoundedProbe(req,{spawn})).ok).toBe(false);expect(performance.now()-start).toBeLessThan(1150);expect(signals).toEqual(["SIGTERM","SIGKILL"]);
   expect(readyAtAbort).toBe(true);
 });
 test("auth parsing occurs only after clean exit and reaping",async()=>{
