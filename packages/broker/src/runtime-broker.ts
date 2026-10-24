@@ -231,6 +231,28 @@ export class RuntimeBroker {
     }
   }
 
+  async publish(event: import("@madventures/protocol").BridgeEventV1) {
+    let row: LedgerRow;
+    try {
+      if (this.deps.ledger.hasEventId(event.event_id)) {
+        return { ok: false as const, commandId: event.event_id, error: "invalid_command" as const, detail: "publish: duplicate event_id" };
+      }
+      row = this.deps.ledger.append(event);
+    } catch {
+      try {
+        await this.interrupt("ledger_write_failed", "publish: ledger_write_failed", "high", this.deps.sources.nextEventId(), null, null);
+      } catch {
+        // A non-durable interruption still requires teardown; next start reconciles its closure.
+        if (this.state.phase !== "closing" && this.state.phase !== "closed") {
+          try { await this.deps.terminateGovernedProcesses(); } catch { /* The returned ledger failure cannot certify teardown. */ }
+        }
+      }
+      return { ok: false as const, commandId: event.event_id, error: "ledger_write_failed" as const, detail: "publish: ledger_write_failed" };
+    }
+    this.fold(row);
+    return { ok: true as const, commandId: event.event_id };
+  }
+
   async pause(commandId: string): Promise<void> {
     if (this.state.phase !== "active") {
       throw new RuntimeBrokerError("invalid_phase", `pause requires phase active, found ${this.state.phase}`);

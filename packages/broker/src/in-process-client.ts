@@ -65,6 +65,7 @@ import type {
   OutputFrame,
 } from "./client";
 import { evaluateCommandLegality } from "./command-legality";
+import { evaluatePublishLegality } from "./publish-legality";
 import { projectSnapshot } from "./snapshot";
 import type { RuntimeBroker } from "./runtime-broker";
 import type { BridgeEventV1 } from "@madventures/protocol";
@@ -363,13 +364,28 @@ export function createInProcessBrokerClient(
   }
 
   async function publish(event: BridgeEventV1): Promise<BrokerResult> {
-    // No production delivery seam is authorized for this client (DEC-20260926-01 C4).
-    return {
-      ok: false,
-      commandId: event.event_id,
-      error: "unauthorized",
-      detail: "publish is not authorized on the in-process client",
-    };
+    // Evaluate and append the same captured values, including caller-supplied getters.
+    let captured: BridgeEventV1;
+    let commandId = "";
+    try {
+      captured = structuredClone(event);
+      const id = captured?.event_id;
+      commandId = typeof id === "string" ? id : "";
+    } catch {
+      try {
+        const id = event?.event_id;
+        commandId = typeof id === "string" ? id : "";
+      } catch { /* An unreadable event id has no command identity. */ }
+      return { ok: false, commandId, error: "invalid_command", detail: "step 1: invalid_command" };
+    }
+    const legality = evaluatePublishLegality(captured, projectSnapshot(broker.snapshotProjectionInput()), evaluatedPrincipal);
+    if (!legality.ok) return { ok: false, commandId, error: legality.error, detail: legality.detail };
+    if (captured.event_type === "incident") {
+      return { ok: false, commandId, error: "invariant_failure", detail: "incident publication not wired" };
+    }
+    const result = await broker.publish(captured);
+    if (!result.ok) return { ...result };
+    return { ok: true, commandId, acceptedSnapshotSeq: deliveredSeq };
   }
 
   async function close(): Promise<void> {

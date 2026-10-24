@@ -111,6 +111,10 @@ export class Ledger {
     return { valid: true, count: rows.length, head: expectedPrev };
   }
 
+  hasEventId(eventId: string): boolean {
+    return this.db.query("SELECT 1 FROM events WHERE event_id = ?").get(eventId) !== null;
+  }
+
   readAfter(sequence: number): Array<LedgerRow> {
     return this.db
       .query("SELECT sequence, event_id, event_json, previous_hash, event_hash, created_at FROM events WHERE sequence > ? ORDER BY sequence ASC")
