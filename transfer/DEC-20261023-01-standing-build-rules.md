@@ -23,7 +23,7 @@ A4. **The other reviews of pull request 188.**
 
 A5. **The fragile tests.**
 
-1. `doctor: read-only invariant > no files created in cwd` runs `runCli` with the argument `doctor`, which calls `execSync` on the real `claude --version` and `agy --version` found on `PATH`, each with a 5,000 ms limit, inside a test whose own limit is 5,000 ms. It timed out at the Task 24 D1 baseline under load.
+1. `doctor: read-only invariant > no files created in cwd` runs `runCli` with the argument `doctor`, which calls `execSync` on the real `claude --version` and `agy --version` found on `PATH`, each with a 5,000 ms limit, inside a test whose own limit is 5,000 ms. It timed out at the Task 24 D1 baseline under load. `apps/madbridge/test/cli.test.ts` also runs `doctor` through `runCli` in several tests, and so also starts those executables.
 2. `preflight creates nothing` compares a listing of the whole shared `tmpdir()` before and after preflight, so any other writer to that directory can fail it.
 3. Rollback tests in `build-rollback.test.ts` compare the count of `/dev/fd` entries with a baseline taken earlier in the same test, so descriptors the runtime opens or closes for other reasons can fail them.
 
@@ -41,7 +41,7 @@ B4. **Builder self-fix.** When the builder's own change fails `tsc` or a test in
 
 B5. **No reruns to pass.** A failed run is never rerun unchanged to obtain a pass. D3 of every act stays fail-closed: any failure or error in it, outside B4, is a stop.
 
-B6. **Logs.** Every test run of a builder or reviewer pipes its full output through `tee` into a log file under the folder its prompt names, one file per run, and reports each log's SHA-256. Logs are not truncated, compressed or encoded. A report quotes each run's summary and failure lines with its log's SHA-256.
+B6. **Logs.** Every test run of a builder or reviewer pipes its full output through `tee` into a log file under the folder its prompt names, one file per run, and reports each log's SHA-256. Logs are not truncated, compressed or encoded. A report quotes each run's summary and failure lines with its log's SHA-256. B2 governs logs too: if a run's output contains, or the session sees it would contain, the value of an environment variable, a token, a credential or a key, the session stops at once, does not open, quote, hash or copy that log, and reports only its path and the test that produced it; I delete the log before any further run.
 
 B7. **GitHub.** Builder and reviewer sessions make no GitHub call: they run no `gh` command, including `gh auth status`, and load, request or check no `GH_TOKEN`. `git fetch` and `bun install` are their only network commands. A missing `GH_TOKEN` is not a stop for them. Sessions whose prompt assigns them GitHub operations, such as filing and correction sessions, keep the rules of `AGENTS.md` for `daley40-lab`. Part E amends `AGENTS.md` to say so.
 
@@ -65,7 +65,7 @@ C4. **Paths.** The correction is one new commit on top of `c201cde18077b789b8aef
 
 C5. **Verification.** D1 runs at `c201cde18077b789b8aefe7c5f88db61d44649e5`. D2 adds four breaks, each failing a named test of C3: the delegate without `publish`; the duplicate check removed; the checks of B2 step 5 moved ahead of the readiness check of step 4; and the `session_mismatch` check moved ahead of the principal check of step 2. D3: `tsc` exits 0; `publish-legality.test.ts` shows exactly twenty-two passing; `bun test packages/broker`, `bun test packages/ledger` and `bun test packages/supervisor` show 0 fail; bare `bun test` shows 0 fail; `git diff --check` is clean; and the changed paths are exactly those of C4.
 
-C6. **Builder, review, binding.** The builder is a fresh Codex CLI session on my MacBook with Actor-Id `session:codex/m10-task24-r2`, in its own clone of the branch at `c201cde18077b789b8aefe7c5f88db61d44649e5`, under Part B. Its commit subject is `fix(broker): route publish through the build delegate and refuse duplicate event ids`, ending with the three trailers `Role-Id: builder`, that Actor-Id and `Execution-Surface: codex`. It saves a new pull request description covering both commits. I push the commit without force and replace the description. A fresh Gemini 4 session on Antigravity on my MacBook, reviewer id `antigravity`, reviews the new head under `DEC-20261022-01` E3 as this Part amends it; the verdict at `c201cde18077b789b8aefe7c5f88db61d44649e5` does not cover the new head.
+C6. **Builder, review, binding.** The builder is a fresh Codex CLI session on my MacBook with Actor-Id `session:codex/m10-task24-r2`, in its own clone of the branch at `c201cde18077b789b8aefe7c5f88db61d44649e5`, under Part B. Its commit subject is `fix(broker): route publish through the build delegate and refuse duplicate event ids`, ending with the three trailers `Role-Id: builder`, that Actor-Id and `Execution-Surface: codex`. It saves a new pull request description covering both commits as a file and makes no GitHub call. I push the commit without force and replace the description. A fresh Gemini 4 session on Antigravity on my MacBook, reviewer id `antigravity`, reviews the new head under `DEC-20261022-01` E3 as this Part amends it; the verdict at `c201cde18077b789b8aefe7c5f88db61d44649e5` does not cover the new head.
 
 C7. **Task 25.** `DEC-20261022-01` B9 stands: Task 25 replaces one test in `publish-legality.test.ts`, which then still holds twenty-two, and D3 for Task 25 reads "twenty-two".
 
@@ -76,17 +76,18 @@ C8. **Counting.** Plan §11.3 counts verdicts from Plato/Codex pre-commit review
 D1. **Authorization.** After Task 25 merges, one build hardens the three tests of A5, under a builder prompt I sign that names a binding base containing that merge. It changes exactly these paths, each only as D2 rules:
 
 - `apps/madbridge/test/doctor.test.ts`;
+- `apps/madbridge/test/cli.test.ts`, only for its tests that run `doctor`;
 - `apps/madbridge/src/commands/doctor.ts`, only if D2 item 1 requires it;
 - `packages/supervisor/test/preflight.test.ts`;
 - `packages/supervisor/test/build-rollback.test.ts`.
 
 D2. **The rulings.**
 
-1. **Doctor.** No test in `doctor.test.ts` starts a real provider executable. The tests supply fixture executables, under a disposable `mkdtemp` root, for every executable `doctor` probes, and every assertion of the file stays. If that cannot be done from the test file alone, `doctor.ts` may gain one injection seam for the probed executables whose default leaves production behavior unchanged. No timeout is raised to hide a slow real executable.
+1. **Doctor.** No test in `doctor.test.ts` or `cli.test.ts` starts a real provider executable. Every test that runs `doctor` supplies fixture executables, under a disposable `mkdtemp` root, for every executable `doctor` probes, and every assertion of both files stays. If that cannot be done from the test files alone, `doctor.ts` may gain one injection seam for the probed executables whose default leaves production behavior unchanged. No timeout is raised to hide a slow real executable.
 2. **Preflight.** `preflight creates nothing` checks a temporary directory that only the test owns and that preflight's temporary location resolves to during the test, instead of the shared `tmpdir()`. Every other assertion of the test stays.
 3. **Descriptors.** Each descriptor assertion of `build-rollback.test.ts` checks the specific resource it is about, such as the ledger's database being open or closed, instead of the total count of `/dev/fd` entries. Every other assertion stays.
 
-D3. **Verification.** D1 and D3 of `DEC-20261022-01`, as Part B reads them, with `bun test apps/madbridge/test/doctor.test.ts`, `bun test packages/supervisor/test/preflight.test.ts` and `bun test packages/supervisor/test/build-rollback.test.ts` each passing five times in a row, each run separately in the foreground, before bare `bun test`. D2 adds one break per ruling, each failing the hardened test: `doctor` writing a file into its working directory; preflight writing a file into its temporary location; and the ledger left open, or closed, where the assertion requires the other.
+D3. **Verification.** D1 and D3 of `DEC-20261022-01`, as Part B reads them, with `bun test apps/madbridge/test/doctor.test.ts`, `bun test apps/madbridge/test/cli.test.ts`, `bun test packages/supervisor/test/preflight.test.ts` and `bun test packages/supervisor/test/build-rollback.test.ts` each passing five times in a row, each run separately in the foreground, before bare `bun test`. D2 adds one break per ruling, each failing the hardened test: `doctor` writing a file into its working directory; preflight writing a file into its temporary location; and the ledger left open, or closed, where the assertion requires the other.
 
 D4. **Builder, reviewer, binding.** The builder is a fresh Codex CLI session on my MacBook with Actor-Id `session:codex/stabilization-r1`; the reviewer is a fresh Gemini 4 session on Antigravity on my MacBook, reviewer id `antigravity`; both under Part B. Its commit subject is `test: isolate the doctor, preflight and descriptor tests from the host`, ending with the three trailers `Role-Id: builder`, that Actor-Id and `Execution-Surface: codex`. It lands by its own pull request, Tier-2 review and merge authorization, by merge commit only.
 
