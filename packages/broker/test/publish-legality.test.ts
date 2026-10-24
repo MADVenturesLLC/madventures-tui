@@ -379,3 +379,46 @@ test("a failed append interrupts the session with ledger_write_failed", async ()
     }
   }
 });
+
+test("a sender that is not ready fails at step 4 before any reference check", () => {
+  for (const event_type of ["action_accept", "action_reject", "ownership_accept", "ownership_reject"] as const) {
+    for (const state of ["declared", "host-starting", "launching", "attesting", "exited", "failed"] as const) {
+      expect(evaluatePublishLegality(event({ event_type }), snapshot({ executions: [execution(state)] }), PRINCIPAL)).toEqual({
+        ok: false, error: "invariant_failure", detail: "step 4: invariant_failure",
+      });
+    }
+  }
+});
+
+test("a principal mismatch is unauthorized before any session check", () => {
+  for (const principal of [{ kind: "execution", executionId: "another-execution" }, { kind: "founder_tui" }] as const) {
+    expect(evaluatePublishLegality(event({ session_id: "other-session" }), snapshot(), principal)).toEqual({
+      ok: false, error: "unauthorized", detail: "step 2: unauthorized",
+    });
+  }
+});
+
+test("a duplicate event_id is refused without appending or interrupting the session", async () => {
+  const f = await fixture();
+  const client = createInProcessBrokerClient(f.broker, PRINCIPAL);
+  const candidate = event();
+  expect(await client.publish(candidate)).toMatchObject({ ok: true, commandId: candidate.event_id });
+  const rows = f.ledger.readAfter(0);
+  const head = f.ledger.verify().head;
+  const before = await client.getSnapshot();
+  const brokerSeq = f.broker.snapshotSeq;
+  expect(f.ledger.calls).toHaveLength(1);
+  expect(f.observations).toHaveLength(1);
+  expect(await client.publish(candidate)).toEqual({
+    ok: false, commandId: candidate.event_id, error: "invalid_command", detail: "publish: duplicate event_id",
+  });
+  expect(f.ledger.readAfter(0)).toEqual(rows);
+  expect(f.ledger.readAfter(0).filter(row => row.event_id === candidate.event_id)).toHaveLength(1);
+  expect(f.ledger.verify().head).toBe(head);
+  expect(f.ledger.calls).toHaveLength(1);
+  expect(f.observations).toHaveLength(1);
+  expect(f.broker.snapshotSeq).toBe(brokerSeq);
+  expect((await client.getSnapshot()).phase).toBe(before.phase);
+  expect(before.phase).toBe("active");
+  expect(f.terminations()).toBe(0);
+});

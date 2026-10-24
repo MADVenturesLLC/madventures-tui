@@ -27,7 +27,7 @@ const EXCEPTIONS: Readonly<Record<string, { sha256: string; call?: string }>> = 
     sha256: "9210012a505848a7379ab7b9cf9d840f33197de58f85b23c359653760479c603", call: "PAYLOAD_SHAPE[knownType](payload)",
   },
   "packages/supervisor/src/build.ts": {
-    sha256: "bd73bb219e96bc76d3b4e544cde9152ef028ce12d02003ff67d93347f39ca35d", call: "host.handle.facts()[Symbol.asyncIterator]()",
+    sha256: "bf1fd94b76043c6e8b4d0e2afddde8805c0cac5d361d0c4ea1fd7c2db2679368", call: "host.handle.facts()[Symbol.asyncIterator]()",
   },
 };
 

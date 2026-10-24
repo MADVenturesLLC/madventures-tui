@@ -234,6 +234,9 @@ export class RuntimeBroker {
   async publish(event: import("@madventures/protocol").BridgeEventV1) {
     let row: LedgerRow;
     try {
+      if (this.deps.ledger.hasEventId(event.event_id)) {
+        return { ok: false as const, commandId: event.event_id, error: "invalid_command" as const, detail: "publish: duplicate event_id" };
+      }
       row = this.deps.ledger.append(event);
     } catch {
       try {

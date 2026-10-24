@@ -1,5 +1,6 @@
 import { expect, spyOn, test } from "bun:test";
 import { existsSync } from "node:fs";
+import { PROTOCOL_VERSION, sha256CanonicalSync } from "@madventures/protocol";
 import * as build from "../src/build";
 import type { BuildInput, BuildResult } from "../src/build";
 import { RuntimeBroker } from "../../broker/src/runtime-broker";
@@ -105,4 +106,35 @@ test("Task49 prerequisite durable activation fallback retains execution launch f
     projection.mockRestore();
     await captured?.session.close();
   }
+}, 20_000);
+
+test("an adapter client from the build publishes an accepted event through its broker delegate", async () => {
+  const { session, input, result } = await captureFixtureBuild();
+  try {
+    const adapter = result.state.adapters[0]!;
+    const identity = input.envelope.executions.find(value => value.execution_id === adapter.executionId)!;
+    const snapshot = await adapter.client.getSnapshot();
+    expect(snapshot.phase).toBe("active");
+    const ledger = result.state.ledger!;
+    const before = ledger.readAfter(0);
+    const payload = { text: "synthetic build-delegate message" };
+    const candidate = {
+      protocol_version: PROTOCOL_VERSION, event_id: "event-task24-build-delegate", session_id: snapshot.sessionId,
+      parent_event_id: null, sender_execution_id: identity.execution_id,
+      receiver_execution_id: input.envelope.executions[1]!.execution_id,
+      sender_role: identity.role, sender_surface: identity.surface, sender_model: identity.model, sender_provider: identity.provider,
+      task_envelope_hash: snapshot.taskEnvelopeHash, repository_fingerprint: snapshot.repositoryFingerprint,
+      event_type: "message" as const, payload_hash: sha256CanonicalSync(payload), payload,
+      created_at: "2026-10-23T00:00:00Z", previous_event_hash: ledger.verify().head,
+    };
+    await expect(adapter.client.publish(candidate)).resolves.toMatchObject({ ok: true, commandId: candidate.event_id });
+    const rows = ledger.readAfter(0);
+    expect(rows).toHaveLength(before.length + 1);
+    expect(rows.filter(row => row.event_id === candidate.event_id)).toHaveLength(1);
+    expect(JSON.parse(rows.at(-1)!.event_json)).toEqual(candidate);
+    expect(ledger.verify().valid).toBe(true);
+  } finally {
+    await session.close();
+  }
+  expect(existsSync(session.storage.sessionDir)).toBe(false);
 }, 20_000);
