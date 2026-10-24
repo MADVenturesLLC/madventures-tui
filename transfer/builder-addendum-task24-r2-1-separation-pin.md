@@ -1,0 +1,13 @@
+ADDENDUM 1 TO THE TASK 24 CORRECTION BUILDER PROMPT: the separation pin. Paste this into the Codex session that stopped at D3's full suite. It is signed by the Founder and is part of the builder prompt.
+
+Your stop was correct. I rule as follows.
+
+1. The facts. At D3, bare bun test failed exactly the three tests of test/phase3a/harness-separation.test.ts that read the digest pin of packages/supervisor/src/build.ts, because the forwarding of publish that DEC-20261023-01 C1 requires changed that file's bytes from the pinned SHA-256 bd73bb219e96bc76d3b4e544cde9152ef028ce12d02003ff67d93347f39ca35d. Every other D3 check you ran passed. No commit exists.
+2. The authority. DEC-20261024-01, SHA-256 fa0d114dbe3a37db38a7538e9a5c33da42755a47250d7ae4069233043c6ac85e, merged to main as 8987aa50b35830cf5994645f0fb46c72c0372f9b. Run git fetch origin main, confirm origin/main is that commit or a descendant whose changes since it touch none of the paths of item 4, confirm the act on it has that SHA-256, and read it in full. If either differs, stop.
+3. The pin. Under its B1 and B3, change only the sha256 of the packages/supervisor/src/build.ts entry in the EXCEPTIONS table of test/phase3a/harness-separation.test.ts, to the SHA-256 of build.ts as you will commit it. Change nothing else in that file: not that entry's call, no other entry, and no line of the analyzer or its tests. If build.ts changes again before you commit, the pin follows it.
+4. Paths. The correction now changes exactly eight paths against 942c225bb3d4c772ad68c9cac2a7d494655758b9: the seven of DEC-20261023-01 C4 and test/phase3a/harness-separation.test.ts. Your branch stays on c201cde18077b789b8aefe7c5f88db61d44649e5; do not merge or rebase onto the new main.
+5. Verification. Run bun test test/phase3a/harness-separation.test.ts, which must pass in full. Then restart D3 from its first item, under DEC-20261023-01 B4, with both runtime checks, the uptime gate and the logs it requires; the changed-path check of D3 reads eight paths. Your D1, RED runs and breaks stand and are not rerun.
+6. Record. Under Deviations, record this addendum by its SHA-256; the old and new SHA-256 of build.ts and its diff; that the entry's call is unchanged; the three failed tests verbatim with the uptime before that run and its log's SHA-256; and the D3 restart. In pr-body.md, list the eight paths, and state for the reviewer, as DEC-20261024-01 B2 requires, that the build.ts diff adds no route from production code to the test tree.
+7. Then continue with DELIVERABLES and the FINAL REPORT.
+
+Everything else in the builder prompt is unchanged.
