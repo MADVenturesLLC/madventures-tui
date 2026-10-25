@@ -1,0 +1,14 @@
+ADDENDUM 2 TO THE TASK 25 BUILDER PROMPT: the fencing batch count. Paste this into the Codex session that stopped during D1, after addendum 1. It is signed by the Founder and is part of the builder prompt.
+
+Your stop was correct. I rule as follows.
+
+1. The facts. Under addendum 1 you completed D1's install, tsc, and broker, ledger and supervisor runs with 0 failures, and stopped before D1's bare bun test and before any edit, because the test the runtime broker performs no ambient discovery, holds no process authority, and batches only the compensation, in packages/broker/test/fencing.test.ts, asserts that appendMany( occurs exactly once in runtime-broker.ts, and fencing.test.ts is not among Task 25's paths.
+2. The authority. DEC-20261025-01, SHA-256 09cc8288cc484422d6e4ae4496d69954d954d8aee59af7d6f54e8265589bddc4, merged to main as 61da2bd6897330a6fc9a4b5429cb2e4783edb9de. Run git fetch origin main, confirm origin/main is that commit or a descendant whose changes since it touch no path under packages/broker/, packages/ledger/, packages/protocol/, packages/supervisor/ or test/phase3a/, and report every path changed since 6d7870de660f2eee00b91ce01410a7f7573723fe. Confirm the act on it has that SHA-256, Status ISSUED and the founder signature, and read it in full. If any of this differs, stop. It joins AUTHORITY, and where it amends DEC-20261024-02, the amended text binds.
+3. The base. HEAD stays 7e4572c95d90c19b5403c07c8d4cd146c6d37d98 on build/m10-task25-r1 with a clean tree. Do not merge or rebase onto the new main.
+4. Paths. Task 25 changes exactly the eight paths of DEC-20261025-01 B3: the seven of addendum 1 item 5, and packages/broker/test/fencing.test.ts only as its B1 allows, that is, the assertion's count from 1 to 2 and the comment on the line before it. Change nothing else in that file. Add no value import to runtime-broker.ts; if the work needs one, stop. Wherever the builder prompt or addendum 1 says four or seven paths, read these eight.
+5. D1. Your completed D1 runs stand and are not rerun. Run the runtime check of THE TEST RUNTIME, record uptime, then run D1's bare bun test once at HEAD, before any edit, teed to its own log. Under DEC-20261023-01 B3, a failure in a file outside the eight paths is recorded and is not a stop; a failure inside them, or an error that stops the suite, is.
+6. Then continue with THE WORK as addendum 1 amends it. Make the fencing change of item 4 with the implementation, not before the RED runs. D3's changed-path check lists the eight paths; its check that the incident path has exactly one appendMany call site stands.
+7. Record. Under Deviations, record this stop, this addendum by its SHA-256, and the fencing.test.ts diff. In pr-body.md, list the eight paths and add a row for DEC-20261025-01 B1 and B2 to the table.
+8. Then continue with DELIVERABLES and the FINAL REPORT.
+
+Everything else in the builder prompt and addendum 1 is unchanged.
