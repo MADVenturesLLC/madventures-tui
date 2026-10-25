@@ -253,6 +253,46 @@ export class RuntimeBroker {
     return { ok: true as const, commandId: event.event_id };
   }
 
+  async publishIncident(event: import("@madventures/protocol").BridgeEventV1) {
+    const payload = event.payload as unknown as import("@madventures/protocol").PublishedIncidentPayloadV1;
+    const reason = "execution_reported_incident" as const;
+    const interrupted = {
+      ...this.record("session_interrupted", {
+        incident_id: payload.incident_id,
+        reason: payload.reason,
+        severity: payload.severity,
+        source_event_id: event.event_id,
+        reported_by_execution_id: event.sender_execution_id,
+      }, reason),
+      previous_event_hash: computeEventHash(this.head, canonicalJson(event)),
+    };
+    reduceLedgerEvent(reduceLedgerEvent(this.state, event), interrupted);
+    let rows: readonly LedgerRow[];
+    try {
+      rows = this.deps.ledger.appendMany([event, interrupted]);
+    } catch {
+      try {
+        await this.interrupt("ledger_write_failed", "publishIncident: ledger_write_failed", "high", this.deps.sources.nextEventId(), null, null);
+      } catch {
+        // A non-durable interruption still requires teardown; next start reconciles its closure.
+        if (this.state.phase !== "closing" && this.state.phase !== "closed") {
+          try { await this.deps.terminateGovernedProcesses(); } catch { /* The returned ledger failure cannot certify teardown. */ }
+        }
+      }
+      return { ok: false as const, commandId: event.event_id, error: "ledger_write_failed" as const, detail: "publishIncident: ledger_write_failed" };
+    }
+    // Fold the source silently so the pair has only its interrupted observation.
+    this.state = reduceLedgerEvent(this.state, parseRow(rows[0]!));
+    this.head = rows[0]!.event_hash;
+    this.fold(rows[1]!);
+    this.persist(invalidateToken(this.state, "interruption", payload.incident_id, this.fencingContext()));
+    const terminal = { closure_kind: "interruption", incident_id: payload.incident_id, reason_code: reason } as const;
+    this.persist(this.record("session_closing", terminal, reason));
+    await this.deps.terminateGovernedProcesses();
+    this.persist(this.record("session_closed", terminal, reason));
+    return { ok: true as const, commandId: event.event_id };
+  }
+
   async pause(commandId: string): Promise<void> {
     if (this.state.phase !== "active") {
       throw new RuntimeBrokerError("invalid_phase", `pause requires phase active, found ${this.state.phase}`);

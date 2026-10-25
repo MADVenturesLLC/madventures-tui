@@ -300,7 +300,7 @@ test("an ownership_accept fails closed while pendingTransfers is not produced", 
   }
 });
 
-test("a legal published incident fails closed until its atomic path exists", async () => {
+test("a legal published incident takes the atomic incident path", async () => {
   for (const phase of ["active", "paused"] as const) {
     const f = await fixture();
     if (phase === "paused") await f.broker.pause("pause-for-incident");
@@ -308,10 +308,17 @@ test("a legal published incident fails closed until its atomic path exists", asy
     const before = f.ledger.readAfter(0);
     const observations = f.observations.length;
     expect(evaluatePublishLegality(incident(), await client.getSnapshot(), PRINCIPAL)).toEqual({ ok: true });
-    expect(await client.publish(incident())).toEqual({ ok: false, commandId: incident().event_id, error: "invariant_failure", detail: "incident publication not wired" });
-    expect(f.ledger.readAfter(0)).toEqual(before);
-    expect(f.observations).toHaveLength(observations);
-    expect(f.terminations()).toBe(0);
+    expect(await client.publish(incident())).toEqual({ ok: true, commandId: incident().event_id, acceptedSnapshotSeq: 1 });
+    const events = f.ledger.readAfter(before.length).map(row => JSON.parse(row.event_json));
+    expect(events.map(value => value.event_type)).toEqual(["incident", "session_interrupted", "fencing_token_invalidated", "session_closing", "session_closed"]);
+    expect(events[0]).toEqual(incident());
+    expect(events[1]).toMatchObject({ reason_code: "execution_reported_incident", payload: {
+      ...incident().payload, source_event_id: incident().event_id, reported_by_execution_id: incident().sender_execution_id,
+    } });
+    expect(f.observations).toHaveLength(observations + 4);
+    expect(f.observations[observations]).toMatchObject({ phase: "interrupted", ledgerSeq: before.length + 2 });
+    expect(f.terminations()).toBe(1);
+    expect(f.ledger.verify().valid).toBe(true);
   }
 });
 

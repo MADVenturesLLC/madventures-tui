@@ -1491,8 +1491,8 @@ describe("Task 19 module discipline", () => {
     for (const pattern of forbidden) {
       expect(source).not.toMatch(pattern);
     }
-    // Exactly one atomic batch exists: the failed-activation compensation.
-    expect(source.match(/appendMany\(/g)).toHaveLength(1);
+    // Exactly two atomic batches exist: the failed-activation compensation and the published-incident pair.
+    expect(source.match(/appendMany\(/g)).toHaveLength(2);
     // No module-level mutable binding: no hidden registry or singleton.
     expect(source.split("\n").filter((l) => /^(let|var)\s/.test(l))).toEqual([]);
     const valueImports = source.split("\n").filter((l) => /^import\s+(?!type\b)/.test(l));
