@@ -760,6 +760,9 @@ export async function runTransactionalBuildWithDependencies(
             publish: {
               value: (event: Parameters<RuntimeBroker["publish"]>[0]) => openBroker().publish(event),
             },
+            publishIncident: {
+              value: (event: Parameters<RuntimeBroker["publishIncident"]>[0]) => openBroker().publishIncident(event),
+            },
             resume: {
               value: (commandId: string) => openBroker().resume(commandId),
             },

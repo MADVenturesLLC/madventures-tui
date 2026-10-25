@@ -380,10 +380,9 @@ export function createInProcessBrokerClient(
     }
     const legality = evaluatePublishLegality(captured, projectSnapshot(broker.snapshotProjectionInput()), evaluatedPrincipal);
     if (!legality.ok) return { ok: false, commandId, error: legality.error, detail: legality.detail };
-    if (captured.event_type === "incident") {
-      return { ok: false, commandId, error: "invariant_failure", detail: "incident publication not wired" };
-    }
-    const result = await broker.publish(captured);
+    const result = captured.event_type === "incident"
+      ? await broker.publishIncident(captured)
+      : await broker.publish(captured);
     if (!result.ok) return { ...result };
     return { ok: true, commandId, acceptedSnapshotSeq: deliveredSeq };
   }
