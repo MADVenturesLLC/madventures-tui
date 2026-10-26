@@ -198,6 +198,11 @@ test("public preflight rejects fixture dependencies before and after a test-seam
 });
 test("fixture preflight keeps pair policy and registration overrides local to each call", async () => {
   const f = fixtureWithUnregisteredSurfaces();
+  f.deps.probe = async request => ({
+    ok: true,
+    diagnostic: { result: "pass", primitive: request.kind === "identity" ? "system/init" : "auth status",
+      exitCode: 0, signal: null, stdoutBytes: 0, stderrBytes: 0 },
+  });
   await failure(f, "executable_unresolved", { registration: () => undefined });
   expect((await f.run()).ok).toBe(true);
   const [builder, reviewer] = f.executions;
