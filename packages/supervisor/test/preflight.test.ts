@@ -225,9 +225,9 @@ test("preflight creates nothing", async () => {
   writeFileSync(join(f.input.worktree,"dirty-fixture"),"fixture dirty status");
   const status=Bun.spawnSync(["git","--no-optional-locks","-C",f.input.worktree,"status","--porcelain=v1","-z"],{stdout:"pipe",stderr:"pipe"});
   expect(status.exitCode).toBe(0);
-  const before = listing(f.root); const temporary = readdirSync(tmpdir()).sort();
+  const before = listing(f.root); const temporary = readdirSync(f.temp).sort();
   const r = await f.run(); expect(r.ok).toBe(true);
-  expect(listing(f.root)).toEqual(before); expect(readdirSync(tmpdir()).sort()).toEqual(temporary);
+  expect(listing(f.root)).toEqual(before); expect(readdirSync(f.temp).sort()).toEqual(temporary);
   if (r.ok) { expect(r.plan.repositoryFingerprint.statusSha256).toBe(new Bun.CryptoHasher("sha256").update(status.stdout).digest("hex")); expect(Object.isFrozen(r.plan)).toBe(true); expect(Object.isFrozen(r.plan.executions)).toBe(true); for (const e of r.plan.executions) { expect(Object.isFrozen(e)).toBe(true); expect(Object.isFrozen(e.arguments)).toBe(true); expect(Object.isFrozen(e.environment)).toBe(true); expect(e.artifactSha256).toBe(new Bun.CryptoHasher("sha256").update(readFileSync(e.executablePath)).digest("hex")); } }
 });
 test("probe environment equals launch environment", async () => {

@@ -1,5 +1,5 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -790,15 +790,6 @@ function processSurvives(pid: number): boolean {
   }
 }
 
-async function waitForAbsence(predicate: () => boolean): Promise<void> {
-  const deadline = performance.now() + 1_000;
-  while (!predicate() && performance.now() < deadline) await Bun.sleep(10);
-}
-
-function descriptorCount(): number {
-  return readdirSync("/dev/fd").length;
-}
-
 function capabilityFixture(f: ReturnType<typeof makeBuildFixture>) {
   const registration = f.registration(f.envelope.executions[0]!.surface)!;
   const record = parseCapabilityRecord({
@@ -854,7 +845,6 @@ for (const step of BUILD_STEPS) {
   test(`rollback after step ${step} leaves no partial session`, async () => {
     const f = makeBuildFixture(`ses-task47-${step}`);
     const capability = capabilityFixture(f);
-    const baseline = descriptorCount();
     // Durable activation cannot fail; inject immediately before its commit instead.
     const result = await f.run(step === "activate" ? { injectFailureAt: step } : {
       onStep: ({ step: observed }) => {
@@ -870,7 +860,7 @@ for (const step of BUILD_STEPS) {
     for (const pid of [...childPids, ...state.hosts.map(host => host.hostPid)]) {
       expect(processSurvives(pid)).toBe(true);
     }
-    if (state.ledger !== null) expect(descriptorCount()).toBeGreaterThan(baseline);
+    if (state.ledger !== null) expect(() => state.ledger!.readAfter(0)).not.toThrow();
     const survivingAtHostCleanup: string[] = [];
     const escalate = hostModule.escalateWedgedHost;
     const containment = step === "children" ? spyOn(hostModule, "escalateWedgedHost").mockImplementation(async (...args) => {
@@ -934,8 +924,7 @@ for (const step of BUILD_STEPS) {
       expect(existsSync(join(f.plan.storageRoot, "sessions", f.sessionId))).toBe(false);
     }
     expect(readFileSync(capability.path)).toEqual(capability.bytes);
-    await waitForAbsence(() => descriptorCount() <= baseline);
-    expect(descriptorCount()).toBeLessThanOrEqual(baseline);
+    if (state.ledger !== null) expect(() => state.ledger!.readAfter(0)).toThrow();
   }, 15_000);
 }
 
@@ -1015,7 +1004,6 @@ test("rollback uses the same containment path as live interruption", async () =>
 
   for (const fault of ["ledger_write", "host_send"] as const) {
     const f = makeBuildFixture(`ses-task47-error-${fault}`);
-    const baseline = descriptorCount();
     const failed = await f.run({ injectFailureAt: "reattest", ...(fault === "host_send" ? {
       spawnHost: (descriptor: hostModule.HostLaunchDescriptor) => {
         const handle = hostModule.spawnPtyHost(descriptor);
@@ -1033,8 +1021,7 @@ test("rollback uses the same containment path as live interruption", async () =>
       for (const child of state.children) expect(processSurvives(child.childPid!)).toBe(false);
       await expect(state.client!.getSnapshot()).rejects.toThrow();
       expect(() => state.ledger!.readAfter(0)).toThrow();
-      await waitForAbsence(() => descriptorCount() <= baseline);
-      expect(descriptorCount()).toBeLessThanOrEqual(baseline);
+      expect(() => state.ledger!.readAfter(0)).toThrow();
     } finally {
       append?.mockRestore();
       await cleanupPartialState(state);

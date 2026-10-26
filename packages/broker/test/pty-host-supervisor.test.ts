@@ -1052,9 +1052,13 @@ test("S0: a dead host with a stdin-inheriting descendant still triggers mandator
   // PGID is MANDATORY anyway and must not wait for EPIPE — which on Bun
   // 1.3.14 never arrives, because writes to a dead host's stdin succeed
   // silently. The child group must die from the direct PGID path alone.
-  const fixture = "/tmp/t44-stdin-inheritor.sh";
-  require("node:fs").writeFileSync(fixture, '#!/bin/sh\ntrap "" TERM\nwhile true; do sleep 0.05; done\n');
-  require("node:fs").chmodSync(fixture, 0o755);
+  const { mkdtempSync, writeFileSync, existsSync, rmSync } = require("node:fs");
+  const { join } = require("node:path");
+  const root = mkdtempSync(join(require("node:os").tmpdir(), "t44-stdin-inheritor-"));
+  const fixture = join(root, "stdin-inheritor.sh");
+  const ready = join(root, "ready");
+  // Host death sends SIGHUP; readiness proves the fixture installed both traps.
+  writeFileSync(fixture, `#!/bin/sh\ntrap "" HUP TERM\nprintf ready > '${ready}'\nwhile true; do sleep 0.05; done\n`, { mode: 0o755 });
 
   const handle = spawnPtyHost({
     path: fixture,
@@ -1070,8 +1074,9 @@ test("S0: a dead host with a stdin-inheriting descendant still triggers mandator
     expect(first.done).toBe(false);
     pgid = (first.value as Extract<HostFactFrame, { kind: "launched" }>).pgid;
 
-    // Kill the HOST outright. The child group survives it (the child is in
-    // its own process group and ignores SIGTERM).
+    expect(await waitUntil(() => existsSync(ready), HOST_OUTER_BOUND_MS)).toBe(true);
+    // Kill the HOST outright. The ready child is in its own process group
+    // and ignores SIGHUP and SIGTERM.
     process.kill(handle.hostPid, "SIGKILL");
     const hostGone = await waitUntil(() => !externallyAlive(handle.hostPid), 5000);
     expect(hostGone).toBe(true);
@@ -1101,6 +1106,7 @@ test("S0: a dead host with a stdin-inheriting descendant still triggers mandator
     expect(groupGone).toBe(true);
   } finally {
     cleanupProcesses(handle.hostPid, pgid);
+    rmSync(root, { recursive: true, force: true });
   }
 }, 25000);
 
