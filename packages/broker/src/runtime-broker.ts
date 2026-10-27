@@ -254,6 +254,20 @@ export class RuntimeBroker {
   }
 
   async publishIncident(event: import("@madventures/protocol").BridgeEventV1) {
+    try {
+      if (this.deps.ledger.hasEventId(event.event_id)) {
+        return { ok: false as const, commandId: event.event_id, error: "invalid_command" as const, detail: "publish: duplicate event_id" };
+      }
+    } catch {
+      try {
+        await this.interrupt("ledger_write_failed", "publishIncident: ledger_write_failed", "high", this.deps.sources.nextEventId(), null, null);
+      } catch {
+        if (this.state.phase !== "closing" && this.state.phase !== "closed") {
+          try { await this.deps.terminateGovernedProcesses(); } catch { /* The returned ledger failure cannot certify teardown. */ }
+        }
+      }
+      return { ok: false as const, commandId: event.event_id, error: "ledger_write_failed" as const, detail: "publishIncident: ledger_write_failed" };
+    }
     const payload = event.payload as unknown as import("@madventures/protocol").PublishedIncidentPayloadV1;
     const reason = "execution_reported_incident" as const;
     const interrupted = {

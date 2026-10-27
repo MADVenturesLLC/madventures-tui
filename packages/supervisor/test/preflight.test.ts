@@ -143,6 +143,17 @@ test("preflight fails with repository_fingerprint when the envelope names anothe
     f.input.ambient.HOME = f.input.installation.passwd_home;
   }
 });
+test("preflight fails with repository_fingerprint when the repository root and the worktree belong to different repositories", async () => {
+  const f = fixture(), other = fixture();
+  expect((await f.run()).ok).toBe(true);
+  expect(realpathSync(f.git(["rev-parse", "--path-format=absolute", "--git-common-dir"])))
+    .not.toBe(realpathSync(other.git(["rev-parse", "--path-format=absolute", "--git-common-dir"])));
+  f.input.worktree = other.input.worktree;
+  f.envelope.worktree = other.input.worktree;
+  (f.envelope.repository_fingerprint as Record<string, unknown>).git_sha = other.git(["rev-parse", "--verify", "HEAD"]);
+  f.sign();
+  await failure(f, "repository_fingerprint");
+});
 test("preflight fails with executable_unresolved", async () => { const f = fixture(); rmSync(join(f.bin, "agy")); await failure(f, "executable_unresolved"); chmodSync(join(f.bin, "madbridge-claude-v5"), 0o600); await failure(f, "executable_unresolved"); });
 test("preflight fails with identity_mismatch", async () => { const f = fixture(); writeFileSync(join(f.bin, "madbridge-claude-v5"), `#!${process.execPath}\nconsole.log('{"type":"system","subtype":"init","model":"other","claude_code_version":"2.1.296"}');\n`); await failure(f, "identity_mismatch"); });
 test("preflight fails with identity_mismatch when the independence domain differs from the registration", async () => {
