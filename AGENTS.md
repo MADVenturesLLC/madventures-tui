@@ -72,9 +72,16 @@ Stop and ask the Founder before:
 
 - Starting a Phase 3A task. Plan approval alone starts nothing. Each task
   needs its own written Founder authorization naming the base SHA and scope.
-- Merging any pull request. Required checks on `main` are `Verify`,
-  `Verify (macOS)`, and `code-review`. Merge authorization is a separate
-  Founder act naming the exact head SHA.
+- Merging a pull request that touches a governance path — `docs/decisions/`,
+  `AGENTS.md`, `SECURITY.md`, `CONTRIBUTING.md`, `.github/`,
+  `packages/founder-act/` — or whose thread carries a canonical deferral, or
+  which an open `HO-*` handoff references, or which carries a
+  `needs-founder-auth` label, or which no milestone authorization names. Merge
+  authorization is a separate Founder act naming the exact head SHA, or a
+  milestone authorization under FounderOS `DEC-20261027-01` naming that head.
+  Required checks on `main` are `Verify`, `Verify (macOS)`, and `code-review`; a
+  pull request touching none of those paths and meeting none of those conditions
+  merges on those checks with no per-PR Founder act.
 - Changing this repository's security posture (secret scanning, push
   protection, code-owner review requirement, CODEOWNERS owners).
 - Certifying a live runtime, connecting the production TUI, or substituting
