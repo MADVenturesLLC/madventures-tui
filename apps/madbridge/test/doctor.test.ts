@@ -2,10 +2,38 @@
 // Doctor-specific contract tests — read-only checks and output structure.
 
 import { test, expect, describe, beforeEach, afterEach } from "bun:test";
-import { rmSync, mkdtempSync, readdirSync, writeFileSync, existsSync } from "fs";
+import { rmSync, mkdtempSync, readdirSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { runCli, type CliResult } from "../src/cli";
+import { runCli as runHostCli, type CliContext, type CliResult } from "../src/cli";
+
+async function runCli(args: Array<string>, ctx: CliContext): Promise<CliResult> {
+  if (args.at(0) !== "doctor") return runHostCli(args, ctx);
+  const root = mkdtempSync(join(tmpdir(), "madv-doctor-fixtures-"));
+  const bin = join(root, "bin");
+  const cwd = process.cwd();
+  const path = process.env.PATH;
+  const home = process.env.HOME;
+  try {
+    mkdirSync(bin);
+    mkdirSync(join(root, "cwd"));
+    for (const name of "bun claude agy".split(" ")) {
+      writeFileSync(join(bin, name), "#!/bin/sh\nprintf '1.4.2-fixture\\n'\n", { mode: 0o700 });
+    }
+    process.env.PATH = bin;
+    process.env.HOME = root;
+    // doctor reads process.cwd(), so its filesystem assertions need the real cwd.
+    process.chdir(ctx.cwd === cwd ? join(root, "cwd") : ctx.cwd);
+    return await runHostCli(args, { ...ctx, cwd: process.cwd() });
+  } finally {
+    process.chdir(cwd);
+    if (path === undefined) delete process.env.PATH;
+    else process.env.PATH = path;
+    if (home === undefined) delete process.env.HOME;
+    else process.env.HOME = home;
+    rmSync(root, { recursive: true, force: true });
+  }
+}
 
 function runDoctor(args: string[] = [], opts: { stdin?: string; cwd?: string } = {}): Promise<CliResult> {
   return runCli(["doctor", ...args], { stdin: opts.stdin ?? "", cwd: opts.cwd ?? process.cwd() });

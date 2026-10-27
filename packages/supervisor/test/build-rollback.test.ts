@@ -1,5 +1,5 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, fstatSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync, type BigIntStats } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -790,13 +790,67 @@ function processSurvives(pid: number): boolean {
   }
 }
 
-async function waitForAbsence(predicate: () => boolean): Promise<void> {
-  const deadline = performance.now() + 1_000;
-  while (!predicate() && performance.now() < deadline) await Bun.sleep(10);
+function descriptorIdentity(stat: BigIntStats): string {
+  // Socket mode bits change when the peer closes; device/inode identify the resource.
+  return `${stat.dev}:${stat.ino}:${stat.birthtimeNs}`;
 }
 
-function descriptorCount(): number {
-  return readdirSync("/dev/fd").length;
+function openDescriptors(): Map<number, BigIntStats> {
+  const descriptors = new Map<number, BigIntStats>();
+  for (const entry of readdirSync("/dev/fd")) {
+    try {
+      descriptors.set(Number(entry), fstatSync(Number(entry), { bigint: true }));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EBADF") throw error;
+    }
+  }
+  return descriptors;
+}
+
+function watchBuildDescriptors(root: string) {
+  const files = new Map<string, string>();
+  const channels = new Map<string, string>();
+  const rememberFiles = (path: string): void => {
+    const stat = lstatSync(path, { bigint: true });
+    files.set(descriptorIdentity(stat), path);
+    if (stat.isDirectory()) {
+      for (const entry of readdirSync(path)) rememberFiles(join(path, entry));
+    }
+  };
+  const open = (): Array<string> => {
+    // Retain identities of storage paths that rollback subsequently removes.
+    rememberFiles(root);
+    const owned = new Array<string>();
+    openDescriptors().forEach((stat, fd) => {
+      const identity = descriptorIdentity(stat);
+      const target = files.get(identity) ?? channels.get(identity);
+      if (target !== undefined) owned.push(`${target} at fd ${fd}`);
+    });
+    return owned;
+  };
+  return {
+    open,
+    spawnHost: (descriptor: hostModule.HostLaunchDescriptor) => {
+      const before = new Set(Array.from(openDescriptors().values(), descriptorIdentity));
+      const handle = hostModule.spawnPtyHost(descriptor);
+      let captured = 0;
+      openDescriptors().forEach((stat, fd) => {
+        const identity = descriptorIdentity(stat);
+        // macOS represents kqueues as FIFO-like descriptors with inode zero.
+        if (!before.has(identity) && stat.ino !== 0n && (stat.isSocket() || stat.isFIFO())) {
+          channels.set(identity, `${descriptor.executionId} host stdio channel ${captured} (original fd ${fd})`);
+          captured += 1;
+        }
+      });
+      expect(captured).toBe(3);
+      return handle;
+    },
+    expectClosed: async () => {
+      const deadline = performance.now() + 1_000;
+      while (open().length > 0 && performance.now() < deadline) await Bun.sleep(10);
+      expect(open()).toHaveLength(0);
+    },
+  };
 }
 
 function capabilityFixture(f: ReturnType<typeof makeBuildFixture>) {
@@ -854,13 +908,13 @@ for (const step of BUILD_STEPS) {
   test(`rollback after step ${step} leaves no partial session`, async () => {
     const f = makeBuildFixture(`ses-task47-${step}`);
     const capability = capabilityFixture(f);
-    const baseline = descriptorCount();
+    const descriptors = watchBuildDescriptors(f.root);
     // Durable activation cannot fail; inject immediately before its commit instead.
-    const result = await f.run(step === "activate" ? { injectFailureAt: step } : {
+    const result = await f.run({ ...(step === "activate" ? { injectFailureAt: step } : {
       onStep: ({ step: observed }) => {
         if (observed === step) throw new Error("SYNTHETIC-ROLLBACK-FAILURE");
       },
-    });
+    }), spawnHost: descriptors.spawnHost });
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("expected a typed build failure");
     expect(result).toMatchObject({ ok: false, failedStep: step, failure: rollbackFailureCodes[step] });
@@ -870,7 +924,11 @@ for (const step of BUILD_STEPS) {
     for (const pid of [...childPids, ...state.hosts.map(host => host.hostPid)]) {
       expect(processSurvives(pid)).toBe(true);
     }
-    if (state.ledger !== null) expect(descriptorCount()).toBeGreaterThan(baseline);
+    const open = descriptors.open();
+    if (state.ledger !== null) {
+      expect(() => state.ledger!.readAfter(0)).not.toThrow();
+      expect(open.some(target => target.startsWith(`${state.ledgerPath} at fd `))).toBe(true);
+    }
     const survivingAtHostCleanup: string[] = [];
     const escalate = hostModule.escalateWedgedHost;
     const containment = step === "children" ? spyOn(hostModule, "escalateWedgedHost").mockImplementation(async (...args) => {
@@ -934,8 +992,7 @@ for (const step of BUILD_STEPS) {
       expect(existsSync(join(f.plan.storageRoot, "sessions", f.sessionId))).toBe(false);
     }
     expect(readFileSync(capability.path)).toEqual(capability.bytes);
-    await waitForAbsence(() => descriptorCount() <= baseline);
-    expect(descriptorCount()).toBeLessThanOrEqual(baseline);
+    await descriptors.expectClosed();
   }, 15_000);
 }
 
@@ -1015,15 +1072,16 @@ test("rollback uses the same containment path as live interruption", async () =>
 
   for (const fault of ["ledger_write", "host_send"] as const) {
     const f = makeBuildFixture(`ses-task47-error-${fault}`);
-    const baseline = descriptorCount();
-    const failed = await f.run({ injectFailureAt: "reattest", ...(fault === "host_send" ? {
+    const descriptors = watchBuildDescriptors(f.root);
+    const failed = await f.run({ injectFailureAt: "reattest",
       spawnHost: (descriptor: hostModule.HostLaunchDescriptor) => {
-        const handle = hostModule.spawnPtyHost(descriptor);
-        return { ...handle, send: () => { throw new Error("SYNTHETIC-HOST-SEND-FAILURE"); } };
+        const handle = descriptors.spawnHost(descriptor);
+        return fault === "host_send" ? { ...handle, send: () => { throw new Error("SYNTHETIC-HOST-SEND-FAILURE"); } } : handle;
       },
-    } : {}) });
+    });
     if (failed.ok) throw new Error("expected a typed build failure");
     const state = failed.partialState;
+    descriptors.open();
     const append = fault === "ledger_write" ? spyOn(state.ledger!, "appendMany").mockImplementation(() => {
       throw new Error("SYNTHETIC-LEDGER-WRITE-FAILURE");
     }) : null;
@@ -1033,8 +1091,7 @@ test("rollback uses the same containment path as live interruption", async () =>
       for (const child of state.children) expect(processSurvives(child.childPid!)).toBe(false);
       await expect(state.client!.getSnapshot()).rejects.toThrow();
       expect(() => state.ledger!.readAfter(0)).toThrow();
-      await waitForAbsence(() => descriptorCount() <= baseline);
-      expect(descriptorCount()).toBeLessThanOrEqual(baseline);
+      await descriptors.expectClosed();
     } finally {
       append?.mockRestore();
       await cleanupPartialState(state);
