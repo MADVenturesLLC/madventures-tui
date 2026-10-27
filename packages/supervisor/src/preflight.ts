@@ -136,10 +136,12 @@ export async function runPurePreflightWithDependencies(input: PreflightInput, ov
   try {
     repo = fingerprint(input.repositoryRoot, input.worktree, d);
     const repository = d.realpath(envelope.repository);
-    if (repository !== repo.root) {
-      const common = Bun.spawnSync(["git", "--no-optional-locks", "-C", repo.root, "rev-parse", "--path-format=absolute", "--git-common-dir"], { stdout: "pipe", stderr: "pipe" });
-      if (common.exitCode !== 0 || repository !== d.realpath(common.stdout.toString().trim())) return fail("repository_fingerprint");
-    }
+    const common = Bun.spawnSync(["git", "--no-optional-locks", "-C", repo.root, "rev-parse", "--path-format=absolute", "--git-common-dir"], { stdout: "pipe", stderr: "pipe" });
+    const worktreeCommon = Bun.spawnSync(["git", "--no-optional-locks", "-C", repo.worktree, "rev-parse", "--path-format=absolute", "--git-common-dir"], { stdout: "pipe", stderr: "pipe" });
+    if (common.exitCode !== 0 || worktreeCommon.exitCode !== 0) return fail("repository_fingerprint");
+    const commonPath = d.realpath(common.stdout.toString().trim());
+    if (commonPath !== d.realpath(worktreeCommon.stdout.toString().trim())) return fail("repository_fingerprint");
+    if (repository !== repo.root && repository !== commonPath) return fail("repository_fingerprint");
     if (d.realpath(envelope.worktree) !== repo.worktree || envelope.repository_fingerprint.git_sha !== repo.head) return fail("repository_fingerprint");
   } catch { return fail("repository_fingerprint"); }
   if (input.ambient.HOME === undefined || input.ambient.HOME !== input.installation.passwd_home) return fail("home_mismatch");

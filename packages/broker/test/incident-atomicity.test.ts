@@ -103,6 +103,25 @@ function incident(ledger: Ledger, severity: "low" | "medium" | "high" = "high"):
   };
 }
 
+test("a duplicate incident event_id is refused without appending or interrupting the session", async () => {
+  const f = await fixture();
+  const client = createInProcessBrokerClient(f.broker, { kind: "execution", executionId: EXECUTION });
+  const candidate = { ...incident(f.ledger), event_id: "open-task25" };
+  const rows = f.ledger.readAfter(0);
+  const seq = f.broker.snapshotSeq;
+  expect(rows.filter(row => JSON.parse(row.event_json).event_id === candidate.event_id)).toHaveLength(1);
+  expect(await client.publish(candidate)).toEqual({
+    ok: false, commandId: candidate.event_id, error: "invalid_command", detail: "publish: duplicate event_id",
+  });
+  expect(f.ledger.readAfter(0)).toEqual(rows);
+  expect(f.ledger.appends).toEqual([]);
+  expect(f.ledger.batches).toEqual([]);
+  expect(f.observations).toEqual([]);
+  expect(f.broker.snapshotSeq).toBe(seq);
+  expect(f.broker.snapshotProjectionInput().lifecycle.phase).toBe("active");
+  expect(f.terminations()).toBe(0);
+});
+
 test("no snapshot is emitted between the source incident and the derived lifecycle record", async () => {
   for (const phase of ["active", "paused"] as const) {
     const f = await fixture();
