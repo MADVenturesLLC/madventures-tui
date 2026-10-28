@@ -23,10 +23,23 @@ export function createFakeByteRouter(): {
 
 export function fixtureExecutableSource(model: string): string {
   return `#!${process.execPath}
-process.on("SIGTERM", () => process.exit(0));
-process.on("SIGINT", () => process.exit(0));
+const finish = () => process.stdout.write("", () => process.exit(0));
+process.on("SIGTERM", finish);
+process.on("SIGINT", finish);
 if (process.argv.includes("--fixture-run")) {
-  setInterval(() => {}, 1000);
+  process.stdin.setRawMode(true);
+  process.stdin.on("data", bytes => process.stdout.write(bytes));
+  process.stdin.on("end", finish);
+  // Detached Bun children need an explicit refresh of cached terminal dimensions.
+  let size = process.stdout.getWindowSize().join(" ");
+  setInterval(() => {
+    process.stdout._refreshSize();
+    const observed = process.stdout.getWindowSize().join(" ");
+    if (observed === size) return;
+    size = observed;
+    process.stdout.write("FIXTURE_RESIZE " + observed + "\\n");
+  }, 10);
+  process.stdout.write("FIXTURE_READY\\n");
 } else if (process.argv.includes("--fixture-auth")) {
   console.log(JSON.stringify({ loggedIn: true, authMethod: "claude.ai", apiProvider: "firstParty", subscriptionType: "max" }));
 } else {

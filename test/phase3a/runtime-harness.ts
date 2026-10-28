@@ -4,12 +4,14 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   ADAPTER_REGISTRY, PROTOCOL_VERSION, parseSurfaceId, parseTaskEnvelope, sha256CanonicalSync,
-  type AdapterRegistrationV1, type SurfaceId,
+  type AdapterRegistrationV1, type InterruptionReasonCodeV1, type SurfaceId,
 } from "@madventures/protocol";
 import { validateStorageRoot, type SessionStorage } from "@madventures/storage";
 import { runPurePreflightWithDependencies } from "../../packages/supervisor/src/preflight";
-import { rollbackBuild, runTransactionalBuildWithDependencies, type PartialBuildState } from "../../packages/supervisor/src/build";
+import { BUILD_STEPS, rollbackBuild, runTransactionalBuildWithDependencies,
+  type BuildFailureCode, type BuildStep, type PartialBuildState } from "../../packages/supervisor/src/build";
 import type { BrokerClient, BrokerSnapshot } from "../../packages/broker/src/client";
+import { unsafeTestOnlyIngestOutputFrame } from "../../packages/broker/src/in-process-client";
 import { escalateWedgedHost } from "../../packages/broker/src/pty-host-supervisor";
 import { HOST_DEADLINES_MS } from "../../packages/pty-host/src/signals";
 import { fixtureCapabilityRecord, fixtureExecutableSource } from "./fixture-adapters";
@@ -57,11 +59,30 @@ export const FIXTURE_REGISTRY: ReadonlyMap<SurfaceId, AdapterRegistrationV1> = O
   },
 });
 
-export interface HarnessOptions { readonly surfaces?: readonly SurfaceId[] }
+export interface HarnessOptions {
+  readonly surfaces?: readonly SurfaceId[];
+  readonly injectFailureAt?: BuildStep;
+}
 export interface HarnessSession {
   readonly client: BrokerClient;
   readonly storage: SessionStorage;
+  interrupt(reason: InterruptionReasonCodeV1): Promise<void>;
   close(): Promise<void>;
+}
+
+export class FixtureStartupFailure extends Error {
+  readonly hostPids: readonly number[];
+  readonly childPids: readonly number[];
+  readonly processGroups: readonly number[];
+  constructor(readonly failedStep: BuildStep, readonly failure: BuildFailureCode,
+    state: PartialBuildState, readonly fixtureRoot: string) {
+    super(`FixtureBuildFailed:${failedStep}:${failure}`);
+    this.name = "FixtureStartupFailure";
+    this.hostPids = Object.freeze(state.hosts.map(host => host.hostPid));
+    this.childPids = Object.freeze(state.children.flatMap(child => child.childPid === null ? [] : [child.childPid]));
+    this.processGroups = Object.freeze(state.children.flatMap(child => child.pgid === null ? [] : [child.pgid]));
+    Object.freeze(this);
+  }
 }
 
 export class RealSurfaceRejected extends Error {
@@ -70,7 +91,11 @@ export class RealSurfaceRejected extends Error {
 
 function requestedSurfaces(options: HarnessOptions): readonly SurfaceId[] {
   if (options === null || typeof options !== "object" || Object.getPrototypeOf(options) !== Object.prototype
-    || Reflect.ownKeys(options).some(key => key !== "surfaces")) throw new Error("InvalidHarnessOptions");
+    || Reflect.ownKeys(options).some(key => key !== "surfaces" && key !== "injectFailureAt")) throw new Error("InvalidHarnessOptions");
+  const injection = Object.getOwnPropertyDescriptor(options, "injectFailureAt");
+  if (injection !== undefined && (!("value" in injection) || !BUILD_STEPS.includes(injection.value))) {
+    throw new Error("InvalidHarnessOptions");
+  }
   const descriptor = Object.getOwnPropertyDescriptor(options, "surfaces");
   if (descriptor !== undefined && !("value" in descriptor)) throw new Error("InvalidHarnessOptions");
   const surfaces: unknown = descriptor === undefined ? FIXTURE_SURFACE_IDS : descriptor.value;
@@ -130,6 +155,7 @@ async function terminateFixtures(state: PartialBuildState): Promise<void> {
 
 export async function startFixtureSession(options: HarnessOptions = {}): Promise<HarnessSession> {
   const surfaces = requestedSurfaces(options);
+  const injectFailureAt: BuildStep | undefined = Object.getOwnPropertyDescriptor(options, "injectFailureAt")?.value;
   for (const surface of FIXTURE_SURFACE_IDS) if (ADAPTER_REGISTRY.has(surface)) throw new Error("FixtureRegistryCollision");
   // The approved test seams run the production algorithms with closed fixture inputs.
   const registry = new Map([...ADAPTER_REGISTRY, ...FIXTURE_REGISTRY]);
@@ -155,13 +181,23 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
     ? Promise.reject(new Error("FixtureStateUnavailable")) : terminateFixtures(state);
   let closing: Promise<void> | undefined;
   let finalSnapshot: BrokerSnapshot | undefined;
+  const pumps: Promise<void>[] = [];
+  const pumpErrors: unknown[] = [];
   const close = (): Promise<void> => closing ??= (async () => {
     if (state === undefined) throw new Error("FixtureStateUnavailable");
     const completed = state;
     const errors: unknown[] = [];
     const attempt = async (action: () => void | Promise<void>) => { try { await action(); } catch (error) { errors.push(error); } };
-    await attempt(() => completed.broker!.founderClose(`fixture-close-${crypto.randomUUID()}`));
+    await attempt(async () => {
+      if ((await completed.client!.getSnapshot()).phase !== "closed") {
+        await completed.broker!.founderClose(`fixture-close-${crypto.randomUUID()}`);
+      }
+    });
     await attempt(terminate);
+    await attempt(async () => {
+      await Promise.all(pumps);
+      if (pumpErrors.length) throw new AggregateError(pumpErrors, "FixtureOutputFailed");
+    });
     for (const adapter of completed.adapters) await attempt(() => adapter.disconnect());
     await attempt(async () => {
       await completed.client!.close();
@@ -208,7 +244,8 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
     if (fingerprint.root !== REPOSITORY || fingerprint.worktree !== REPOSITORY || fingerprint.head !== head || fingerprint.statusSha256 !== statusHash) {
       throw new Error("FixtureRepositoryDrift");
     }
-    const result = await runTransactionalBuildWithDependencies({ sessionId: `fixture-${crypto.randomUUID()}`, envelope, plan: preflight.plan }, {
+    const result = await runTransactionalBuildWithDependencies({ sessionId: `fixture-${crypto.randomUUID()}`, envelope,
+      plan: preflight.plan, ...(injectFailureAt === undefined ? {} : { injectFailureAt }) }, {
       registration: surface => {
         const registration = FIXTURE_REGISTRY.get(surface);
         return registration === undefined ? undefined : { ...registration, live_attester: ({ model }) => ({
@@ -218,9 +255,21 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
       terminateGovernedProcesses: terminate,
     });
     state = result.ok ? result.state : result.partialState;
-    if (!result.ok) throw new Error(`FixtureBuildFailed:${result.failedStep}:${result.failure}`);
+    if (!result.ok) throw new FixtureStartupFailure(result.failedStep, result.failure, state, root);
     if (state.storage === null || state.client === null || state.broker === null || state.ledger === null) throw new Error("FixtureBuildIncomplete");
     const underlying = state.client;
+    for (const host of state.hosts) {
+      pumps.push((async () => {
+        for await (const fact of host.handle.facts()) {
+          if (fact.kind === "output") unsafeTestOnlyIngestOutputFrame(underlying, host.executionId, fact.bytes);
+        }
+      })().catch(error => { pumpErrors.push(error); }));
+    }
+    const interrupt = async (reason: InterruptionReasonCodeV1): Promise<void> => {
+      await state!.broker!.interrupt(reason, "Fixture typed interruption", "high", crypto.randomUUID(), null, null);
+      await Promise.all(pumps);
+      await underlying.close();
+    };
     let closedSequence = 0;
     const client: BrokerClient = Object.create(underlying);
     Object.defineProperty(client, "getSnapshot", {
@@ -235,8 +284,26 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
       configurable: true,
       enumerable: true,
     });
+    Object.defineProperty(client, "request", {
+      value: async (command: Parameters<BrokerClient["request"]>[0]) => {
+        const captured = { ...command };
+        if (captured.kind === "pty_input" && captured.bytes instanceof Uint8Array) captured.bytes = captured.bytes.slice();
+        const accepted = await underlying.request(captured);
+        if (!accepted.ok) return accepted;
+        if (captured.kind === "pty_input" || captured.kind === "pty_resize") {
+          const host = state!.hosts.find(host => host.executionId === captured.executionId);
+          if (host === undefined) throw new Error("FixtureWriterHostMissing");
+          host.handle.send(captured.kind === "pty_input" ? { kind: "input", bytes: captured.bytes }
+            : { kind: "resize", cols: captured.cols, rows: captured.rows });
+        } else if (captured.kind === "session_close") {
+          await Promise.all(pumps);
+          await underlying.close();
+        }
+        return accepted;
+      },
+    });
     Object.freeze(client);
-    return Object.freeze({ client, storage: state.storage, close });
+    return Object.freeze({ client, storage: state.storage, close, interrupt });
   } catch (error) {
     try {
       if (state !== undefined && state.sessionActivatedRow !== null) await close();
