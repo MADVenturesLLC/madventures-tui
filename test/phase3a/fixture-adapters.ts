@@ -23,6 +23,11 @@ export function createFakeByteRouter(): {
 
 export function fixtureExecutableSource(model: string): string {
   return `#!${process.execPath}
+import { writeFileSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
+const mode = process.argv.includes("--fixture-run") ? "child" : process.argv.includes("--fixture-auth") ? "auth" : "identity";
+writeFileSync(join(dirname(dirname(process.argv[1])), basename(process.argv[1]) + "." + mode + ".environment.json"),
+  JSON.stringify(process.env), { mode: 0o600 });
 const finish = () => process.stdout.write("", () => process.exit(0));
 process.on("SIGTERM", finish);
 process.on("SIGINT", finish);

@@ -1,6 +1,6 @@
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { userInfo } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   ADAPTER_REGISTRY, PROTOCOL_VERSION, parseSurfaceId, parseTaskEnvelope, sha256CanonicalSync,
@@ -12,7 +12,7 @@ import { BUILD_STEPS, rollbackBuild, runTransactionalBuildWithDependencies,
   type BuildFailureCode, type BuildStep, type PartialBuildState } from "../../packages/supervisor/src/build";
 import type { BrokerClient, BrokerSnapshot } from "../../packages/broker/src/client";
 import { unsafeTestOnlyIngestOutputFrame } from "../../packages/broker/src/in-process-client";
-import { escalateWedgedHost } from "../../packages/broker/src/pty-host-supervisor";
+import { escalateWedgedHost, spawnPtyHost } from "../../packages/broker/src/pty-host-supervisor";
 import { HOST_DEADLINES_MS } from "../../packages/pty-host/src/signals";
 import { fixtureCapabilityRecord, fixtureExecutableSource } from "./fixture-adapters";
 
@@ -251,6 +251,10 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
         return registration === undefined ? undefined : { ...registration, live_attester: ({ model }) => ({
           ok: true, evidenceKind: "actual_session", model, provider: registration.provider, cliVersion: "1.0.0",
         }) };
+      },
+      spawnHost: descriptor => {
+        writeFileSync(join(root, `${basename(descriptor.path)}.host.environment.json`), JSON.stringify(descriptor.env), { mode: 0o600 });
+        return spawnPtyHost(descriptor);
       },
       terminateGovernedProcesses: terminate,
     });
