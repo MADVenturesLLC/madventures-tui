@@ -79,6 +79,8 @@ Stop and ask the Founder before:
   `needs-founder-auth` label, or which no milestone authorization names. Merge
   authorization is a separate Founder act naming the exact head SHA, or a
   milestone authorization under FounderOS `DEC-20261027-01` naming that head.
+  That FounderOS act is not this repository's `DEC-20261027-01`; a milestone
+  authorization here is a Founder act filed under `docs/decisions/`.
   Required checks on `main` are `Verify`, `Verify (macOS)`, and `code-review`; a
   pull request touching none of those paths and meeting none of those conditions
   merges on those checks with no per-PR Founder act.
