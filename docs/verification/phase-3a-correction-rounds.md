@@ -1324,4 +1324,11 @@ Round 2's resolution, recorded above as pending, is now closed:
 - **Plan milestone:** M22, Tasks 48 to 50. **Rubric milestone:** 10.
 - **Closed at:** `2b47fea87a766c345ab295ffb3342d6be445c231`, the merge of PR #202.
 - **Count:** rubric milestone 10 stays at 0 correction rounds.
-- **Carried forward:** the items of `DEC-20261028-01` B4, for later acts.
+- **Carried forward (act B4):** the PTY host's loading of a `.env` file from the repository root, and
+  the production routing of `pty_input` and `pty_resize`, both in `packages/broker`; tests of a failing
+  duplicate lookup in `publish` and `publishIncident`, and of a refused duplicate that builds no record;
+  a `packages/pty-host` test of the child's environment when the host's holds more; `test/phase3a` tests
+  of refused input and resize, a clean exit on SIGINT, the returned session by `Reflect.ownKeys`, and a
+  refused command in the third environment test; and the items of `DEC-20261027-01` B9, unchanged.
+- **Limitations stated:** the PTY host environment capture is what the build hands the host; no session
+  path exercises the redaction of a secret-marked value; the Task 49 fixture uses Bun's `_refreshSize`.
