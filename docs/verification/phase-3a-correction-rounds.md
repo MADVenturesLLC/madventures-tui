@@ -1278,3 +1278,57 @@ Round 2's resolution, recorded above as pending, is now closed:
   comment 6278664190 by `daley40-lab`.
 - **Result:** PASS. **Counted:** no round. `DEC-20261020-01` B5 files the approval under which this change
   projects the snapshot's `executions` member as the ruling on plan question (iii).
+
+## M22 corrections review verdict PASS (rubric milestone 10, no round)
+
+- **Recorded:** 2026-10-28, under `DEC-20261028-01` C1.
+- **Plan milestone:** M22, the corrections of `DEC-20261027-01` B2 to B4. **Rubric milestone:** 10.
+- **Head reviewed:** `5ef992f6ad6e53d18db493ed051d2fa59d5d2c5f` on PR #198, built by
+  `session:codex/m22-corrections-r1`.
+- **Reviewer:** `antigravity`, a fresh Gemini Antigravity session on the Founder's MacBook.
+- **Verdict text SHA-256:** `93877eb1b1b9b4cb39be64723d46303eeab164e4388a2cdc5c7db26db91ef275`, 62,662
+  bytes, 961 lines, saved at `/Users/michaeldaley/builds/m22-corrections-review-r1.md`, posted on PR #198
+  as comments 6440061248 and 6440061784 by `decivantiq`.
+- **Result:** PASS, no findings. **Counted:** no round. Merged at
+  `ce4b276aa49bb36c7736c82136de24db88360903` under the authorization in comment 6452577539.
+
+## Task 49 review verdict PASS (rubric milestone 10, no round)
+
+- **Recorded:** 2026-10-28, under `DEC-20261028-01` C1.
+- **Plan milestone:** M22, Task 49. **Rubric milestone:** 10.
+- **Head reviewed:** `06fa371bae8195afa6524da6a02b35448fe8e8bb` on PR #201, built by
+  `session:codex/m22-task49-r1`.
+- **Reviewer:** `antigravity`, a fresh Gemini Antigravity session on the Founder's MacBook.
+- **Verdict text SHA-256:** `c2e975c544cfd7cdeec5dfbacff4c734046b3d705ed47b6c706fd2b95c70b453`, 68,047
+  bytes, 824 lines, saved at `/Users/michaeldaley/builds/m22-task49-review-r1.md`, posted on PR #201 as
+  comments 6455139522 and 6455140002 by `decivantiq`.
+- **Result:** PASS, no findings; three unclassified results ruled advisory by the merge authorization in
+  comment 6457665692. **Counted:** no round. Merged at `2e62ebbb173d9649de999e5ef22c48812f36e6d0`.
+
+## Task 50 review verdict PASS (rubric milestone 10, no round)
+
+- **Recorded:** 2026-10-28, under `DEC-20261028-01` C1.
+- **Plan milestone:** M22, Task 50. **Rubric milestone:** 10.
+- **Head reviewed:** `c7eabf0ec8ad676e2d3ecc63075eedae9bfc3535` on PR #202, built by
+  `session:codex/m22-task50-r1`.
+- **Reviewer:** `antigravity`, a fresh Gemini Antigravity session on the Founder's MacBook.
+- **Verdict text SHA-256:** `509229fa3e48c8ba79dba517420d858e466cc931c3bccdea038170012c98d0ae`, 77,265
+  bytes, 894 lines, saved at `/Users/michaeldaley/builds/m22-task50-review-r1.md`, posted on PR #202 as
+  comments 6466766561 and 6466767164 by `decivantiq`.
+- **Result:** PASS, three advisory findings. **Counted:** no round. Merged at
+  `2b47fea87a766c345ab295ffb3342d6be445c231` under the authorization in comment 6468466154.
+
+## M22 review checkpoint closed (rubric milestone 10, count unchanged)
+
+- **Recorded:** 2026-10-28, under `DEC-20261028-01` B2 and C1.
+- **Plan milestone:** M22, Tasks 48 to 50. **Rubric milestone:** 10.
+- **Closed at:** `2b47fea87a766c345ab295ffb3342d6be445c231`, the merge of PR #202.
+- **Count:** rubric milestone 10 stays at 0 correction rounds.
+- **Carried forward (act B4):** the PTY host's loading of a `.env` file from the repository root, and
+  the production routing of `pty_input` and `pty_resize`, both in `packages/broker`; tests of a failing
+  duplicate lookup in `publish` and `publishIncident`, and of a refused duplicate that builds no record;
+  a `packages/pty-host` test of the child's environment when the host's holds more; `test/phase3a` tests
+  of refused input and resize, a clean exit on SIGINT, the returned session by `Reflect.ownKeys`, and a
+  refused command in the third environment test; and the items of `DEC-20261027-01` B9, unchanged.
+- **Limitations stated:** the PTY host environment capture is what the build hands the host; no session
+  path exercises the redaction of a secret-marked value; the Task 49 fixture uses Bun's `_refreshSize`.
