@@ -672,3 +672,171 @@ sequence_fault {"detectedMs":2.086583000003884,"deathMs":25.272375000000466,"esc
 ```
 
 Result: five tests per new file; the required RED and a non-vacuous break; restored typecheck exit 0; required combined suite 414 pass and 0 fail; no production changes. git diff --check and the exact-path and credential-shape scans passed before staging. The staged diff is checked again before commit. No self-fix of a failed new Task 53 GREEN run was needed. The resume failures, Addendum 6 correction and two load holds above are the deviations carried by this task.
+
+## Task 54 — ledger, attestation, auth and residual scenarios
+
+Built on Task 53 commit `2871fbc5c36db98176593bb4d81d1016da8bbc3e`, parent `226f6aee99013cfaa31511f498772cfa2eab4dd3`. This section precedes the Task 54 commit; Task 55 records that commit's identity. Changed files are runtime-harness.ts, the four new adversarial files named by Task 54, and this build log. No production file changed.
+
+### Deviations: scope halt and Addendum 7
+
+Before Task 54 Step 1, the session halted under DEC-20261028-02 B9 item 1 and plan section 10 item 1. Addendum 6 item 4's sentence "that commit is the only one to touch these files again" could either pin all four files touched by the liveness correction, including runtime-harness.ts, or allow the later harness changes required by Task 54 Step 3. No Task 54 edit or test occurred before the ruling.
+
+Addendum 7 rules that the restriction concerns the corrected liveness helpers and the placement of their correction in Task 53's commit, not the containing files. It expressly permits the remaining tasks and final gates to change B3 paths as their plan steps require, including runtime-harness.ts. Its supplied text, from ADDENDUM heading through the final sentence, UTF-8 with LF and one final newline, has SHA-256 `51b9a6c8e74e142091cdb6bc73394e2012aaa8c2a9c975b544e8c63a0878b83e`, computed with shasum on stdin. No claim is made about an unseen signed filesystem artifact.
+
+After the ruling the branch/head matched, the tree was clean, and Task 54 began at Step 1. All four named files were written before the RED command. The corrected harness liveness helper was compared byte for byte with Task 53 and is unchanged. The three earlier adversarial files have not been touched again.
+
+### RED and implementation readings
+
+Task 54 RED ran exactly one test, with one filtered out. The test's missing-switch fallback starts the default harness and exercises successful real pause/resume appends so that RED has the plan's required cause, rather than failing only on option validation. The fallback is reached only when the option is absent; it cannot turn a missing-switch regression green. Every required assertion remains. Required failure, verbatim:
+
+```text
+32 |     expect(snapshot.phase).toBe("closed");
+error: expect(received).toBe(expected)
+
+Expected: "closed"
+Received: "active"
+```
+
+The runtime check before RED again matched the pinned Bun path, bunx symlink, binary SHA-256, version and revision. No host setting or runtime changed. Every Task 54 check requests require_escalated under the existing Founder approval.
+
+Implementation is confined to runtime-harness.ts and the four new test files. fixture-adapters.ts is not needed: the harness can alter only the generated fixture sources. Production remains unchanged.
+
+Narrower fixture readings: failLedgerAppendAfter selects one failing append or persistent failure; SQLite PRAGMA query_only supplies a real SQLITE_READONLY failure on the build's existing connection. Changing directory modes alone would not make that already-open connection reliably refuse writes. The harness restores write capability before a transient interruption, but keeps the persistent case unrecordable until the test closes it and performs production next-start reconciliation. It records no fabricated terminal prefix. Auth expiry and model mismatch arrive as synthetic fixture-child output and the harness requests the existing typed interruptions; no production monitor or new production routing is claimed. mismatchAttestationAfter is the additional fixture switch needed for the separately named mismatch test. swapBinaryBeforeExec changes the generated executable after preflight while retaining the original launch hash; failSecondSurfaceLaunch supplies an incorrect second descriptor hash so the first child's real launch is observed before failure.
+
+The resource census retains only internal references to fixture-owned resources and returns frozen copied data. It records host/child/group identities from launched facts and specific anonymous descriptor identities from the test process, checks the original ledger instance is closed, and reads any retained ledger without writes to count still-valid durable tokens. It also tracks the parent-side child-supervisor resources and every session started through this module. No broker, ledger or publishing callback is returned to a test; no process-listing command is run by the builder.
+
+### Commands and logs so far
+
+Logs remain under `/Users/michaeldaley/builds/m23-m24-r1-pr/logs/`; no existing log is overwritten.
+
+| Command / step | Exit | Log | SHA-256 |
+| --- | ---: | --- | --- |
+| Task 54 RED: bun test test/phase3a/adversarial/ledger-failure.test.ts -t "a mid-session append failure interrupts with ledger_write_failed" | 1 | r2-task54-step2-run1.log | e7b8b4e64fafe874ffcf277a312ce0261006b3d5c0d60e1a5efdad9350be6562 |
+| Task 54 Step 3 bunx tsc --noEmit | 0 | r2-task54-step3-typecheck-run1.log | e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 |
+| Task 54 Step 4 load precheck; no test started | 88 | r2-task54-step4-run1.log | 5091b14df6115a60455be714b5e4d99965c008b2641d2de3fd00b6fbb0c5166c |
+
+```text
+r2-task54-step2-run1.log
+14:14  up 4 days,  5:22, 7 users, load averages: 1.80 2.05 1.91
+ 0 pass
+ 1 filtered out
+ 1 fail
+ 5 expect() calls
+Ran 1 test across 1 file. [5.71s]
+r2-task54-step4-run1.log
+14:17  up 4 days,  5:26, 7 users, load averages: 2.18 1.75 1.78
+```
+
+The Step 4 load guard started no test and asked the Founder to quiet the host. No rerun of an unchanged failed test is involved in this wait.
+
+Founder answer to the Task 54 load hold, verbatim:
+
+> Host quieted as far as I can. Visible apps: Finder, cmux, Antigravity, Claude. Hermes processes: 0. Load averages: 1.95 2.13 2.02. Host ready.
+
+The immediate reading had risen to 2.12, so run2 also started no test. The received readiness answer remained the answer to this hold while the session waited for a fresh reading below 2.0. A later reading was 1.76, and run3's immediate reading was 1.62. No cutoff was waived.
+
+| Command / step | Exit | Log | SHA-256 |
+| --- | ---: | --- | --- |
+| Task 54 Step 4 load precheck; no test started | 88 | r2-task54-step4-run2.log | af1de748c3343bdf2176ffa1414abad416381ab184ec7ba3b2ab4343ad25b299 |
+| Task 54 Step 4 all four files, no filter | 0 | r2-task54-step4-run3.log | e25c8acbe2339b033c5ed6bf18c00df4c9bc4c52a87993a5adc54fd25477c39e |
+| Task 54 strengthened-census bunx tsc --noEmit | 0 | r2-task54-cohort-typecheck-run1.log | e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 |
+
+```text
+r2-task54-step4-run2.log
+14:29  up 4 days,  5:38, 7 users, load averages: 2.12 2.16 2.04
+r2-task54-step4-run3.log
+14:30  up 4 days,  5:39, 7 users, load averages: 1.62 2.02 1.99
+ 8 pass
+ 0 fail
+ 73 expect() calls
+Ran 8 tests across 4 files. [7.23s]
+```
+
+That passing run proved real SQLITE_READONLY and ledger_write_failed for both ledger cases, a durable identity_mismatch after the child's drift marker, authentication_expired after the child's auth marker, refusal of resume, new session/envelope recovery, both startup failures, and a zero-residual census of the fixtures recorded to that point. It also showed Bun ran cleanup-residuals.test.ts first despite the command's argument order.
+
+Before treating that census as final, the new census test was strengthened to own a bounded cohort of setsid, wedged-host, malformed-frame, output-gap, ledger, auth and identity fixtures, plus all four child-supervisor exit modes. It then checks the cumulative resource census, including a governed grandchild. This avoids relying on test-file discovery order. Its own new enclosing test timeout became 30 seconds for the cohort; every normative per-scenario deadline remains 5000 ms, with exact 500 ms kill-initiation upper bounds and Addendum 1's 249 ms lower bounds where applicable. No existing test timeout or assertion changed. The eight required names and count remain unchanged. Typecheck passed after this strengthening. A fresh pre-run reading of 3.10 2.34 2.11 caused another quiet-host request; the strengthened tests have not run yet.
+
+### Strengthened GREEN, deliberate break and Step 5
+
+The Founder replied `ready`. The next immediate reading was 1.36 1.52 1.56, and the strengthened four-file check ran without filtering: 8 pass, 0 fail, 98 expect calls. Each of ledger-failure.test.ts, attestation-drift.test.ts, auth-expiry.test.ts and cleanup-residuals.test.ts holds exactly two passing named tests. Its owned-cohort census covered 13 recorded runs, 26 hosts, 25 children and 68 distinct anonymous descriptor identities; every live/open count was zero.
+
+The deliberate break changed only the injected PRAGMA from query_only ON to OFF, allowing the append to succeed. The full harness diff was shown before the complete unfiltered ledger-failure.test.ts run. Both named tests failed, 0 pass and 2 fail. Failing assertions, verbatim:
+
+```text
+32 |     expect(snapshot.phase).toBe("closed");
+error: expect(received).toBe(expected)
+
+Expected: "closed"
+Received: "active"
+
+49 |     expect(harness.fixtureFaultReport(session).publicationError).toBe("ledger_write_failed");
+error: expect(received).toBe(expected)
+
+Expected: "ledger_write_failed"
+Received: null
+```
+
+The PRAGMA was restored before gates. Restored SHA-256 values matched the pre-break files:
+
+| File | SHA-256 |
+| --- | --- |
+| runtime-harness.ts | 74515ab0a1bb8ee6cc8a615fc03bc3ee519ffed871e24d84324beecd2759b675 |
+| adversarial/ledger-failure.test.ts | ccb122f27206ab2f2f46d4e9c746ceac53cb76378e111a6734402c108788a42c |
+| adversarial/attestation-drift.test.ts | 3ef846a0819e59a17f2d0afe1598e6b2987432bff8f2dc5b212a7d8f19fb714b |
+| adversarial/auth-expiry.test.ts | e73e49d495ab51e4ac7b3ef54fc95212989db0798f34af596cfbfb087b828d18 |
+| adversarial/cleanup-residuals.test.ts | f7584d63b1ef10d66565a82c9851ae534a4f3236a815d5b548f6426ae60dd82f |
+
+| Command / step | Exit | Log | SHA-256 |
+| --- | ---: | --- | --- |
+| Task 54 Step 4 all four files, no filter | 0 | r2-task54-step4-run4.log | 7a0b3d8df7acfafcbc12b06ec7485d2c7557285034b766fffc9b8723234fad90 |
+| Task 54 break: bun test test/phase3a/adversarial/ledger-failure.test.ts | 1 | r2-task54-break-run1.log | 03f5411785f7a7df4e63f4ab65bc34952fd4386dc11c84d738488be3c9a44640 |
+| Task 54 Step 5 bunx tsc --noEmit | 0 | r2-task54-step5-typecheck-run1.log | e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 |
+| Task 54 Step 5 bare bun test | 0 | r2-task54-step5-full-run1.log | 12a78db71cac745680c091d085e19632ebbf2c8fa6de29bc72659d470c4ca8e0 |
+
+The full runtime check immediately before the bare suite matched every pinned value. No runtime or host setting changed. Summary and uptime lines:
+
+```text
+r2-task54-step4-run4.log
+14:57  up 4 days,  6:06, 8 users, load averages: 1.36 1.52 1.56
+ 8 pass
+ 0 fail
+ 98 expect() calls
+Ran 8 tests across 4 files. [12.03s]
+r2-task54-break-run1.log
+14:58  up 4 days,  6:07, 8 users, load averages: 1.27 1.48 1.54
+ 0 pass
+ 2 fail
+ 6 expect() calls
+Ran 2 tests across 1 file. [6.01s]
+r2-task54-step5-full-run1.log
+14:59  up 4 days,  6:08, 8 users, load averages: 1.95 1.65 1.60
+ 1856 pass
+ 0 fail
+ 18079 expect() calls
+Ran 1856 tests across 135 files. [196.22s]
+```
+
+During the load hold the Founder separately requested a hash-only check of `/Users/michaeldaley/tier2-136/FOUNDER-ACT-20261029-BR-PLANNER-READINESS-signed.txt`. shasum confirmed `0c8efcd9ea746966437a997595253b7f8d89360fb0128cc962570ec9ed381f65`. This read of a specifically supplied file was explicitly requested; its contents were not read or used as M23/M24 authority.
+
+No failed Task 54 GREEN run required self-fixing. The census strengthening above answered observed file order and retained all required assertions. All Task 54 runs used require_escalated. The corrected liveness helpers remain unchanged. There is no conditional fixture-adapters.ts or production-path change. No break is committed. Observed timings from the restored full suite follow, copied from its full-output log:
+
+```text
+second_surface_failure final_death_ms=739.6315409999806
+census_fault {"detectedMs":255.71812499998487,"deathMs":282.3183330000029,"escalation":{"reason":"pty_host_failure","state":"S3","escalated":true,"closeStdinCalled":true,"sessionInterruptionRequired":true,"pgidKillAttempted":true,"hostKillAttempted":true,"unnecessaryHostExitConfirmed":false,"killOrder":["pgid","host"],"observedMs":{"terminateSentMs":0.01770799999940209,"ackWindowEndedMs":249.1380000000063,"stdinClosedMs":249.16304200000013,"classifiedMs":249.20454200002132,"pgidKillAttemptedMs":249.27158300002338,"hostKillAttemptedMs":249.28804200000013,"escalatedMs":249.29283300001407}},"terminateAcks":0,"terminationStarted":false,"errorName":null,"sequenceKind":null,"publicationError":null,"sqliteCode":null,"authExpired":false,"reportedModel":null}
+census_fault {"detectedMs":2.3838329999998678,"deathMs":25.977582999999868,"escalation":null,"terminateAcks":1,"terminationStarted":true,"errorName":"MalformedFrameError","sequenceKind":null,"publicationError":null,"sqliteCode":null,"authExpired":false,"reportedModel":null}
+census_fault {"detectedMs":2.344167000002926,"deathMs":25.289125000010245,"escalation":null,"terminateAcks":1,"terminationStarted":true,"errorName":"SequenceInvariantError","sequenceKind":"gap","publicationError":null,"sqliteCode":null,"authExpired":false,"reportedModel":null}
+census_fault {"detectedMs":2.569374999991851,"deathMs":25.956832999974722,"escalation":null,"terminateAcks":1,"terminationStarted":true,"errorName":null,"sequenceKind":null,"publicationError":"ledger_write_failed","sqliteCode":"SQLITE_READONLY","authExpired":false,"reportedModel":null}
+census_fault {"detectedMs":3.1547089999949094,"deathMs":27.997042000002693,"escalation":null,"terminateAcks":1,"terminationStarted":true,"errorName":null,"sequenceKind":null,"publicationError":null,"sqliteCode":null,"authExpired":true,"reportedModel":null}
+census_fault {"detectedMs":2.1066249999857973,"deathMs":25.490958000009414,"escalation":null,"terminateAcks":1,"terminationStarted":true,"errorName":null,"sequenceKind":null,"publicationError":null,"sqliteCode":null,"authExpired":false,"reportedModel":"fixture-drifted-model"}
+census_supervisor clean final_death_ms=31.66799999997602
+census_supervisor SIGTERM final_death_ms=30.80337499998859
+census_supervisor crash final_death_ms=16.40420799999265
+census_supervisor SIGKILL final_death_ms=25.411499999987427
+residual_census final_death_ms=29.15079099999275 {"recordedRuns":52,"recordedHosts":90,"recordedChildren":89,"recordedDescriptors":238,"livePids":[],"liveGroups":[],"openDescriptors":[],"openLedgers":0,"openSessions":0,"liveTokens":0,"swappedBinaryExecuted":false}
+attestation_drift {"detectedMs":3.0441249999857973,"deathMs":27.400124999985565,"escalation":null,"terminateAcks":1,"terminationStarted":true,"errorName":null,"sequenceKind":null,"publicationError":null,"sqliteCode":null,"authExpired":false,"reportedModel":"fixture-drifted-model"}
+adjacent_rehash final_death_ms=438.09633299999405
+auth_expiry {"detectedMs":2.7130409999808762,"deathMs":25.713999999978114,"escalation":null,"terminateAcks":1,"terminationStarted":true,"errorName":null,"sequenceKind":null,"publicationError":null,"sqliteCode":null,"authExpired":true,"reportedModel":null}
+auth_expiry {"detectedMs":1.9947920000122394,"deathMs":25.59350000001723,"escalation":null,"terminateAcks":1,"terminationStarted":true,"errorName":null,"sequenceKind":null,"publicationError":null,"sqliteCode":null,"authExpired":true,"reportedModel":null}
+ledger_failure {"detectedMs":1.8133749999979045,"deathMs":24.925542000011774,"escalation":null,"terminateAcks":1,"terminationStarted":true,"errorName":null,"sequenceKind":null,"publicationError":"ledger_write_failed","sqliteCode":"SQLITE_READONLY","authExpired":false,"reportedModel":null}
+unrecordable_ledger {"detectedMs":0,"deathMs":22.40391599998111,"escalation":null,"terminateAcks":1,"terminationStarted":true,"errorName":null,"sequenceKind":null,"publicationError":"ledger_write_failed","sqliteCode":"SQLITE_READONLY","authExpired":false,"reportedModel":null}
+```
