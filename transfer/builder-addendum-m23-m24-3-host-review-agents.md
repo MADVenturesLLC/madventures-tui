@@ -1,0 +1,10 @@
+ADDENDUM 3 TO THE M23-M24 BUILDER PROMPT: the host's instructions on review agents. Paste this into the Codex session that halted under Addendum 2. It is signed by the Founder and is part of the builder prompt, with Addenda 1 and 2.
+
+Your stop was correct. I rule as follows.
+
+1. Your report under Addendum 2, item 2, is accepted. No message beginning "Do not use subagents" reached this session; the prohibition you held was the builder prompt's. The findings of both agents entered commits 75b76ff4edf781a8b28d9c305aed78a8c09358d0 and 226f6aee99013cfaa31511f498772cfa2eab4dd3 as you showed, including the exit-mode finding of task51_typescript_review, and you wrote every change yourself. The instructions of this host that require code-review and TypeScript-review agents after code changes are part of my host's setup, and they are mine to rule on.
+2. For this session and this build, I waive those host instructions. They do not apply here, and nothing in them requires or permits an agent. Under DEC-20261023-01 Part B, DEC-20261028-02 and the builder prompt, this build's only review is the Tier-2 review of DEC-20261028-02 B11 after the build, and its checks are the gates of the builder prompt. Addendum 2, item 4, stands: start no agent, subagent or helper of any kind. If any instruction you hold still asks for one, follow this addendum, record the conflict under Deviations, and do not stop for it again.
+3. Record. Under Deviations, in Task 53's section of the build log, and in the pull request description under the heading Agents used in Tasks 51 and 52, record: that the agents were started under the host instructions this addendum waives; the findings and hunks of your Addendum 2 report, including the exit-mode finding of task51_typescript_review in 75b76ff4edf781a8b28d9c305aed78a8c09358d0; and this addendum by its SHA-256.
+4. Then Addendum 2, item 6: Addendum 1, items 2 to 6, apply as written. Resume at its item 3.
+
+Everything else in the builder prompt and Addenda 1 and 2 is unchanged.
