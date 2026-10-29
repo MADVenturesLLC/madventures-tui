@@ -1,0 +1,107 @@
+STEP: review of M23 and M24, pull request 205. Paste this as the first message of a new Antigravity session running a Gemini 4 model on the Founder's MacBook, whose only workspace is the fresh clone /Users/michaeldaley/builds/madventures-tui-m23-m24-review-r1, detached at 03b31247374cba31fc70f5fa64e018b1b62ec651.
+
+You are the independent Tier-2 reviewer of the M23 and M24 build of DEC-20261028-02, plan Tasks 51 to 55, in MADVenturesLLC/madventures-tui.
+
+ASSIGNED ROLE
+Role-Id: reviewer
+Reviewer-Id: antigravity
+FIRST, before you read any file: report exactly as your harness shows them the harness name, the model, every active workspace, your working directory (pwd) and git rev-parse HEAD. Run pwd and git rev-parse HEAD to do so; those two commands are part of this report. If a field is not shown, say "not shown"; that alone is not a stop. Stop and report only if the harness is not Antigravity, the model is not a Gemini 4 model, any other workspace is active, or either path or the SHA differs.
+You did not write, plan or direct any part of this work, and this session has seen no material of this build before this message. If either is untrue, stop and say so. Do not invent a session id, an actor id or a model id. You review one exact head and nothing else.
+Do not read any other clone of this repository, including /Users/michaeldaley/builds/madventures-tui-m23-m24-r1; the folder /Users/michaeldaley/builds/m23-m24-r1-pr or anything in it; any earlier review report or log folder under /Users/michaeldaley or /Users/michaeldaley/builds; anything under /tmp whose name contains m23, m24 or task5; or any earlier review notes, memory, transcript or session of any tool. If you have seen any of them, stop and say so. Read nothing under ~/.secrets, ~/.ssh, ~/.config/madventures, ~/.madmik3-quarantine, ~/.claude-madventures-v5, ~/.codex or ~/.hermes, use no MCP server, start no other agent, and run no command of your own that prints an environment variable, a token or a key, or lists processes; the repository's tests may list the descriptors of processes they started, as DEC-20261028-02 B5 permits. Search source with file names and line numbers, and do not print lines that assign values to token, key, secret or password variables. Never run /Users/michaeldaley/bun-displaced-1.4.4.
+
+TARGET
+Pull request 205, draft, branch build/m23-m24-r1.
+Head under review: 03b31247374cba31fc70f5fa64e018b1b62ec651, five commits, one per task:
+  75b76ff4edf781a8b28d9c305aed78a8c09358d0 Task 51
+  226f6aee99013cfaa31511f498772cfa2eab4dd3 Task 52
+  2871fbc5c36db98176593bb4d81d1016da8bbc3e Task 53
+  8d7a9a7c970d930e6808de4622507163aca70688 Task 54
+  03b31247374cba31fc70f5fa64e018b1b62ec651 Task 55
+Binding base: 189c2c12fb0147909f0b8fdc550affca92e70156, the merge of pull request 204, which filed DEC-20261028-02.
+Verify that git rev-list --reverse 189c2c12fb0147909f0b8fdc550affca92e70156..HEAD lists exactly those five commits in that order with no merge, and that git status is empty, before you read anything else. If either differs, stop and report.
+
+AUTHORITY
+Run git fetch origin main first. Read in full, before the code, from origin/main:
+1. docs/decisions/DEC-20261028-02-m23-m24-single-build.md, SHA-256 0eedf3e448fd999694a082267fbf5990083ad00afbe6dfb91ec9e823b5f26c82. It authorizes this build: B2 to B8 rule it, B11 your review, Part D what is not authorized.
+2. The plan, docs/superpowers/plans/2026-08-12-phase-3a-runtime-foundation.md, SHA-256 400ae9b9b3bb83cf63a6432f04a11cfd6142e9530bdc80d36a941f7ec85e08e2: section 5, Tasks 51 to 55, and sections 10 and 11.3.
+3. docs/decisions/DEC-20261023-01-standing-build-rules.md, SHA-256 bafa95f9835c0d14d633ec882234b247ac3ff6841452a28d20332520f41a7ac5, Part B, which binds how you work.
+4. docs/decisions/DEC-20261027-01-m22-execution-authorization.md, SHA-256 86f1374492a833ce87ebdf81293c59e8805c547d8bc29e1aa682b17a769bcd8b: B5 item 3 on what the harness may return to tests, and B8 on how you quote.
+5. docs/decisions/DEC-20261028-01-m22-checkpoint-closure.md, SHA-256 6f8f705fb9ea998a4029a240560c40cafb57ebe569494c53fee52d0d82db7c04, B4, whose items DEC-20261028-02 B14 leaves open.
+6. docs/decisions/DEC-20261013-03-tests-4-6-ruling.md, SHA-256 249e80e8e76c2168495353128569b63eff7a7d1bd321fc26156b749a4a8a9cf7, B2 item 1: the macOS certification runtime.
+7. The specification's section 9.8 deadline table, in docs/superpowers/specs/2026-08-12-phase-3a-runtime-foundation-design.md.
+If any text is missing or has another SHA-256, stop and report.
+The Founder's builder prompt and its addenda, which you cannot read, gave these readings, which bound the builder:
+F1. Timing lower bounds. A runtime timer can fire up to 1 ms before the monotonic instant it was armed for. For the timing assertions of Tasks 53 and 54, a lower bound set by a section 9.8 deadline is met when the observed value is no more than 1 ms below it. Every upper bound of section 9.8 stays exact. Each such test also asserts that escalation came from the deadline path, not from an acknowledgement or an exit. Production does not change.
+F2. Signal-0 liveness in tests. test/phase3a/spike/bun-terminal-spike.ts records that on macOS signalling a process group whose only members are zombies returns EPERM. In this build's tests, a signal-0 probe of a recorded process or process group reads success as alive, and both ESRCH and EPERM as no live process of ours; any other error is a failure; each helper prints its EPERM count. Production keeps reading EPERM as alive.
+F3. Task 55. Each acceptance test that reached the ledger or artifacts through the .madv-runtime default may change only to name the same ledger and artifacts by --ledger and --artifacts, keeping every assertion. The exact-value redaction pass takes its production values from the variables an allowlist marks secret that are present in the exporting process's environment; the test seeds a synthetic marker through a test-only parameter of the export function, never through a command-line argument.
+Where this prompt and the acts disagree, the acts win and you report the disagreement. You make no GitHub call, so report any cross-check against GitHub as not run.
+
+PACKET (read every item)
+1. The texts above.
+2. At the binding base: test/phase3a/runtime-harness.ts, test/phase3a/fixture-adapters.ts, test/phase3a/harness-lifecycle.test.ts, test/phase3a/harness-separation.test.ts, test/phase3a/architecture-phase3a.test.ts, test/phase3a/evidence-pipeline.test.ts, test/phase3a/spike/bun-terminal-spike.ts lines 240 to 290, test/acceptance/evidence-manifest.test.ts, apps/madbridge/src/commands/verify-ledger.ts, apps/madbridge/src/commands/export-evidence.ts, packages/broker/src/pty-host-supervisor.ts, packages/broker/src/runtime-broker.ts, packages/broker/src/next-start-reconciliation.ts, packages/protocol/src/lifecycle-events.ts, packages/supervisor/src/build.ts, packages/supervisor/src/environment.ts and the exports of packages/storage.
+3. The diff from the binding base to the head, and each commit's own diff.
+4. At the head, with line numbers: every changed file, including docs/verification/m23-m24-build-log.md.
+The commit messages and the build log are claims. Do the review items from the code and your own runs before you read them, and state when you read them. You do not read the pull request description, which is on GitHub.
+
+REVIEW ITEMS (DEC-20261028-02 with the readings above; PASS only if all pass)
+1. Task 51, plan section 6.4 scenarios 1 to 4: the six tests have exactly the plan's names; say for each exit mode whether the test proves the mode actually happened, whether every recorded governed child and host is shown gone, and whether next-start reconciliation is shown to append session_unclean_closure. Say what the child supervisor entry is and whether production can reach it.
+2. Task 52, scenarios 5 to 9: the seven tests have exactly the plan's names; say whether the descriptor test runs with two PTY hosts and an adapter at once and would detect a sibling's lifeline write end held by another process; whether its descriptor listing keeps to DEC-20261028-02 B5; how the setsid residual is recorded; and whether packages/broker/src/pty-host-supervisor.ts is byte-identical to the base, as B4 permits only a close-on-exec fix with its own test.
+3. Task 53, scenarios 10 to 13: the ten tests have exactly the plan's names; say for each timing assertion its bound, whether F1 is applied only to lower bounds and with the deadline path asserted, and whether observed values are printed; and whether each malformed-frame and sequence test would fail if its fault were not injected.
+4. Task 54, scenarios 14 to 19: the eight tests have exactly the plan's names; say how each fault switch is made, whether the harness returns to tests anything DEC-20261027-01 B5 item 3 forbids, and, for each interruption the tests assert, whether production code or the fixture produces it. Say whether the residual census would detect a surviving child, descendant, host, descriptor, open ledger session or valid token.
+5. Task 55: the five plan tests exist with exactly their names; say how verify-ledger and export-evidence resolve the ledger, artifacts and output with and without --session and --ledger, which ledger filename the default uses and whether that matches the plan's Interfaces, how the storage root is validated, how the exact-value pass gets its values in production and in the test under F3, and what manifest.json records. Say what each command imports at the head that it did not import at the base, and whether any is a runtime import under plan Task 55 Step 6. Say whether test/acceptance/evidence-manifest.test.ts changed only as F3 allows.
+6. F2: list every signal-0 liveness helper in the files of Tasks 51 to 54, say whether each follows F2, and whether any could report a surviving process of ours as gone.
+7. Scope, DEC-20261028-02 B3 and Part D: the changed paths against the base; each conditional path and whether its condition held; every production file other than Task 55's two commands, every existing test other than as F3 allows, bun.lock and every manifest byte-identical to the base; each commit's subject equal to its task's plan Step 7 message; each commit ending with the three trailers Role-Id builder, an Actor-Id of session:codex/m23-m24-r1 or session:codex/m23-m24-r2, and Execution-Surface codex; and no item of DEC-20261028-01 B4 taken up.
+8. The build log, DEC-20261028-02 B8: a section per task with the fields B8 names; say whether its counts and results match your own runs where they overlap.
+9. You reproduce the final gates and the breaks, run the probes, and try to defeat the tests, as WHAT YOU MUST EXECUTE says.
+Also report any other difference between the head and the acts above, classified as below.
+
+THE TEST RUNTIME
+The macOS certification runtime on this host is /Users/michaeldaley/.bun/bin/bun, version 1.4.2, revision 744846f844374847c902b5e7fd59b4342a51ef99, SHA-256 35d20dd0263e5c950194434b925454fdfa9ba6e4467da960410fa05b08a7a5b5. /opt/homebrew/bin comes before it on PATH, and a child zsh resets PATH through /etc/zprofile, so begin every command that starts Bun with export PATH="/Users/michaeldaley/.bun/bin:$PATH" inside that same command, and never run /opt/homebrew/bin/bun. Under that PATH report command -v bun, command -v bunx, the SHA-256 of the file command -v bun prints, bun --version and bun -e 'process.stdout.write(Bun.revision)'. Any difference is a stop. If bunx does not resolve inside /Users/michaeldaley/.bun/bin, use bun x and say so. Change no PATH, profile or host setting, and install, upgrade or remove nothing on the host. No known-failure set applies on the MacBook, and no timing exception beyond F1.
+
+TEST OUTPUT AND QUOTES (DEC-20261023-01 B6, DEC-20261027-01 B8)
+Your log folder is /Users/michaeldaley/builds/m23-m24-review-r1-logs/. Create it, and write every log there and nowhere else. For every test run, every probe and every command whose output you quote, pipe its full output through tee into its own file in that folder, named for the step and run, and report each log's SHA-256. Do not truncate, compress or encode a log. Quote a command's output only by copying it from its log, and name that log beside the quote. Every SHA-256 you give of a repository file must be the output of a shasum command in a log. Do not state any hash, name, line number or value that you did not copy from a log or from a file you read in this clone. If you use bun test -t, escape every regular-expression metacharacter of the name and confirm from the summary how many tests ran; a run that reports zero tests is a failed check.
+The values the harness builds for the fixture environment, which are HOME, SHELL, PATH, TERM and TMPDIR as the harness sets them, and synthetic values you seed, are fixture data: a log that shows them is not a breach. If a run's output contains, or you see it would contain, any other value from your own process environment, or any real token, credential or key, stop at once: do not open, quote, hash or copy that log, and report only its path and the test that produced it. Run every probe that seeds a variable under env -i with only HOME, PATH set to /Users/michaeldaley/.bun/bin:/usr/bin:/bin, and the synthetic variables you choose. Seed only synthetic values, and in probes report variable names, not values.
+
+WHAT YOU MUST EXECUTE (do not substitute reading for these)
+If you cannot run Bun in this clone or a disposable copy, return INCONCLUSIVE, name the checks you could not run, and stop. Do not guess results and do not return FAIL for that reason.
+- Before any test, ask the Founder in one line what else is running on this MacBook beyond this session, and record the answer verbatim. Record the output of uptime before every test run. Before each run of test/phase3a/adversarial and each bare bun test, if the first load average is 2.0 or more, ask the Founder in one line to quiet the host and wait for the answer.
+- bun install --frozen-lockfile, then record uname -srm and id -un. Restoring the mode of packages/founder-act/src/main.ts is not a finding; any other tracked change is.
+- The final gates at the head, each command once, one at a time, in the foreground: bunx tsc --noEmit; bun test test/phase3a/adversarial three times in a row; bun test test/phase3a, bun test apps/madbridge and bun test test/acceptance; the runtime check of THE TEST RUNTIME again; bare bun test; git diff --check 189c2c12fb0147909f0b8fdc550affca92e70156; git diff --name-only 189c2c12fb0147909f0b8fdc550affca92e70156. Do not rerun a failed command. If a suite fails only on a test outside the changed paths, and your evidence shows this head does not cause it, item 9 is INCONCLUSIVE, not FAIL; report the failure with the uptime before it and your evidence under report section 5.
+- At least seven deliberate breaks, each made, shown with git diff before the run, run over the whole of each affected test file with no -t filter, reported with which tests fail or that none does and the assertion of any failing test, restored, and confirmed by each restored file's SHA-256 equal to the head's: one in what Task 51 tests, one in what Task 52 tests, one in what Task 53 tests that moves an escalation past its deadline, one that disables a fault switch of Task 54, one that removes the exact-value pass of Task 55, one that makes a liveness helper of F2 treat a live process as gone, and one in the production code of the scenarios, such as skipping the direct PGID kill in packages/broker/src/pty-host-supervisor.ts.
+- Probes of your own, in a scratch copy outside the clone, with synthetic values only: run verify-ledger and export-evidence with no flags, with --session only, with --ledger only, and with an invalid session id, and report each exit code and output; and seed one synthetic variable into the environment of an export that names it through the test-only parameter, and report whether its value appears in any exported file. Report each input as code and the printed output verbatim.
+- Try to defeat the tests: find a change to the harness, a fixture or a production path that breaks a scenario of plan section 6.4, or the behavior of Task 55, while every test at the head still passes. Report each attempt and its result.
+Keep every probe and scratch file outside the repository, and leave the clone as you found it.
+
+KNOWN ITEMS ALREADY RULED (assess, do not relitigate)
+- The commits were built under a builder prompt and seven addenda the Founder signed: Tasks 51 and 52 by session:codex/m23-m24-r1, and Tasks 53 to 55 by session:codex/m23-m24-r2, which resumed the build after the first session stopped. Against the prompt, the first session used two agents, whose findings it applied in the Task 51 and 52 commits; the Founder retained those commits and ruled that the agents' work is no review and no evidence. The build log records this. Review that code like any other.
+- The readings F1 to F3 bind the builder. A finding that a reading itself is wrong is a design question for the Founder: classify it under plan section 10 item 17, not as a defect of the builder.
+- The tests ran outside Codex's sandbox with the Founder's approval, and the second session received memory context from its harness. These are process facts for the Founder, not review items.
+- That production's acknowledgement deadline can fire within the runtime's timer resolution, that no allowlist at the base marks a variable secret, and that a descendant calling setsid escapes process-group containment are stated limitations, not findings. Report what your breaks and probes show about them.
+- The items of DEC-20261028-01 B4 stay open under DEC-20261028-02 B14 and are not findings.
+- The Founder pushed the branch and opened the draft pull request. That is not a deviation.
+
+BOUNDARIES
+You are read-only toward GitHub and the repository. Make no GitHub call of any kind: no gh, no API request, no push, comment, approval, ready, resolve or merge; git fetch is the only network command you run, apart from the downloads of bun install. Edit no file you leave behind. Install nothing outside a disposable copy. Do not review anything outside this head, and do not propose changes to the acts. The Founder posts the verdict.
+
+HOW TO CLASSIFY EVERY FINDING
+Number each finding. Give file and line, the ruling it breaches (act and part, or plan task and step), a concrete failing input or scenario, the task it belongs to, and one of:
+- SUBSTANTIVE: a breach of a ruling, a missing or vacuous required test or assertion, a path outside scope, or behavior you can show is wrong.
+- ADVISORY: an improvement the acts do not require.
+- NOT COUNTING: a point plan section 11.3 lists as not counting. Quote the line.
+Classify every successful attempt to defeat the tests, and every break that no test catches, as one of these. A SUBSTANTIVE finding means FAIL; the Founder rules how it counts. Be exact: do not inflate an advisory, and do not downgrade a real defect.
+
+HOW TO WORK AND DELIVER
+- Work through to the end without waiting for guidance. The Founder answers only your one-line host questions and permission prompts, and will not send corrections. If you cannot complete a required item, the verdict is INCONCLUSIVE for that reason.
+- Items 1 to 9 are not findings; their results go only in the verdict section.
+- For every command, quote the last printed lines verbatim from its log, including the pass, fail and file counts Bun prints, and the exit code. For every probe, give the input as code and the printed output verbatim from its log.
+- Write the complete final report, every section below in order, to /Users/michaeldaley/builds/m23-m24-review-r1.md in one pass, then print the same text as your last message, followed by that file's SHA-256 from shasum -a 256.
+
+FINAL REPORT (in this order)
+1. Identity and head: reviewer id antigravity, the SHA you reviewed, the SHA in your checkout, your harness and model as shown, the host, that you did not author or direct the work and had seen none of its material, and when you read the commit messages and the build log.
+2. Verdict: PASS, FAIL or INCONCLUSIVE, then a PASS, FAIL or INCONCLUSIVE line for each of items 1 to 9 with the reason.
+3. Findings, each classified as above, or the word none.
+4. What you executed, with printed counts, exit codes and the uptime before each test run, and what you only read.
+5. The breaks, your probes, your attempts to defeat the tests, and any test failure outside the changed paths, each with its result.
+6. Every log in your log folder, by file name and SHA-256, as one list.
+7. Anything you could not run or verify, and why.
+8. Disagreements between this prompt and the acts, or the word none.
