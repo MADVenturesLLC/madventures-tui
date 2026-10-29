@@ -12,8 +12,10 @@ import { runPurePreflightWithDependencies } from "../../packages/supervisor/src/
 import { BUILD_STEPS, rollbackBuild, runTransactionalBuildWithDependencies,
   type BuildFailureCode, type BuildStep, type PartialBuildState } from "../../packages/supervisor/src/build";
 import type { BrokerClient, BrokerSnapshot } from "../../packages/broker/src/client";
-import { unsafeTestOnlyIngestOutputFrame } from "../../packages/broker/src/in-process-client";
-import { escalateWedgedHost, spawnPtyHost } from "../../packages/broker/src/pty-host-supervisor";
+import { SequenceInvariantError, unsafeTestOnlyIngestOutputFrame, unsafeTestOnlyIngestRawOutputFrame,
+  unsafeTestOnlyOfferSnapshotSeq } from "../../packages/broker/src/in-process-client";
+import { escalateWedgedHost, spawnPtyHost, type EscalationOutcome } from "../../packages/broker/src/pty-host-supervisor";
+import { decodeFact, MalformedFrameError } from "../../packages/broker/src/pty-host-protocol";
 import { HOST_DEADLINES_MS } from "../../packages/pty-host/src/signals";
 import { fixtureCapabilityRecord, fixtureExecutableSource } from "./fixture-adapters";
 
@@ -65,6 +67,10 @@ export interface HarnessOptions {
   readonly injectFailureAt?: BuildStep;
   readonly retainStorage?: boolean;
   readonly processScenario?: ProcessScenario;
+  readonly wedgeHostAfter?: number;
+  readonly emitMalformedFrame?: "malformed" | "unknown";
+  readonly skewOutputSeq?: "duplicate" | "regression" | "gap";
+  readonly skewSnapshotSeq?: boolean;
 }
 export interface HarnessSession {
   readonly client: BrokerClient;
@@ -94,7 +100,17 @@ export class RealSurfaceRejected extends Error {
 
 function requestedSurfaces(options: HarnessOptions): readonly SurfaceId[] {
   if (options === null || typeof options !== "object" || Object.getPrototypeOf(options) !== Object.prototype
-    || Reflect.ownKeys(options).some(key => !["surfaces", "injectFailureAt", "retainStorage", "processScenario"].includes(String(key)))) throw new Error("InvalidHarnessOptions");
+    || Reflect.ownKeys(options).some(key => !["surfaces", "injectFailureAt", "retainStorage", "processScenario",
+      "wedgeHostAfter", "emitMalformedFrame", "skewOutputSeq", "skewSnapshotSeq"].includes(String(key)))) throw new Error("InvalidHarnessOptions");
+  for (const key of ["wedgeHostAfter", "emitMalformedFrame", "skewOutputSeq", "skewSnapshotSeq"] as const) {
+    const field = Object.getOwnPropertyDescriptor(options, key);
+    if (field === undefined) continue;
+    if (!("value" in field) || (key === "wedgeHostAfter"
+      ? typeof field.value !== "number" || !Number.isFinite(field.value) || field.value < 0
+      : key === "emitMalformedFrame" ? !["malformed", "unknown"].includes(field.value)
+      : key === "skewOutputSeq" ? !["duplicate", "regression", "gap"].includes(field.value)
+      : typeof field.value !== "boolean")) throw new Error("InvalidHarnessOptions");
+  }
   const scenario = Object.getOwnPropertyDescriptor(options, "processScenario");
   if (scenario !== undefined && (!("value" in scenario) || !PROCESS_SCENARIOS.includes(scenario.value))) throw new Error("InvalidHarnessOptions");
   const retain = Object.getOwnPropertyDescriptor(options, "retainStorage");
@@ -126,9 +142,17 @@ function git(args: readonly string[]): Buffer {
   return result.stdout;
 }
 
+let livenessEpermCount = 0;
+export function fixtureLivenessEpermCount(): number { return livenessEpermCount; }
+
 function alive(pid: number): boolean {
   try { process.kill(pid, 0); return true; }
-  catch (error) { if ((error as NodeJS.ErrnoException).code === "ESRCH") return false; throw error; }
+  catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "EPERM") { livenessEpermCount += 1; return false; }
+    if (code === "ESRCH") return false;
+    throw error;
+  }
 }
 
 async function terminateFixtures(state: PartialBuildState): Promise<void> {
@@ -189,6 +213,10 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
   let faultTimer: ReturnType<typeof setTimeout> | undefined;
   let faultWork = Promise.resolve();
   let faultError: unknown;
+  const faultReport: FixtureFaultReport = { detectedMs: 0, deathMs: 0, escalation: null,
+    terminateAcks: 0, terminationStarted: false, errorName: null, sequenceKind: null };
+  let faultStarted: number | undefined;
+  let builderOutputSeq = 0;
   const terminate = () => termination ??= state === undefined
     ? Promise.reject(new Error("FixtureStateUnavailable")) : (async () => {
       try { await terminateFixtures(state!); }
@@ -301,6 +329,11 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
         return spawnPtyHost(descriptor);
       },
       terminateGovernedProcesses: terminate,
+      observeLifecycle: observation => {
+        if (observation.phase === "interrupted" && faultStarted !== undefined) {
+          faultReport.detectedMs = performance.now() - faultStarted;
+        }
+      },
     });
     state = result.ok ? result.state : result.partialState;
     if (!result.ok) throw new FixtureStartupFailure(result.failedStep, result.failure, state, root);
@@ -322,7 +355,14 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
     for (const host of state.hosts) {
       pumps.push((async () => {
         for await (const fact of host.handle.facts()) {
-          if (fact.kind === "output") unsafeTestOnlyIngestOutputFrame(underlying, host.executionId, fact.bytes);
+          if (fact.kind === "output") {
+            unsafeTestOnlyIngestOutputFrame(underlying, host.executionId, fact.bytes);
+            if (host.executionId === "builder") builderOutputSeq += 1;
+          }
+          if (host.executionId === "builder" && faultStarted !== undefined) {
+            if (fact.kind === "ack" && fact.ofKind === "terminate") faultReport.terminateAcks += 1;
+            if (fact.kind === "termination_started") faultReport.terminationStarted = true;
+          }
         }
       })().catch(error => { pumpErrors.push(error); }));
     }
@@ -365,6 +405,55 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
     });
     Object.freeze(client);
     const session = Object.freeze({ client, storage: state.storage, close, interrupt });
+    faultReports.set(session, faultReport);
+    if (options.wedgeHostAfter !== undefined || options.emitMalformedFrame !== undefined
+      || options.skewOutputSeq !== undefined || options.skewSnapshotSeq === true) {
+      faultTimer = setTimeout(() => {
+        faultWork = (async () => {
+          faultStarted = performance.now();
+          if (options.wedgeHostAfter !== undefined) {
+            const host = state!.hosts[0]!, child = state!.children[0]!;
+            process.kill(host.hostPid, "SIGSTOP");
+            const outcome = await escalateWedgedHost(host.handle, child.pgid!, host.hostPid);
+            faultReport.escalation = outcome;
+            faultReport.detectedMs = outcome.observedMs.ackWindowEndedMs!;
+            if (outcome.sessionInterruptionRequired) await interrupt(outcome.reason);
+          } else if (options.emitMalformedFrame !== undefined) {
+            // Inject raw fact bytes at the harness receive boundary through the production codec.
+            const bytes = options.emitMalformedFrame === "unknown"
+              ? new Uint8Array([0, 0, 0, 1, 255]) : new Uint8Array([0, 0, 0, 2, 1, 1]);
+            try { decodeFact(bytes); }
+            catch (error) {
+              if (!(error instanceof MalformedFrameError)) throw error;
+              faultReport.errorName = error.name;
+              faultReport.detectedMs = performance.now() - faultStarted;
+              await interrupt("pty_host_failure");
+            }
+          } else {
+            try {
+              if (options.skewSnapshotSeq === true) {
+                await unsafeTestOnlyOfferSnapshotSeq(underlying, Number.MAX_SAFE_INTEGER);
+              } else {
+                const snapshot = await underlying.getSnapshot();
+                const frame = { sessionId: snapshot.sessionId, executionId: "builder", bytes: new Uint8Array([1]) };
+                await unsafeTestOnlyIngestRawOutputFrame(underlying, { ...frame, outputSeq: ++builderOutputSeq });
+                const offered = options.skewOutputSeq === "duplicate" ? builderOutputSeq
+                  : options.skewOutputSeq === "regression" ? builderOutputSeq - 1 : builderOutputSeq + 2;
+                await unsafeTestOnlyIngestRawOutputFrame(underlying, { ...frame, outputSeq: offered });
+              }
+            } catch (error) {
+              if (!(error instanceof SequenceInvariantError)) throw error;
+              faultReport.errorName = error.name;
+              faultReport.sequenceKind = error.kind;
+              await Promise.all(pumps);
+              await underlying.close();
+            }
+          }
+          faultReport.deathMs = performance.now() - faultStarted;
+        })();
+        void faultWork.catch(error => { faultError = error; });
+      }, options.wedgeHostAfter ?? 100);
+    }
     if (options.processScenario !== undefined) {
       processReports.set(session, {
         supervisorPid: process.pid, adapterPid: fixtureAdapter!.pid,
@@ -402,6 +491,22 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
     }
     throw error;
   }
+}
+
+export interface FixtureFaultReport {
+  detectedMs: number;
+  deathMs: number;
+  escalation: EscalationOutcome | null;
+  terminateAcks: number;
+  terminationStarted: boolean;
+  errorName: string | null;
+  sequenceKind: string | null;
+}
+const faultReports = new WeakMap<HarnessSession, FixtureFaultReport>();
+export function fixtureFaultReport(session: HarnessSession): Readonly<FixtureFaultReport> {
+  const report = faultReports.get(session);
+  if (report === undefined) throw new Error("FixtureFaultReportUnavailable");
+  return freeze(structuredClone(report));
 }
 
 const PROCESS_SCENARIOS = ["descriptors", "grandchild", "ignore-term", "lifeline-eof", "host-exit", "setsid"] as const;

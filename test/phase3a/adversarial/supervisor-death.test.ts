@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { afterAll, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { Ledger } from "@madventures/ledger";
@@ -19,9 +19,17 @@ interface ChildSupervisor {
   dispose(): Promise<void>;
 }
 
+let livenessEpermCount = 0;
+afterAll(() => console.log(`supervisor-death alive EPERM count=${livenessEpermCount}; runtime-harness alive EPERM count=${harness.fixtureLivenessEpermCount()}`));
+
 function alive(pid: number): boolean {
   try { process.kill(pid, 0); return true; }
-  catch (error) { if ((error as NodeJS.ErrnoException).code === "ESRCH") return false; throw error; }
+  catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "EPERM") { livenessEpermCount += 1; return false; }
+    if (code === "ESRCH") return false;
+    throw error;
+  }
 }
 
 async function scenario(mode: ExitMode, reconcile = false): Promise<void> {

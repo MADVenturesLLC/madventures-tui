@@ -1,11 +1,19 @@
-import { expect, test } from "bun:test";
+import { afterAll, expect, test } from "bun:test";
 import { readdirSync, readlinkSync } from "node:fs";
-import { startProcessScenario as start, fixtureProcessReport as report } from "../runtime-harness";
+import { startProcessScenario as start, fixtureProcessReport as report, fixtureLivenessEpermCount } from "../runtime-harness";
 interface Descriptor { fd: number; type: string; device?: string; inode?: string; peer?: string }
+
+let livenessEpermCount = 0;
+afterAll(() => console.log(`descriptor-hygiene alive EPERM count=${livenessEpermCount}; runtime-harness alive EPERM count=${fixtureLivenessEpermCount()}`));
 
 function alive(pid: number): boolean {
   try { process.kill(pid, 0); return true; }
-  catch (error) { if ((error as NodeJS.ErrnoException).code === "ESRCH") return false; throw error; }
+  catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "EPERM") { livenessEpermCount += 1; return false; }
+    if (code === "ESRCH") return false;
+    throw error;
+  }
 }
 function descriptors(pid: number, recorded: readonly number[]): Descriptor[] {
   expect(recorded.includes(pid)).toBe(true);

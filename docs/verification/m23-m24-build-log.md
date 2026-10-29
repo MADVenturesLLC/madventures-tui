@@ -446,3 +446,229 @@ setsid_residual: recorded_count=1 group_containment=false
 ### Result
 
 RED failed for the absent adapter; Step 4 had 7 pass and 0 fail; the causal break failed; restored Step 5 typecheck exited 0 and Phase 3A had 104 pass and 0 fail. `git diff --check` exited 0. The current commit identity is recorded by the next section and final report. No B9 halt occurred.
+
+## Task 53 — resumed by session:codex/m23-m24-r2
+
+Built on Task 52 commit `226f6aee99013cfaa31511f498772cfa2eab4dd3`, parent `75b76ff4edf781a8b28d9c305aed78a8c09358d0`, whose parent is binding base `189c2c12fb0147909f0b8fdc550affca92e70156`.
+
+This section precedes the Task 53 commit. Its full commit identity is recorded by Task 54 and the final report, avoiding self-reference. Changed paths: runtime-harness.ts; new adversarial/wedged-host.test.ts and adversarial/sequence-invariants.test.ts; the three existing adversarial files named by Addendum 6; and this build log. No production path changed.
+
+### Resume identity, authority and custody
+
+Harness Codex; model shown GPT-6; sandbox shown danger-full-access; filesystem unrestricted; network enabled; approval policy not shown. Settings were not changed. Agent-creation tools are available; this session started no agent. Memory context was supplied; no hook output was supplied and no memory or earlier-session transcript files were read. Source discovery used in-clone reads, as the prompt forbids MCP servers. The host review-agent instructions are waived by Addenda 3 and 4; no agent is required or permitted for this build.
+
+Working directory `/Users/michaeldaley/builds/madventures-tui-m23-m24-r1`, branch `build/m23-m24-r1`, and the ancestry above matched. Initial status, verbatim:
+
+```text
+ M test/phase3a/runtime-harness.ts
+?? test/phase3a/adversarial/sequence-invariants.test.ts
+?? test/phase3a/adversarial/wedged-host.test.ts
+```
+
+The leftovers were saved under `/Users/michaeldaley/builds/m23-m24-r1-pr/r1-task53-leftover/`, then the tracked path restored and exactly the copied untracked files deleted, under Addendum 4 item 3. Status became empty. Their contents were not read or adapted; Task 53 was written fresh from plan Step 1. Saved-file SHA-256 values, confirmed with shasum:
+
+| Saved path relative to the archive | SHA-256 |
+| --- | --- |
+| status.txt | 90fa307750565e02bb110ccb2f14dcb75047266a639dd75cc31b6402cb8f9889 |
+| tracked.patch | 4e1fc51e87d7baf4106d49da9161c8e7e1f0e1f6997cdefd2a9fd97e129666c8 |
+| test/phase3a/adversarial/sequence-invariants.test.ts | 100295f89610bd87449cc2813f79d97ec00950eb0808fb4de11f1fd279956a5a |
+| test/phase3a/adversarial/wedged-host.test.ts | 0e6e2e89730297f5ac0b7035a9d724ffbac73d9d92c6aef9ae121cc09ad80aa3 |
+
+`git fetch origin main` exited 0. origin/main is exactly the binding base, and the upstream changed-path list is empty. All eight authority documents matched the prompt's hashes on origin/main and were read before the first edit; the six acts are ISSUED and signed Michael Daley. The initial Python hash comparison and archive hashes were reverified using the required macOS shasum command. Host from uname: Darwin 27.0.0 arm64; user from id -un: michaeldaley.
+
+Every runtime check so far matched `/Users/michaeldaley/.bun/bin/bun`, bunx at `/Users/michaeldaley/.bun/bin/bunx` symlinked to that Bun, version 1.4.2, revision 744846f844374847c902b5e7fd59b4342a51ef99, binary SHA-256 35d20dd0263e5c950194434b925454fdfa9ba6e4467da960410fa05b08a7a5b5. Checks occurred at identity, before the resume install, before Addendum 5's escalated run, before Addendum 6's break, and before Task 53 RED. Each Bun command set the required PATH inside its own command. bun.lock remains 34224c0133c44d967c4a4da8b75bf11093c573c47e42bcaf502c6d6f61c3e7c0. Install changed only the permitted main.ts executable bit; chmod 644 restored it before further work.
+
+Founder answer to precondition 5, verbatim:
+
+> Host quieted as far as I can. Visible apps: Finder, Claude, cmux, app_mode_loader, Kimi Code. Hermes processes: 0. Load averages: 1.90 1.77 2.09. Continue
+
+The answer arrived after the first resume suite; running that suite before the answer is recorded as a deviation. No process-listing command was run by this session.
+
+### Addenda and earlier-session record
+
+These are SHA-256 values of the exact supplied addendum bodies, from their ADDENDUM heading through their final sentence, UTF-8 with LF and one final newline, computed using shasum on stdin. They are not claims about an unseen signed filesystem artifact.
+
+| Addendum | SHA-256 |
+| --- | --- |
+| 1 | 1dd90f6dba570a0bf071b195514878a37a34e458252ccb46d9c831d711683939 |
+| 2 | d369bac9b0f3a25880f87c04683b5a00bb1a66816674de19b53487875eca5cfe |
+| 3 | cc2ce8bb08d4f1cc0a4b5b899c633e0a0f68da641ceeb25ba24c029fdb628927 |
+| 4 | 1a3b056cd6b1e47f0d3d8e8b663796f069fbe0f664574f17ddf1ad6e5738431f |
+| 5 | 6bb9938c2f2ae29b9c9295a6440f84d20b4ec887dbdcee01e3ae4ac10cd4cc3e |
+| 6 | ba48aa146bbc5efe26ec3e9ca3fedae64f3f260735f69bd316a8ed90a30074e2 |
+
+Agents used in Tasks 51 and 52: session:codex/m23-m24-r1 started task51_test_review and task51_typescript_review against the builder prompt, under host code-review and TypeScript-review instructions that Addendum 3 waives. As far as the carried record states, they were asked to review the in-clone Task 51/52 changes for test reach and TypeScript/code correctness. Their exact requests and transcripts were not kept. Both are completed and interrupted. No message beginning "Do not use subagents" reached that session. This record is carried from Addendum 4, not inferred from transcripts. Agent advice is not review evidence; the changes stand on the tests, gates and the later Tier-2 review.
+
+The previous builder wrote each change itself. The agent-derived hunks were verified with git show:
+
+* In 75b76ff4edf781a8b28d9c305aed78a8c09358d0, runtime-harness.ts's exit function bounds proc.exited with Promise.race and HOST_DEADLINES_MS.outerBound, clears its timer in finally, and returns exitCode and signalCode. The bounded-wait finding came from task51_test_review. The returned exit outcomes and per-mode assertions came from task51_typescript_review. supervisor-death.test.ts asserts exitCode 0 for clean/SIGTERM, nonzero for crash/SIGKILL, and signalCode SIGKILL only for SIGKILL. The nullable exitCode accommodates observed Bun behavior without weakening the signal assertion.
+* In 226f6aee99013cfaa31511f498772cfa2eab4dd3, runtime-harness.ts starts a separate observer of hosts[0].handle.facts(), waits for it to end, and only then calls interrupt("pty_host_failure") if not closing. The timer itself only kills the host. This task51_test_review finding corrects host-exit causality. The unchanged commits retain their r1 trailers.
+
+Earlier Task 53 halt, carried verbatim in substance by Addendum 4: test "a SIGSTOPped host is cleared through the direct PGID path" asserted `expect(data.observedMs.pgidKillAttemptedMs).toBeGreaterThanOrEqual(250)` and received 249.82662499999992, state S3, ackWindowEndedMs 249.6094579999999. Its log is `/Users/michaeldaley/builds/m23-m24-r1-pr/logs/task53-step4-run1.log`, SHA-256 de8d9c062faca74c2fbcd3947d15bcebb58360f7f1da9d2ceec3794b7001f6e0. The old assertion and old files were not reused. New Task 53 deadline lower bounds are 249 ms under Addendum 1, with S3, no terminate acknowledgement, no termination_started fact, closeStdinCalled true, no prior exit, ordered PGID/host kills, and printed observed values. Upper kill-initiation bounds remain exactly 500 ms and death exactly 5000 ms. Production's timer may fire before its monotonic deadline; re-arming production is deferred to the next act authorizing packages/broker.
+
+### Resume EPERM halts and authorized correction
+
+The first resume suite and Addendum 5's escalated suite both failed the same Task 52 test, "deliberate lifeline EOF terminates that child's process group only", at process-group.test.ts:7 and :61. Failure lines, verbatim:
+
+```text
+SystemError: kill() failed: EPERM: Operation not permitted
+ syscall: "kill",
+   errno: 1,
+    code: "EPERM"
+
+      at alive (/Users/michaeldaley/builds/madventures-tui-m23-m24-r1/test/phase3a/adversarial/process-group.test.ts:7:17)
+      at <anonymous> (/Users/michaeldaley/builds/madventures-tui-m23-m24-r1/test/phase3a/adversarial/process-group.test.ts:61:13)
+```
+
+Both runs had 103 pass, 1 fail, 2133 expect calls across 104 tests and 11 files, and exited 1. These were B9 item 4 / Addendum 4 item 4c and Addendum 5 item 3 halts respectively. No code was changed to resolve either until Addendum 6 authorized it. The operation was signal-0 liveness probing of a recorded process/group, not descriptor listing, sockets or file access. Addendum 6 supersedes Addendum 5 item 2's sandbox attribution: the escalated failure shows this was not a sandbox effect.
+
+The escalation request asked, verbatim:
+
+> Approve running this build’s test commands outside the sandbox for the rest of session session:codex/m23-m24-r2, as Addendum 5 §3 requires?
+
+The harness executed that require_escalated request; no separate textual approval response was exposed. Addendum 6 item 5 explicitly confirms "under the approval you already hold". No verbatim approval response is fabricated. The first resume run used default execution. Every test run after Addendum 5, including all runs under Addendum 6 and Task 53, requested require_escalated under that approval. The phrase "every test run of this session" in Addendum 6's recording instruction is recorded with this chronology, not applied retroactively to the earlier run.
+
+Spike evidence at test/phase3a/spike/bun-terminal-spike.ts:258-261 states:
+
+```text
+/** Process state via ps; empty when the pid is gone. A zombie is dead: its
+ *  reaping parent has already received the exit. Signaling a zombie-only
+ *  group returns EPERM on macOS (observed live), so zombies are never
+ *  counted as signalable — F13-class hazard, designed around (Q3). */
+```
+
+Under Addendum 6, the alive helpers in runtime-harness.ts, supervisor-death.test.ts, descriptor-hygiene.test.ts and process-group.test.ts now count EPERM and return false for it, return false for ESRCH, return true on success, and rethrow every other error. Existing assertions stay. A read-only counter accessor lets test afterAll hooks print the harness count without changing the exact stdout/stderr of the existing isolated harness test. Production's EPERM-as-alive behavior is unchanged.
+
+The Addendum 6 break temporarily omitted the grandchild scenario's interrupt, so the recorded governed processes were still live when gone() checked them. The full affected file ran without a filter; exactly "a grandchild in the governed process group is terminated" failed, 4 pass and 1 fail. Assertion, verbatim:
+
+```text
+19 |   for (const pid of [...data.hostPids, ...data.childPids, ...data.descendantPids]) expect(alive(pid)).toBe(false);
+error: expect(received).toBe(expected)
+
+Expected: false
+Received: true
+```
+
+The break was restored and these hashes matched the pre-break files: runtime-harness.ts f717bceaf7b696d31cbe7cf5f6c8df262f2d7163e495993a9db36b81e37fe5c9; supervisor-death.test.ts abda233ffd61564f64f853f8d1ceb738823250f2505b6b50a89f0b5f64c927d3; descriptor-hygiene.test.ts 379073827b3cf37ce49d2c49958a283feae1525aa6d021a0be8f4b18d7a8d6ef; process-group.test.ts e2c06b00029ba2173f40b33b20c65f7a7b6c59350eb6e84a2ec63e451c36a423. The changed-tests resume suite then passed 104/104, with every helper's EPERM count printed as 0. No unchanged failed suite was rerun to obtain a pass.
+
+### Commands and logs so far
+
+Log folder: `/Users/michaeldaley/builds/m23-m24-r1-pr/logs/`. All output is full and uncompressed. Exit 88 below is a load-gate stop before a test command was started, not a test run.
+
+| Command / step | Exit | Log | SHA-256 |
+| --- | ---: | --- | --- |
+| resume bun install --frozen-lockfile | 0 | r2-resume-install-run1.log | bbb04956f08397c0ce19dc36a629f4df2a5ddd3829aea96811a33be8bc6baf9e |
+| resume bunx tsc --noEmit | 0 | r2-resume-typecheck-run1.log | e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 |
+| resume bun test test/phase3a | 1 | r2-resume-phase3a-run1.log | 04d9e7225744ff471feb2fe32211e79032769f6287516b9ef9bb9603d1c4e781 |
+| Addendum 5 bun test test/phase3a | 1 | r2-resume-phase3a-escalated-run1.log | aba12a8390f82b047cd4d47b08883f91b27978bba77cf6add070d8f2244e9226 |
+| Addendum 6 break: bun test test/phase3a/adversarial/process-group.test.ts | 1 | r2-addendum6-break-run1.log | fae12dff40e28efdd228a156f220dbd711785580984c3a8a6be8dae07d82d10d |
+| Addendum 6 bun test test/phase3a | 0 | r2-addendum6-phase3a-run1.log | 015d5fb7815b7c31bf0bc787e6efd83cae94c3539732add5e9142b280e0544fe |
+| Task 53 RED: bun test test/phase3a/adversarial/wedged-host.test.ts -t "a SIGSTOPped host is cleared through the direct PGID path" | 1 | r2-task53-step2-run1.log | 853621c5c893fdfa5504ab2967c0d4e240bb7c917c55879aa4ed34bfd55c91d4 |
+| Task 53 bunx tsc --noEmit | 0 | r2-task53-step3-typecheck-run1.log | e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 |
+| Task 53 bun test test/phase3a/adversarial/wedged-host.test.ts test/phase3a/adversarial/sequence-invariants.test.ts | 0 | r2-task53-step4-run1.log | 0f6065aadf349687f6c39556c73e275404a73f84a25186127cde8456a2911acd |
+| Task 53 break precheck; no test started | 88 | r2-task53-break-run1.log | b6bd73c071bd15318bb1eea7bf39887fc6b18a0790c6c1731941f892fdd07233 |
+
+Task 53 RED ran exactly one test, four filtered out. It failed with `error: InvalidHarnessOptions` at requestedSurfaces runtime-harness.ts:97 because wedgeHostAfter was not an accepted option. No Task 53 implementation preceded that run. Typecheck then passed; Step 4 ran all five tests in each new file, 10 pass and 0 fail, 184 expect calls. Every deadline case printed the complete production escalation outcome and had S3, 0 terminate acknowledgements and no termination_started fact. The three PGID kill observations were 249.9035829999999, 249.45583299999998 and 249.29641700000002 ms. Host kill observations were 249.9091659999999, 249.46112500000004 and 249.3018750000001 ms. Every lower bound met the 249 ms reading and every upper bound stayed exact.
+
+Task 53's planned break turns only an output gap into the next valid sequence. Its first precheck saw load 13.41 4.32 2.71 and started no test; the change was restored to db1a4b1118dfcf1867d65f4ec263814623a892e787a404364b648c39cb2d490d before waiting for the Founder to quiet the host. Other restored hashes: wedged-host.test.ts ce60b3774cb8efbc973da22eed2f5ef7461957d6ee79d2e32a3afe57983a3045; sequence-invariants.test.ts 3fd0db56664f4dff7bf814de075ed65424cdcf106179896e084e991d7e354932.
+
+Founder response to that load hold, verbatim:
+
+```text
+load 2.17, waiting
+Host quieted as far as I can. Visible apps: Finder, Claude, cmux, app_mode_loader, Google Chrome, Kimi Code, Antigravity, ChatGPT. Hermes processes: 0. Load averages: 1.90 2.15 2.29. Host ready.
+```
+
+The resume state check confirmed the same head, branch and source hashes. Its live uptime was `12:30  up 4 days,  3:39, 8 users, load averages: 2.20 2.20 2.30`. No test was started. A new host-quieting request was made under the load gate.
+
+Narrower reading: malformed and unknown serialized facts are injected at the harness receive boundary through the production decodeFact codec, whose typed rejection causes the harness's typed session interruption. No host executable or production file is replaced. Sequence anomalies use the existing private client test seams inside the harness. Neither injection seam, a publisher nor any broker/ledger object is returned to tests. The exported fault report is a frozen defensive copy of data only.
+
+### Task 53 restored break and final task gates
+
+The Founder answered the second load hold, verbatim: `1. Host ready.` The immediate test precheck was below 2.0. Task 53's break then changed only the output gap's offered sequence from last + 2 to last + 1. The complete five-test sequence file ran without a filter. It failed exactly "an output sequence gap interrupts the session" and "every timing assertion reports observed values, not just pass"; duplicate, regression and snapshot-gap checks still passed. Both failing assertions were:
+
+```text
+28 |     expect(data.errorName).toBe("SequenceInvariantError");
+error: expect(received).toBe(expected)
+
+Expected: "SequenceInvariantError"
+Received: null
+```
+
+The full harness diff was printed in the break log before the run. The break was restored before gates. Verified restored hashes matched their pre-break values: runtime-harness.ts db1a4b1118dfcf1867d65f4ec263814623a892e787a404364b648c39cb2d490d; wedged-host.test.ts ce60b3774cb8efbc973da22eed2f5ef7461957d6ee79d2e32a3afe57983a3045; sequence-invariants.test.ts 3fd0db56664f4dff7bf814de075ed65424cdcf106179896e084e991d7e354932. No break is committed.
+
+| Command / step | Exit | Log | SHA-256 |
+| --- | ---: | --- | --- |
+| Task 53 break: bun test test/phase3a/adversarial/sequence-invariants.test.ts | 1 | r2-task53-break-run2.log | 511bc1b4118ea15e30d3d2faf3c3d17d36905c9ce02bbe49f0d3d8499f9a1bca |
+| Task 53 Step 5 bunx tsc --noEmit | 0 | r2-task53-step5-typecheck-run1.log | e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 |
+| Task 53 Step 5 bun test test/phase3a packages/broker | 0 | r2-task53-step5-phase3a-broker-run1.log | 66349e947c76d3dd71eee14a61d45c5118d31eba4b3790c2428f93b6b5876b2b |
+
+Uptime and summary lines for the resume and Task 53 runs, copied from the corresponding logs:
+
+```text
+r2-resume-phase3a-run1.log
+10:35  up 4 days,  1:44, 7 users, load averages: 1.54 1.61 2.23
+ 103 pass
+ 1 fail
+ 2133 expect() calls
+Ran 104 tests across 11 files. [46.42s]
+r2-resume-phase3a-escalated-run1.log
+10:47  up 4 days,  1:56, 8 users, load averages: 1.51 1.68 1.94
+ 103 pass
+ 1 fail
+ 2133 expect() calls
+Ran 104 tests across 11 files. [46.95s]
+r2-addendum6-break-run1.log
+10:55  up 4 days,  2:04, 8 users, load averages: 1.57 1.62 1.80
+ 4 pass
+ 1 fail
+ 34 expect() calls
+Ran 5 tests across 1 file. [5.46s]
+r2-addendum6-phase3a-run1.log
+10:55  up 4 days,  2:04, 8 users, load averages: 1.32 1.57 1.77
+ 104 pass
+ 0 fail
+ 2138 expect() calls
+Ran 104 tests across 11 files. [48.15s]
+r2-task53-step2-run1.log
+10:57  up 4 days,  2:06, 8 users, load averages: 1.98 1.69 1.79
+ 0 pass
+ 4 filtered out
+ 1 fail
+Ran 1 test across 1 file. [19.00ms]
+r2-task53-step4-run1.log
+10:59  up 4 days,  2:08, 8 users, load averages: 1.93 1.68 1.77
+ 10 pass
+ 0 fail
+ 184 expect() calls
+Ran 10 tests across 2 files. [6.49s]
+r2-task53-break-run2.log
+12:32  up 4 days,  3:41, 8 users, load averages: 1.46 1.91 2.17
+ 3 pass
+ 2 fail
+ 49 expect() calls
+Ran 5 tests across 1 file. [12.39s]
+r2-task53-step5-phase3a-broker-run1.log
+12:33  up 4 days,  3:42, 8 users, load averages: 1.34 1.84 2.13
+ 414 pass
+ 0 fail
+ 5003 expect() calls
+Ran 414 tests across 29 files. [58.45s]
+```
+
+In the restored Step 5 suite, the new timing tests printed these complete timing observations and causal facts:
+
+```text
+host_fault {"detectedMs":251.77404199999728,"deathMs":274.3442500000019,"escalation":{"reason":"pty_host_failure","state":"S3","escalated":true,"closeStdinCalled":true,"sessionInterruptionRequired":true,"pgidKillAttempted":true,"hostKillAttempted":true,"unnecessaryHostExitConfirmed":false,"killOrder":["pgid","host"],"observedMs":{"terminateSentMs":0.024041999997280072,"ackWindowEndedMs":249.60245900000155,"stdinClosedMs":249.6165420000034,"classifiedMs":249.64300000000367,"pgidKillAttemptedMs":249.67741699999897,"hostKillAttemptedMs":249.687417000001,"escalatedMs":249.6883749999979}},"terminateAcks":0,"terminationStarted":false,"errorName":null,"sequenceKind":null}
+host_fault {"detectedMs":251.7771670000002,"deathMs":273.95991700000013,"escalation":{"reason":"pty_host_failure","state":"S3","escalated":true,"closeStdinCalled":true,"sessionInterruptionRequired":true,"pgidKillAttempted":true,"hostKillAttempted":true,"unnecessaryHostExitConfirmed":false,"killOrder":["pgid","host"],"observedMs":{"terminateSentMs":0.02070899999671383,"ackWindowEndedMs":249.65149999999994,"stdinClosedMs":249.6631669999988,"classifiedMs":249.67929199999344,"pgidKillAttemptedMs":249.70175000000017,"hostKillAttemptedMs":249.7094169999982,"escalatedMs":249.70999999999913}},"terminateAcks":0,"terminationStarted":false,"errorName":null,"sequenceKind":null}
+host_fault {"detectedMs":251.6617499999993,"deathMs":274.36124999999447,"escalation":{"reason":"pty_host_failure","state":"S3","escalated":true,"closeStdinCalled":true,"sessionInterruptionRequired":true,"pgidKillAttempted":true,"hostKillAttempted":true,"unnecessaryHostExitConfirmed":false,"killOrder":["pgid","host"],"observedMs":{"terminateSentMs":0.022333000000799075,"ackWindowEndedMs":249.69225000000006,"stdinClosedMs":249.7073750000054,"classifiedMs":249.72150000000693,"pgidKillAttemptedMs":249.74629200000345,"hostKillAttemptedMs":249.75400000000081,"escalatedMs":249.7546250000014}},"terminateAcks":0,"terminationStarted":false,"errorName":null,"sequenceKind":null}
+host_fault {"detectedMs":1.973041999997804,"deathMs":24.894541999994544,"escalation":null,"terminateAcks":1,"terminationStarted":true,"errorName":"MalformedFrameError","sequenceKind":null}
+host_fault {"detectedMs":1.3315419999998994,"deathMs":24.32395899999392,"escalation":null,"terminateAcks":1,"terminationStarted":true,"errorName":"MalformedFrameError","sequenceKind":null}
+sequence_fault {"detectedMs":2.0167920000021695,"deathMs":25.6036249999961,"escalation":null,"terminateAcks":1,"terminationStarted":true,"errorName":"SequenceInvariantError","sequenceKind":"duplicate"}
+sequence_fault {"detectedMs":2.32341599999927,"deathMs":25.421000000002095,"escalation":null,"terminateAcks":1,"terminationStarted":true,"errorName":"SequenceInvariantError","sequenceKind":"regression"}
+sequence_fault {"detectedMs":1.9752499999958673,"deathMs":24.610374999996566,"escalation":null,"terminateAcks":1,"terminationStarted":true,"errorName":"SequenceInvariantError","sequenceKind":"gap"}
+sequence_fault {"detectedMs":1.9816670000000158,"deathMs":25.270542000005662,"escalation":null,"terminateAcks":1,"terminationStarted":true,"errorName":"SequenceInvariantError","sequenceKind":"gap"}
+sequence_fault {"detectedMs":2.086583000003884,"deathMs":25.272375000000466,"escalation":null,"terminateAcks":1,"terminationStarted":true,"errorName":"SequenceInvariantError","sequenceKind":"gap"}
+```
+
+Result: five tests per new file; the required RED and a non-vacuous break; restored typecheck exit 0; required combined suite 414 pass and 0 fail; no production changes. git diff --check and the exact-path and credential-shape scans passed before staging. The staged diff is checked again before commit. No self-fix of a failed new Task 53 GREEN run was needed. The resume failures, Addendum 6 correction and two load holds above are the deviations carried by this task.

@@ -1,11 +1,19 @@
-import { expect, test } from "bun:test";
+import { afterAll, expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
 import { join } from "node:path";
-import { startProcessScenario as start, fixtureProcessReport as report, type HarnessSession } from "../runtime-harness";
+import { startProcessScenario as start, fixtureProcessReport as report, fixtureLivenessEpermCount, type HarnessSession } from "../runtime-harness";
 type ProcessReport = ReturnType<typeof report>;
+let livenessEpermCount = 0;
+afterAll(() => console.log(`process-group alive EPERM count=${livenessEpermCount}; runtime-harness alive EPERM count=${fixtureLivenessEpermCount()}`));
+
 function alive(pid: number): boolean {
   try { process.kill(pid, 0); return true; }
-  catch (error) { if ((error as NodeJS.ErrnoException).code === "ESRCH") return false; throw error; }
+  catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "EPERM") { livenessEpermCount += 1; return false; }
+    if (code === "ESRCH") return false;
+    throw error;
+  }
 }
 function gone(data: ProcessReport): void {
   for (const pid of [...data.hostPids, ...data.childPids, ...data.descendantPids]) expect(alive(pid)).toBe(false);
