@@ -1,4 +1,5 @@
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import type { Subprocess } from "bun";
 import { userInfo } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -63,6 +64,7 @@ export interface HarnessOptions {
   readonly surfaces?: readonly SurfaceId[];
   readonly injectFailureAt?: BuildStep;
   readonly retainStorage?: boolean;
+  readonly processScenario?: ProcessScenario;
 }
 export interface HarnessSession {
   readonly client: BrokerClient;
@@ -92,7 +94,9 @@ export class RealSurfaceRejected extends Error {
 
 function requestedSurfaces(options: HarnessOptions): readonly SurfaceId[] {
   if (options === null || typeof options !== "object" || Object.getPrototypeOf(options) !== Object.prototype
-    || Reflect.ownKeys(options).some(key => key !== "surfaces" && key !== "injectFailureAt" && key !== "retainStorage")) throw new Error("InvalidHarnessOptions");
+    || Reflect.ownKeys(options).some(key => !["surfaces", "injectFailureAt", "retainStorage", "processScenario"].includes(String(key)))) throw new Error("InvalidHarnessOptions");
+  const scenario = Object.getOwnPropertyDescriptor(options, "processScenario");
+  if (scenario !== undefined && (!("value" in scenario) || !PROCESS_SCENARIOS.includes(scenario.value))) throw new Error("InvalidHarnessOptions");
   const retain = Object.getOwnPropertyDescriptor(options, "retainStorage");
   if (retain !== undefined && (!("value" in retain) || typeof retain.value !== "boolean")) throw new Error("InvalidHarnessOptions");
   const injection = Object.getOwnPropertyDescriptor(options, "injectFailureAt");
@@ -180,8 +184,22 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
   const root = mkdtempSync(join(realpathSync(user.homedir), ".madbridge-task48-"));
   let state: PartialBuildState | undefined;
   let termination: Promise<void> | undefined;
+  let fixtureAdapter: Subprocess<"pipe", "ignore", "ignore"> | undefined;
+  const descendants: number[] = [];
+  let faultTimer: ReturnType<typeof setTimeout> | undefined;
+  let faultWork = Promise.resolve();
+  let faultError: unknown;
   const terminate = () => termination ??= state === undefined
-    ? Promise.reject(new Error("FixtureStateUnavailable")) : terminateFixtures(state);
+    ? Promise.reject(new Error("FixtureStateUnavailable")) : (async () => {
+      try { await terminateFixtures(state!); }
+      finally {
+        if (fixtureAdapter !== undefined) {
+          if (fixtureAdapter.exitCode === null && fixtureAdapter.signalCode === null) fixtureAdapter.kill("SIGKILL");
+          await fixtureAdapter.exited;
+          fixtureAdapter.stdin.end();
+        }
+      }
+    })();
   let closing: Promise<void> | undefined;
   let finalSnapshot: BrokerSnapshot | undefined;
   const pumps: Promise<void>[] = [];
@@ -191,12 +209,20 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
     const completed = state;
     const errors: unknown[] = [];
     const attempt = async (action: () => void | Promise<void>) => { try { await action(); } catch (error) { errors.push(error); } };
+    clearTimeout(faultTimer);
     await attempt(async () => {
       if ((await completed.client!.getSnapshot()).phase !== "closed") {
         await completed.broker!.founderClose(`fixture-close-${crypto.randomUUID()}`);
       }
     });
     await attempt(terminate);
+    await attempt(async () => { await faultWork; if (faultError !== undefined) throw faultError; });
+    await attempt(async () => {
+      for (const pid of descendants) if (alive(pid)) process.kill(pid, "SIGKILL");
+      const deadline = performance.now() + HOST_DEADLINES_MS.outerBound;
+      while (descendants.some(alive) && performance.now() < deadline) await Bun.sleep(10);
+      if (descendants.some(alive)) throw new Error("FixtureDescendantCleanupFailed");
+    });
     await attempt(async () => {
       await Promise.all(pumps);
       if (pumpErrors.length) throw new AggregateError(pumpErrors, "FixtureOutputFailed");
@@ -218,7 +244,22 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
     const records = new Map(executions.map(execution => {
       const registration = registry.get(execution.surface)!;
       const path = join(bin, registration.executable_name);
-      writeFileSync(path, fixtureExecutableSource(execution.model), { mode: 0o700 });
+      let source = fixtureExecutableSource(execution.model);
+      if (execution.execution_id === "builder") {
+        if (options.processScenario === "ignore-term") source = source.replace('process.on("SIGTERM", finish);', 'process.on("SIGTERM", () => {});');
+        if (options.processScenario === "grandchild" || options.processScenario === "setsid") {
+          const marker = 'if (process.argv.includes("--fixture-run")) {';
+          if (!source.includes(marker)) throw new Error("FixtureSourceMarkerMissing");
+          const detached = options.processScenario === "setsid";
+          const childSource = 'process.on("SIGTERM", () => process.exit(0)); setInterval(() => {}, 1000);';
+          source = source.replace(marker, marker + `
+  const descendant = Bun.spawn([process.execPath, "-e", ${JSON.stringify(childSource)}], {
+    detached: ${detached}, env: process.env, stdin: "ignore", stdout: "ignore", stderr: "ignore",
+  });
+  writeFileSync(join(dirname(dirname(process.argv[1])), "descendant.json"), JSON.stringify({ pid: descendant.pid }));`);
+        }
+      }
+      writeFileSync(path, source, { mode: 0o700 });
       return [execution.surface, fixtureCapabilityRecord(registration, execution.model, path, hash(readFileSync(path)), now)];
     }));
     const unsigned = {
@@ -265,6 +306,19 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
     if (!result.ok) throw new FixtureStartupFailure(result.failedStep, result.failure, state, root);
     if (state.storage === null || state.client === null || state.broker === null || state.ledger === null) throw new Error("FixtureBuildIncomplete");
     const underlying = state.client;
+    if (options.processScenario !== undefined) {
+      fixtureAdapter = Bun.spawn([process.execPath, "-e", "process.stdin.resume();"], {
+        env: { ...preflight.plan.executions[0]!.environment }, stdin: "pipe", stdout: "ignore", stderr: "ignore",
+      });
+      if (options.processScenario === "grandchild" || options.processScenario === "setsid") {
+        const record = join(root, "descendant.json");
+        const deadline = performance.now() + HOST_DEADLINES_MS.outerBound;
+        while (!existsSync(record) && performance.now() < deadline) await Bun.sleep(10);
+        const pid: unknown = JSON.parse(readFileSync(record, "utf8")).pid;
+        if (typeof pid !== "number" || !Number.isSafeInteger(pid) || pid <= 1) throw new Error("FixtureDescendantIdentityMissing");
+        descendants.push(pid);
+      }
+    }
     for (const host of state.hosts) {
       pumps.push((async () => {
         for await (const fact of host.handle.facts()) {
@@ -310,7 +364,32 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
       },
     });
     Object.freeze(client);
-    return Object.freeze({ client, storage: state.storage, close, interrupt });
+    const session = Object.freeze({ client, storage: state.storage, close, interrupt });
+    if (options.processScenario !== undefined) {
+      processReports.set(session, {
+        supervisorPid: process.pid, adapterPid: fixtureAdapter!.pid,
+        hostPids: state.hosts.map(host => host.hostPid), childPids: state.children.map(child => child.childPid!),
+        processGroups: state.children.map(child => child.pgid!), descendantPids: [...descendants],
+        residuals: options.processScenario === "setsid" ? descendants.map(pid => ({ kind: "setsid_escape", pid })) : [],
+      });
+      if (options.processScenario === "lifeline-eof" || options.processScenario === "host-exit") {
+        if (options.processScenario === "host-exit") {
+          faultWork = (async () => {
+            for await (const _ of state!.hosts[0]!.handle.facts()) { /* observe the actual host stream ending */ }
+            clearTimeout(faultTimer);
+            if (closing === undefined) await interrupt("pty_host_failure");
+          })();
+          void faultWork.catch(() => {}); // close propagates monitoring failures after cleanup.
+        }
+        faultTimer = setTimeout(() => {
+          try {
+            if (options.processScenario === "lifeline-eof") state!.hosts[0]!.handle.closeStdin();
+            else process.kill(state!.hosts[0]!.hostPid, "SIGKILL");
+          } catch (error) { faultError = error; }
+        }, 150);
+      }
+    }
+    return session;
   } catch (error) {
     try {
       if (state !== undefined && state.sessionActivatedRow !== null) await close();
@@ -323,6 +402,27 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
     }
     throw error;
   }
+}
+
+const PROCESS_SCENARIOS = ["descriptors", "grandchild", "ignore-term", "lifeline-eof", "host-exit", "setsid"] as const;
+export type ProcessScenario = typeof PROCESS_SCENARIOS[number];
+export interface FixtureProcessReport {
+  readonly supervisorPid: number;
+  readonly adapterPid: number | null;
+  readonly hostPids: readonly number[];
+  readonly childPids: readonly number[];
+  readonly processGroups: readonly number[];
+  readonly descendantPids: readonly number[];
+  readonly residuals: readonly { readonly kind: string; readonly pid: number }[];
+}
+const processReports = new WeakMap<HarnessSession, FixtureProcessReport>();
+export function fixtureProcessReport(session: HarnessSession): FixtureProcessReport {
+  const report = processReports.get(session);
+  if (report === undefined) throw new Error("FixtureProcessReportUnavailable");
+  return freeze(structuredClone(report));
+}
+export function startProcessScenario(processScenario: ProcessScenario): Promise<HarnessSession> {
+  return startFixtureSession({ processScenario });
 }
 
 export interface ChildFixtureSession {

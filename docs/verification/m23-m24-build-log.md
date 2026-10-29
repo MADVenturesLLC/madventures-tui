@@ -255,3 +255,194 @@ supervisor SIGKILL: exit=null signal=SIGKILL final_death_ms=25.74
 ### Result
 
 RED established the named missing capability. The deliberate break failed required tests. Typecheck exited 0; Phase 3A had 97 pass and 0 fail. `git diff --check` exited 0. Only the four named Task 51 paths are staged for this task. No production file changed. No B9 halt occurred; load-gate waits were answered by the Founder.
+
+## Task 52 — descriptor hygiene and process groups
+
+Built on Task 51 commit: `75b76ff4edf781a8b28d9c305aed78a8c09358d0`, parent `189c2c12fb0147909f0b8fdc550affca92e70156`.
+
+Changed files: runtime-harness.ts, adversarial/descriptor-hygiene.test.ts, adversarial/process-group.test.ts, and this build log, all under the authorized test and documentation roots.
+
+### Commands, outcomes and full-output logs
+
+Every Bun command used the required runtime prefix. The full runtime check before the first Task 52 test matched every pinned value. Logs are under the same external log directory as Task 51.
+
+| Step | Command | Exit | Full-output log | SHA-256 |
+| --- | --- | ---: | --- | --- |
+| 52.2 | `bun test test/phase3a/adversarial/descriptor-hygiene.test.ts -t "with two PTY hosts and an adapter, no process holds a sibling's lifeline write end"` | 1 | `task52-step2-run1.log` | `5497b89cb4123d7e965f061aaf8dd74ca8ad6f2abdbe9c1c237ce3ef679c4be0` |
+| 52.4 | `bun test test/phase3a/adversarial/descriptor-hygiene.test.ts test/phase3a/adversarial/process-group.test.ts` | 1 | `task52-step4-run1.log` | `ca644c72bd44236733b1457e41300c4d0587559947330117bbc25f8e0bd7be76` |
+| 52 self-fix | `bunx tsc --noEmit` | 2 | `task52-self-fix-typecheck-run1.log` | `206552d7b2a7335bdd290fff6ac5688869561e282d8fca40870acbf5fbaf8fa4` |
+| 52.4 diagnostic | `bun test test/phase3a/adversarial/descriptor-hygiene.test.ts test/phase3a/adversarial/process-group.test.ts` | 1 | `task52-step4-run2.log` | `fc5a4e04b194a97b59500868362e453434d27ea7d47ed09e714d3ce7e8ad9ae8` |
+| 52 self-fix | `bunx tsc --noEmit` | 0 | `task52-self-fix-typecheck-run2.log` | `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` |
+| 52.4 | `bun test test/phase3a/adversarial/descriptor-hygiene.test.ts test/phase3a/adversarial/process-group.test.ts` | 1 | `task52-step4-run3.log` | `bd0aa3fbaf6719aa371b75fe94d4b4bf0927c8bad25584c55b7be5ee85307235` |
+| 52 descriptor behavior probe | `bun test test/phase3a/adversarial/descriptor-hygiene.test.ts` | 1 | `task52-descriptor-probe-run1.log` | `880fa75f08d3eca310294edd0ebc8bb40ef24f56fb817be76b8eba240663e2ec` |
+| 52 self-fix | `bunx tsc --noEmit` | 0 | `task52-self-fix-typecheck-run3.log` | `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` |
+| 52.4 | `bun test test/phase3a/adversarial/descriptor-hygiene.test.ts test/phase3a/adversarial/process-group.test.ts` | 0 | `task52-step4-run4.log` | `f127c14e201fd3d44ae47332f6828f85b801b9723483ba25c5521eade33e79be` |
+| 52 break | `bun test test/phase3a/adversarial/process-group.test.ts` | 1 | `task52-break-run1.log` | `c70fe3a3ad3970f463ef5a9fe9757236130e507fa18ec998ea623355c765bf68` |
+| 52.5 | `bunx tsc --noEmit` | 0 | `task52-step5-typecheck-run1.log` | `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` |
+| 52.5 | `bun test test/phase3a` | 0 | `task52-step5-phase3a-run1.log` | `210516e0b704eb59c86fcfd950e4055586a646d1b630a92ba91bd8ba1caa288d` |
+
+Run summaries and uptime readings, copied from logs:
+
+`task52-step2-run1.log`:
+
+```text
+23:27  up 3 days, 14:36, 4 users, load averages: 1.16 1.40 1.82
+ 0 pass
+ 1 filtered out
+ 1 fail
+ 2 expect() calls
+Ran 1 test across 1 file. [566.00ms]
+```
+
+`task52-step4-run1.log`:
+
+```text
+23:29  up 3 days, 14:37, 4 users, load averages: 1.18 1.38 1.78
+ 4 pass
+ 3 fail
+ 71 expect() calls
+Ran 7 tests across 2 files. [2.98s]
+```
+
+`task52-self-fix-typecheck-run1.log`:
+
+```text
+No output; exit 2.
+```
+
+`task52-step4-run2.log`:
+
+```text
+23:31  up 3 days, 14:40, 4 users, load averages: 1.48 1.47 1.75
+ 6 pass
+ 1 fail
+ 80 expect() calls
+Ran 7 tests across 2 files. [5.93s]
+```
+
+`task52-self-fix-typecheck-run2.log`:
+
+```text
+No output; exit 0.
+```
+
+`task52-step4-run3.log`:
+
+```text
+23:32  up 3 days, 14:41, 4 users, load averages: 1.95 1.61 1.77
+ 6 pass
+ 1 fail
+ 75 expect() calls
+Ran 7 tests across 2 files. [5.06s]
+```
+
+`task52-descriptor-probe-run1.log`:
+
+```text
+23:34  up 3 days, 14:43, 4 users, load averages: 1.34 1.50 1.71
+ 1 pass
+ 1 fail
+ 35 expect() calls
+Ran 2 tests across 1 file. [1099.00ms]
+```
+
+`task52-self-fix-typecheck-run3.log`:
+
+```text
+No output; exit 0.
+```
+
+`task52-step4-run4.log`:
+
+```text
+23:35  up 3 days, 14:44, 4 users, load averages: 1.04 1.36 1.64
+ 7 pass
+ 0 fail
+ 89 expect() calls
+Ran 7 tests across 2 files. [4.90s]
+```
+
+`task52-break-run1.log`:
+
+```text
+23:36  up 3 days, 14:45, 4 users, load averages: 1.35 1.40 1.64
+ 4 pass
+ 1 fail
+ 32 expect() calls
+Ran 5 tests across 1 file. [8.53s]
+```
+
+`task52-step5-typecheck-run1.log`:
+
+```text
+No output; exit 0.
+```
+
+`task52-step5-phase3a-run1.log`:
+
+```text
+23:37  up 3 days, 14:46, 4 users, load averages: 1.71 1.47 1.65
+ 104 pass
+ 0 fail
+ 2138 expect() calls
+Ran 104 tests across 11 files. [35.99s]
+```
+
+### Tests, RED and file counts
+
+Seven exact plan names: two descriptor-hygiene tests and five process-group tests. Step 4 run 4 had 7 pass and 0 fail; Step 5 repeated every one in a Phase 3A suite with 104 pass and 0 fail. They cover section 6.4 scenarios 5 through 9 and the explicit section 3.5 setsid residual.
+
+RED ran exactly one test with one filtered out. Failure lines, verbatim:
+
+```text
+error: the harness has no concurrent fixture adapter process
+
+Received: null
+```
+
+### Deliberate break
+
+The break omitted the host-kill injection while leaving the host-stream observer intact. The full harness diff was printed before the unfiltered five-test process-group file. Four passed and the host-exit test failed. This demonstrates that fixture interruption depends on observed host loss rather than an unconditional injected interruption.
+
+Failing assertion and values, verbatim:
+
+```text
+78 |     expect(snapshot.phase).toBe("closed");
+error: expect(received).toBe(expected)
+
+Expected: "closed"
+Received: "active"
+```
+
+Restored file SHA-256 values matched their pre-break values:
+
+- runtime-harness.ts: 05a3847b2542d29803010007239ab8fedd3df27777c01751357cc356cb3c2ea1
+- descriptor-hygiene.test.ts: c1021e9aced8f0d023cb828c049f1e7cc4b6aa6753858ab64ec59ca965aa13f2
+- process-group.test.ts: 9d6db02acfe48c4a27bb6e69febc23aa4c9489d73ba0540f586a2583c993d359
+
+Observed Task 52 timings and residual summary from the restored Step 5 suite:
+
+```text
+ignore_SIGTERM: final_death_ms=2040.33
+lifeline_EOF: final_death_ms=177.07
+host_exit: final_death_ms=193.30
+setsid_residual: recorded_count=1 group_containment=false
+```
+
+### B4, B5, narrower readings and self-fixes
+
+1. B4: no real inherited lifeline write endpoint was found. packages/broker/src/pty-host-supervisor.ts remains byte-identical. Its working directory was not changed.
+2. B5: only the descriptor test ran lsof, on the supervisor, two hosts, two governed children and the auxiliary fixture adapter recorded by the harness. It parsed descriptor numbers, types, device/inode identifiers, and hexadecimal peer identifiers only. It ignored file and socket path names. The session itself ran no process or descriptor listing. Linux uses the permitted recorded-PID fd directory branch but was not run on this MacBook.
+3. Narrower reading: the binding base already has two hosts. RED therefore pins the missing concurrent fixture-adapter process, rather than pretending the second host was absent. Scenario startup adds the auxiliary fixture adapter without adding an execution or altering default harness sessions.
+4. The first own GREEN run failed three checks: TERM-ignore duration Expected >= 2000, Received 27.595500000000015; EOF host death Expected false, Received true; descriptor type Expected "PIPE", Received "". The fixture-ready marker is now awaited before measuring TERM handling, EOF waits for both host and group, and the parser handles actual field delimiters and type casing.
+5. Self-fix typecheck run 1 failed with readonly-array conversion errors and an optional regex-capture assignment error. The new tests now import the implemented typed helpers directly instead of keeping RED-only reflective fallback interfaces, and validate the matched capture. The complete failure output is in its unchanged log. Run 2 passed.
+6. The next runtime run had six pass and one fail: Expected "PIPE", Received "UNIX". This is Bun's anonymous stdin socketpair on macOS, not a named runtime endpoint. The test supports both observed anonymous descriptor types without weakening the no-alias assertion.
+7. Run 3 and the diagnostic behavior probe failed the non-vacuity owner check: Expected > 0, Received 0. The probe printed only permitted descriptor metadata and showed that lsof's selected D field did not provide anonymous endpoint device identifiers. Selecting d as well established both endpoint identities and their supervisor owner. The no-alias and positive-owner assertions remain. Diagnostic prints were then removed. No unchanged failed run was repeated to obtain a pass.
+8. Step 4 run 2 started after the preceding self-fix typecheck had failed. It is retained as diagnostic evidence, not a passing gate. Subsequent verification restarted with a passing typecheck and the full files.
+9. Required host code reviews found a causality gap: the original host-exit timer both killed and directly interrupted. The timer now only kills; an independent host-fact-stream observer derives interruption. The deliberate break confirms this correction. Reviews remain non-binding advice, not the act's Tier-2 verdict. Both subagents were interrupted after completion.
+10. The setsid fixture uses the existing Bun detached-spawn behavior, already described as calling setsid in the spike source. Its descendant was still alive after governed group termination, recorded as one setsid_escape residual, and separately killed during final fixture cleanup. This is an explicit containment limitation, not hostile-process containment.
+11. All changes and self-fixes stayed within the task's authorized test files and harness. No conditional production path or fixture-adapters.ts change was used.
+
+### Result
+
+RED failed for the absent adapter; Step 4 had 7 pass and 0 fail; the causal break failed; restored Step 5 typecheck exited 0 and Phase 3A had 104 pass and 0 fail. `git diff --check` exited 0. The current commit identity is recorded by the next section and final report. No B9 halt occurred.
