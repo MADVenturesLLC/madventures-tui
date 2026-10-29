@@ -840,3 +840,126 @@ auth_expiry {"detectedMs":1.9947920000122394,"deathMs":25.59350000001723,"escala
 ledger_failure {"detectedMs":1.8133749999979045,"deathMs":24.925542000011774,"escalation":null,"terminateAcks":1,"terminationStarted":true,"errorName":null,"sequenceKind":null,"publicationError":"ledger_write_failed","sqliteCode":"SQLITE_READONLY","authExpired":false,"reportedModel":null}
 unrecordable_ledger {"detectedMs":0,"deathMs":22.40391599998111,"escalation":null,"terminateAcks":1,"terminationStarted":true,"errorName":null,"sequenceKind":null,"publicationError":"ledger_write_failed","sqliteCode":"SQLITE_READONLY","authExpired":false,"reportedModel":null}
 ```
+
+
+## Task 55 — fixture-driven evidence commands
+
+Built on Task 54 commit `8d7a9a7c970d930e6808de4622507163aca70688`, parent `2871fbc5c36db98176593bb4d81d1016da8bbc3e`. This section precedes its own commit; the final report records that commit. Actor-Id for this task is session:codex/m23-m24-r2.
+
+Changed paths: apps/madbridge/src/commands/verify-ledger.ts and export-evidence.ts; test/phase3a/evidence-pipeline.test.ts; test/phase3a/runtime-harness.ts; the four B6 argument lists in test/acceptance/evidence-manifest.test.ts; and this log.
+
+### RED and implementation readings
+
+All five exact Step 1 names were written before any other Task 55 change. The RED filter escaped the period in .madv-runtime and ran exactly one test, with seven filtered out. A valid empty legacy ledger was seeded, so the old default returned success and failed the required missing-session assertion. The failing assertion was:
+
+```text
+548 |     expect(result.exitCode).toBe(1);
+error: expect(received).toBe(expected)
+
+Expected: 1
+Received: 0
+```
+
+The runtime check before RED matched every pinned value, including the Bun executable, bunx link, binary SHA-256, version and revision. No settings changed. All Task 55 test commands request require_escalated under the existing Founder approval.
+
+The two commands now share storage-root/session resolution, use the existing pure validator, require --session unless --ledger is explicit, and preserve explicit relative or absolute paths. Default export output is the session's sanitized-evidence directory. Session identifiers use the existing createSessionStorage character and length restriction.
+
+Narrower reading: the plan interface names ledger.db, but the binding transactional build actually writes ledger.sqlite3 at packages/supervisor/src/build.ts:701. Spec section 4.3 and Task 55 require consuming that actual fixture output, and spec section 5.1 pins the directory layout. The commands therefore consume the existing ledger.sqlite3 without changing the storage writer, ledger semantics or any production path beyond the two authorized files. The earlier Task 51 self-fix records this same existing filename.
+
+B6 item 1: only four CLI argument lists changed in evidence-manifest.test.ts, naming the same existing or missing ledger and artifact paths explicitly. Every assertion remains; the missing-ledger case still expects a nonzero exit. The full diff was shown and a four-list-only comparison passed.
+
+B6 item 2: exact-value redaction reuses the pure environment redactor and the registered allowlists. It accesses an exporting-process variable only after its allowlist marks it secret; at this base none is marked. The synthetic marker is passed to generated fixture output through its allowlisted fixture environment. The fixture adapter's own bound client records the observed output as an ordinary message. A read-only ledger check proves the marker arrived before export. The export function receives the synthetic allowlist/environment only through its optional test-only parameter, with no CLI argument. Every exported file is checked for absence, and manifest.json records the exact-value pass and its applied rule. String values are sanitized before JSON serialization, retaining valid JSON for metacharacters. No real credential variable was read or printed.
+
+The harness change is required fixture evidence wiring under B3 and Addendum 7; it adds no returned publishing function, broker or ledger. The Task 54 ledger-fault message construction is reused without changing fault behavior. The corrected liveness helper is byte-identical to Task 54 HEAD; the three earlier adversarial files remain unchanged in this task.
+
+Step 6 inspection: neither command imports a start, host, runtime constructor or fixture harness. The shared environment module imports only a protocol type and defines pure allowlist/redaction functions; no runtime is instantiated by this import. B4's conditional broker fix and fixture-adapters.ts remain unused.
+
+### Self-fix, GREEN and deliberate break
+
+The supplementary Step 3 typecheck found four new test-context errors: three calls omitted runCli's required second argument, and the fourth context omitted stdin. The log contains TS2554 at evidence-pipeline.test.ts:489, :499 and :532, and TS2345 at :547. The numeric exit receipt was not retained across context compaction; its failure diagnostics and full log were preserved. Under DEC-20261023-01 B4, the four new calls now supply stdin and cwd. This does not change the RED's old-default failure cause. Verification restarted with the corrected typecheck, which exited 0.
+
+Step 4 ran both changed test files in full: evidence-pipeline.test.ts has 8 pass and 0 fail, comprising its three earlier tests and five added names; evidence-manifest.test.ts has 9 pass and 0 fail. No assertion was removed.
+
+The deliberate break omitted applying the test-only exact-value redactor's returned text. The complete export-evidence.ts diff was shown before an unfiltered full evidence-pipeline.test.ts run. Exactly "exported evidence contains no allowlisted secret value" failed; seven tests passed. Its assertion failed at evidence-pipeline.test.ts:522:
+
+```text
+expect(readFileSync(join(output.outputDir, file), "utf8")).not.toContain(marker)
+error: expect(received).not.toContain(expected)
+```
+
+The synthetic marker remained in ledger-sanitized.json. Its value is omitted from this build log; the unchanged full-output log contains only fixture evidence. The break was restored before gates. Restored SHA-256 values match the pre-break files:
+
+| File | SHA-256 |
+| --- | --- |
+| apps/madbridge/src/commands/export-evidence.ts | ea07d8954693b56d052bfe74a0023c60572c256e3628b5502f4d60a88849f071 |
+| apps/madbridge/src/commands/verify-ledger.ts | 5c9e3e9eb008fbc7f7e11510c95c9487127136a3a633a652ed3fb157d27b7731 |
+| test/phase3a/runtime-harness.ts | 534246a73de52247a4ce020bb7624f7dcd100f3952667022c748fbfcfee52add |
+| test/phase3a/evidence-pipeline.test.ts | 300fc49f0f2b9f8f6db3d872efd132824e26e3b58530625d1b18cd37493d1cff |
+| test/acceptance/evidence-manifest.test.ts | 0ffd1041994ac2c7a08fd1f26d62cec15e8f97c8855c54d92b56349da11aac32 |
+
+### Commands and full-output logs
+
+Logs are relative to /Users/michaeldaley/builds/m23-m24-r1-pr/logs/.
+
+| Command / step | Exit | Log | SHA-256 |
+| --- | ---: | --- | --- |
+| Task 55 RED: bun test test/phase3a/evidence-pipeline.test.ts -t 'verify-ledger no longer defaults to \.madv-runtime' | 1 | r2-task55-step2-run1.log | 63067b7f55c308b9a41e73ba83eefda344421405b68949277f0067e43c39428e |
+| Supplementary Step 3 bunx tsc --noEmit | failed; numeric receipt unavailable | r2-task55-step3-typecheck-run1.log | fbe0244235a1b1e769e70b2df88443d7eae275d189405843f0fba0adb330ad04 |
+| Corrected Step 3 bunx tsc --noEmit | 0 | r2-task55-step3-typecheck-run2.log | e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 |
+| Step 4 bun test test/phase3a/evidence-pipeline.test.ts | 0 | r2-task55-step4-evidence-run1.log | 20d4359221b5410a7c2e149e887a27143ca9f2d4ed06ce7543030cc64da87545 |
+| Step 4 bun test test/acceptance/evidence-manifest.test.ts | 0 | r2-task55-step4-acceptance-run1.log | 0205dfca64081f59f221316a5994fdaf34839f2621bfb35f058601653b4ff289 |
+| Deliberate break: bun test test/phase3a/evidence-pipeline.test.ts | 1 | r2-task55-break-run1.log | dc9d0d1a3da17b862fd347c76b4656ee546986d4497d24a3b2f6306edae3699b |
+| Restored Step 5 bunx tsc --noEmit | 0 | r2-task55-step5-typecheck-run1.log | e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 |
+
+The full-suite load hold began at first load 3.17. The Founder answered, verbatim:
+
+> Host quieted as far as I can. Visible apps: Finder, cmux, Antigravity, Claude. Hermes processes: 0. Load averages: 1.95 2.02 1.86. Host ready.
+
+The next reading was 1.82. The first full-suite command stopped before any test because its extra guard incorrectly required bunx's symlink target to be the relative word bun. The actual link points to /Users/michaeldaley/.bun/bin/bun, the required executable, and all runtime values matched. This was the session's command-guard error, not a runtime difference or a failed test. The guard was corrected to accept that observed absolute target; no setting changed. The next unique log preserved the complete matched runtime check, an immediate 1.79 load reading, and the bare test run.
+
+| Command / step | Exit | Log | SHA-256 |
+| --- | ---: | --- | --- |
+| Step 5 extra symlink guard; no test started | 91 | r2-task55-step5-full-run1.log | 6d5f77e9c789660b0b03388c68805d18978cf4bf8d79928af243be1c89b3c6a3 |
+| Step 5 pinned runtime check and bare bun test | 0 | r2-task55-step5-full-run2.log | 35439cda1b745a5c8721246c7a1de4cb5d3124d832bd5f10ade23d3dc263a1ca |
+
+Uptime and summary lines, copied from the complete logs:
+
+```text
+r2-task55-step2-run1.log
+15:05  up 4 days,  6:14, 8 users, load averages: 1.28 1.57 1.58
+ 0 pass
+ 7 filtered out
+ 1 fail
+ 1 expect() calls
+Ran 1 test across 1 file. [32.00ms]
+r2-task55-step4-evidence-run1.log
+15:12  up 4 days,  6:21, 8 users, load averages: 4.07 2.24 1.80
+ 8 pass
+ 0 fail
+ 685 expect() calls
+Ran 8 tests across 1 file. [1.99s]
+r2-task55-step4-acceptance-run1.log
+15:12  up 4 days,  6:21, 8 users, load averages: 3.52 2.19 1.79
+ 9 pass
+ 0 fail
+ 36 expect() calls
+Ran 9 tests across 1 file. [45.00ms]
+r2-task55-break-run1.log
+15:13  up 4 days,  6:22, 8 users, load averages: 3.17 2.20 1.80
+ 7 pass
+ 1 fail
+ 682 expect() calls
+Ran 8 tests across 1 file. [1.93s]
+r2-task55-step5-full-run2.log
+15:29  up 4 days,  6:38, 8 users, load averages: 1.79 1.96 1.84
+ 1861 pass
+ 0 fail
+ 18107 expect() calls
+Ran 1861 tests across 135 files. [195.51s]
+```
+
+The evidence/acceptance file checks above are not bare or adversarial-suite runs; the 2.0 cutoff does not apply to those particular file commands. Their uptime is retained. The full suite ran only after the required answer and fresh below-cutoff reading. No unchanged failed test was rerun to obtain a pass.
+
+Result: five added named tests, eight passing in the evidence file including all three earlier tests, nine passing in the authorized acceptance file, a causally failing deliberate break with exact restoration hashes, required typecheck exit 0 and bare suite 1861 pass/0 fail. The extra precheck and lost supplementary numeric receipt are disclosed above. No B9 halt occurred during Task 55. No break is committed. The final ordered gates follow this task's commit and are recorded in the PR description and final report; the five-commit limit precludes appending a sixth committed log section for them.
+
+Pre-commit checks: git diff --check and git diff --cached --check exited 0 after removing one trailing blank line in this documentation section. Explicit-path staging contains only the six Task 55 paths. The staged credential-shape scan and exact-path check passed. The commit message is checked for 72-character lines and exactly the three final attribution trailers before git commit -F -. No hook output has been supplied.

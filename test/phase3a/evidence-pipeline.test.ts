@@ -1,7 +1,13 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { tmpdir } from "node:os";
+import { Database } from "bun:sqlite";
+import { Ledger } from "@madventures/ledger";
+import { runCli } from "../../apps/madbridge/src/cli";
+import { exportEvidenceCommand } from "../../apps/madbridge/src/commands/export-evidence";
+import { startFixtureSession, type HarnessSession } from "./runtime-harness";
 import {
   capabilityRecordFilename,
   evaluateCapabilityFreshness,
@@ -443,4 +449,103 @@ test("no configured model string is accepted as identity evidence", () => {
       }
     }
   }
+});
+
+async function closedEvidenceFixture(
+  run: (session: HarnessSession, id: string) => Promise<void>,
+  fixtureMarker?: string,
+): Promise<void> {
+  const session = await startFixtureSession({ retainStorage: true, ...(fixtureMarker === undefined ? {} : { fixtureMarker }) });
+  const previous = process.env.MADV_STORAGE_DIR;
+  try {
+    const snapshot = await session.client.getSnapshot();
+    expect(snapshot.phase).toBe("active");
+    if (fixtureMarker !== undefined) {
+      const started = performance.now();
+      let observed = false;
+      while (!observed && performance.now() - started < 5000) {
+        const db = new Database(join(session.storage.ledgerDir, "ledger.sqlite3"), { readonly: true });
+        try {
+          observed = (db.query("SELECT event_json FROM events ORDER BY sequence").all() as { event_json: string }[])
+            .some(row => JSON.parse(row.event_json).payload?.text === fixtureMarker);
+        } finally { db.close(); }
+        if (!observed) await Bun.sleep(5);
+      }
+      expect(observed, "the marker must reach the ledger through fixture output").toBe(true);
+    }
+    await session.close();
+    process.env.MADV_STORAGE_DIR = session.storage.root;
+    await run(session, snapshot.sessionId);
+  } finally {
+    if (previous === undefined) delete process.env.MADV_STORAGE_DIR;
+    else process.env.MADV_STORAGE_DIR = previous;
+    await session.close();
+    rmSync(dirname(session.storage.root), { recursive: true });
+  }
+}
+
+test("production verify-ledger validates a fixture-produced ledger", async () => {
+  await closedEvidenceFixture(async (_session, id) => {
+    const result = await runCli(["verify-ledger", "--session", id, "--json"], { stdin: "", cwd: process.cwd() });
+    expect(result.exitCode).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.valid).toBe(true);
+    expect(output.count).toBeGreaterThan(0);
+  });
+}, 15000);
+
+test("production export-evidence consumes a fixture-produced session", async () => {
+  await closedEvidenceFixture(async (session, id) => {
+    const result = await runCli(["export-evidence", "--session", id, "--json"], { stdin: "", cwd: process.cwd() });
+    expect(result.exitCode).toBe(0);
+    const output = JSON.parse(result.stdout);
+    expect(output.outputDir).toBe(session.storage.sanitizedEvidenceDir);
+    expect(output.eventCount).toBeGreaterThan(0);
+    expect(existsSync(join(output.outputDir, "manifest.json"))).toBe(true);
+    const ledger = new Ledger(join(session.storage.ledgerDir, "ledger.sqlite3"));
+    try { expect(output.manifest.ledger_head_hash).toBe(ledger.verify().head); }
+    finally { ledger.close(); }
+  });
+}, 15000);
+
+test("exported evidence contains no allowlisted secret value", async () => {
+  const marker = "fixture.exact+a$b^value";
+  await closedEvidenceFixture(async (session, id) => {
+    const result = await exportEvidenceCommand({ session: id }, { cwd: process.cwd(), stdin: "", json: true }, {
+      environment: { LANG: marker },
+      allowlist: { ref: "fixture-only-exact-value", variables: [{ name: "LANG", required: true, secret: true }] },
+    });
+    expect(result.exitCode).toBe(0);
+    const output = JSON.parse(result.stdout);
+    const files = readdirSync(output.outputDir);
+    expect(files.length).toBeGreaterThan(0);
+    for (const file of files) expect(readFileSync(join(output.outputDir, file), "utf8")).not.toContain(marker);
+    expect(readFileSync(join(output.outputDir, "ledger-sanitized.json"), "utf8")).toContain("<redacted:LANG>");
+    const manifest = JSON.parse(readFileSync(join(session.storage.sanitizedEvidenceDir, "manifest.json"), "utf8"));
+    expect(manifest.redaction_rules_applied).toContain("exact_allowlisted_secret_values");
+    expect(manifest.redaction_rules_applied).toContain("secret-value:LANG");
+  }, marker);
+}, 15000);
+
+test("the manifest records which redaction rules ran", async () => {
+  await closedEvidenceFixture(async (session, id) => {
+    const result = await runCli(["export-evidence", "--session", id, "--json"], { stdin: "", cwd: process.cwd() });
+    expect(result.exitCode).toBe(0);
+    const manifest = JSON.parse(readFileSync(join(session.storage.sanitizedEvidenceDir, "manifest.json"), "utf8"));
+    expect(manifest.redaction_rules_applied).toContain("known_token_patterns");
+    expect(manifest.redaction_rules_applied).toContain("exact_allowlisted_secret_values");
+    expect(manifest.redaction_rules_applied.some((rule: string) => rule.startsWith("secret-value:"))).toBe(false);
+  });
+}, 15000);
+
+test("verify-ledger no longer defaults to .madv-runtime", async () => {
+  const legacy = mkdtempSync(join(tmpdir(), "task55-legacy-"));
+  try {
+    const directory = join(legacy, ".madv-runtime", "ledger");
+    mkdirSync(directory, { recursive: true });
+    new Ledger(join(directory, "ledger.db")).close();
+    const result = await runCli(["verify-ledger", "--json"], { stdin: "", cwd: legacy });
+    expect(result.exitCode).toBe(1);
+    expect(JSON.parse(result.stdout).error).toBe("session_required");
+  } finally { rmSync(legacy, { recursive: true }); }
 });

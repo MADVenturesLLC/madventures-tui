@@ -79,6 +79,7 @@ export interface HarnessOptions {
   readonly expireAuthAfter?: number;
   readonly mismatchAttestationAfter?: number;
   readonly failSecondSurfaceLaunch?: boolean;
+  readonly fixtureMarker?: string;
 }
 export interface HarnessSession {
   readonly client: BrokerClient;
@@ -110,7 +111,10 @@ function requestedSurfaces(options: HarnessOptions): readonly SurfaceId[] {
   if (options === null || typeof options !== "object" || Object.getPrototypeOf(options) !== Object.prototype
     || Reflect.ownKeys(options).some(key => !["surfaces", "injectFailureAt", "retainStorage", "processScenario",
       "wedgeHostAfter", "emitMalformedFrame", "skewOutputSeq", "skewSnapshotSeq", "failLedgerAppendAfter",
-      "swapBinaryBeforeExec", "expireAuthAfter", "mismatchAttestationAfter", "failSecondSurfaceLaunch"].includes(String(key)))) throw new Error("InvalidHarnessOptions");
+      "swapBinaryBeforeExec", "expireAuthAfter", "mismatchAttestationAfter", "failSecondSurfaceLaunch", "fixtureMarker"].includes(String(key)))) throw new Error("InvalidHarnessOptions");
+  const marker = Object.getOwnPropertyDescriptor(options, "fixtureMarker");
+  if (marker !== undefined && (!("value" in marker) || typeof marker.value !== "string"
+    || marker.value.length === 0 || marker.value.length > 256)) throw new Error("InvalidHarnessOptions");
   for (const key of ["failLedgerAppendAfter", "swapBinaryBeforeExec", "expireAuthAfter", "mismatchAttestationAfter", "failSecondSurfaceLaunch"] as const) {
     const field = Object.getOwnPropertyDescriptor(options, key);
     if (field === undefined) continue;
@@ -266,6 +270,7 @@ async function terminateFixtures(state: PartialBuildState): Promise<void> {
 
 export async function startFixtureSession(options: HarnessOptions = {}): Promise<HarnessSession> {
   const surfaces = requestedSurfaces(options);
+  const fixtureMarker = options.fixtureMarker;
   const injectFailureAt: BuildStep | undefined = Object.getOwnPropertyDescriptor(options, "injectFailureAt")?.value;
   for (const surface of FIXTURE_SURFACE_IDS) if (ADAPTER_REGISTRY.has(surface)) throw new Error("FixtureRegistryCollision");
   // The approved test seams run the production algorithms with closed fixture inputs.
@@ -300,6 +305,7 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
   let faultStarted: number | undefined;
   let builderOutputSeq = 0;
   let builderOutputText = "";
+  let fixtureEvidencePublished = false;
   let unrecordableLedgerFailure = false;
   const terminate = () => termination ??= state === undefined
     ? Promise.reject(new Error("FixtureStateUnavailable")) : (async () => {
@@ -360,6 +366,8 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
       let source = fixtureExecutableSource(execution.model);
       if (execution.execution_id === "builder") {
         const marker = 'if (process.argv.includes("--fixture-run")) {';
+        if (fixtureMarker !== undefined) source = source.replace(marker, marker + `
+  setTimeout(() => process.stdout.write("FIXTURE_EVIDENCE " + JSON.stringify({ text: process.env.LANG }) + "\\n"), 25);`);
         if (options.expireAuthAfter !== undefined) source = source.replace(marker, marker + `
   setTimeout(() => process.stdout.write("FIXTURE_AUTH_EXPIRED\\n"), ${options.expireAuthAfter});`);
         if (options.mismatchAttestationAfter !== undefined) source = source.replace(marker, marker + `
@@ -395,7 +403,8 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
     const envelope = parseTaskEnvelope(structuredClone(raw));
     const preflight = await runPurePreflightWithDependencies({
       envelope: raw, repositoryRoot: REPOSITORY, worktree: REPOSITORY,
-      ambient: { HOME: user.homedir, SHELL: user.shell, PATH: bin, TERM: "xterm-256color", TMPDIR: temp },
+      ambient: { HOME: user.homedir, SHELL: user.shell, PATH: bin, TERM: "xterm-256color", TMPDIR: temp,
+        ...(fixtureMarker === undefined ? {} : { LANG: fixtureMarker }) },
       installation: { installation_uid: user.uid, passwd_home: user.homedir, approved_path: bin },
       invocationArguments: [], settingsSources: [], storageRootOverride: storageRoot,
       hostCapabilities: { pty: true, processGroups: true, termination: true, timing: true },
@@ -444,6 +453,17 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
     if (!result.ok) throw new FixtureStartupFailure(result.failedStep, result.failure, state, root);
     if (state.storage === null || state.client === null || state.broker === null || state.ledger === null) throw new Error("FixtureBuildIncomplete");
     const underlying = state.client;
+    const fixtureMessage = (text: string) => {
+      const identity = executions[0]!, payload = { text };
+      return {
+        protocol_version: PROTOCOL_VERSION, event_id: crypto.randomUUID(), session_id: state!.sessionId,
+        parent_event_id: null, sender_execution_id: identity.execution_id, receiver_execution_id: executions[1]!.execution_id,
+        sender_role: identity.role, sender_surface: identity.surface, sender_model: identity.model, sender_provider: identity.provider,
+        task_envelope_hash: envelope.envelope_hash, repository_fingerprint: envelope.repository_fingerprint,
+        event_type: "message" as const, payload, payload_hash: sha256CanonicalSync(payload), created_at: new Date().toISOString(),
+        previous_event_hash: state!.ledger!.readAfter(0).at(-1)!.event_hash,
+      };
+    };
     if (options.processScenario !== undefined) {
       const before = descriptorIdentities();
       fixtureAdapter = Bun.spawn([process.execPath, "-e", "process.stdin.resume();"], {
@@ -469,6 +489,17 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
             if (host.executionId === "builder") {
               builderOutputSeq += 1;
               builderOutputText = (builderOutputText + new TextDecoder().decode(fact.bytes)).slice(-4096);
+              if (fixtureMarker !== undefined && !fixtureEvidencePublished) {
+                const match = /FIXTURE_EVIDENCE (.+)\r?\n/.exec(builderOutputText);
+                if (match !== null) {
+                  const record: unknown = JSON.parse(match[1]!);
+                  if (record === null || typeof record !== "object" || !("text" in record)
+                    || record.text !== fixtureMarker) throw new Error("FixtureEvidenceMismatch");
+                  fixtureEvidencePublished = true;
+                  const published = await state!.adapters[0]!.client.publish(fixtureMessage(record.text));
+                  if (!published.ok) throw new Error(`FixtureEvidencePublicationFailed:${published.error}`);
+                }
+              }
               const expired = options.expireAuthAfter !== undefined && builderOutputText.includes("FIXTURE_AUTH_EXPIRED");
               const mismatch = options.mismatchAttestationAfter !== undefined && builderOutputText.includes("FIXTURE_REATTEST fixture-drifted-model");
               if (faultStarted === undefined && (expired || mismatch)) {
@@ -548,15 +579,7 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
                 if (options.failLedgerAppendAfter === 1) { db.exec("PRAGMA query_only = OFF"); ledger.append = append; }
               }
             };
-            const identity = executions[0]!, payload = { text: "synthetic fixture append" };
-            const result = await state!.adapters[0]!.client.publish({
-              protocol_version: PROTOCOL_VERSION, event_id: crypto.randomUUID(), session_id: state!.sessionId,
-              parent_event_id: null, sender_execution_id: identity.execution_id, receiver_execution_id: executions[1]!.execution_id,
-              sender_role: identity.role, sender_surface: identity.surface, sender_model: identity.model, sender_provider: identity.provider,
-              task_envelope_hash: envelope.envelope_hash, repository_fingerprint: envelope.repository_fingerprint,
-              event_type: "message", payload, payload_hash: sha256CanonicalSync(payload), created_at: new Date().toISOString(),
-              previous_event_hash: ledger.readAfter(0).at(-1)!.event_hash,
-            });
+            const result = await state!.adapters[0]!.client.publish(fixtureMessage("synthetic fixture append"));
             faultReport.publicationError = result.ok ? null : result.error;
             unrecordableLedgerFailure = options.failLedgerAppendAfter === "persistent" && !result.ok && result.error === "ledger_write_failed";
             if (!result.ok) { await Promise.all(pumps); await underlying.close(); }

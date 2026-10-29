@@ -3,10 +3,14 @@
 // NO raw transcripts or secrets in the output — only sanitized ledger
 // events, artifact hashes, and a final manifest.
 
-import { existsSync, mkdirSync, writeFileSync, readFileSync } from "fs";
+import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { join } from "path";
 import { Ledger } from "@madventures/ledger";
-import { ArtifactStore, createManifest } from "@madventures/artifact-store";
+import { createManifest } from "@madventures/artifact-store";
+import { ADAPTER_REGISTRY } from "@madventures/protocol";
+import { validateStorageRoot } from "@madventures/storage";
+import { redact, redactWithAllowlist, type EnvironmentAllowlistV1 } from "../../../../packages/supervisor/src/environment";
+import { resolveEvidencePaths } from "./verify-ledger";
 import type { CommandFlags, CommandContext, CommandResult } from "./types";
 
 // Patterns that must never appear in exported evidence
@@ -19,43 +23,52 @@ const SECRET_PATTERNS = [
   /token\s*[:=]\s*[a-zA-Z0-9]{20,}/gi, // token assignments
 ];
 
-function sanitizeText(text: string): string {
+function sanitizeText(text: string, exact: (text: string) => string): string {
   let sanitized = text;
   for (const pattern of SECRET_PATTERNS) {
     sanitized = sanitized.replace(pattern, "[REDACTED]");
   }
-  return sanitized;
+  return exact(sanitized);
 }
 
-function sanitizeEvent(eventJson: string): string {
+function sanitizeEvent(eventJson: string, exact: (text: string) => string): string {
   // Parse, redact secrets, re-serialize
   try {
     const parsed = JSON.parse(eventJson);
-    const stringified = JSON.stringify(parsed);
-    const sanitized = sanitizeText(stringified);
-    return sanitized;
+    return JSON.stringify(parsed, (_key, value) => typeof value === "string" ? sanitizeText(value, exact) : value);
   } catch {
     // If not JSON, sanitize as plain text
-    return sanitizeText(eventJson);
+    return sanitizeText(eventJson, exact);
   }
 }
 
 export async function exportEvidenceCommand(
   flags: CommandFlags,
   ctx: CommandContext,
+  testOnly?: { readonly environment: Readonly<Record<string, string>>; readonly allowlist: EnvironmentAllowlistV1 },
 ): Promise<CommandResult> {
-  // Resolve paths
-  const runtimeDir = join(ctx.cwd, ".madv-runtime");
-  const ledgerPath = typeof flags["ledger"] === "string"
-    ? (flags["ledger"].startsWith("/") ? flags["ledger"] : join(ctx.cwd, flags["ledger"]))
-    : join(runtimeDir, "ledger", "ledger.db");
-  const artifactsDir = typeof flags["artifacts"] === "string"
-    ? (flags["artifacts"].startsWith("/") ? flags["artifacts"] : join(ctx.cwd, flags["artifacts"]))
-    : join(runtimeDir, "artifacts");
-
-  const outputDir = typeof flags["output"] === "string"
-    ? (flags["output"].startsWith("/") ? flags["output"] : join(ctx.cwd, flags["output"]))
-    : join(ctx.cwd, "evidence-export");
+  const paths = resolveEvidencePaths(flags, ctx);
+  if (!paths.ok) return paths.result;
+  const { ledgerPath, artifactsDir, outputDir } = paths;
+  if (typeof flags["session"] === "string" && typeof flags["output"] !== "string") {
+    const validation = validateStorageRoot(outputDir, ctx.cwd, ctx.cwd);
+    if (!validation.ok) return { exitCode: 1, stdout: ctx.json ? JSON.stringify({ ok: false, error: `storage_root_invalid:${validation.failure}` }) : "",
+      stderr: ctx.json ? "" : `storage root failed validation: ${validation.failure}\n` };
+  }
+  const rules = new Set(["known_token_patterns", "exact_allowlisted_secret_values"]);
+  const exact = (text: string): string => {
+    for (const registration of ADAPTER_REGISTRY.values()) {
+      const result = redact(text, process.env as Readonly<Record<string, string>>, registration);
+      text = result.text;
+      for (const rule of result.rulesApplied) rules.add(rule);
+    }
+    if (testOnly !== undefined) {
+      const result = redactWithAllowlist(text, testOnly.environment, testOnly.allowlist);
+      text = result.text;
+      for (const rule of result.rulesApplied) rules.add(rule);
+    }
+    return text;
+  };
 
   // Validate inputs exist
   if (!existsSync(ledgerPath)) {
@@ -118,7 +131,7 @@ export async function exportEvidenceCommand(
   const sanitizedEvents = rows.map((row) => ({
     sequence: row.sequence,
     event_id: row.event_id,
-    event_json: sanitizeEvent(row.event_json),
+    event_json: sanitizeEvent(row.event_json, exact),
     previous_hash: row.previous_hash,
     event_hash: row.event_hash,
     created_at: row.created_at,
@@ -147,11 +160,11 @@ export async function exportEvidenceCommand(
   }
 
   // Create final manifest
-  const manifest = createManifest(
+  const manifest = { ...createManifest(
     artifactMetadata,
     verifyResult.head,
     repoFingerprint,
-  );
+  ), redaction_rules_applied: [...rules] };
 
   // Write sanitized evidence package
   mkdirSync(outputDir, { recursive: true, mode: 0o700 });
