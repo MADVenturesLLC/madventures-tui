@@ -62,6 +62,7 @@ export const FIXTURE_REGISTRY: ReadonlyMap<SurfaceId, AdapterRegistrationV1> = O
 export interface HarnessOptions {
   readonly surfaces?: readonly SurfaceId[];
   readonly injectFailureAt?: BuildStep;
+  readonly retainStorage?: boolean;
 }
 export interface HarnessSession {
   readonly client: BrokerClient;
@@ -91,7 +92,9 @@ export class RealSurfaceRejected extends Error {
 
 function requestedSurfaces(options: HarnessOptions): readonly SurfaceId[] {
   if (options === null || typeof options !== "object" || Object.getPrototypeOf(options) !== Object.prototype
-    || Reflect.ownKeys(options).some(key => key !== "surfaces" && key !== "injectFailureAt")) throw new Error("InvalidHarnessOptions");
+    || Reflect.ownKeys(options).some(key => key !== "surfaces" && key !== "injectFailureAt" && key !== "retainStorage")) throw new Error("InvalidHarnessOptions");
+  const retain = Object.getOwnPropertyDescriptor(options, "retainStorage");
+  if (retain !== undefined && (!("value" in retain) || typeof retain.value !== "boolean")) throw new Error("InvalidHarnessOptions");
   const injection = Object.getOwnPropertyDescriptor(options, "injectFailureAt");
   if (injection !== undefined && (!("value" in injection) || !BUILD_STEPS.includes(injection.value))) {
     throw new Error("InvalidHarnessOptions");
@@ -205,7 +208,7 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
     });
     await attempt(() => completed.ledger!.close());
     if (errors.length) throw new AggregateError(errors, "FixtureCloseFailed");
-    rmSync(root, { recursive: true });
+    if (!options.retainStorage) rmSync(root, { recursive: true });
   })();
   try {
     const bin = join(root, "bin"), temp = join(root, "tmp"), storageRoot = join(root, "storage");
@@ -320,4 +323,79 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
     }
     throw error;
   }
+}
+
+export interface ChildFixtureSession {
+  readonly supervisorPid: number;
+  readonly hostPids: readonly number[];
+  readonly childPids: readonly number[];
+  readonly processGroups: readonly number[];
+  readonly storage: SessionStorage;
+  readonly initialSnapshot: BrokerSnapshot;
+  exit(mode: "clean" | "SIGTERM" | "crash" | "SIGKILL"): Promise<{ exitCode: number | null; signalCode: string | null }>;
+  dispose(): Promise<void>;
+}
+
+export async function startFixtureSessionInChildProcess(): Promise<ChildFixtureSession> {
+  const proc = Bun.spawn([process.execPath, join(REPOSITORY, "test/phase3a/adversarial/supervisor-entry.ts")], {
+    cwd: REPOSITORY, env: { PATH: `${dirname(process.execPath)}:/usr/bin:/bin` },
+    stdin: "pipe", stdout: "pipe", stderr: "pipe",
+  });
+  const stderr = new Response(proc.stderr).text();
+  const reader = proc.stdout.getReader();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let fixture: { storage: SessionStorage; snapshot: BrokerSnapshot };
+  try {
+    fixture = await Promise.race([
+      (async () => {
+        let text = "";
+        while (!text.includes("\n")) {
+          const chunk = await reader.read();
+          if (chunk.done) throw new Error("FixtureSupervisorExitedBeforeReady");
+          text += new TextDecoder().decode(chunk.value);
+          if (text.length > 65536) throw new Error("FixtureSupervisorReportTooLarge");
+        }
+        return JSON.parse(text.trim()) as typeof fixture;
+      })(),
+      new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("FixtureSupervisorStartupTimeout")), 5000); }),
+    ]);
+  } catch (error) {
+    proc.kill("SIGKILL");
+    await proc.exited;
+    await stderr;
+    throw error;
+  } finally { clearTimeout(timer); reader.releaseLock(); }
+  const executions = fixture.snapshot.executions ?? [];
+  const hostPids = executions.map(execution => execution.hostPid!);
+  const childPids = executions.map(execution => execution.childPid!);
+  const processGroups = executions.map(execution => execution.processGroupId!);
+  if (executions.length !== FIXTURE_SURFACE_IDS.length || [...hostPids, ...childPids, ...processGroups]
+    .some(pid => !Number.isSafeInteger(pid) || pid <= 1)) {
+    proc.kill("SIGKILL");
+    await proc.exited;
+    throw new Error("FixtureSupervisorIdentityMissing");
+  }
+  const exit = async (mode: "clean" | "SIGTERM" | "crash" | "SIGKILL") => {
+    if (mode === "SIGTERM" || mode === "SIGKILL") proc.kill(mode);
+    else { proc.stdin.write(`${mode}\n`); proc.stdin.flush(); }
+    let exitTimer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([proc.exited, new Promise<never>((_, reject) => {
+        exitTimer = setTimeout(() => reject(new Error("FixtureSupervisorExitTimeout")), HOST_DEADLINES_MS.outerBound);
+      })]);
+    } finally { clearTimeout(exitTimer); }
+    await stderr;
+    return { exitCode: proc.exitCode, signalCode: proc.signalCode };
+  };
+  return Object.freeze({ supervisorPid: proc.pid, hostPids: Object.freeze(hostPids), childPids: Object.freeze(childPids),
+    processGroups: Object.freeze(processGroups), storage: fixture.storage, initialSnapshot: fixture.snapshot, exit,
+    async dispose() {
+      if (proc.exitCode === null && proc.signalCode === null) await exit("SIGKILL");
+      const deadline = performance.now() + HOST_DEADLINES_MS.outerBound;
+      while ([...hostPids, ...childPids].some(alive) && performance.now() < deadline) await Bun.sleep(10);
+      if ([...hostPids, ...childPids].some(alive)) throw new Error("FixtureSupervisorResidualProcess");
+      proc.stdin.end();
+      rmSync(dirname(fixture.storage.root), { recursive: true });
+    },
+  });
 }
