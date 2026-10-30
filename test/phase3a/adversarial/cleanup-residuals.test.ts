@@ -4,6 +4,23 @@ import * as harness from "../runtime-harness";
 
 afterAll(() => console.log(`Task 54 runtime-harness alive EPERM count=${harness.fixtureLivenessEpermCount()}`));
 
+test("the residual census retains durable closure and token evidence after storage deletion", async () => {
+  const session = await harness.startFixtureSession();
+  try {
+    const snapshot = await session.client.getSnapshot();
+    expect(snapshot.phase).toBe("active");
+    expect(snapshot.tokenState).toBe("valid");
+    await session.close();
+    expect(existsSync(session.storage.root)).toBe(false);
+    const data = harness.fixtureResidualReport();
+    const durable = Reflect.get(data, "durableSessions");
+    expect(durable, "deleted session storage must leave durable lifecycle evidence in the census").toBeArray();
+    expect(durable).toContainEqual({ sessionId: snapshot.sessionId, phase: "closed", tokenState: "invalidated" });
+    expect(data.openSessions).toBe(0);
+    expect(data.liveTokens).toBe(0);
+  } finally { await session.close(); }
+}, 15000);
+
 test("the first surface is torn down when the second surface fails to launch", async () => {
   let failure: harness.FixtureStartupFailure | undefined;
   let unexpected: harness.HarnessSession | undefined;

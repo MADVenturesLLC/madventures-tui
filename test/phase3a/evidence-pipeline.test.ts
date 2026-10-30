@@ -527,6 +527,38 @@ test("exported evidence contains no allowlisted secret value", async () => {
   }, marker);
 }, 15000);
 
+for (const kind of ["allowlisted secret", "known token pattern"] as const) {
+  test(`exported evidence redacts a ${kind} in nested property keys`, async () => {
+    const marker = kind === "allowlisted secret" ? 'fixture.key+a$b^"escaped\\value' : "ghp_" + "x".repeat(36);
+    await closedEvidenceFixture(async (session, id) => {
+      const ledger = new Ledger(join(session.storage.ledgerDir, "ledger.sqlite3"));
+      try {
+        const message = ledger.readAfter(0).map(row => JSON.parse(row.event_json)).find(event => event.event_type === "message");
+        expect(message.payload).toEqual({ text: marker, [marker]: [{ [marker]: marker }] });
+      } finally { ledger.close(); }
+      const result = await exportEvidenceCommand({ session: id }, { cwd: process.cwd(), stdin: "", json: true },
+        kind === "allowlisted secret" ? {
+          environment: { LANG: marker },
+          allowlist: { ref: "fixture-only-key-redaction", variables: [{ name: "LANG", required: true, secret: true }] },
+        } : undefined);
+      expect(result.exitCode).toBe(0);
+      const output = JSON.parse(result.stdout);
+      for (const file of readdirSync(output.outputDir)) {
+        const text = readFileSync(join(output.outputDir, file), "utf8");
+        expect(text).not.toContain(marker);
+        if (file.endsWith(".json")) expect(() => JSON.parse(text)).not.toThrow();
+      }
+      const exported = JSON.parse(readFileSync(join(output.outputDir, "ledger-sanitized.json"), "utf8"));
+      const message = exported.map((row: { event_json: string }) => JSON.parse(row.event_json))
+        .find((event: { event_type: string }) => event.event_type === "message");
+      const redacted = kind === "allowlisted secret" ? "<redacted:LANG>" : "[REDACTED]";
+      expect(message.payload).toEqual({ text: redacted, [redacted]: [{ [redacted]: redacted }] });
+      expect(JSON.parse(readFileSync(join(output.outputDir, "manifest.json"), "utf8")).redaction_rules_applied)
+        .toContain(kind === "allowlisted secret" ? "secret-value:LANG" : "known_token_patterns");
+    }, marker);
+  }, 15000);
+}
+
 test("the manifest records which redaction rules ran", async () => {
   await closedEvidenceFixture(async (session, id) => {
     const result = await runCli(["export-evidence", "--session", id, "--json"], { stdin: "", cwd: process.cwd() });

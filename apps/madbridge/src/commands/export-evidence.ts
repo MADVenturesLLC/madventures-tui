@@ -32,10 +32,16 @@ function sanitizeText(text: string, exact: (text: string) => string): string {
 }
 
 function sanitizeEvent(eventJson: string, exact: (text: string) => string): string {
-  // Parse, redact secrets, re-serialize
+  function sanitize(value: unknown): unknown {
+    if (typeof value === "string") return sanitizeText(value, exact);
+    if (Array.isArray(value)) return value.map(sanitize);
+    if (value !== null && typeof value === "object") {
+      return Object.fromEntries(Object.entries(value).map(([key, child]) => [sanitizeText(key, exact), sanitize(child)]));
+    }
+    return value;
+  }
   try {
-    const parsed = JSON.parse(eventJson);
-    return JSON.stringify(parsed, (_key, value) => typeof value === "string" ? sanitizeText(value, exact) : value);
+    return JSON.stringify(sanitize(JSON.parse(eventJson)));
   } catch {
     // If not JSON, sanitize as plain text
     return sanitizeText(eventJson, exact);

@@ -9,8 +9,8 @@ import {
   type AdapterRegistrationV1, type InterruptionReasonCodeV1, type SurfaceId,
 } from "@madventures/protocol";
 import { validateStorageRoot, type SessionStorage } from "@madventures/storage";
-import type { Ledger, LedgerRow } from "@madventures/ledger";
-import { replayDurablePrefix } from "../../packages/broker/src/next-start-reconciliation";
+import { Ledger, type LedgerRow, type LifecycleState } from "@madventures/ledger";
+import { planPrefixCompletion, replayDurablePrefix } from "../../packages/broker/src/next-start-reconciliation";
 import { runPurePreflightWithDependencies } from "../../packages/supervisor/src/preflight";
 import { BUILD_STEPS, rollbackBuild, runTransactionalBuildWithDependencies,
   type BuildFailureCode, type BuildStep, type PartialBuildState } from "../../packages/supervisor/src/build";
@@ -177,6 +177,7 @@ interface FixtureResources {
   storage: SessionStorage | null;
   ledger: Ledger | null;
   closed: boolean;
+  durable: Pick<LifecycleState, "sessionId" | "phase" | "tokenState"> | null;
   pids: Set<number>;
   groups: Set<number>;
   hosts: Set<number>;
@@ -186,13 +187,23 @@ interface FixtureResources {
 }
 const fixtureResources: FixtureResources[] = [];
 function recordFixtureResources(): FixtureResources {
-  const record: FixtureResources = { storage: null, ledger: null, closed: false, pids: new Set(), groups: new Set(),
+  const record: FixtureResources = { storage: null, ledger: null, closed: false, durable: null, pids: new Set(), groups: new Set(),
     hosts: new Set(), children: new Set(), channels: new Set(), swappedBinaryExecuted: false };
   fixtureResources.push(record);
   return record;
 }
 function recordChannels(record: FixtureResources, before: Set<string>): void {
   for (const id of descriptorIdentities()) if (!before.has(id)) record.channels.add(id);
+}
+function recordDurableState(record: FixtureResources): void {
+  if (record.storage === null) return;
+  const path = join(record.storage.ledgerDir, "ledger.sqlite3");
+  if (!existsSync(path)) return;
+  const db = new Database(path, { readonly: true });
+  try {
+    const state = replayDurablePrefix(db.query("SELECT * FROM events ORDER BY sequence").all() as LedgerRow[]);
+    record.durable = { sessionId: state.sessionId, phase: state.phase, tokenState: state.tokenState };
+  } finally { db.close(); }
 }
 export function fixtureResidualReport() {
   const descriptors = descriptorIdentities(), pids = new Set<number>(), groups = new Set<number>(), channels = new Set<string>();
@@ -201,21 +212,13 @@ export function fixtureResidualReport() {
     for (const pid of record.pids) if (alive(pid)) pids.add(pid);
     for (const pgid of record.groups) if (alive(-pgid)) groups.add(pgid);
     for (const id of record.channels) if (descriptors.has(id)) channels.add(id);
-    if (!record.closed) openSessions += 1;
+    recordDurableState(record);
+    if (record.durable?.sessionId != null ? record.durable.phase !== "closed" : !record.closed) openSessions += 1;
+    if (record.durable?.tokenState === "valid") liveTokens += 1;
     if (record.ledger !== null) {
       let readable = true;
       try { record.ledger.readAfter(0); } catch { readable = false; }
       if (!record.closed || readable) openLedgers += 1;
-    }
-    if (record.storage !== null) {
-      const path = join(record.storage.ledgerDir, "ledger.sqlite3");
-      if (existsSync(path)) {
-        const db = new Database(path, { readonly: true });
-        try {
-          const rows = db.query("SELECT * FROM events ORDER BY sequence").all() as LedgerRow[];
-          if (replayDurablePrefix(rows).tokenState === "valid") liveTokens += 1;
-        } finally { db.close(); }
-      }
     }
   }
   return freeze({ recordedRuns: fixtureResources.length,
@@ -223,6 +226,7 @@ export function fixtureResidualReport() {
     recordedChildren: fixtureResources.reduce((n, record) => n + record.children.size, 0),
     recordedDescriptors: new Set(fixtureResources.flatMap(record => [...record.channels])).size,
     livePids: [...pids], liveGroups: [...groups], openDescriptors: [...channels], openLedgers, openSessions, liveTokens,
+    durableSessions: fixtureResources.flatMap(record => record.durable === null ? [] : [record.durable]),
     swappedBinaryExecuted: fixtureResources.some(record => record.swappedBinaryExecuted) });
 }
 
@@ -351,6 +355,7 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
       finalSnapshot = await completed.client!.getSnapshot();
     });
     await attempt(() => completed.ledger!.close());
+    await attempt(() => recordDurableState(resources));
     if (errors.length) throw new AggregateError(errors, "FixtureCloseFailed");
     resources.closed = true;
     if (!options.retainStorage) rmSync(root, { recursive: true });
@@ -453,8 +458,8 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
     if (!result.ok) throw new FixtureStartupFailure(result.failedStep, result.failure, state, root);
     if (state.storage === null || state.client === null || state.broker === null || state.ledger === null) throw new Error("FixtureBuildIncomplete");
     const underlying = state.client;
-    const fixtureMessage = (text: string) => {
-      const identity = executions[0]!, payload = { text };
+    const fixtureMessage = (payload: Record<string, unknown>) => {
+      const identity = executions[0]!;
       return {
         protocol_version: PROTOCOL_VERSION, event_id: crypto.randomUUID(), session_id: state!.sessionId,
         parent_event_id: null, sender_execution_id: identity.execution_id, receiver_execution_id: executions[1]!.execution_id,
@@ -496,7 +501,9 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
                   if (record === null || typeof record !== "object" || !("text" in record)
                     || record.text !== fixtureMarker) throw new Error("FixtureEvidenceMismatch");
                   fixtureEvidencePublished = true;
-                  const published = await state!.adapters[0]!.client.publish(fixtureMessage(record.text));
+                  const published = await state!.adapters[0]!.client.publish(fixtureMessage({
+                    text: record.text, [record.text]: [{ [record.text]: record.text }],
+                  }));
                   if (!published.ok) throw new Error(`FixtureEvidencePublicationFailed:${published.error}`);
                 }
               }
@@ -579,7 +586,7 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
                 if (options.failLedgerAppendAfter === 1) { db.exec("PRAGMA query_only = OFF"); ledger.append = append; }
               }
             };
-            const result = await state!.adapters[0]!.client.publish(fixtureMessage("synthetic fixture append"));
+            const result = await state!.adapters[0]!.client.publish(fixtureMessage({ text: "synthetic fixture append" }));
             faultReport.publicationError = result.ok ? null : result.error;
             unrecordableLedgerFailure = options.failLedgerAppendAfter === "persistent" && !result.ok && result.error === "ledger_write_failed";
             if (!result.ok) { await Promise.all(pumps); await underlying.close(); }
@@ -659,6 +666,7 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
         await Promise.all(pumps);
         resources.swappedBinaryExecuted = options.swapBinaryBeforeExec === true
           && existsSync(join(root, "fixture-builder.child.environment.json"));
+        recordDurableState(resources);
         rmSync(root, { recursive: true });
         resources.closed = true;
       }
@@ -784,9 +792,22 @@ export async function startFixtureSessionInChildProcess(): Promise<ChildFixtureS
     async dispose() {
       if (proc.exitCode === null && proc.signalCode === null) await exit("SIGKILL");
       const deadline = performance.now() + HOST_DEADLINES_MS.outerBound;
-      while ([...hostPids, ...childPids].some(alive) && performance.now() < deadline) await Bun.sleep(10);
-      if ([...hostPids, ...childPids].some(alive)) throw new Error("FixtureSupervisorResidualProcess");
+      const live = () => [...hostPids, ...childPids].some(alive) || processGroups.some(pgid => alive(-pgid));
+      while (live() && performance.now() < deadline) await Bun.sleep(10);
+      if (live()) throw new Error("FixtureSupervisorResidualProcess");
       proc.stdin.end();
+      // Complete crash/SIGKILL prefixes through production reconciliation before deleting their evidence.
+      const ledger = new Ledger(join(fixture.storage.ledgerDir, "ledger.sqlite3"));
+      try {
+        const rows = ledger.readAfter(0), first = JSON.parse(rows[0]!.event_json), last = rows.at(-1)!;
+        ledger.appendMany(planPrefixCompletion(replayDurablePrefix(rows), {
+          taskEnvelopeHash: first.task_envelope_hash, repositoryFingerprint: first.repository_fingerprint,
+          previousEventHash: last.event_hash, lastDurableEventId: last.event_id,
+          createdAt: new Date().toISOString(), eventIds: Array.from({ length: 4 }, () => crypto.randomUUID()),
+          governedProcessesGone: true, founderCommandId: null,
+        }));
+      } finally { ledger.close(); }
+      recordDurableState(resources);
       rmSync(dirname(fixture.storage.root), { recursive: true });
       resources.closed = true;
     },

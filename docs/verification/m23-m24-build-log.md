@@ -963,3 +963,90 @@ The evidence/acceptance file checks above are not bare or adversarial-suite runs
 Result: five added named tests, eight passing in the evidence file including all three earlier tests, nine passing in the authorized acceptance file, a causally failing deliberate break with exact restoration hashes, required typecheck exit 0 and bare suite 1861 pass/0 fail. The extra precheck and lost supplementary numeric receipt are disclosed above. No B9 halt occurred during Task 55. No break is committed. The final ordered gates follow this task's commit and are recorded in the PR description and final report; the five-commit limit precludes appending a sixth committed log section for them.
 
 Pre-commit checks: git diff --check and git diff --cached --check exited 0 after removing one trailing blank line in this documentation section. Explicit-path staging contains only the six Task 55 paths. The staged credential-shape scan and exact-path check passed. The commit message is checked for 72-character lines and exactly the three final attribution trailers before git commit -F -. No hook output has been supplied.
+
+## Correction round 1
+
+Performed by session:codex/m23-m24-r3, role builder, execution surface codex, under DEC-20261028-02 B8 and B12 and builder Addendum 8. Parent: 03b31247374cba31fc70f5fa64e018b1b62ec651. This section cannot contain its own commit SHA; the final report and pr-body-r2.md record it and the ordered gates at that exact head after this commit. No earlier commit is amended.
+
+### Authority, identity and preconditions
+
+Addendum 8: /Users/michaeldaley/builds/m23-m24-r1-pr/prompt-r3/builder-addendum-m23-m24-8-correction-r1.md, SHA-256 b882d84e060411b3aefa16613a5d023f7696739fdbc5e8d972b75be131ccd45f. The main prompt and all eight addenda were read. Authority document hashes all match the prompt. DEC-20261028-02 is 0eedf3e448fd999694a082267fbf5990083ad00afbe6dfb91ec9e823b5f26c82. No review report or GitHub page was read; the FAIL and three substantive findings are the Founder's report in Addendum 8 item 4, not an independent finding or verdict issued by this builder.
+
+Harness Codex; shown model GPT-6, exact served variant not shown. Filesystem sandbox unrestricted, danger-full-access; approval policy not shown. No hook output supplied. Agent-start tools and their role names were reported in the session; no agent, subagent, external reviewer or helper agent was started. Addendum 3's waiver controls the conflicting host instructions to use reviewer agents. Prior-session memory context was supplied and consulted during discovery before the prompt files were located and read; this is a deviation, not correction authority. The Founder later directed no further prior-session memory use; none was read after that instruction.
+
+Working directory /Users/michaeldaley/builds/madventures-tui-m23-m24-r1, branch build/m23-m24-r1, initially clean at the parent above. git fetch origin main build/m23-m24-r1 exited 0. Fetched origin/main is exactly 189c2c12fb0147909f0b8fdc550affca92e70156 and origin/build/m23-m24-r1 is exactly the parent. The runtime check matched command paths /Users/michaeldaley/.bun/bin/bun and bunx; bunx resolves by symlink to that same Bun; version 1.4.2; revision 744846f844374847c902b5e7fd59b4342a51ef99; executable SHA-256 35d20dd0263e5c950194434b925454fdfa9ba6e4467da960410fa05b08a7a5b5. No runtime or host setting changed. Every Bun command puts that directory first on PATH within its own shell.
+
+The Founder supplied the host report and unrestricted-test approval verbatim:
+
+> Visible apps: Finder, cmux, Claude, Google Chrome, Messages, ChatGPT, Antigravity, Hermes. Hermes processes: 3. Load averages: 3.54 3.21 2.61. I approve running this build's test commands outside the sandbox for the rest of this session, as under Addendum 5. From here on use no memory of earlier sessions, and record under Deviations that prior-session memory was consulted during discovery before the prompt files were read.
+
+No test or correction edit ran while that host condition was pending. The session paused under DEC-20261028-01 B5 because Hermes was reported running, and under the host-readiness requirement. The current uptime was 8:34, load averages 3.10 3.14 2.60. The Founder then supplied, verbatim:
+
+> Hermes stopped and host quieted as far as I can. Visible apps: Finder, cmux, Claude, Google Chrome, Messages, ChatGPT, Antigravity. Hermes processes: 0. Load averages: 1.77 2.34 2.43. Host ready
+
+All correction tests run in the current unrestricted environment under that approval. No process listing, credential access or GitHub API call was made. Dependency installation exited 0 with no dependency changes. It changed only the executable bit of packages/founder-act/src/main.ts; the prompt-authorized restore to 100644 was performed, with zero content change. The tree was clean again before baseline testing. bun.lock stays byte-identical at 34224c0133c44d967c4a4da8b75bf11093c573c47e42bcaf502c6d6f61c3e7c0.
+
+### Files and corrections
+
+- test/phase3a/adversarial/wedged-host.test.ts: the exact required SIGSTOP test now includes the existing governed grandchild and asserts its death before teardown. A separate host-death calibration proves that this member survives host death alone. Every original timing assertion remains. An AggregateError preserves the containment assertion alongside any cleanup error, rather than allowing teardown to mask it.
+- test/phase3a/runtime-harness.ts: record the durable session identity, phase and token state from read-only SQLite replay before storage deletion, and refresh from any ledger still on disk. The census counts these records and exposes copied durableSessions. Child-supervisor disposal checks recorded groups as well as PIDs and completes crash/SIGKILL prefixes through the existing production next-start reconciliation before deleting their evidence; ordinary close does not reconcile away a missing founderClose. Synthetic fixture output is published internally with nested property keys as well as values for the key-redaction tests. No publication authority is returned to tests.
+- test/phase3a/adversarial/cleanup-residuals.test.ts: add a check that a deleted session leaves durable closed/invalidated evidence; preserve the original all-zero resource assertions.
+- apps/madbridge/src/commands/export-evidence.ts: recursively apply the existing known-pattern and exact-value passes to strings in object keys, values and arrays, then serialize valid JSON. This is the only lasting production change in this correction.
+- test/phase3a/evidence-pipeline.test.ts: add exact-allowlisted and known-pattern key cases, including nested arrays, nested keys and escaped characters, checking fixture-produced raw input, every exported file, parsed output and manifest rules. docs/verification/m23-m24-build-log.md appends this record. No conditional fixture-adapters.ts change is needed.
+
+### RED, breaks, restoration and counts
+
+The first PGID log was prematurely named RED: it is a passing one-test calibration, proving the existing grandchild survives host death. It is retained as such, not claimed as a failed regression test. Because production's direct PGID path is already correct and the defect is missing causal coverage, the required containment RED uses the prescribed S3-only skip at the binding parent with the strengthened test. Exactly one test failed. Teardown initially masked the assertion with FixtureContainmentIncomplete and a lifecycle error; the test-only error aggregation preserves both failures. This is the only self-fix of the correction tests and it weakens no assertion.
+
+The complete six-test wedged-host file then passed. The deliberate break skipped both process.kill(-pgid, SIGKILL) and handle.killPgid only in S3, leaving every other state unchanged; the complete diff was shown before the run. The unfiltered file showed 5 pass, 1 fail, including this assertion:
+
+```text
+error: the recorded governed descendant must be gone within the outer bound
+Expected: false
+Received: true
+```
+
+The broker file was restored byte-for-byte to SHA-256 9ba986edb28133e2f7a177f95280b2088b8bd5051e80ba58794dc0555a5a8bb7; the corrected test is fe46ed9c7277e0b3e2e52083f93deb06497931bbb39b7968fd811d1b6823b0a9. No broker change is committed. In the healthy corrected run the first S3 case reported detectedMs 255.06633299999993, deathMs 281.033083, ackWindowEndedMs 249.38158300000003, pgidKillAttemptedMs 249.89749999999998 and hostKillAttemptedMs 249.92566700000003. The independent calibration reported host_dead_ms 106.17904099999998 and descendant_alive true.
+
+The census RED selected exactly one test and failed because durableSessions was undefined after deletion. With the correction, the complete file passed 3 tests. The deliberate break added the retainStorage condition to founderClose, omitting it for non-retained sessions, and its full diff was shown. The unfiltered file showed 1 pass, 2 fail. Durable evidence was active/valid instead of closed/invalidated, and the original residual assertion failed:
+
+```text
+expect(data.openSessions).toBe(0)
+Expected: 0
+Received: 3
+```
+
+The printed census also had liveTokens 3 while PIDs, groups, descriptors and ledgers were all zero. This demonstrates the durable residual cannot be hidden by deleting storage or setting the harness closed flag. Restored harness SHA-256 at this point was ad6455f30c5f798023008f88fd1e12c768d4bec06d9f75a8fc01b43831022995; cleanup-residuals.test.ts is 3b3112f316f63ab1b98029c2d7ea953b6dd18125c3417278611e411b26d0aec7. The later authorized synthetic-key fixture change makes the final harness hash 738f228ba4ad27dfdd3bffe291912e070c998833d9be43f00c4a384a5b91f1c8.
+
+Each key-redaction RED selected exactly one new test while export-evidence.ts was still byte-identical to the parent. The exact-value case failed the parsed payload comparison because nested keys retained the escaped synthetic marker; the pattern case failed the exported-file absence assertion. After the recursive correction, all 10 evidence-file tests passed, including all 8 earlier tests. The deliberate break removed only key sanitization, leaving value sanitization intact; the full diff was shown. The unfiltered file showed 7 pass, 3 fail: the earlier exact-value test and both new nested-key tests. Assertions were expect(text).not.toContain(marker) and the expected redacted-key payload equality. All leaked values in these controlled logs are synthetic fixture data authorized by the prompt, not real credentials. The production file was restored to a9e0540d90a5a42233b98a36e8aaee41d895597d1b2b42d9e47376dd27eda2f2; evidence-pipeline.test.ts is 7c7ee8acbbbd97c72c3d74372f2d4909640efa06bb7921d2a68622ce9a8905a2.
+
+### Commands and full-output logs
+
+All logs below are new files under /Users/michaeldaley/builds/m23-m24-r1-pr/logs/. Exit receipts were captured from the command side of tee. Every test run records uptime first. Adversarial file runs also guarded the 2.0 load threshold. The evidence-file break's first load was 2.12; the cutoff governs bare and adversarial runs, not that focused evidence file. No failed run was retried unchanged to obtain a pass.
+
+| Command or step | Exit | Result | Log | SHA-256 |
+| --- | ---: | --- | --- | --- |
+| bun install --frozen-lockfile | 0 | no dependency changes | r3-pre-install-run1.log | 8cfcc25e41f6768800f6a6186a2a56739c35fc9c806b0c17b59f822545846b2e |
+| baseline bunx tsc --noEmit | 0 | clean | r3-pre-typecheck-run1.log | 77fa2145977817e2c92da0fb7409b6d116bd89721859bab65675fe333a6e9eb6 |
+| baseline bun test test/phase3a | 0 | 127 pass, 0 fail, 2447 expects, 17 files | r3-pre-phase3a-run1.log | ac89329727f5bbf4cfac03421a4c2b5dd85f2be78fbab7e98960c6f7c419782a |
+| host-death calibration, one test | 0 | 1 pass, 0 fail; not RED | r3-pgid-red-run1.log | f9c0e2492b7041147ab6ac43b1ea452d84ca39517798c005b46610bb59c22150 |
+| S3 PGID-skip RED, exact required test | 1 | 0 pass, 1 fail | r3-pgid-red-s3-skip-run1.log | a61ec70e807bc82ccebc35364cf3a5bf84c4702cf4e0c3965f661b0dce6ceab3 |
+| bun test test/phase3a/adversarial/wedged-host.test.ts | 0 | 6 pass, 0 fail | r3-pgid-green-run1.log | 22363a1e21e877332de3acb4c55b953e158fa946979f83fce67ccb39b0641f11 |
+| S3 PGID-skip break, unfiltered wedged-host file | 1 | 5 pass, 1 fail | r3-pgid-break-s3-skip-run1.log | 959efbf5afcd326f28ef6b83aeb441d0d2b73e3eb06b8f8917cbf654ba93c35b |
+| durable census RED, one new test | 1 | 0 pass, 1 fail | r3-census-red-run1.log | ac051d10c1f2e7b614c166a7bf5532a5e8a623d281b457763ec1ff8f6dc4d915 |
+| census bunx tsc --noEmit | 0 | clean | r3-census-typecheck-run1.log | 1fb3e4c19bf619916a13848374462c3895674d76c932656e1f1f8fff4a0ad7c7 |
+| bun test test/phase3a/adversarial/cleanup-residuals.test.ts | 0 | 3 pass, 0 fail | r3-census-green-run1.log | 8b6b3f9b3368824c4ccc2959b1d8dab9ccb53c24b129ca292be03b7853d5e500 |
+| founderClose-skip break, unfiltered cleanup-residuals file | 1 | 1 pass, 2 fail | r3-census-break-founder-close-run1.log | 339d77820e0dd25bcb8175bfecf690ef8701a25b8da707a3c26256695b0cdc2a |
+| exact-key RED, one new test | 1 | 0 pass, 1 fail | r3-exact-key-red-run1.log | affab5e9df3dc8f4938278c1dfa5aab0273d9348b0d60912893c3b25b71ecb50 |
+| pattern-key RED, one new test | 1 | 0 pass, 1 fail | r3-pattern-key-red-run1.log | 95a8fe4f18567821223850a3620e76f65e597a4cc800b83cbe291747576d5912 |
+| bun test test/phase3a/evidence-pipeline.test.ts | 0 | 10 pass, 0 fail | r3-key-redaction-green-run1.log | 90c15a7a1c302ceb39848f6e2f03443773b7f34c268664f65d9de6461e25b685 |
+| key-sanitization removal, unfiltered evidence file | 1 | 7 pass, 3 fail | r3-key-redaction-break-run1.log | 50e9430e134a3b4ced5df1b7c6b680366f139909f473a79942553fa37a772a0c |
+| restored pre-commit bunx tsc --noEmit | 0 | clean | r3-precommit-typecheck-run1.log | e89baf31b7495feb3d90408a08fc993b492b928336a1dc4894e623a595cf0188 |
+
+### Deviations, held items and final-head handoff
+
+Prior-session memory was consulted during discovery before the prompt files were read, as directed to be recorded by the Founder. Other discovery reads included the Founder's local governance rules, RTK instructions and filename searches outside the clone before the packet was found. No prior-session memory was used after the Founder's explicit instruction above. The passing calibration was misnamed RED and is retained honestly; the actual coverage RED uses the prescribed S3 fault because the production path already works. The first mutant failure's teardown masked its assertion; preserving both errors fixed the test reporting, and the subsequent unfiltered break displays the required assertion. No other self-fix occurred. Child-supervisor fixture disposal now completes its deliberately unclean durable prefixes through existing next-start reconciliation so their deletion cannot conceal open sessions or valid tokens; normal close still exposes the prescribed founderClose omission. These are test-harness changes only, within B3. No corrected signal-0 helper was changed.
+
+The three advisory findings remain unchanged: a silent but running host; manifest_hash not covering redaction_rules_applied; and the earlier build log's lost exit-code receipt. Nothing in an earlier log is rewritten. No new dependency, fixture-adapters.ts change, production containment change, gate change, governance change, push or other GitHub operation occurred.
+
+The Hermes/readiness hold above is a prerequisite pause under DEC-20261028-01 B5, not a failed test or a waived B9 condition. No correction-stage B9 halt occurred. The final ordered gates will run at the correction commit, with full logs, uptimes, exact hashes and observed timings recorded in pr-body-r2.md and the final report. This keeps the correction to one commit without claiming a self-referential commit SHA or post-commit results inside its own committed record.

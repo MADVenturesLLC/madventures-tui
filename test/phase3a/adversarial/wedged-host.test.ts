@@ -17,9 +17,15 @@ function alive(pid: number): boolean {
 
 async function scenario(options: harness.HarnessOptions): Promise<harness.FixtureFaultReport> {
   const session = await harness.startFixtureSession(options);
+  let assertionFailure: unknown;
   try {
     const initial = await session.client.getSnapshot();
     expect(initial.phase).toBe("active");
+    const descendants = options.processScenario === "grandchild" ? harness.fixtureProcessReport(session).descendantPids : [];
+    if (options.processScenario === "grandchild") {
+      expect(descendants).toHaveLength(1);
+      for (const pid of descendants) expect(alive(pid)).toBe(true);
+    }
     const started = performance.now();
     const report = Reflect.get(harness, "fixtureFaultReport") as (session: harness.HarnessSession) => harness.FixtureFaultReport;
     expect(typeof report).toBe("function");
@@ -27,6 +33,7 @@ async function scenario(options: harness.HarnessOptions): Promise<harness.Fixtur
       && performance.now() - started < 5000) await Bun.sleep(5);
     const data = report(session);
     console.log(`host_fault ${JSON.stringify(data)}`);
+    for (const pid of descendants) expect(alive(pid), "the recorded governed descendant must be gone within the outer bound").toBe(false);
     const closed = await session.client.getSnapshot();
     expect(closed.phase).toBe("closed");
     expect(closed.tokenState).toBe("invalidated");
@@ -59,11 +66,34 @@ async function scenario(options: harness.HarnessOptions): Promise<harness.Fixtur
       expect(escalation.observedMs.hostKillAttemptedMs).toBeLessThanOrEqual(500);
     }
     return data;
-  } finally { await session.close(); }
+  } catch (error) { assertionFailure = error; throw error; }
+  finally {
+    try { await session.close(); }
+    catch (cleanupError) {
+      if (assertionFailure === undefined) throw cleanupError;
+      throw new AggregateError([assertionFailure, cleanupError], "FixtureAssertionAndCleanupFailed");
+    }
+  }
 }
 
 test("a SIGSTOPped host is cleared through the direct PGID path", async () => {
-  await scenario({ wedgeHostAfter: 50 });
+  await scenario({ wedgeHostAfter: 50, processScenario: "grandchild" });
+}, 15000);
+test("the wedged-host descendant survives host death without a direct PGID kill", async () => {
+  const session = await harness.startFixtureSession({ wedgeHostAfter: 10000, processScenario: "grandchild" });
+  try {
+    const initial = await session.client.getSnapshot();
+    const descendants = harness.fixtureProcessReport(session).descendantPids;
+    expect(descendants).toHaveLength(1);
+    expect(alive(descendants[0]!)).toBe(true);
+    const started = performance.now();
+    process.kill(initial.executions![0]!.hostPid!, "SIGKILL");
+    while (alive(initial.executions![0]!.hostPid!) && performance.now() - started < 5000) await Bun.sleep(5);
+    expect(alive(initial.executions![0]!.hostPid!)).toBe(false);
+    await Bun.sleep(100);
+    console.log(`wedged_descendant_calibration host_dead_ms=${performance.now() - started} descendant_alive=${alive(descendants[0]!)}`);
+    expect(alive(descendants[0]!), "host death alone must leave the governed descendant alive").toBe(true);
+  } finally { await session.close(); }
 }, 15000);
 test("a host that never acknowledges a command is treated as host failure at 250 ms", async () => {
   await scenario({ wedgeHostAfter: 50 });
