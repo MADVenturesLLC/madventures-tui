@@ -17,11 +17,25 @@ function alive(pid: number): boolean {
 }
 function descriptors(pid: number, recorded: readonly number[]): Descriptor[] {
   expect(recorded.includes(pid)).toBe(true);
-  if (process.platform === "linux") return readdirSync(`/proc/${pid}/fd`).flatMap(fd => {
-    if (!/^\d+$/.test(fd)) return [];
-    const match = /^pipe:\[(\d+)\]$/.exec(readlinkSync(`/proc/${pid}/fd/${fd}`));
-    return match ? [{ fd: Number(fd), type: "PIPE", inode: match[1]! }] : [];
-  });
+  if (process.platform === "linux") {
+    let closedDuringListing = 0;
+    try {
+      return readdirSync(`/proc/${pid}/fd`).flatMap(fd => {
+        if (!/^\d+$/.test(fd)) return [];
+        let target: string;
+        try { target = readlinkSync(`/proc/${pid}/fd/${fd}`); }
+        catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+          closedDuringListing += 1;
+          return [];
+        }
+        const match = /^pipe:\[(\d+)\]$/.exec(target);
+        return match ? [{ fd: Number(fd), type: "PIPE", inode: match[1]! }] : [];
+      });
+    } finally {
+      console.log(`descriptor_listing pid=${pid} closed_ENOENT_count=${closedDuringListing}`);
+    }
+  }
   expect(process.platform).toBe("darwin");
   const result = Bun.spawnSync(["lsof", "-nP", "-a", "-p", String(pid), "-FftdDin"], { stdout: "pipe", stderr: "pipe" });
   expect(result.exitCode).toBe(0);

@@ -1774,3 +1774,116 @@ Everything else in the builder prompt and Addenda 1 to 10 is unchanged.
 ### Description-size disposition
 
 The full replacement description was first assembled in session state and measured 67,206 characters before any file write, above the 60,000-byte limit. Under Addendum 9 item 11, earlier per-run tables, associated run receipts and redundant RED/GREEN/self-fix summaries were shortened to pointers to this unchanged historical build-log prefix and the unchanged pr-body-r2.md, SHA-256 3a7f1c8abedee2d68b35de97bb490c58270f124578e9d8245056deaa6df7ef3b. The prior what/why, path-purpose and test-requirement maps, actual agent provenance/hunks, authority hashes and limitations remain. The new round-2 log hashes and all 207 printed timing observations remain in the new description and this record. This is an editorial narrower reading of the size rule, not a change to evidence or authority. Square brackets around the spike label are omitted in the description only to satisfy its zero-square-bracket constraint; every observed numeric string is unchanged. No existing artifact or earlier log was overwritten.
+
+## Linux continuous-integration correction
+
+Performed by session:codex/m23-m24-r4, role builder, execution surface codex, under builder Addendum 12. Parent: 4a6a67d3d5cc8c001e2d5a46dc153a3ad567f5ff. One commit is authorized for this CI failure only. The containing commit is identified in pr-body-r4.md and the final report, not self-referenced here.
+
+### Authority and supplied failure
+
+The Founder supplied Addendum 12 directly in this session. Its exact pasted text, UTF-8/LF with one terminal LF, hashes via shasum -a 256 on standard input to 2b9d08a3cb078056b723ae2f692ad329ec9a79bc96e50fd6657118679eaaa1ba. The text is preserved verbatim below; no separate on-disk signed file is asserted.
+
+As reported in that addendum, Verify on ubuntu-24.04 failed at 03b31247374cba31fc70f5fa64e018b1b62ec651, c4526065216ac86a0c10c1bbcba13b04e36486de and the parent, with 1870 passing tests and one failing descriptor-hygiene scenario, because an entry closed between readdirSync and readlinkSync. No GitHub call or CI-log fetch was made; the supplied addendum is the evidence for those CI facts. The Founder rules that this is CI failure, not a review verdict, and adds no correction round under plan section 11.3.
+
+The directory and branch matched the prompt, the initial tree was clean, and HEAD matched the required parent. The same builder seat continues. No agent was started, no earlier-session memory was used and no memory file was read. The prior unrestricted-test approval continues. No dependency, runtime, host setting, credential or production file changed.
+
+### Item 2b: bounded source inspection
+
+At the parent, test/phase3a/adversarial/descriptor-hygiene.test.ts:20 to 24 lists /proc/PID/fd and reads each numeric entry by readlinkSync; line 22 is the failing path. In the corrected file, the listing is line 23, readlinkSync line 26, ENOENT-only handling lines 27 to 30 and per-process count line 36.
+
+test/phase3a/runtime-harness.ts:173 to 181 is different: line 175 lists /proc/self/fd on Linux or /dev/fd on macOS, but line 177 calls fstatSync on the numeric descriptor instead of reading a /proc entry path. Line 179 already skips EBADF for a descriptor closed before fstat and rethrows other errors. It therefore has no matching readlink-of-listed-entry pattern and remains byte-identical at 9a90ef8b3e357b7f89c0f2d9ba9ecddb6c9d2e707b7160065004422df7d39d10.
+
+The other Task 51 to 55 adversarial files, fixture-adapters.ts, evidence-pipeline.test.ts, the B6 acceptance file, both evidence command files and the conditional broker path contain no other matching /proc listing-then-entry-read loop. The evidence tests list their owned export/storage files, not /proc entries. Source searches used filenames and line numbers; no process or descriptor listing was run directly by this session.
+
+### Change and preserved behavior
+
+Only the Linux branch of descriptors() changes. Each readlinkSync ENOENT increments closedDuringListing and returns an empty entry result. Every other readlink error rethrows, and readdirSync failures also propagate. The finally block prints descriptor_listing pid and closed_ENOENT_count for each attempted process listing, including when another error aborts it; no descriptor target text is printed. Numeric filtering, pipe/inode parsing and every assertion stay.
+
+The entire suffix beginning with the macOS platform assertion, including the macOS branch and both test bodies, was compared byte-for-byte with the parent and is unchanged. The prefix before the Linux branch is also byte-identical. The corrected test-file SHA-256 is a48a3fe4580b8c4654d5de1da25ad2725b88e76065ab69a88ef623153bdd244b.
+
+No RED run and no deliberate break was performed or required, expressly under Addendum 12 item 3. No new test, skipped test, changed timeout or weakened assertion was introduced.
+
+### Local verification and limits
+
+All required commands ran once, in the prescribed order, in the foreground with the complete output piped through tee to new, non-overwritten logs. Every test run recorded uptime. Addendum 9 item 5 controls load: no load pause, and no unchanged rerun of a timing failure at first load at least 2.0. No run or timing assertion failed.
+
+All runtime checks matched /Users/michaeldaley/.bun/bin/bun and bunx, the symbolic link to that Bun, version 1.4.2, revision 744846f844374847c902b5e7fd59b4342a51ef99 and executable SHA-256 35d20dd0263e5c950194434b925454fdfa9ba6e4467da960410fa05b08a7a5b5. The immediate pre-bare check is in r4-linux-runtime-run1.log. bun.lock remained 34224c0133c44d967c4a4da8b75bf11093c573c47e42bcaf502c6d6f61c3e7c0.
+
+| Command | Result | Uptime / load before run | Log under /Users/michaeldaley/builds/m23-m24-r1-pr/logs/ | SHA-256 |
+| --- | --- | --- | --- | --- |
+| bunx tsc --noEmit | exit 0 |  6:57  up 5 days, 22:06, 12 users, load averages: 3.51 4.25 4.30 | r4-linux-tsc-run1.log | 3490ccdd55053664bcde7dc8e4d8bea55e80fae0016d92cf8b132822f64d3519 |
+| bun test test/phase3a/adversarial/descriptor-hygiene.test.ts | 2 pass, 0 fail; 49 assertions; Ran 2 tests across 1 file. [1270.00ms] |  6:57  up 5 days, 22:06, 12 users, load averages: 3.95 4.33 4.33 | r4-linux-descriptor-run1.log | 362f620c3b9e04d4df9049abff10e11fd7826ecc27af6a56e07bf27ead9f02c7 |
+| bun test test/phase3a | 137 pass, 0 fail; 2541 assertions; Ran 137 tests across 17 files. [56.30s] |  6:57  up 5 days, 22:06, 12 users, load averages: 3.95 4.33 4.33 | r4-linux-phase3a-run1.log | a54f7fef695c5eabd7c34f30864412db0ab3c98ef24bdcda70ae4408413c33d5 |
+| Pinned runtime check immediately before bare bun test | exit 0 | not a test | r4-linux-runtime-run1.log | 6d5f77e9c789660b0b03388c68805d18978cf4bf8d79928af243be1c89b3c6a3 |
+| bun test | 1871 pass, 0 fail; 18204 assertions; Ran 1871 tests across 135 files. [177.11s] |  6:59  up 5 days, 22:07, 12 users, load averages: 4.52 4.42 4.36 | r4-linux-full-run1.log | 56637736425c48baa6f1133d9a733e926d5a1712fbd82a4282037f3b1084e763 |
+
+
+These are macOS results. The changed Linux branch was not executed on this MacBook. Its verification remains the GitHub Actions Linux run after the Founder pushes, which the Founder checks. No Linux pass, new Tier-2 verdict, merge readiness or live runtime certification is claimed.
+
+### Exact source diff
+
+```diff
+diff --git a/test/phase3a/adversarial/descriptor-hygiene.test.ts b/test/phase3a/adversarial/descriptor-hygiene.test.ts
+index f6adae5..5e6e418 100644
+--- a/test/phase3a/adversarial/descriptor-hygiene.test.ts
++++ b/test/phase3a/adversarial/descriptor-hygiene.test.ts
+@@ -17,11 +17,25 @@ function alive(pid: number): boolean {
+ }
+ function descriptors(pid: number, recorded: readonly number[]): Descriptor[] {
+   expect(recorded.includes(pid)).toBe(true);
+-  if (process.platform === "linux") return readdirSync(`/proc/${pid}/fd`).flatMap(fd => {
+-    if (!/^\d+$/.test(fd)) return [];
+-    const match = /^pipe:\[(\d+)\]$/.exec(readlinkSync(`/proc/${pid}/fd/${fd}`));
+-    return match ? [{ fd: Number(fd), type: "PIPE", inode: match[1]! }] : [];
+-  });
++  if (process.platform === "linux") {
++    let closedDuringListing = 0;
++    try {
++      return readdirSync(`/proc/${pid}/fd`).flatMap(fd => {
++        if (!/^\d+$/.test(fd)) return [];
++        let target: string;
++        try { target = readlinkSync(`/proc/${pid}/fd/${fd}`); }
++        catch (error) {
++          if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
++          closedDuringListing += 1;
++          return [];
++        }
++        const match = /^pipe:\[(\d+)\]$/.exec(target);
++        return match ? [{ fd: Number(fd), type: "PIPE", inode: match[1]! }] : [];
++      });
++    } finally {
++      console.log(`descriptor_listing pid=${pid} closed_ENOENT_count=${closedDuringListing}`);
++    }
++  }
+   expect(process.platform).toBe("darwin");
+   const result = Bun.spawnSync(["lsof", "-nP", "-a", "-p", String(pid), "-FftdDin"], { stdout: "pipe", stderr: "pipe" });
+   expect(result.exitCode).toBe(0);
+```
+
+### Description and deviations
+
+pr-body-r4.md is based on the unchanged pr-body-r3.md, SHA-256 c685e73aaf97fbfce10f87a6d702d064bad29ab35c80e9cad6fe117e6e52a312, with a Linux continuous-integration correction section and this seat's final trailers. One historical round-2 timing table is shortened to a pointer to this committed historical record and that pinned prior description to stay below 60000 bytes, under the continuing description-size rule. Earlier numbers and logs are not rewritten. This is description-only condensation; there is no implementation or verification deviation.
+
+The correction changes only test/phase3a/adversarial/descriptor-hygiene.test.ts and this build log. All production files, the harness, package files and assertions stay unchanged. Attribution checks and final custody occur after this commit and are reported in the new description/final report without changing the containing commit.
+
+### Verbatim Addendum 12 text
+
+```text
+ADDENDUM 12 TO THE M23-M24 BUILDER PROMPT: the Linux descriptor listing. Paste this into the Codex session session:codex/m23-m24-r4, open in /Users/michaeldaley/builds/madventures-tui-m23-m24-r1. It is signed by the Founder and is part of the builder prompt, with Addenda 1 to 11.
+
+1. The facts. The required check Verify, on ubuntu-24.04 in GitHub Actions, failed at 03b31247374cba31fc70f5fa64e018b1b62ec651, c4526065216ac86a0c10c1bbcba13b04e36486de and 4a6a67d3d5cc8c001e2d5a46dc153a3ad567f5ff, each time in with two PTY hosts and an adapter, no process holds a sibling's lifeline write end. In the Linux branch of descriptors() in test/phase3a/adversarial/descriptor-hygiene.test.ts, readlinkSync of an entry that readdirSync had just listed under /proc/PID/fd threw ENOENT, at line 22 of the file at 4a6a67d3d5cc8c001e2d5a46dc153a3ad567f5ff; one run read /proc/2771/fd/20. Every other test passed there: 1,870 pass, 1 fail. The macOS branch passes. This is a continuous-integration failure, not a review verdict, so it adds no correction round under plan section 11.3.
+2. My ruling. I authorize one more commit, for this failure only.
+   a. In the Linux branch of descriptors() in test/phase3a/adversarial/descriptor-hygiene.test.ts, an entry that readlinkSync reports as ENOENT is a descriptor that closed between the listing and the read: skip it and count it. Any other error still fails. Print the count for each listed process. Keep every assertion, and leave the macOS branch unchanged.
+   b. Read test/phase3a/runtime-harness.ts near line 168 and any other place in the files of Tasks 51 to 55 that lists /proc entries and then reads each one. Where the same pattern exists, apply the same rule; where it does not, say so.
+   c. Change no other file, except docs/verification/m23-m24-build-log.md, and no production file.
+3. Verification, under the prompt's TEST OUTPUT rules and Addendum 9, item 5, with new log names that overwrite no existing log. This MacBook cannot run the Linux branch, so the Linux run in GitHub Actions after the push is its verification, which the Founder checks. Here: show git diff; bunx tsc --noEmit; bun test test/phase3a/adversarial/descriptor-hygiene.test.ts; bun test test/phase3a; and bare bun test, each with 0 fail; git diff --check; and git diff --name-only 4a6a67d3d5cc8c001e2d5a46dc153a3ad567f5ff, which lists only the paths of item 2. No RED run and no deliberate break is required for this commit; record that.
+4. The commit. One commit on top of 4a6a67d3d5cc8c001e2d5a46dc153a3ad567f5ff, with the subject fix(phase3a): skip descriptors closed during the Linux listing, a body that names this addendum and the failure, and the trailers of your seat. Append a section Linux continuous-integration correction to docs/verification/m23-m24-build-log.md in the same commit.
+5. The description. Save a full new description as /Users/michaeldaley/builds/m23-m24-r1-pr/pr-body-r4.md: pr-body-r3.md with a section Linux continuous-integration correction. Keep it under 60,000 bytes, with zero square brackets, zero bare three-hyphen lines, and the three trailers of your seat as its final paragraph. Run attribution-shape-check.sh in pr mode on the branch and in prbody mode on pr-body-r4.md.
+6. Final report: the facts of item 2b with file and line; the git diff; each run with its counts, load reading and log SHA-256; the commit's full SHA and parent; the SHA-256 of pr-body-r4.md and of the build log; both attribution results; deviations, or the word none; and the single next decision for the Founder: push the commit without force and replace the pull request description.
+
+Everything else in the builder prompt and Addenda 1 to 11 is unchanged.
+```
+
+### Final local scope receipt
+
+After the required tests, git diff --check exited 0. git diff --name-only 4a6a67d3d5cc8c001e2d5a46dc153a3ad567f5ff listed exactly test/phase3a/adversarial/descriptor-hygiene.test.ts and docs/verification/m23-m24-build-log.md. The original macOS/test suffix and pre-Linux prefix were checked byte-identical, the gated Linux test file hash remained a48a3fe4580b8c4654d5de1da25ad2725b88e76065ab69a88ef623153bdd244b, and the harness and lock hashes remained unchanged. Log r4-linux-scope-run1.log, exit 0, SHA-256 84bd5e60b7f259b772ce657a6a01a624d5756a783fd0e022c0c43e9734b250ff. No implementation or verification deviation occurred.
