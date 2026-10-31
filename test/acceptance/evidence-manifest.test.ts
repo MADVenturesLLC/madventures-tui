@@ -143,7 +143,7 @@ describe("evidence sanitization — no secrets or raw transcripts", () => {
 
       // Run export-evidence
       const result = await runCli(
-        ["export-evidence", "--json", "--output", outputDir],
+        ["export-evidence", "--json", "--output", outputDir, "--ledger", ledgerPath, "--artifacts", artifactsDir],
         { stdin: "", cwd: testDir },
       );
 
@@ -184,7 +184,7 @@ describe("evidence sanitization — no secrets or raw transcripts", () => {
       ledger.close();
 
       const result = await runCli(
-        ["export-evidence", "--json", "--output", outputDir],
+        ["export-evidence", "--json", "--output", outputDir, "--ledger", ledgerPath, "--artifacts", join(testDir, ".madv-runtime", "artifacts")],
         { stdin: "", cwd: testDir },
       );
 
@@ -216,7 +216,7 @@ describe("CLI verify-ledger on real ledger", () => {
       ledger.close();
 
       const result = await runCli(
-        ["verify-ledger", "--json"],
+        ["verify-ledger", "--json", "--ledger", ledgerPath],
         { stdin: "", cwd: testDir },
       );
 
@@ -235,7 +235,7 @@ describe("CLI verify-ledger on real ledger", () => {
     const testDir = mkdtempSync(join(tmpdir(), "madv-verify-missing-"));
     try {
       const result = await runCli(
-        ["verify-ledger", "--json"],
+        ["verify-ledger", "--json", "--ledger", join(testDir, ".madv-runtime", "ledger", "ledger.db")],
         { stdin: "", cwd: testDir },
       );
 
