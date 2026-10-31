@@ -1050,3 +1050,727 @@ Prior-session memory was consulted during discovery before the prompt files were
 The three advisory findings remain unchanged: a silent but running host; manifest_hash not covering redaction_rules_applied; and the earlier build log's lost exit-code receipt. Nothing in an earlier log is rewritten. No new dependency, fixture-adapters.ts change, production containment change, gate change, governance change, push or other GitHub operation occurred.
 
 The Hermes/readiness hold above is a prerequisite pause under DEC-20261028-01 B5, not a failed test or a waived B9 condition. No correction-stage B9 halt occurred. The final ordered gates will run at the correction commit, with full logs, uptimes, exact hashes and observed timings recorded in pr-body-r2.md and the final report. This keeps the correction to one commit without claiming a self-referential commit SHA or post-commit results inside its own committed record.
+
+## Correction round 2
+
+Performed by session:codex/m23-m24-r4, role builder, execution surface codex, under DEC-20261028-02 B8 and B12, builder Addendum 9 and the Founder's subsequent Addendum 10. Parent: c4526065216ac86a0c10c1bbcba13b04e36486de. This section cannot contain its own commit SHA. The commit is the single round-2 correction; no previous commit is amended, rebased, squashed or reordered.
+
+### Authority, identity and preconditions
+
+The ten read-only prompt-r4 packet files were hashed before they were read, and all ten matched the Founder-supplied SHA-256 values. The builder prompt and Addenda 1 through 9 were read in full, in order. Addendum 9 is 9d3920b5ef20dcd61e5768b944ef42b899b29cc2cc6472cf043e2d78a6346a53. Addendum 10 was supplied directly in this session; its verbatim pasted text, encoded as UTF-8 with LF line endings and one terminal LF, hashes to b7dcd8db74013a84c4e5c6ea24c454ae1949126c0b39aa49333df91055ba98f9 via shasum -a 256 on standard input. This is a hash of the recorded text, not an assertion that a separate signed file exists.
+
+The Founder reports and accepts an Antigravity Tier-2 FAIL at the parent: three substantive and two advisory findings, with the prior three findings corrected. That is the reported verdict and authority for this correction, not an independent verdict issued by this builder. Addendum 9 rules that rubric milestone 10 has two correction rounds; a further substantive FAIL requires reassignment. No review report or GitHub page was read.
+
+Harness: Codex; shown model GPT-6, exact served variant not shown. Filesystem access is unrestricted, danger-full-access; network enabled; approval policy not shown. Agent-start tools and every offered role name were reported; no agent, subagent or helper agent was started. No separate hook output was supplied. The harness supplied memory context, but this session used no earlier-session memory and read no memory files. Addendum 3 controls the waived host review-agent instructions.
+
+Working directory /Users/michaeldaley/builds/madventures-tui-m23-m24-r1; branch build/m23-m24-r1; initial tree clean at the parent. git fetch origin main build/m23-m24-r1 exited 0; origin/main is 189c2c12fb0147909f0b8fdc550affca92e70156 and origin/build/m23-m24-r1 equals the parent. All eight AUTHORITY hashes matched origin/main; the six acts are ISSUED and carry Michael Daley's signature. The specified plan sections and in-clone source were read before correction edits. No graph/MCP service was used because the builder prompt explicitly prohibits it.
+
+Host: Darwin 27.0.0 arm64; user michaeldaley. All runtime checks matched /Users/michaeldaley/.bun/bin/bun and bunx, with bunx a symbolic link to that same Bun, version 1.4.2, revision 744846f844374847c902b5e7fd59b4342a51ef99, executable SHA-256 35d20dd0263e5c950194434b925454fdfa9ba6e4467da960410fa05b08a7a5b5. Every Bun command prepends that directory to PATH in its own shell. No host runtime, profile or setting changed.
+
+The Founder supplied precondition 5 verbatim:
+
+> Visible apps: Finder, cmux, Claude, Antigravity, Perplexity, Google Chrome, Serato DJ Pro, Messages. Hermes processes: 0. Load averages: 1.06 1.08 1.14.
+
+The Founder approved the session's test execution verbatim:
+
+> I approve running this build test commands outside the sandbox for the rest of this session.
+
+All test commands ran in the unrestricted environment under that approval. Uptime was recorded before every run. Addendum 9 replaces the earlier load gate: no pause for load, and no unchanged rerun of a timing failure at first load 2.0 or more. No such timing assertion failed. The prescribed successful baseline had 131 passing tests, 0 failures and 2483 assertions across 17 files; tsc and installation exited 0. Installation changed only the allowed executable mode of packages/founder-act/src/main.ts; it was restored to 100644 with no content change. bun.lock stayed byte-identical at 34224c0133c44d967c4a4da8b75bf11093c573c47e42bcaf502c6d6f61c3e7c0.
+
+### Changes and test reach
+
+apps/madbridge/src/commands/export-evidence.ts is the sole lasting production change. Exact-value redaction runs on the original string before known patterns can consume a prefix, for keys and values at every nesting level. Colliding sanitized keys receive deterministic numeric suffixes until unique, preserving every value even when an input key already uses a generated-looking suffix. Rule labels are added when the passes actually execute rather than unconditionally claiming rules on an empty event set. Registered production allowlists remain the only production source of exact values.
+
+test/phase3a/evidence-pipeline.test.ts adds the token-prefixed synthetic marker in both keys and values, asserting absence of the full marker and its formerly leaked suffix in every output file, parseable JSON, the exact nested redacted payload, and only the available secret rule. A missing synthetic allowlist variable contributes no rule. A collision case checks all four values, valid parsed output, no marker, and identical bytes on repeated export. Four CLI cases prove each command rejects a relative invalid storage root and an inconsistent synthetic HOME, returns exit 1 with its error, creates no requested export and leaves the entire fixture storage file listing unchanged. Each uses an explicit existing fixture ledger so deleting validation reaches a valid ledger rather than merely failing ledger lookup. All ten prior evidence tests stay, for a total of 16.
+
+test/phase3a/adversarial/supervisor-entry.ts writes a fixed witness only from the actual SIGTERM handler, before graceful close. runtime-harness.ts returns the captured synthetic child-supervisor stderr without returning publication authority. supervisor-death.test.ts requires that witness for SIGTERM and empty stderr for clean mode; crash requires the uncaught synthetic exception diagnostic and stack plus an active durable prefix with no session_closing. The six existing scenario names and all earlier containment assertions remain.
+
+runtime-harness.ts reuses the existing non-detached grandchild fixture for lifeline-eof and records its PID before scheduling EOF. process-group.test.ts requires the extra member alive before EOF and gone afterward, with the existing peer group still alive, and explicitly checks the printed monotonic death duration against 5000 ms. No signal-0 liveness helper was changed. The added collision fixture payload is plain, string-valued synthetic JSON validated with the existing closed options parser; it traverses fixture stdout and the harness-internal bound publication client. No publisher, broker or ledger handle is returned to a test. fixture-adapters.ts does not change.
+
+### RED checks, self-fixes and narrower readings
+
+The prefix RED fails on the leaked _FIXTURE_SUFFIX. Collision RED run 1 failed for InvalidHarnessOptions because the new fixture payload option was absent from the closed options parser; this is preserved as a setup error, not claimed as the required RED. The parser was updated to admit and validate only the test's synthetic string payload. Collision RED run 2 then failed for the required 4-versus-3 key count before the exporter changed.
+
+SIGTERM RED fails because the original handler produces no signal-specific witness. The crash and storage behaviors already exist in production; their defects are missing causal tests. Their REDs therefore use exactly the review substitutions at the binding parent with the new tests: graceful close plus exit(1), and omission of all HOME/storage validation. Each filtered RED ran exactly one test and failed for the named reason. The affected files were restored immediately with SHA-256 checks. This narrower causal-coverage reading follows Addendum 9 items 7b, 7c and 8 and the preceding correction's treatment of already-correct production containment.
+
+The lifeline RED fails because the original scenario records zero independent members. The new full evidence run initially failed four assertions expecting the export directory not to exist; transactional fixture storage already creates that directory. The tests were corrected to name a fresh rejected-export child path and keep the before/after recursive storage listing assertion. This changes only the test setup, preserving the required no-export claim. The changed file then passed all 16 tests; supervisor-death passed 6 and process-group passed 5 before the later explicit death-bound assertion. No failed run was rerun unchanged to obtain a pass.
+
+### Review mutations and restorations
+
+Each mutation diff was shown before its run. Every item-8 break ran its affected test file unfiltered and full; its source was then restored and the SHA-256 confirmed. S3-only and all-state omission skip both the direct PGID syscall and handle.killPgid, leaving the rest of production unchanged. Both fail on the independent recorded descendant remaining alive, with the existing AggregateError preserving teardown failures. The all-state variant also fails calibration teardown.
+
+Skipping founderClose for non-retained sessions fails both durable residual tests: phase/token remain active/valid, and openSessions and liveTokens are 3 despite no live PIDs, groups, descriptors or open ledger handles. Removing key sanitization fails five evidence tests. Substituting clean for SIGTERM fails the signal witness; substituting graceful close plus exit(1) for crash fails the uncaught diagnostic. Removing all storage/HOME checks fails all four CLI rejection tests with Expected: 1, Received: 0. Restoring known-pattern-first order fails the prefix probe on the leaked suffix. Removing collision suffixing fails Expected length: 4, Received length: 3.
+
+### Halt and Addendum 10 disposition
+
+At Addendum 9 item 8, the killGroup-only leader-signal mutation unexpectedly passed all five process-group tests with 43 assertions. Log r4-break-lifeline-leader-only-run1.log has SHA-256 f4de488b26c46727ac1b8496da1a27869a40796f2b646579d216e7ddbe8ebc64 and first load 2.48. No timing assertion failed; the deliberate break failed to prove reach. The session halted under DEC-20261028-02 B9 item 1 and the repository's mutation stop condition, restored packages/pty-host/src/signals.ts to c5d2814420dc7d431a28cb7ef03229304daf5896bd50e9630268ba3d637fa90e, made no commit, and left the correction tree intact.
+
+The Founder issued Addendum 10, whose text hash is recorded above. It treats the original finding as advisory, retains the independent-member scenario, withdraws the killGroup-only failure requirement, and permits continuation from the collision mutation. No combined or additional lifeline mutation was run.
+
+VERIFIED by source inspection: lifeline EOF reaches killGroup. packages/pty-host/src/main.ts:622 calls onLifelineEof without seam overrides; packages/pty-host/src/signals.ts:189 selects the default signal seam, line 87 delegates to killGroup, and lines 193 and 205 request group SIGTERM and SIGKILL. After the child exits, the same EOF branch invokes close with signal:true at main.ts:716. That enters terminateChildGroup at main.ts:360 through the separately supplied seam at lines 365 to 379: SIGTERM uses sigtermProcessGroup at main.ts:178 to 180, and SIGKILL calls process.kill(-pgid, SIGKILL) at line 379. The production entry calls runSteadyState at main.ts:811, whose default signal callback is set at line 520 and passed into makeSessionCloser at line 523. These redundant production paths explain why changing only killGroup is masked. This paragraph is code inspection, not a new runtime trace or mutation claim.
+
+The resumed collision mutation failed the required 4-versus-3 assertion, with 15 passing and 1 failing test. The exporter was restored to aee7ea77660c42b37a662d0300d9c1ae2e1cfb12bd315cd6190f010fa530167e.
+
+### Limitations and scope
+
+Production still redacts no exact environment value until a registered allowlist marks one secret. Existing best-effort known-pattern limitations remain. A silent but running host, manifest_hash not covering redaction_rules_applied, and the earlier build log's lost exit-code receipt remain unchanged under Addendum 8; no old evidence is rewritten. The setsid escape remains explicitly documented and separately cleaned. No production containment, lifecycle, storage validation, gate, governance, dependency, timeout or manifest changes beyond the authorized exporter correction were made. Temporary review mutations are all restored. No host installation, credential access, process listing, GitHub operation, push, live runtime certification, merge or deployment occurred.
+
+### Addendum 11: unknown-source test exclusion and hunk audit
+
+While the session was halted, a test named "lifeline EOF default seams terminate an independent detached group member" appeared at line 86 of test/phase3a/adversarial/process-group.test.ts. This session did not write it. Its source remains unknown; the Founder states that Syncthing does not touch /Users/michaeldaley/builds and that no other session or app was writing this clone. Those statements do not establish this test's source.
+
+Under Addendum 11, stat before removal reported Modified: 2026-10-30 16:33:34 -0400, epoch 1793392414. This is the file's modification time, not proof of the time or author of the unknown insertion. The entire git diff, including the dedicated import hunk and the full test-bearing hunk, was reported before removal.
+
+The named custody artifact /Users/michaeldaley/builds/m23-m24-r1-pr/logs/r4-foreign-test-hunk.patch already existed, with stat Modified: 2026-10-30 17:13:03 -0400, epoch 1793394783. An exclusive-create attempt failed with FileExistsError; its Python process exited 1 while the surrounding shell, which then hashed the existing file, exited 0. No artifact was overwritten. A comparison then verified that this existing artifact is byte-for-byte the full test-bearing git diff hunk, with its git header. It contains the adjacent session-authored changes as part of that mixed hunk; it is not a patch intended to revert those known changes. SHA-256: 6df151d90719f017c312d8131a67552c260140204b2e3fc8c5c4d1f0eb122421.
+
+Only the unknown test block and its two dedicated imports were removed: spawn from node:child_process, and HOST_DEADLINES_MS/onLifelineEof from the signals module. Every adjacent session-authored lifeline assertion remains. The removed test is absent from the candidate tree and no build commit contains it; this was checked by a bounded git log -S over the branch's commits. Its executed 34-test partial final run is retained as superseded evidence, not as a gate for this candidate.
+
+The complete remaining unstaged diff was audited against this session's own apply_patch records and test/mutation logs, not earlier-session memory. Item 2d result: every remaining changed hunk is traced to this session; no further unknown-source hunk remains.
+
+| Path | Session-authored hunks and own record |
+| --- | --- |
+| apps/madbridge/src/commands/export-evidence.ts | Three hunks: exact-first ordering, unique collision suffixes, and rule recording. The correction patch, REDs and full-file reverse-order/key/collision breaks record each. |
+| test/phase3a/runtime-harness.ts | Fixture payload type and closed validation, generated fixture stdout, internal payload publication, the two lifeline descendant branches, and captured stderr type/return. The session's setup patches, lifeline RED and restored mutation receipts trace all hunks. |
+| test/phase3a/adversarial/supervisor-death.test.ts | Exit-result type, mode-specific witness/uncaught-error assertions, and durable crash-prefix assertions. The session's first regression patch and SIGTERM/crash substitution logs trace all three. |
+| test/phase3a/adversarial/supervisor-entry.ts | SIGTERM-handler witness only, from the session's correction patch and crash-break restoration. |
+| test/phase3a/evidence-pipeline.test.ts | Fixture helper extension and six regressions, from the session's regression/setup patches, option-parser self-fix and fresh export-path self-fix; full-file logs preserve all ten prior tests. |
+| test/phase3a/adversarial/process-group.test.ts | One hunk: independent-member before/after assertions, captured death duration and explicit 5000 ms assertion. The initial session regression patch and post-Addendum-10 strengthening trace it. |
+
+This session's own lifeline scenario already reuses a non-detached governed descendant whose only termination source in the scenario is group signalling; it asserts that member alive before EOF and gone afterward within the explicit monotonic outer bound, with the peer group still alive. The fixture source gives that descendant no parent-exit cleanup hook or PTY ownership. No foreign default-seam test is needed or retained. Addendum 11 item 3 and Addendum 10 item 2a require no additional RED for this advisory scenario; no new lifeline mutation or RED was run after those rulings.
+
+Addendum 11's verbatim pasted text, UTF-8 with LF line endings and one terminal LF, hashes to 90b5f2e60a484b87683d12116425c7b1a02f4f45f528bdc7e9e625c37b788656 via shasum -a 256 on standard input. Its preserved text follows below; no separate on-disk signed packet is asserted.
+
+### Restarted final gates
+
+The earlier r4-final-tsc-run1 and r4-final-adversarial-run1 sequence is superseded: the latter included the unknown-source test and passed 34, so it cannot attest this 33-test candidate. Addendum 11 requires the final gates from the beginning after removal. No failed test was rerun unchanged. The restarted ordered gates below all passed; no timing assertion failed even when the recorded first load was at least 2.0.
+
+Final tests ran on the working tree over parent c4526065216ac86a0c10c1bbcba13b04e36486de, before this single correction commit, in the order Addendum 11 item 4 then Addendum 9 items 10 to 13 specify. They are not mislabeled as post-commit runs. All six gated source files were SHA-256 checked unchanged afterward, and the commit's contents are checked against these hashes. The only subsequent repository write is this append-only verification record. Three adversarial runs each passed 33 tests, 0 fail, 627 assertions across nine files. Phase 3A passed 137 across 17 files; MadBridge 518 across 15; acceptance 87 across four; bare bun test passed 1871, 0 fail, 18202 assertions across 135 files in 177.23 seconds. The immediate pre-bare runtime check matched every pinned value.
+
+The exact branch path set is the 16 authorized B3 paths. This correction changes the six audited source/test paths plus this build log. The sole conditional path remains the original supervisor-entry.ts, required to run a killable isolated supervisor; neither fixture-adapters.ts nor the conditional broker production fix was used. Both git diff --check and the bounded path/hash/exclusion checks passed.
+
+| Ordered gate | Result | Uptime before run | Log | SHA-256 |
+| --- | --- | --- | --- | --- |
+| bunx tsc --noEmit | exit 0 |  1:55  up 5 days, 17:04, 12 users, load averages: 2.11 2.33 1.90 | r4-final-add11-tsc-run1.log | 2aab5d80e81cc4bee9d8b1ef9310c51b17d25b79863e9d0f7a6027a7655c2476 |
+| bun test test/phase3a/adversarial | 33 pass, 0 fail; 627 assertions |  1:55  up 5 days, 17:04, 12 users, load averages: 2.02 2.31 1.90 | r4-final-add11-adversarial-run1.log | 35e05048e823e326787e8f30994d3695200c12b06e869104bfe88c8cac4e54d3 |
+| bun test test/phase3a/adversarial | 33 pass, 0 fail; 627 assertions |  1:56  up 5 days, 17:05, 12 users, load averages: 3.89 2.75 2.07 | r4-final-add11-adversarial-run2.log | a39c3660a10e5364d9ae34883af9f0ec2330b0809b1106961a63ffc7f400d05c |
+| bun test test/phase3a/adversarial | 33 pass, 0 fail; 627 assertions |  1:56  up 5 days, 17:05, 12 users, load averages: 5.36 3.23 2.27 | r4-final-add11-adversarial-run3.log | 6080b0d598038f3473618f0ba11522b8ba66d29dc6a799e9091aabc79d2c012a |
+| bun test test/phase3a | 137 pass, 0 fail; 2541 assertions |  1:57  up 5 days, 17:06, 12 users, load averages: 6.06 3.63 2.45 | r4-final-add11-phase3a-run1.log | 8df88d2e3bdc211554789da03c4d25b652ffc49a24b13b7de6dbc9eae9508aff |
+| bun test apps/madbridge | 518 pass, 0 fail; 2299 assertions |  1:58  up 5 days, 17:07, 12 users, load averages: 7.96 4.79 2.99 | r4-final-add11-madbridge-run1.log | 93d7986fbc54954eb422e30d16c8d584636717a31c10a2374fd7226886a387b4 |
+| bun test test/acceptance | 87 pass, 0 fail; 214 assertions |  1:58  up 5 days, 17:07, 12 users, load averages: 7.63 4.83 3.02 | r4-final-add11-acceptance-run1.log | b6805d24cdcabd7958bb1d70772a4a82ac833e51206cadafb8be12b684bcf8de |
+| command -v bun; command -v bunx; ls -l bunx; shasum -a 256 bun; bun --version; bun -e 'process.stdout.write(Bun.revision)' | exit 0 | not a test | r4-final-add11-runtime-run1.log | 6d5f77e9c789660b0b03388c68805d18978cf4bf8d79928af243be1c89b3c6a3 |
+| bun test | 1871 pass, 0 fail; 18202 assertions |  1:59  up 5 days, 17:08, 12 users, load averages: 7.28 4.90 3.08 | r4-final-add11-full-run1.log | 396ce83ae169692836ebeb82f81cfb898ebbb6e19ad0468a38892654d9c2618e |
+| git diff --check 189c2c12fb0147909f0b8fdc550affca92e70156; exact scope, source hash and foreign-test exclusion checks | exit 0 | not a test | r4-final-add11-scope-run1.log | a8d65e198480114371cb1ccfec81e46a5f7466e3cca3d1f5769fda8b2f101619 |
+
+### Every run: command, outcome and full-output log
+
+All log files below are under /Users/michaeldaley/builds/m23-m24-r1-pr/logs/. Every test command prepends the pinned Bun directory to PATH in its own shell and pipes complete stdout/stderr through tee. Tool display excerpts do not truncate the stored files. Exit statuses are captured from the command side of the pipe using pipefail; no earlier receipt is rewritten.
+
+| Log | Command | Exit | Summary | SHA-256 |
+| --- | --- | --- | --- | --- |
+| r4-precondition-install-run1.log | bun install --frozen-lockfile | 0 | no test summary | 08d9da9fbb927d6510cd2c30254cbfc224591b8f68649464bfa6a2fbe4664e31 |
+| r4-precondition-tsc-run1.log | bunx tsc --noEmit | 0 | no test summary | d06db2da096198dade9c1d17c99684493da4241dc6f4fac8115dcb1249d2958f |
+| r4-precondition-phase3a-run1.log | bun test test/phase3a | 0 | 131 pass, 0 fail; 2483 assertions | 1a861fd490569879683a269ac487060f64476ddeb04ccfd14a1410620b78f05f |
+| r4-red-prefixed-run1.log | bun test test/phase3a/evidence-pipeline.test.ts -t 'token-prefixed allowlisted secrets leave no suffix in exported keys or values' | 1 | 0 pass, 1 fail; 10 assertions | 6328d83cdf9fc6b7d92062e5f4089a49f9fd8e2073db2783938df4c95d899356 |
+| r4-red-collision-run1.log | bun test test/phase3a/evidence-pipeline.test.ts -t 'colliding redacted keys retain every value deterministically' | 1 | 0 pass, 1 fail; not printed assertions | b56e83fc42f837f2753953a84cd437a0cbfcb52107b8a011bd1d21dbc1dc4712 |
+| r4-red-collision-run2.log | bun test test/phase3a/evidence-pipeline.test.ts -t '^colliding redacted keys retain every value deterministically$' | 1 | 0 pass, 1 fail; 5 assertions | bee185ddc60e459c53ad7bf7f9625220be4f6b9671966659453376488701adf7 |
+| r4-red-sigterm-run1.log | bun test test/phase3a/adversarial/supervisor-death.test.ts -t '^supervisor SIGTERM terminates every governed child$' | 1 | 0 pass, 1 fail; 12 assertions | 609b2603c96e6bfc069f556419a05e972aaef39a13585ee352a8183487291fbf |
+| r4-red-lifeline-run1.log | bun test test/phase3a/adversarial/process-group.test.ts -t "^deliberate lifeline EOF terminates that child's process group only$" | 1 | 0 pass, 1 fail; 1 assertions | ba5f8a316c264182c2bd997222018b006014e3e6fd05b918fffc3d09d3f9c3c0 |
+| r4-red-crash-substitution-run1.log | bun test test/phase3a/adversarial/supervisor-death.test.ts -t '^supervisor crash terminates every governed child$' | 1 | 0 pass, 1 fail; 12 assertions | 1f34d9892d79f187b42a0dbe0783ef7a7e6b76315d78d2dfe335be0a7e76a237 |
+| r4-red-verify-root-run1.log | bun test test/phase3a/evidence-pipeline.test.ts -t '^verify-ledger rejects an invalid storage root without exporting$' | 1 | 0 pass, 1 fail; 2 assertions | f9b084f41aac8117581f080929a13d2fd2aec9db4017b39369dd3b40af1269cf |
+| r4-red-verify-home-run1.log | bun test test/phase3a/evidence-pipeline.test.ts -t '^verify-ledger rejects an inconsistent HOME without exporting$' | 1 | 0 pass, 1 fail; 2 assertions | f60dc96865e2c04f311f85cf5d394e452872be2641c5d1aaf97a39c7132745a0 |
+| r4-red-export-root-run1.log | bun test test/phase3a/evidence-pipeline.test.ts -t '^export-evidence rejects an invalid storage root without exporting$' | 1 | 0 pass, 1 fail; 2 assertions | 95ceea98fd824b195cd158e2409960a51e381cb423c86cad6938b76195fd184b |
+| r4-red-export-home-run1.log | bun test test/phase3a/evidence-pipeline.test.ts -t '^export-evidence rejects an inconsistent HOME without exporting$' | 1 | 0 pass, 1 fail; 2 assertions | 3a6da9b6ed2057b8cb3f3fda9357af80e85e56b37adcc1e9313f30874dcb6a03 |
+| r4-corrections-tsc-run1.log | bunx tsc --noEmit | 0 | no test summary | 88fb73cfd8f69490bbc137c7cb8231d31a81f8f757b73d8742523999089c7dd3 |
+| r4-green-evidence-run1.log | bun test test/phase3a/evidence-pipeline.test.ts | 1 | 12 pass, 4 fail; 745 assertions | 20ede587e0e4f7ef3eb27b56a6fd5ba74457e11ee60fb3b5105e8e8faeb6691d |
+| r4-green-evidence-run2.log | bun test test/phase3a/evidence-pipeline.test.ts | 0 | 16 pass, 0 fail; 749 assertions | 2745796ece4857746d786b503d7d16ef0a7687a77c81bb8c022be00eb9d80867 |
+| r4-green-supervisor-run1.log | bun test test/phase3a/adversarial/supervisor-death.test.ts | 0 | 6 pass, 0 fail; 238 assertions | 214b0203f089f793480526ee399ec2f9e825eab7f84aee5fd49ba8481b0cba34 |
+| r4-green-process-group-run1.log | bun test test/phase3a/adversarial/process-group.test.ts | 0 | 5 pass, 0 fail; 43 assertions | f9301e0cbac96473d11e975e9ab10fb4b70dfc4e6815b2ff2887a932f4ceb738 |
+| r4-break-pgid-s3-run1.log | bun test test/phase3a/adversarial/wedged-host.test.ts | 1 | 5 pass, 1 fail; 90 assertions | 746339ccdedb343d0bc05dcaf8a25ff054a5705f8eb10c80a88f03e3ceb002f6 |
+| r4-break-pgid-all-run1.log | bun test test/phase3a/adversarial/wedged-host.test.ts | 1 | 4 pass, 2 fail; 90 assertions | d635b6e9da708b4967e8bc9c975f2019e27d4f43d1132283aaa085abf366d12b |
+| r4-break-founder-close-run1.log | bun test test/phase3a/adversarial/cleanup-residuals.test.ts | 1 | 1 pass, 2 fail; 50 assertions | 2afc7feebe52142922d05a54a204620de12ad074aba60092142f4bd65e7939c4 |
+| r4-break-key-sanitization-run1.log | bun test test/phase3a/evidence-pipeline.test.ts | 1 | 11 pass, 5 fail; 738 assertions | 79ac9c787451d590a0b1c267a3e9cf0386f5a6712b46391989a6e4886bd3a1d5 |
+| r4-break-sigterm-clean-run1.log | bun test test/phase3a/adversarial/supervisor-death.test.ts | 1 | 4 pass, 2 fail; 158 assertions | a3363741c0f1e5799809d20a9999144b23442e32dee679fdc77ad1b313f75e2b |
+| r4-break-crash-clean-run1.log | bun test test/phase3a/adversarial/supervisor-death.test.ts | 1 | 4 pass, 2 fail; 183 assertions | d639fc8c7be3590ecff8f2352786d32598d35dd2597d17ecf1db6ac27583af15 |
+| r4-break-storage-checks-run1.log | bun test test/phase3a/evidence-pipeline.test.ts | 1 | 12 pass, 4 fail; 737 assertions | 85726f4eb37fc55d641fb683df96017b74c13b80c578c393eca3e0baadb0c3a8 |
+| r4-break-prefixed-order-run1.log | bun test test/phase3a/evidence-pipeline.test.ts | 1 | 15 pass, 1 fail; 746 assertions | e14a18754ec9a1f725cc1da1adfe3a0952d275ba13a7d0828655f6b6f0b79029 |
+| r4-break-lifeline-leader-only-run1.log | bun test test/phase3a/adversarial/process-group.test.ts | 0 | 5 pass, 0 fail; 43 assertions | f4de488b26c46727ac1b8496da1a27869a40796f2b646579d216e7ddbe8ebc64 |
+| r4-break-key-collision-run1.log | bun test test/phase3a/evidence-pipeline.test.ts | 1 | 15 pass, 1 fail; 745 assertions | 43d0cc42c051bc2733d72fa1d42f26507f989032340eb1f3da98497ac8d65c42 |
+| r4-final-tsc-run1.log | bunx tsc --noEmit | 0 | no test summary | 9d87d53aded29966fa4cafa9207d7f10cc4f8302baa26dd06c39b84ffb804a69 |
+| r4-final-adversarial-run1.log | bun test test/phase3a/adversarial | 0 | 34 pass, 0 fail; 634 assertions | 17591c44d08e74bd5c519f128dea4c5e0a14f886c2d95634a3442b0b1214f2d0 |
+| r4-final-add11-adversarial-run2.log | bun test test/phase3a/adversarial | 0 | 33 pass, 0 fail; 627 assertions | a39c3660a10e5364d9ae34883af9f0ec2330b0809b1106961a63ffc7f400d05c |
+| r4-final-add11-adversarial-run3.log | bun test test/phase3a/adversarial | 0 | 33 pass, 0 fail; 627 assertions | 6080b0d598038f3473618f0ba11522b8ba66d29dc6a799e9091aabc79d2c012a |
+| r4-final-add11-phase3a-run1.log | bun test test/phase3a | 0 | 137 pass, 0 fail; 2541 assertions | 8df88d2e3bdc211554789da03c4d25b652ffc49a24b13b7de6dbc9eae9508aff |
+| r4-final-add11-madbridge-run1.log | bun test apps/madbridge | 0 | 518 pass, 0 fail; 2299 assertions | 93d7986fbc54954eb422e30d16c8d584636717a31c10a2374fd7226886a387b4 |
+| r4-final-add11-acceptance-run1.log | bun test test/acceptance | 0 | 87 pass, 0 fail; 214 assertions | b6805d24cdcabd7958bb1d70772a4a82ac833e51206cadafb8be12b684bcf8de |
+| r4-final-add11-tsc-run1.log | bunx tsc --noEmit | 0 | no test summary | 2aab5d80e81cc4bee9d8b1ef9310c51b17d25b79863e9d0f7a6027a7655c2476 |
+| r4-final-add11-adversarial-run1.log | bun test test/phase3a/adversarial | 0 | 33 pass, 0 fail; 627 assertions | 35e05048e823e326787e8f30994d3695200c12b06e869104bfe88c8cac4e54d3 |
+| r4-final-add11-runtime-run1.log | command -v bun; command -v bunx; ls -l bunx; shasum -a 256 bun; bun --version; bun -e 'process.stdout.write(Bun.revision)' | 0 | no test summary | 6d5f77e9c789660b0b03388c68805d18978cf4bf8d79928af243be1c89b3c6a3 |
+| r4-final-add11-full-run1.log | bun test | 0 | 1871 pass, 0 fail; 18202 assertions | 396ce83ae169692836ebeb82f81cfb898ebbb6e19ad0468a38892654d9c2618e |
+| r4-final-add11-scope-run1.log | git diff --check 189c2c12fb0147909f0b8fdc550affca92e70156; exact scope, source hash and foreign-test exclusion checks | 0 | no test summary | a8d65e198480114371cb1ccfec81e46a5f7466e3cca3d1f5769fda8b2f101619 |
+
+### Uptime before each test run
+
+r4-precondition-install-run1.log: 15:08  up 5 days,  6:17, 11 users, load averages: 2.44 2.64 1.94
+
+r4-precondition-tsc-run1.log: 15:08  up 5 days,  6:17, 11 users, load averages: 2.33 2.61 1.94
+
+r4-precondition-phase3a-run1.log: 15:08  up 5 days,  6:17, 11 users, load averages: 2.22 2.59 1.93
+
+r4-red-prefixed-run1.log: 15:11  up 5 days,  6:19, 11 users, load averages: 3.10 2.81 2.11
+
+r4-red-collision-run1.log: 15:11  up 5 days,  6:19, 11 users, load averages: 3.10 2.81 2.11
+
+r4-red-collision-run2.log: 15:11  up 5 days,  6:20, 11 users, load averages: 2.37 2.66 2.08
+
+r4-red-sigterm-run1.log: 15:11  up 5 days,  6:19, 11 users, load averages: 3.09 2.81 2.11
+
+r4-red-lifeline-run1.log: 15:11  up 5 days,  6:19, 11 users, load averages: 3.09 2.81 2.11
+
+r4-red-crash-substitution-run1.log: 15:11  up 5 days,  6:20, 11 users, load averages: 2.39 2.66 2.08
+
+r4-red-verify-root-run1.log: 15:11  up 5 days,  6:20, 11 users, load averages: 4.95 3.21 2.28
+
+r4-red-verify-home-run1.log: 15:11  up 5 days,  6:20, 11 users, load averages: 4.95 3.21 2.28
+
+r4-red-export-root-run1.log: 15:11  up 5 days,  6:20, 11 users, load averages: 4.95 3.21 2.28
+
+r4-red-export-home-run1.log: 15:11  up 5 days,  6:20, 11 users, load averages: 4.95 3.21 2.28
+
+r4-corrections-tsc-run1.log: 15:12  up 5 days,  6:21, 11 users, load averages: 4.54 3.24 2.32
+
+r4-green-evidence-run1.log: 15:12  up 5 days,  6:21, 11 users, load averages: 4.21 3.21 2.32
+
+r4-green-evidence-run2.log: 15:12  up 5 days,  6:21, 11 users, load averages: 3.87 3.18 2.32
+
+r4-green-supervisor-run1.log: 15:12  up 5 days,  6:21, 11 users, load averages: 3.96 3.21 2.34
+
+r4-green-process-group-run1.log: 15:12  up 5 days,  6:21, 11 users, load averages: 3.96 3.21 2.34
+
+r4-break-pgid-s3-run1.log: 15:13  up 5 days,  6:22, 11 users, load averages: 2.43 2.90 2.29
+
+r4-break-pgid-all-run1.log: 15:13  up 5 days,  6:22, 11 users, load averages: 2.13 2.82 2.27
+
+r4-break-founder-close-run1.log: 15:14  up 5 days,  6:23, 11 users, load averages: 2.18 2.78 2.27
+
+r4-break-key-sanitization-run1.log: 15:14  up 5 days,  6:23, 11 users, load averages: 2.32 2.79 2.27
+
+r4-break-sigterm-clean-run1.log: 15:14  up 5 days,  6:23, 11 users, load averages: 1.81 2.65 2.23
+
+r4-break-crash-clean-run1.log: 15:14  up 5 days,  6:23, 11 users, load averages: 1.98 2.67 2.24
+
+r4-break-storage-checks-run1.log: 15:14  up 5 days,  6:23, 11 users, load averages: 1.97 2.64 2.24
+
+r4-break-prefixed-order-run1.log: 15:15  up 5 days,  6:23, 11 users, load averages: 1.97 2.63 2.24
+
+r4-break-lifeline-leader-only-run1.log: 15:15  up 5 days,  6:24, 11 users, load averages: 2.48 2.71 2.27
+
+r4-break-key-collision-run1.log: 16:33  up 5 days,  7:41, 11 users, load averages: 4.24 3.74 3.58
+
+r4-final-tsc-run1.log: 16:33  up 5 days,  7:42, 11 users, load averages: 3.63 3.66 3.56
+
+r4-final-adversarial-run1.log: 16:33  up 5 days,  7:42, 11 users, load averages: 3.66 3.67 3.56
+
+r4-final-add11-adversarial-run2.log:  1:56  up 5 days, 17:05, 12 users, load averages: 3.89 2.75 2.07
+
+r4-final-add11-adversarial-run3.log:  1:56  up 5 days, 17:05, 12 users, load averages: 5.36 3.23 2.27
+
+r4-final-add11-phase3a-run1.log:  1:57  up 5 days, 17:06, 12 users, load averages: 6.06 3.63 2.45
+
+r4-final-add11-madbridge-run1.log:  1:58  up 5 days, 17:07, 12 users, load averages: 7.96 4.79 2.99
+
+r4-final-add11-acceptance-run1.log:  1:58  up 5 days, 17:07, 12 users, load averages: 7.63 4.83 3.02
+
+r4-final-add11-tsc-run1.log:  1:55  up 5 days, 17:04, 12 users, load averages: 2.11 2.33 1.90
+
+r4-final-add11-adversarial-run1.log:  1:55  up 5 days, 17:04, 12 users, load averages: 2.02 2.31 1.90
+
+r4-final-add11-full-run1.log:  1:59  up 5 days, 17:08, 12 users, load averages: 7.28 4.90 3.08
+
+
+### Failure lines retained verbatim
+
+r4-red-prefixed-run1.log
+
+```text
+(fail) token-prefixed allowlisted secrets leave no suffix in exported keys or values [312.71ms]
+```
+
+r4-red-collision-run1.log
+
+```text
+(fail) colliding redacted keys retain every value deterministically [1.49ms]
+```
+
+r4-red-collision-run2.log
+
+```text
+(fail) colliding redacted keys retain every value deterministically [432.66ms]
+```
+
+r4-red-sigterm-run1.log
+
+```text
+(fail) supervisor SIGTERM terminates every governed child [394.81ms]
+```
+
+r4-red-lifeline-run1.log
+
+```text
+(fail) deliberate lifeline EOF terminates that child's process group only [272.23ms]
+```
+
+r4-red-crash-substitution-run1.log
+
+```text
+(fail) supervisor crash terminates every governed child [498.48ms]
+```
+
+r4-red-verify-root-run1.log
+
+```text
+(fail) verify-ledger rejects an invalid storage root without exporting [281.51ms]
+```
+
+r4-red-verify-home-run1.log
+
+```text
+(fail) verify-ledger rejects an inconsistent HOME without exporting [349.38ms]
+```
+
+r4-red-export-root-run1.log
+
+```text
+(fail) export-evidence rejects an invalid storage root without exporting [282.41ms]
+```
+
+r4-red-export-home-run1.log
+
+```text
+(fail) export-evidence rejects an inconsistent HOME without exporting [295.72ms]
+```
+
+r4-green-evidence-run1.log
+
+```text
+(fail) verify-ledger rejects an invalid storage root without exporting [257.61ms]
+(fail) verify-ledger rejects an inconsistent HOME without exporting [285.22ms]
+(fail) export-evidence rejects an invalid storage root without exporting [243.38ms]
+(fail) export-evidence rejects an inconsistent HOME without exporting [292.96ms]
+```
+
+r4-break-pgid-s3-run1.log
+
+```text
+(fail) a SIGSTOPped host is cleared through the direct PGID path [6170.72ms]
+```
+
+r4-break-pgid-all-run1.log
+
+```text
+(fail) a SIGSTOPped host is cleared through the direct PGID path [6105.23ms]
+(fail) the wedged-host descendant survives host death without a direct PGID kill [5882.65ms]
+```
+
+r4-break-founder-close-run1.log
+
+```text
+(fail) the residual census retains durable closure and token evidence after storage deletion [288.90ms]
+(fail) no child, descendant, host, descriptor, open ledger session, or live fencing token remains after the adversarial suite [4836.61ms]
+```
+
+r4-break-key-sanitization-run1.log
+
+```text
+(fail) exported evidence contains no allowlisted secret value [366.72ms]
+(fail) exported evidence redacts a allowlisted secret in nested property keys [301.97ms]
+(fail) exported evidence redacts a known token pattern in nested property keys [300.23ms]
+(fail) token-prefixed allowlisted secrets leave no suffix in exported keys or values [295.18ms]
+(fail) colliding redacted keys retain every value deterministically [332.08ms]
+```
+
+r4-break-sigterm-clean-run1.log
+
+```text
+(fail) supervisor SIGTERM terminates every governed child [421.39ms]
+(fail) no governed process survives any supervisor-death scenario [703.60ms]
+```
+
+r4-break-crash-clean-run1.log
+
+```text
+(fail) supervisor crash terminates every governed child [339.61ms]
+(fail) no governed process survives any supervisor-death scenario [1162.52ms]
+```
+
+r4-break-storage-checks-run1.log
+
+```text
+(fail) verify-ledger rejects an invalid storage root without exporting [341.39ms]
+(fail) verify-ledger rejects an inconsistent HOME without exporting [268.42ms]
+(fail) export-evidence rejects an invalid storage root without exporting [315.52ms]
+(fail) export-evidence rejects an inconsistent HOME without exporting [274.31ms]
+```
+
+r4-break-prefixed-order-run1.log
+
+```text
+(fail) token-prefixed allowlisted secrets leave no suffix in exported keys or values [296.59ms]
+```
+
+r4-break-key-collision-run1.log
+
+```text
+(fail) colliding redacted keys retain every value deterministically [352.15ms]
+```
+
+The unfiltered breaks' assertion excerpts are:
+
+```text
+error: the recorded governed descendant must be gone within the outer bound
+Expected: false
+Received: true
+
+expect(data.openSessions).toBe(0)
+Expected: 0
+Received: 3
+
+error: SIGTERM must reach its signal handler
+
+error: crash must report the uncaught synthetic exception
+Expected to contain: "error: Synthetic supervisor crash"
+Received: ""
+
+expect(result.exitCode).toBe(1)
+Expected: 1
+Received: 0
+
+Expected to not contain: "_FIXTURE_SUFFIX"
+
+expect(Object.keys(payload)).toHaveLength(4)
+Expected length: 4
+Received length: 3
+```
+
+The full diagnostics, synthetic fixture values and stack frames are in the unmodified logs, rather than copied wholesale into this record.
+
+### Per-break restored file SHA-256
+
+r4-break-pgid-s3-run1.log, exit 1:
+
+- packages/broker/src/pty-host-supervisor.ts: 9ba986edb28133e2f7a177f95280b2088b8bd5051e80ba58794dc0555a5a8bb7
+
+r4-break-pgid-all-run1.log, exit 1:
+
+- packages/broker/src/pty-host-supervisor.ts: 9ba986edb28133e2f7a177f95280b2088b8bd5051e80ba58794dc0555a5a8bb7
+
+r4-break-founder-close-run1.log, exit 1:
+
+- test/phase3a/runtime-harness.ts: 9a90ef8b3e357b7f89c0f2d9ba9ecddb6c9d2e707b7160065004422df7d39d10
+
+r4-break-key-sanitization-run1.log, exit 1:
+
+- apps/madbridge/src/commands/export-evidence.ts: aee7ea77660c42b37a662d0300d9c1ae2e1cfb12bd315cd6190f010fa530167e
+
+r4-break-sigterm-clean-run1.log, exit 1:
+
+- test/phase3a/runtime-harness.ts: 9a90ef8b3e357b7f89c0f2d9ba9ecddb6c9d2e707b7160065004422df7d39d10
+
+r4-break-crash-clean-run1.log, exit 1:
+
+- test/phase3a/adversarial/supervisor-entry.ts: f4a772df7801fe4abf4a6e186019b30d04edb9ecb2d54e83cc20f342b5530f06
+
+r4-break-storage-checks-run1.log, exit 1:
+
+- apps/madbridge/src/commands/verify-ledger.ts: 5c9e3e9eb008fbc7f7e11510c95c9487127136a3a633a652ed3fb157d27b7731
+- apps/madbridge/src/commands/export-evidence.ts: aee7ea77660c42b37a662d0300d9c1ae2e1cfb12bd315cd6190f010fa530167e
+
+r4-break-prefixed-order-run1.log, exit 1:
+
+- apps/madbridge/src/commands/export-evidence.ts: aee7ea77660c42b37a662d0300d9c1ae2e1cfb12bd315cd6190f010fa530167e
+
+r4-break-lifeline-leader-only-run1.log, exit 0 — withdrawn requirement under Addendum 10; caused the recorded halt:
+
+- packages/pty-host/src/signals.ts: c5d2814420dc7d431a28cb7ef03229304daf5896bd50e9630268ba3d637fa90e
+
+r4-break-key-collision-run1.log, exit 1:
+
+- apps/madbridge/src/commands/export-evidence.ts: aee7ea77660c42b37a662d0300d9c1ae2e1cfb12bd315cd6190f010fa530167e
+
+
+### Observed final-gate milliseconds
+
+D=detectedMs; X=deathMs; T=terminateSentMs; A=ackWindowEndedMs; C=stdinClosedMs; Q=classifiedMs; P=pgidKillAttemptedMs; H=hostKillAttemptedMs; E=escalatedMs. These are the literal decimal strings printed by tests, in output order; all values are milliseconds. Other labels retain their printed names.
+
+r4-final-add11-adversarial-run1.log
+
+| Printed observation |
+| --- |
+| ignore_SIGTERM: final_death_ms=2032.26 |
+| lifeline_EOF: final_death_ms=173.10 |
+| host_exit: final_death_ms=188.13 |
+| supervisor clean: exit=0 signal=null final_death_ms=30.18 |
+| supervisor SIGTERM: exit=0 signal=null final_death_ms=30.79 |
+| supervisor crash: exit=1 signal=null final_death_ms=16.68 |
+| supervisor SIGKILL: exit=null signal=SIGKILL final_death_ms=24.13 |
+| supervisor SIGKILL: exit=null signal=SIGKILL final_death_ms=23.21 |
+| supervisor clean: exit=0 signal=null final_death_ms=31.59 |
+| supervisor SIGTERM: exit=0 signal=null final_death_ms=30.93 |
+| supervisor crash: exit=1 signal=null final_death_ms=25.66 |
+| supervisor SIGKILL: exit=null signal=SIGKILL final_death_ms=25.25 |
+| second_surface_failure final_death_ms=547.1453750000001 |
+| census_fault D=251.3369590000002 X=274.65083400000003 T=0.03879199999937555 A=249.34283399999913 C=249.35829199999898 Q=249.3733339999999 P=249.39820899999904 H=249.40670899999895 E=249.40683399999944 |
+| census_fault D=8.241874999999709 X=32.31412499999897 |
+| census_fault D=2.2091249999994034 X=25.611457999999402 |
+| census_fault D=3.929334000000381 X=27.629084000000148 |
+| census_fault D=2.053749999999127 X=25.23895799999991 |
+| census_fault D=2.0391660000004777 X=25.341207999999824 |
+| census_supervisor clean final_death_ms=41.50908400000117 |
+| census_supervisor SIGTERM final_death_ms=33.979959000000235 |
+| census_supervisor crash final_death_ms=34.03041699999994 |
+| census_supervisor SIGKILL final_death_ms=22.464084000001094 |
+| residual_census final_death_ms=30.72345900000073 |
+| attestation_drift D=1.5999580000006972 X=24.538582999999562 |
+| adjacent_rehash final_death_ms=347.05045900000005 |
+| host_fault D=251.51379199999792 X=275.0986249999987 T=0.02729199999885168 A=249.6262089999982 C=249.6396249999998 Q=249.65129199999865 P=249.69670899999983 H=249.70529199999874 E=249.70550000000003 |
+| wedged_descendant_calibration host_dead_ms=107.48937500000102 descendant_alive=true |
+| host_fault D=254.7328750000015 X=278.64779199999975 T=0.030249999999796273 A=249.8025000000016 C=249.82404099999985 Q=249.8439580000013 P=249.8634579999998 H=249.87229099999968 E=249.8735830000005 |
+| host_fault D=251.7717909999992 X=274.65979100000186 T=0.024750000000494765 A=249.45187500000247 C=249.46933300000092 Q=249.48708299999998 P=249.50900000000183 H=249.5138330000009 E=249.5141250000015 |
+| host_fault D=2.1950830000023416 X=26.00304099999994 |
+| host_fault D=1.991375000001426 X=26.69499999999971 |
+| auth_expiry D=1.8225419999980659 X=24.879832999999053 |
+| auth_expiry D=2.041958000001614 X=24.73058300000048 |
+| sequence_fault D=1.955167000000074 X=26.614667000001646 |
+| sequence_fault D=2.5069169999987935 X=26.724709000001894 |
+| sequence_fault D=2.152541999999812 X=25.546916999999667 |
+| sequence_fault D=1.9565409999995609 X=25.36999999999898 |
+| sequence_fault D=2.096958000001905 X=25.516417000002548 |
+| ledger_failure D=2.360958000001119 X=26.37287500000093 |
+| unrecordable_ledger D=0 X=23.09758299999885 |
+
+r4-final-add11-adversarial-run2.log
+
+| Printed observation |
+| --- |
+| ignore_SIGTERM: final_death_ms=2030.47 |
+| lifeline_EOF: final_death_ms=174.20 |
+| host_exit: final_death_ms=188.06 |
+| supervisor clean: exit=0 signal=null final_death_ms=31.44 |
+| supervisor SIGTERM: exit=0 signal=null final_death_ms=34.67 |
+| supervisor crash: exit=1 signal=null final_death_ms=14.69 |
+| supervisor SIGKILL: exit=null signal=SIGKILL final_death_ms=12.59 |
+| supervisor SIGKILL: exit=null signal=SIGKILL final_death_ms=22.79 |
+| supervisor clean: exit=0 signal=null final_death_ms=32.55 |
+| supervisor SIGTERM: exit=0 signal=null final_death_ms=31.03 |
+| supervisor crash: exit=1 signal=null final_death_ms=25.64 |
+| supervisor SIGKILL: exit=null signal=SIGKILL final_death_ms=26.88 |
+| second_surface_failure final_death_ms=507.2835409999998 |
+| census_fault D=251.29362500000025 X=274.2428340000006 T=0.03345900000022084 A=249.325499999999 C=249.34037499999977 Q=249.35662500000035 P=249.37674999999945 H=249.38600000000042 E=249.38687500000015 |
+| census_fault D=2.0788750000010623 X=25.282875000000786 |
+| census_fault D=2.970041000000492 X=27.88995799999975 |
+| census_fault D=3.1512080000011338 X=27.082125000000815 |
+| census_fault D=2.014666999999463 X=25.213999999999942 |
+| census_fault D=1.795125000000553 X=25.21574999999939 |
+| census_supervisor clean final_death_ms=32.5640829999993 |
+| census_supervisor SIGTERM final_death_ms=32.87845799999923 |
+| census_supervisor crash final_death_ms=28.829750000000786 |
+| census_supervisor SIGKILL final_death_ms=30.86595800000032 |
+| residual_census final_death_ms=27.691666000000623 |
+| attestation_drift D=1.7113750000007713 X=24.45854099999997 |
+| adjacent_rehash final_death_ms=264.50091599999905 |
+| host_fault D=252.16233300000022 X=275.8546669999996 T=0.04104200000074343 A=249.69029200000114 C=249.7028330000012 Q=249.725292000001 P=249.76833299999998 H=249.77662500000042 E=249.77700000000004 |
+| wedged_descendant_calibration host_dead_ms=105.99754199999916 descendant_alive=true |
+| host_fault D=253.14070900000297 X=277.8858340000006 T=0.027249999999185093 A=251.1335829999989 C=251.15674999999828 Q=251.1735000000008 P=251.19437499999913 H=251.20316599999933 E=251.20449999999983 |
+| host_fault D=251.37424999999712 X=274.3472079999992 T=0.06962500000008731 A=249.62937500000044 C=249.64254100000107 Q=249.65066600000137 P=249.66891599999872 H=249.67250000000058 E=249.67275000000154 |
+| host_fault D=2.0071659999994154 X=25.018332999999984 |
+| host_fault D=2.171666999998706 X=25.57562499999767 |
+| auth_expiry D=2.1565000000009604 X=25.2522080000017 |
+| auth_expiry D=1.6696249999986321 X=24.25066599999991 |
+| sequence_fault D=2.3500419999982114 X=28.151624999998603 |
+| sequence_fault D=2.9489159999975527 X=27.813749999997526 |
+| sequence_fault D=2.226582999999664 X=25.95050000000265 |
+| sequence_fault D=2.1066659999996773 X=25.32945800000016 |
+| sequence_fault D=2.1531250000007276 X=25.892916000000696 |
+| ledger_failure D=2.317750000001979 X=25.375542000001587 |
+| unrecordable_ledger D=0 X=22.565624999999272 |
+
+r4-final-add11-adversarial-run3.log
+
+| Printed observation |
+| --- |
+| ignore_SIGTERM: final_death_ms=2024.62 |
+| lifeline_EOF: final_death_ms=173.78 |
+| host_exit: final_death_ms=189.12 |
+| supervisor clean: exit=0 signal=null final_death_ms=31.05 |
+| supervisor SIGTERM: exit=0 signal=null final_death_ms=31.25 |
+| supervisor crash: exit=1 signal=null final_death_ms=32.46 |
+| supervisor SIGKILL: exit=null signal=SIGKILL final_death_ms=24.07 |
+| supervisor SIGKILL: exit=null signal=SIGKILL final_death_ms=23.34 |
+| supervisor clean: exit=0 signal=null final_death_ms=30.89 |
+| supervisor SIGTERM: exit=0 signal=null final_death_ms=30.35 |
+| supervisor crash: exit=1 signal=null final_death_ms=14.53 |
+| supervisor SIGKILL: exit=null signal=SIGKILL final_death_ms=24.25 |
+| second_surface_failure final_death_ms=562.7687920000008 |
+| census_fault D=251.45995799999946 X=274.3303329999999 T=0.04045899999982794 A=249.44974999999977 C=249.46383400000013 Q=249.4741669999985 P=249.49729200000002 H=249.50616699999955 E=249.50624999999854 |
+| census_fault D=2.1900000000005093 X=25.097209000001385 |
+| census_fault D=2.740916999999172 X=25.67712500000016 |
+| census_fault D=2.9648329999999987 X=26.467249999999694 |
+| census_fault D=1.7481250000000728 X=24.737750000000233 |
+| census_fault D=2.6093330000003334 X=29.003499999998894 |
+| census_supervisor clean final_death_ms=34.03270899999916 |
+| census_supervisor SIGTERM final_death_ms=32.80841699999837 |
+| census_supervisor crash final_death_ms=17.567250000000058 |
+| census_supervisor SIGKILL final_death_ms=26.45441700000083 |
+| residual_census final_death_ms=27.322167000000263 |
+| attestation_drift D=2.173957999999402 X=25.574290999998993 |
+| adjacent_rehash final_death_ms=262.2774999999983 |
+| host_fault D=251.2903750000005 X=274.8650830000006 T=0.021875000000363798 A=249.0749169999999 C=249.08991700000115 Q=249.1057920000003 P=249.14508300000125 H=249.152250000001 E=249.15237499999967 |
+| wedged_descendant_calibration host_dead_ms=105.46916699999929 descendant_alive=true |
+| host_fault D=253.49625000000015 X=277.8553329999995 T=0.03033300000242889 A=249.77862500000265 C=249.79933300000266 Q=249.81533300000228 P=249.83516600000075 H=249.84420800000225 E=249.84583300000304 |
+| host_fault D=253.11558300000252 X=276.7294580000016 T=0.027375000001484295 A=249.6103750000002 C=249.62304100000256 Q=249.6349160000027 P=249.65716600000087 H=249.66237499999988 E=249.6627499999995 |
+| host_fault D=2.184499999999389 X=26.063500000000204 |
+| host_fault D=2.3704580000012356 X=25.64654100000189 |
+| auth_expiry D=1.9697089999972377 X=25.59454199999891 |
+| auth_expiry D=2.2377080000005662 X=25.293667000001733 |
+| sequence_fault D=3.015083999998751 X=28.675999999999476 |
+| sequence_fault D=3.2160000000003492 X=28.107499999998254 |
+| sequence_fault D=2.4795410000006086 X=26.687582999998995 |
+| sequence_fault D=2.10320800000045 X=25.65666699999929 |
+| sequence_fault D=2.189083000001119 X=25.478916000000027 |
+| ledger_failure D=2.315416000001278 X=25.689791000000696 |
+| unrecordable_ledger D=0 X=22.234458999999333 |
+
+r4-final-add11-phase3a-run1.log
+
+| Printed observation |
+| --- |
+| ignore_SIGTERM: final_death_ms=2033.91 |
+| lifeline_EOF: final_death_ms=173.75 |
+| host_exit: final_death_ms=189.08 |
+| supervisor clean: exit=0 signal=null final_death_ms=30.65 |
+| supervisor SIGTERM: exit=0 signal=null final_death_ms=37.36 |
+| supervisor crash: exit=1 signal=null final_death_ms=24.71 |
+| supervisor SIGKILL: exit=null signal=SIGKILL final_death_ms=22.88 |
+| supervisor SIGKILL: exit=null signal=SIGKILL final_death_ms=22.80 |
+| supervisor clean: exit=0 signal=null final_death_ms=29.83 |
+| supervisor SIGTERM: exit=0 signal=null final_death_ms=29.46 |
+| supervisor crash: exit=1 signal=null final_death_ms=14.56 |
+| supervisor SIGKILL: exit=null signal=SIGKILL final_death_ms=25.98 |
+| second_surface_failure final_death_ms=594.164084 |
+| census_fault D=252.6684580000001 X=276.49779200000194 T=0.028333999995084014 A=249.61204199999338 C=249.6264169999995 Q=249.64087499999732 P=249.6641249999957 H=249.67091699999582 E=249.6714589999974 |
+| census_fault D=2.4923330000019632 X=26.229583000000275 |
+| census_fault D=2.4573329999984708 X=26.186416999997164 |
+| census_fault D=3.2436670000024606 X=28.588917000000947 |
+| census_fault D=1.7438340000007884 X=26.222125000000233 |
+| census_fault D=2.1145829999950365 X=25.862499999995634 |
+| census_supervisor clean final_death_ms=33.529209000000264 |
+| census_supervisor SIGTERM final_death_ms=32.91662499999802 |
+| census_supervisor crash final_death_ms=29.43779199999699 |
+| census_supervisor SIGKILL final_death_ms=26.864125000000058 |
+| residual_census final_death_ms=27.719958000001498 |
+| attestation_drift D=1.931165999994846 X=25.355290999999852 |
+| adjacent_rehash final_death_ms=329.4946659999987 |
+| host_fault D=251.92199999999866 X=275.67854200000147 T=0.025750000000698492 A=249.41662499999802 C=249.4307090000002 Q=249.4473749999961 P=249.48129199999676 H=249.4872499999983 E=249.48791699999856 |
+| wedged_descendant_calibration host_dead_ms=106.57362500000454 descendant_alive=true |
+| host_fault D=255.43679200000042 X=282.08933300000353 T=0.018917000001238193 A=249.3507080000054 C=249.3715830000001 Q=249.38700000000244 P=249.42320800000016 H=249.43387500000244 E=249.43475000000035 |
+| host_fault D=251.69954100000177 X=275.0720829999991 T=0.029458000004524365 A=249.54979100000492 C=249.56695800000307 Q=249.59316599999875 P=249.65554100000008 H=249.66395800000464 E=249.66525000000547 |
+| host_fault D=2.0557079999998678 X=25.039958000001207 |
+| host_fault D=2.0620830000043497 X=25.21337499999936 |
+| auth_expiry D=1.8251249999957508 X=25.336166000000958 |
+| auth_expiry D=1.3852499999993597 X=24.120958999999857 |
+| sequence_fault D=2.706208000003244 X=27.174207999996725 |
+| sequence_fault D=2.2917080000042915 X=25.571125000002212 |
+| sequence_fault D=2.0095839999994496 X=25.035209000001487 |
+| sequence_fault D=2.065999999998894 X=25.290124999999534 |
+| sequence_fault D=2.425250000000233 X=25.607624999996915 |
+| ledger_failure D=2.5756249999976717 X=25.91466699999728 |
+| unrecordable_ledger D=0 X=21.374958000000333 |
+| [spike] pty_tty_allocation=3ms(pass) exact_binary_io=0ms(pass) resize_propagation=6ms(pass) process_group_and_signals=36ms(pass) child_and_grandchild_termination=30ms(pass) two_ptys_plus_adapter_no_leak=0ms(pass) supervisor_exit_modes=2209ms(pass) lifeline_eof=78ms(pass) pty_host_death=71ms(pass) sigstop_wedged_direct_pgid=292ms(pass) child_ignores_sigterm=731ms(pass) clean_exit_reporting=2066ms(pass) measured_timing=2209ms(pass) |
+
+r4-final-add11-full-run1.log
+
+| Printed observation |
+| --- |
+| ignore_SIGTERM: final_death_ms=2032.76 |
+| lifeline_EOF: final_death_ms=173.45 |
+| host_exit: final_death_ms=189.14 |
+| supervisor clean: exit=0 signal=null final_death_ms=29.89 |
+| supervisor SIGTERM: exit=0 signal=null final_death_ms=47.78 |
+| supervisor crash: exit=1 signal=null final_death_ms=25.89 |
+| supervisor SIGKILL: exit=null signal=SIGKILL final_death_ms=23.64 |
+| supervisor SIGKILL: exit=null signal=SIGKILL final_death_ms=22.91 |
+| supervisor clean: exit=0 signal=null final_death_ms=30.63 |
+| supervisor SIGTERM: exit=0 signal=null final_death_ms=31.30 |
+| supervisor crash: exit=1 signal=null final_death_ms=14.42 |
+| supervisor SIGKILL: exit=null signal=SIGKILL final_death_ms=23.70 |
+| second_surface_failure final_death_ms=587.5917080000218 |
+| census_fault D=252.1710829999938 X=274.9303749999963 T=0.025292000005720183 A=249.39566700000432 C=249.40699999997742 Q=249.41962499998044 P=249.44349999999395 H=249.4488339999807 E=249.44933400000446 |
+| census_fault D=2.5372089999727905 X=25.8452919999836 |
+| census_fault D=2.42987500000163 X=25.802332999999635 |
+| census_fault D=2.651125000003958 X=26.490790999989258 |
+| census_fault D=1.9544580000219867 X=28.436750000022585 |
+| census_fault D=1.9269579999963753 X=25.710874999989755 |
+| census_supervisor clean final_death_ms=32.91112499998417 |
+| census_supervisor SIGTERM final_death_ms=33.086292000021785 |
+| census_supervisor crash final_death_ms=28.922916999988956 |
+| census_supervisor SIGKILL final_death_ms=27.110166999977082 |
+| residual_census final_death_ms=27.56424999999581 |
+| attestation_drift D=2.1885830000101123 X=25.49654200000805 |
+| adjacent_rehash final_death_ms=334.3038330000127 |
+| host_fault D=251.76399999999558 X=275.2761670000036 T=0.030208000011043623 A=249.42883300001267 C=249.4392499999958 Q=249.453125 P=249.49225000001024 H=249.49904200001038 E=249.4991250000021 |
+| wedged_descendant_calibration host_dead_ms=105.1054170000134 descendant_alive=true |
+| host_fault D=251.4153750000114 X=274.0627080000122 T=0.02395900001283735 A=249.3570840000175 C=249.3672920000099 Q=249.38770900000236 P=249.40425000002142 H=249.4079170000041 E=249.40950000000885 |
+| host_fault D=251.79925000001094 X=274.772209000017 T=0.04045800000312738 A=249.41987500002142 C=249.43450000000303 Q=249.44479200002388 P=249.4663330000185 H=249.4708329999994 E=249.4709580000199 |
+| host_fault D=2.2412079999921843 X=25.534416000009514 |
+| host_fault D=1.6176659999764524 X=24.87533299997449 |
+| auth_expiry D=1.9845830000122078 X=25.358625000022585 |
+| auth_expiry D=1.921875 X=25.43620799999917 |
+| sequence_fault D=1.9678340000100434 X=25.408625000010943 |
+| sequence_fault D=2.616875000006985 X=27.53633400000399 |
+| sequence_fault D=2.3836670000164304 X=25.519375000003492 |
+| sequence_fault D=2.1869580000056885 X=25.806207999994513 |
+| sequence_fault D=2.400999999983469 X=25.87041699999827 |
+| ledger_failure D=3.1781250000058208 X=26.759084000019357 |
+| unrecordable_ledger D=0 X=22.4517090000154 |
+| [spike] pty_tty_allocation=3ms(pass) exact_binary_io=0ms(pass) resize_propagation=3ms(pass) process_group_and_signals=38ms(pass) child_and_grandchild_termination=31ms(pass) two_ptys_plus_adapter_no_leak=0ms(pass) supervisor_exit_modes=2110ms(pass) lifeline_eof=70ms(pass) pty_host_death=67ms(pass) sigstop_wedged_direct_pgid=286ms(pass) child_ignores_sigterm=731ms(pass) clean_exit_reporting=2076ms(pass) measured_timing=2110ms(pass) |
+
+
+### Verbatim Addendum 10 text for the recorded text hash
+
+```text
+ADDENDUM 10 TO THE M23-M24 BUILDER PROMPT: the lifeline mutation. Paste this into the Codex session session:codex/m23-m24-r4, which halted at Addendum 9, item 8. It is signed by the Founder and is part of the builder prompt, with Addenda 1 to 9.
+
+Your halt was correct. I rule as follows.
+
+1. The facts as you reported them. With killGroup in packages/pty-host/src/signals.ts changed to signal the process instead of the group, deliberate lifeline EOF terminates that child's process group only still passed, and the file restored to SHA-256 c5d2814420dc7d431a28cb7ef03229304daf5896bd50e9630268ba3d637fa90e. The second review, which you cannot read, reported that production reaches the lifeline-EOF group by more than one path, so that a change to killGroup alone is masked, and that packages/pty-host/test/signals.test.ts failed only when the lifeline-EOF path in packages/pty-host/src/main.ts was changed as well.
+2. The reading. The finding of Addendum 9, item 6d, is advisory. A scenario test that runs the whole stack cannot be required to fail for a change that another production path covers, and production does not change for this finding. So:
+   a. Item 7d is met by a lifeline-EOF scenario with a governed group member that outlives the child's own death unless the group is signalled, and a test that asserts that member is gone within the bound. Keep that test if you have made it; make it if you have not. It need not fail when only killGroup is changed.
+   b. Item 8 no longer requires the killGroup check. Before you go on, report in one paragraph whether the lifeline-EOF scenario reaches killGroup at all, citing file and line, and which other production paths terminate the group there. Read code only for this; do not change production, and run no extra mutation.
+3. Then continue item 8 from the colliding redacted keys, and then items 9 to 13, as Addendum 9 says.
+4. Record. Under Deviations, in the build log's Correction round 2 section, and under Limitations in pr-body-r3.md: this halt, the failed check's log and its SHA-256, your paragraph of item 2b, that the lifeline-EOF group is covered by redundant production paths, and this addendum by its SHA-256.
+
+Everything else in the builder prompt and Addenda 1 to 9 is unchanged.
+```
+
+### Verbatim Addendum 11 text for the recorded text hash
+
+```text
+ADDENDUM 11 TO THE M23-M24 BUILDER PROMPT: the test you did not write. Paste this into the Codex session session:codex/m23-m24-r4. It is signed by the Founder and is part of the builder prompt, with Addenda 1 to 10.
+
+Your question was right to ask. I rule as follows.
+
+1. The facts as you reported them. A test at line 86 of test/phase3a/adversarial/process-group.test.ts appeared in the working tree while this session was halted, and this session did not write it. Syncthing does not touch /Users/michaeldaley/builds. Its source is not established.
+2. Exclude it. Before any other step:
+   a. Report the test's name, its full hunk from git diff, and the modification time of the file from stat.
+   b. Save that hunk as /Users/michaeldaley/builds/m23-m24-r1-pr/logs/r4-foreign-test-hunk.patch and report its SHA-256.
+   c. Remove exactly that hunk, and nothing else, from the working tree.
+   d. For every other changed hunk in the working tree, say whether this session wrote it, from your own records and logs. If any hunk cannot be traced to this session, stop and report it; do not remove it.
+3. Addendum 10, item 2a, then applies as written: if your own work holds no lifeline-EOF test with a group member that only a group signal clears, write one yourself. For that test a RED run is not required, because Addendum 10 rules that it need not fail when only killGroup changes; record that.
+4. The tree has changed since your final gates began, so run the final gates of DEC-20261028-02 B7 again from the start, in full and in order, under Addendum 9, item 5. Then items 10 to 13 of Addendum 9.
+5. Record. Under Deviations, in the build log's Correction round 2 section, and in pr-body-r3.md: that a test of unknown source appeared in the working tree while the session was halted; its name; the saved hunk by its SHA-256; that it was removed and is in no commit; your item 2d result; and this addendum by its SHA-256.
+
+Everything else in the builder prompt and Addenda 1 to 10 is unchanged.
+```
+
+### Description-size disposition
+
+The full replacement description was first assembled in session state and measured 67,206 characters before any file write, above the 60,000-byte limit. Under Addendum 9 item 11, earlier per-run tables, associated run receipts and redundant RED/GREEN/self-fix summaries were shortened to pointers to this unchanged historical build-log prefix and the unchanged pr-body-r2.md, SHA-256 3a7f1c8abedee2d68b35de97bb490c58270f124578e9d8245056deaa6df7ef3b. The prior what/why, path-purpose and test-requirement maps, actual agent provenance/hunks, authority hashes and limitations remain. The new round-2 log hashes and all 207 printed timing observations remain in the new description and this record. This is an editorial narrower reading of the size rule, not a change to evidence or authority. Square brackets around the spike label are omitted in the description only to satisfy its zero-square-bracket constraint; every observed numeric string is unchanged. No existing artifact or earlier log was overwritten.

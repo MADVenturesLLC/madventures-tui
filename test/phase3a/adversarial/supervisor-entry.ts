@@ -1,7 +1,9 @@
 import { startFixtureSession } from "../runtime-harness";
 
 const session = await startFixtureSession({ retainStorage: true });
-process.once("SIGTERM", () => { void session.close().then(() => process.exit(0)); });
+process.once("SIGTERM", () => {
+  process.stderr.write("FIXTURE_SUPERVISOR_SIGNAL:SIGTERM\n", () => { void session.close().then(() => process.exit(0)); });
+});
 process.stdin.setEncoding("utf8");
 process.stdin.on("data", (data: string) => {
   if (data.trim() === "clean") void session.close().then(() => process.exit(0));

@@ -454,8 +454,10 @@ test("no configured model string is accepted as identity evidence", () => {
 async function closedEvidenceFixture(
   run: (session: HarnessSession, id: string) => Promise<void>,
   fixtureMarker?: string,
+  fixturePayload?: Readonly<Record<string, string>>,
 ): Promise<void> {
-  const session = await startFixtureSession({ retainStorage: true, ...(fixtureMarker === undefined ? {} : { fixtureMarker }) });
+  const session = await startFixtureSession({ retainStorage: true, ...(fixtureMarker === undefined ? {} : { fixtureMarker }),
+    ...(fixturePayload === undefined ? {} : { fixturePayload }) });
   const previous = process.env.MADV_STORAGE_DIR;
   try {
     const snapshot = await session.client.getSnapshot();
@@ -581,3 +583,76 @@ test("verify-ledger no longer defaults to .madv-runtime", async () => {
     expect(JSON.parse(result.stdout).error).toBe("session_required");
   } finally { rmSync(legacy, { recursive: true }); }
 });
+
+test("token-prefixed allowlisted secrets leave no suffix in exported keys or values", async () => {
+  const marker = "sk-" + "a".repeat(20) + "_FIXTURE_SUFFIX";
+  await closedEvidenceFixture(async (session, id) => {
+    const result = await exportEvidenceCommand({ session: id }, { cwd: process.cwd(), stdin: "", json: true }, {
+      environment: { LANG: marker },
+      allowlist: { ref: "fixture-only-prefixed-value", variables: [
+        { name: "LANG", required: true, secret: true },
+        { name: "UNSET_FIXTURE", required: false, secret: true },
+      ] },
+    });
+    expect(result.exitCode).toBe(0);
+    for (const file of readdirSync(session.storage.sanitizedEvidenceDir)) {
+      const text = readFileSync(join(session.storage.sanitizedEvidenceDir, file), "utf8");
+      expect(text).not.toContain(marker);
+      expect(text).not.toContain("_FIXTURE_SUFFIX");
+      if (file.endsWith(".json")) expect(() => JSON.parse(text)).not.toThrow();
+    }
+    const exported = JSON.parse(readFileSync(join(session.storage.sanitizedEvidenceDir, "ledger-sanitized.json"), "utf8"));
+    const message = exported.map((row: { event_json: string }) => JSON.parse(row.event_json))
+      .find((event: { event_type: string }) => event.event_type === "message");
+    expect(message.payload).toEqual({ text: "<redacted:LANG>", "<redacted:LANG>": [{ "<redacted:LANG>": "<redacted:LANG>" }] });
+    const manifest = JSON.parse(readFileSync(join(session.storage.sanitizedEvidenceDir, "manifest.json"), "utf8"));
+    expect(manifest.redaction_rules_applied).toEqual([
+      "known_token_patterns", "exact_allowlisted_secret_values", "secret-value:LANG",
+    ]);
+  }, marker);
+}, 15000);
+
+test("colliding redacted keys retain every value deterministically", async () => {
+  const marker = "ghp_" + "c".repeat(36);
+  await closedEvidenceFixture(async (session) => {
+    const flags = { ledger: join(session.storage.ledgerDir, "ledger.sqlite3"), output: session.storage.sanitizedEvidenceDir };
+    const ctx = { cwd: process.cwd(), stdin: "", json: true };
+    expect((await exportEvidenceCommand(flags, ctx)).exitCode).toBe(0);
+    const first = readFileSync(join(session.storage.sanitizedEvidenceDir, "ledger-sanitized.json"), "utf8");
+    const events = JSON.parse(first).map((row: { event_json: string }) => JSON.parse(row.event_json));
+    const payload = events.find((event: { event_type: string }) => event.event_type === "message")?.payload;
+    expect(payload).toBeDefined();
+    expect(Object.keys(payload)).toHaveLength(4);
+    expect(Object.values(payload).sort()).toEqual(["[REDACTED]", "first", "second", "reserved"].sort());
+    expect((await exportEvidenceCommand(flags, ctx)).exitCode).toBe(0);
+    expect(readFileSync(join(session.storage.sanitizedEvidenceDir, "ledger-sanitized.json"), "utf8")).toBe(first);
+    expect(first).not.toContain(marker);
+  }, marker, { text: marker, [marker]: "first", [marker + "x"]: "second", "[REDACTED]#2": "reserved" });
+}, 15000);
+
+for (const command of ["verify-ledger", "export-evidence"] as const) {
+  for (const invalid of ["invalid storage root", "inconsistent HOME"] as const) {
+    test(`${command} rejects an ${invalid} without exporting`, async () => {
+      await closedEvidenceFixture(async (session, id) => {
+        const previousHome = process.env.HOME;
+        const previousRoot = process.env.MADV_STORAGE_DIR;
+        const output = join(session.storage.sanitizedEvidenceDir, "rejected-export");
+        const before = readdirSync(session.storage.root, { recursive: true }).sort();
+        try {
+          if (invalid === "invalid storage root") process.env.MADV_STORAGE_DIR = "relative-fixture-root";
+          else process.env.HOME = join(session.storage.root, "fixture-home-mismatch");
+          const result = await runCli([command, "--session", id, "--ledger",
+            join(session.storage.ledgerDir, "ledger.sqlite3"), "--output", output, "--json"], { stdin: "", cwd: process.cwd() });
+          expect(result.exitCode).toBe(1);
+          expect(JSON.parse(result.stdout)).toEqual({ ok: false,
+            error: invalid === "invalid storage root" ? "storage_root_invalid:not_absolute" : "storage_root_invalid" });
+          expect(existsSync(output)).toBe(false);
+          expect(readdirSync(session.storage.root, { recursive: true }).sort()).toEqual(before);
+        } finally {
+          if (previousHome === undefined) delete process.env.HOME; else process.env.HOME = previousHome;
+          if (previousRoot === undefined) delete process.env.MADV_STORAGE_DIR; else process.env.MADV_STORAGE_DIR = previousRoot;
+        }
+      });
+    }, 15000);
+  }
+}

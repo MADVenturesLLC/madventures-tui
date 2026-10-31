@@ -15,7 +15,7 @@ interface ChildSupervisor {
   readonly processGroups: readonly number[];
   readonly storage: SessionStorage;
   readonly initialSnapshot: BrokerSnapshot;
-  exit(mode: ExitMode): Promise<{ exitCode: number | null; signalCode: string | null }>;
+  exit(mode: ExitMode): Promise<{ exitCode: number | null; signalCode: string | null; stderr: string }>;
   dispose(): Promise<void>;
 }
 
@@ -46,6 +46,12 @@ async function scenario(mode: ExitMode, reconcile = false): Promise<void> {
     for (const pid of pids) expect(alive(pid)).toBe(true);
     const started = performance.now();
     const outcome = await child.exit(mode);
+    if (mode === "SIGTERM") expect(outcome.stderr, "SIGTERM must reach its signal handler").toBe("FIXTURE_SUPERVISOR_SIGNAL:SIGTERM\n");
+    if (mode === "clean") expect(outcome.stderr).toBe("");
+    if (mode === "crash") {
+      expect(outcome.stderr, "crash must report the uncaught synthetic exception").toContain("error: Synthetic supervisor crash");
+      expect(outcome.stderr).toMatch(/at .*supervisor-entry\.ts:\d+/);
+    }
     if (mode === "clean" || mode === "SIGTERM") expect(outcome.exitCode).toBe(0);
     else expect(outcome.exitCode).not.toBe(0);
     expect(outcome.signalCode).toBe(mode === "SIGKILL" ? "SIGKILL" : null);
@@ -64,6 +70,10 @@ async function scenario(mode: ExitMode, reconcile = false): Promise<void> {
       const rows = ledger.readAfter(0);
       expect(ledger.verify().valid).toBe(true);
       const events = rows.map(row => JSON.parse(row.event_json));
+      if (mode === "crash") {
+        expect(replayDurablePrefix(rows).phase, "an uncaught crash must not take the graceful close path").toBe("active");
+        expect(events.some(event => event.event_type === "session_closing")).toBe(false);
+      }
       if (mode === "SIGKILL") {
         expect(events.filter(event => ["session_interrupted", "session_closing", "session_closed", "session_unclean_closure"]
           .includes(event.event_type))).toEqual([]);

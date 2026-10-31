@@ -65,12 +65,17 @@ test("deliberate lifeline EOF terminates that child's process group only", async
   const session = await start("lifeline-eof");
   try {
     const data = report(session);
+    expect(data.descendantPids, "lifeline EOF needs a member independent of the group leader").toHaveLength(1);
+    for (const pid of data.descendantPids) expect(alive(pid)).toBe(true);
     const started = performance.now();
     while ((alive(-data.processGroups[0]!) || alive(data.hostPids[0]!)) && performance.now() - started < 5000) await Bun.sleep(10);
-    console.log(`lifeline_EOF: final_death_ms=${(performance.now() - started).toFixed(2)}`);
+    const deathMs = performance.now() - started;
+    console.log(`lifeline_EOF: final_death_ms=${deathMs.toFixed(2)}`);
+    expect(deathMs).toBeLessThanOrEqual(5000);
     expect(alive(-data.processGroups[0]!)).toBe(false);
     expect(alive(data.childPids[0]!)).toBe(false);
     expect(alive(data.hostPids[0]!)).toBe(false);
+    for (const pid of data.descendantPids) expect(alive(pid), "lifeline EOF must terminate the independent group member").toBe(false);
     expect(alive(-data.processGroups[1]!)).toBe(true);
     expect(alive(data.childPids[1]!)).toBe(true);
   } finally { await session.close(); }

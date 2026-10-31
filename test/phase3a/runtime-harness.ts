@@ -80,6 +80,7 @@ export interface HarnessOptions {
   readonly mismatchAttestationAfter?: number;
   readonly failSecondSurfaceLaunch?: boolean;
   readonly fixtureMarker?: string;
+  readonly fixturePayload?: Readonly<Record<string, string>>;
 }
 export interface HarnessSession {
   readonly client: BrokerClient;
@@ -111,10 +112,16 @@ function requestedSurfaces(options: HarnessOptions): readonly SurfaceId[] {
   if (options === null || typeof options !== "object" || Object.getPrototypeOf(options) !== Object.prototype
     || Reflect.ownKeys(options).some(key => !["surfaces", "injectFailureAt", "retainStorage", "processScenario",
       "wedgeHostAfter", "emitMalformedFrame", "skewOutputSeq", "skewSnapshotSeq", "failLedgerAppendAfter",
-      "swapBinaryBeforeExec", "expireAuthAfter", "mismatchAttestationAfter", "failSecondSurfaceLaunch", "fixtureMarker"].includes(String(key)))) throw new Error("InvalidHarnessOptions");
+      "swapBinaryBeforeExec", "expireAuthAfter", "mismatchAttestationAfter", "failSecondSurfaceLaunch", "fixtureMarker", "fixturePayload"].includes(String(key)))) throw new Error("InvalidHarnessOptions");
   const marker = Object.getOwnPropertyDescriptor(options, "fixtureMarker");
   if (marker !== undefined && (!("value" in marker) || typeof marker.value !== "string"
     || marker.value.length === 0 || marker.value.length > 256)) throw new Error("InvalidHarnessOptions");
+  const payload = Object.getOwnPropertyDescriptor(options, "fixturePayload");
+  if (payload !== undefined && (!("value" in payload) || payload.value === null || typeof payload.value !== "object"
+    || Object.getPrototypeOf(payload.value) !== Object.prototype
+    || Reflect.ownKeys(payload.value).some(key => typeof key !== "string"
+      || typeof Object.getOwnPropertyDescriptor(payload.value, key)?.value !== "string")
+    || marker === undefined || payload.value.text !== marker.value)) throw new Error("InvalidHarnessOptions");
   for (const key of ["failLedgerAppendAfter", "swapBinaryBeforeExec", "expireAuthAfter", "mismatchAttestationAfter", "failSecondSurfaceLaunch"] as const) {
     const field = Object.getOwnPropertyDescriptor(options, key);
     if (field === undefined) continue;
@@ -372,13 +379,13 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
       if (execution.execution_id === "builder") {
         const marker = 'if (process.argv.includes("--fixture-run")) {';
         if (fixtureMarker !== undefined) source = source.replace(marker, marker + `
-  setTimeout(() => process.stdout.write("FIXTURE_EVIDENCE " + JSON.stringify({ text: process.env.LANG }) + "\\n"), 25);`);
+  setTimeout(() => process.stdout.write("FIXTURE_EVIDENCE " + JSON.stringify(${options.fixturePayload === undefined ? "{ text: process.env.LANG }" : JSON.stringify(options.fixturePayload)}) + "\\n"), 25);`);
         if (options.expireAuthAfter !== undefined) source = source.replace(marker, marker + `
   setTimeout(() => process.stdout.write("FIXTURE_AUTH_EXPIRED\\n"), ${options.expireAuthAfter});`);
         if (options.mismatchAttestationAfter !== undefined) source = source.replace(marker, marker + `
   setTimeout(() => process.stdout.write("FIXTURE_REATTEST fixture-drifted-model\\n"), ${options.mismatchAttestationAfter});`);
         if (options.processScenario === "ignore-term") source = source.replace('process.on("SIGTERM", finish);', 'process.on("SIGTERM", () => {});');
-        if (options.processScenario === "grandchild" || options.processScenario === "setsid") {
+        if (options.processScenario === "grandchild" || options.processScenario === "setsid" || options.processScenario === "lifeline-eof") {
           const marker = 'if (process.argv.includes("--fixture-run")) {';
           if (!source.includes(marker)) throw new Error("FixtureSourceMarkerMissing");
           const detached = options.processScenario === "setsid";
@@ -475,7 +482,7 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
         env: { ...preflight.plan.executions[0]!.environment }, stdin: "pipe", stdout: "ignore", stderr: "ignore",
       });
       recordChannels(resources, before); resources.pids.add(fixtureAdapter.pid);
-      if (options.processScenario === "grandchild" || options.processScenario === "setsid") {
+      if (options.processScenario === "grandchild" || options.processScenario === "setsid" || options.processScenario === "lifeline-eof") {
         const record = join(root, "descendant.json");
         const deadline = performance.now() + HOST_DEADLINES_MS.outerBound;
         while (!existsSync(record) && performance.now() < deadline) await Bun.sleep(10);
@@ -501,9 +508,9 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
                   if (record === null || typeof record !== "object" || !("text" in record)
                     || record.text !== fixtureMarker) throw new Error("FixtureEvidenceMismatch");
                   fixtureEvidencePublished = true;
-                  const published = await state!.adapters[0]!.client.publish(fixtureMessage({
+                  const published = await state!.adapters[0]!.client.publish(fixtureMessage(options.fixturePayload === undefined ? {
                     text: record.text, [record.text]: [{ [record.text]: record.text }],
-                  }));
+                  } : record));
                   if (!published.ok) throw new Error(`FixtureEvidencePublicationFailed:${published.error}`);
                 }
               }
@@ -725,7 +732,7 @@ export interface ChildFixtureSession {
   readonly processGroups: readonly number[];
   readonly storage: SessionStorage;
   readonly initialSnapshot: BrokerSnapshot;
-  exit(mode: "clean" | "SIGTERM" | "crash" | "SIGKILL"): Promise<{ exitCode: number | null; signalCode: string | null }>;
+  exit(mode: "clean" | "SIGTERM" | "crash" | "SIGKILL"): Promise<{ exitCode: number | null; signalCode: string | null; stderr: string }>;
   dispose(): Promise<void>;
 }
 
@@ -784,8 +791,7 @@ export async function startFixtureSessionInChildProcess(): Promise<ChildFixtureS
         exitTimer = setTimeout(() => reject(new Error("FixtureSupervisorExitTimeout")), HOST_DEADLINES_MS.outerBound);
       })]);
     } finally { clearTimeout(exitTimer); }
-    await stderr;
-    return { exitCode: proc.exitCode, signalCode: proc.signalCode };
+    return { exitCode: proc.exitCode, signalCode: proc.signalCode, stderr: await stderr };
   };
   return Object.freeze({ supervisorPid: proc.pid, hostPids: Object.freeze(hostPids), childPids: Object.freeze(childPids),
     processGroups: Object.freeze(processGroups), storage: fixture.storage, initialSnapshot: fixture.snapshot, exit,

@@ -24,11 +24,12 @@ const SECRET_PATTERNS = [
 ];
 
 function sanitizeText(text: string, exact: (text: string) => string): string {
-  let sanitized = text;
+  // Match complete values before a token pattern can consume their prefix.
+  let sanitized = exact(text);
   for (const pattern of SECRET_PATTERNS) {
     sanitized = sanitized.replace(pattern, "[REDACTED]");
   }
-  return exact(sanitized);
+  return sanitized;
 }
 
 function sanitizeEvent(eventJson: string, exact: (text: string) => string): string {
@@ -36,7 +37,16 @@ function sanitizeEvent(eventJson: string, exact: (text: string) => string): stri
     if (typeof value === "string") return sanitizeText(value, exact);
     if (Array.isArray(value)) return value.map(sanitize);
     if (value !== null && typeof value === "object") {
-      return Object.fromEntries(Object.entries(value).map(([key, child]) => [sanitizeText(key, exact), sanitize(child)]));
+      const entries: [string, unknown][] = [];
+      const used = new Set<string>();
+      for (const [key, child] of Object.entries(value)) {
+        const base = sanitizeText(key, exact);
+        let unique = base;
+        for (let suffix = 2; used.has(unique); suffix += 1) unique = `${base}#${suffix}`;
+        used.add(unique);
+        entries.push([unique, sanitize(child)]);
+      }
+      return Object.fromEntries(entries);
     }
     return value;
   }
@@ -61,8 +71,10 @@ export async function exportEvidenceCommand(
     if (!validation.ok) return { exitCode: 1, stdout: ctx.json ? JSON.stringify({ ok: false, error: `storage_root_invalid:${validation.failure}` }) : "",
       stderr: ctx.json ? "" : `storage root failed validation: ${validation.failure}\n` };
   }
-  const rules = new Set(["known_token_patterns", "exact_allowlisted_secret_values"]);
+  const rules = new Set<string>();
   const exact = (text: string): string => {
+    rules.add("known_token_patterns");
+    rules.add("exact_allowlisted_secret_values");
     for (const registration of ADAPTER_REGISTRY.values()) {
       const result = redact(text, process.env as Readonly<Record<string, string>>, registration);
       text = result.text;
