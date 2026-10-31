@@ -1887,3 +1887,143 @@ Everything else in the builder prompt and Addenda 1 to 11 is unchanged.
 ### Final local scope receipt
 
 After the required tests, git diff --check exited 0. git diff --name-only 4a6a67d3d5cc8c001e2d5a46dc153a3ad567f5ff listed exactly test/phase3a/adversarial/descriptor-hygiene.test.ts and docs/verification/m23-m24-build-log.md. The original macOS/test suffix and pre-Linux prefix were checked byte-identical, the gated Linux test file hash remained a48a3fe4580b8c4654d5de1da25ad2725b88e76065ab69a88ef623153bdd244b, and the harness and lock hashes remained unchanged. Log r4-linux-scope-run1.log, exit 0, SHA-256 84bd5e60b7f259b772ce657a6a01a624d5756a783fd0e022c0c43e9734b250ff. No implementation or verification deviation occurred.
+
+## Linux continuous-integration correction 2
+
+Performed by session:codex/m23-m24-r4, role builder, execution surface codex, under builder Addendum 13 and DEC-20261028-02 B5. Required parent: dc9087e29c2d2f47d062c5c32a9070f1547501ff. One commit is authorized for this CI failure only. The containing commit is identified in pr-body-r5.md and the final report, not self-referenced here.
+
+### Authority and supplied failure
+
+The Founder supplied Addendum 13 directly in this session. Its exact pasted text, UTF-8/LF with one terminal LF, hashes via shasum -a 256 on standard input to 7c2e7e36b04dbf45a33feaf9d475d78cdab95200f298c100dabd8e23a5ce15dc. The text is preserved verbatim below; no separate on-disk signed file is asserted.
+
+The Founder reports pushing the parent, macOS Verify passing, and Ubuntu Verify failing the descriptor scenario at its line 71: the host's stdin was missing from the inventory because the Linux parser kept only pipes and its descriptor 0 was a socket. The reported result was 1870 pass, 1 fail. Addendum 12's ENOENT skip worked, with one closed entry counted. No GitHub call or CI-log fetch was made; these CI facts are supplied by the Founder. This is a CI failure, not a review verdict, and adds no correction round under plan section 11.3.
+
+The directory, branch and clean initial tree matched the prompt, and HEAD matched the required parent. This session made every new hunk. No agent was started, no earlier-session memory was used and no memory file was read. The harness supplied a memory summary in context; no claim or implementation relies on it. No dependency, runtime, host setting, credential or production file changed. No network or GitHub operation was performed for this correction.
+
+### Linux change and preserved macOS behavior
+
+In test/phase3a/adversarial/descriptor-hygiene.test.ts:32 to 33, the Linux parser now keeps pipe and socket entries, mapping them to PIPE and UNIX, with only numeric descriptor, type and inode fields. The recorded-PID guard, numeric-entry filtering, ENOENT-only skip/rethrow rule and per-process printed count are unchanged. It lists only /proc/PID/fd for the scenario's recorded process IDs. It runs no additional listing and records no target text.
+
+The unchanged common loop at line 67 asserts that each recorded process is alive. The Linux-only block at lines 69 to 87 asserts each host's descriptor 0 is PIPE or UNIX and has an inode; the two host stdin inodes differ; and every recorded process except the supervisor has no descriptor sharing a supervisor-held inode, except the owning host's own descriptor 0 inode when it is a pipe. A failed inventory assertion prints only descriptor numbers, types and inodes. The early return still runs session.close() through the existing finally block.
+
+The entire macOS parser and lsof listing, the original writeEnds assertion block, and the entire second test were compared byte-for-byte against the parent and are unchanged. No macOS assertion is edited, removed or bypassed on macOS. The ENOENT handler and printed count also compare unchanged. The gated source SHA-256 is e6257aa4b00593cd025a60cb579c28ceb566d033448da00aa44082328df60a57.
+
+### Limitations
+
+On Linux, /proc/PID/fd shows different inodes at the two ends of a socket pair and does not expose the socket peer. It cannot establish that the supervisor holds each host's write end. That check is not attempted on Linux, and no other listing is used. The supervisor-held-inode assertion detects shared endpoints within the bounded inventory; it does not infer peer ownership.
+
+This MacBook cannot run the changed Linux branch. Local results below are macOS results. Verification of the Linux branch is the GitHub Actions Linux run after the Founder pushes, which the Founder checks. No Linux pass, new independent verdict, merge readiness or live runtime certification is claimed.
+
+### Self-fix and verification order
+
+The first typecheck failed with exit 2 at the new line 73. A newly introduced optional stdin value was passed to toContain, whose TypeScript overload requires string. No test ran before that failed typecheck was fixed. The fix adds the same compile-time non-null assertion already used in the untouched original block; stdin?.type remains optional at runtime and the required assertion still fails when descriptor 0 is absent. This self-fix is within DEC-20261023-01 B4 and is not a RED run or mutation.
+
+The failed output is preserved in r4-linux2-tsc-run1.log, SHA-256 59f77504811d2aa272ad18f37d75cdbf38c40e97876cc928eea8f0ebc0683186; load averages were 5.13 4.98 4.39. Verbatim diagnostic:
+
+```text
+test/phase3a/adversarial/descriptor-hygiene.test.ts(73,44): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(expected: string): void', gave the following error.
+    Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+  Overload 2 of 2, '(expected: string): void', gave the following error.
+    Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+      Type 'undefined' is not assignable to type 'string'.
+```
+
+After the type-only self-fix, the required verification restarted from typecheck in full and in order. Complete stdout and stderr were piped through tee to new non-overwritten logs; uptime preceded each test run. Addendum 9 item 5 controls load: no load pause and no unchanged rerun of a timing failure at first load at least 2.0. No timing failure occurred.
+
+No RED run and no deliberate break was required or performed, expressly under Addendum 13 item 3.
+
+### Local verification receipts
+
+The pinned runtime was checked before verification and again immediately before bare bun test: /Users/michaeldaley/.bun/bin/bun and bunx, bunx symlink to that absolute Bun, version 1.4.2, revision 744846f844374847c902b5e7fd59b4342a51ef99, executable SHA-256 35d20dd0263e5c950194434b925454fdfa9ba6e4467da960410fa05b08a7a5b5. The immediate pre-bare check is r4-linux2-runtime-run1.log. bun.lock remains 34224c0133c44d967c4a4da8b75bf11093c573c47e42bcaf502c6d6f61c3e7c0.
+
+| Command | Result | Uptime / load before run | Full log | SHA-256 |
+| --- | --- | --- | --- | --- |
+| bunx tsc --noEmit (initial, before self-fix) | exit 2; TS2769; fixed before tests |  9:33  up 6 days, 42 mins, 12 users, load averages: 5.13 4.98 4.39 | r4-linux2-tsc-run1.log | 59f77504811d2aa272ad18f37d75cdbf38c40e97876cc928eea8f0ebc0683186 |
+| bunx tsc --noEmit (restart) | exit 0 |  9:34  up 6 days, 43 mins, 12 users, load averages: 4.55 4.85 4.36 | r4-linux2-tsc-run2.log | 7f154b6245bde8c50d733102a67f44f538144f29e963d74ee8c41aeb2412ea40 |
+| bun test test/phase3a/adversarial/descriptor-hygiene.test.ts | 2 pass; 0 fail; 49 expect() calls; Ran 2 tests across 1 file. [1268.00ms] |  9:34  up 6 days, 43 mins, 12 users, load averages: 4.55 4.85 4.36 | r4-linux2-descriptor-run1.log | 0ea628e4b1205dffbb4c19f0b41bcb44170146df0384d472f80b7ed6df3341dd |
+| bun test test/phase3a | 137 pass; 0 fail; 2541 expect() calls; Ran 137 tests across 17 files. [60.19s] |  9:34  up 6 days, 43 mins, 12 users, load averages: 4.59 4.85 4.36 | r4-linux2-phase3a-run1.log | 34ecfa62ee518f199f76c51bcc7bf297bbc19fe3a7349bf324ff7c453c0e8a48 |
+| Pinned runtime check immediately before bare bun test | exit 0 | not a test | r4-linux2-runtime-run1.log | 6d5f77e9c789660b0b03388c68805d18978cf4bf8d79928af243be1c89b3c6a3 |
+| bun test | 1871 pass; 0 fail; 18204 expect() calls; Ran 1871 tests across 135 files. [183.23s] |  9:36  up 6 days, 45 mins, 12 users, load averages: 4.45 4.87 4.45 | r4-linux2-full-run1.log | 6323320b50ca2c3a997559983d9bbbb99426991cbfb04003bb2ecd18d41a3ed6 |
+
+Logs are under /Users/michaeldaley/builds/m23-m24-r1-pr/logs/. All restarted gates exited 0, and every test run had 0 fail.
+
+### Exact source diff
+
+```diff
+diff --git a/test/phase3a/adversarial/descriptor-hygiene.test.ts b/test/phase3a/adversarial/descriptor-hygiene.test.ts
+index 5e6e418..e25886e 100644
+--- a/test/phase3a/adversarial/descriptor-hygiene.test.ts
++++ b/test/phase3a/adversarial/descriptor-hygiene.test.ts
+@@ -29,8 +29,8 @@ function descriptors(pid: number, recorded: readonly number[]): Descriptor[] {
+           closedDuringListing += 1;
+           return [];
+         }
+-        const match = /^pipe:\[(\d+)\]$/.exec(target);
+-        return match ? [{ fd: Number(fd), type: "PIPE", inode: match[1]! }] : [];
++        const match = /^(pipe|socket):\[(\d+)\]$/.exec(target);
++        return match ? [{ fd: Number(fd), type: match[1] === "pipe" ? "PIPE" : "UNIX", inode: match[2]! }] : [];
+       });
+     } finally {
+       console.log(`descriptor_listing pid=${pid} closed_ENOENT_count=${closedDuringListing}`);
+@@ -66,6 +66,25 @@ test("with two PTY hosts and an adapter, no process holds a sibling's lifeline w
+     const recorded = [data.supervisorPid, ...data.hostPids, ...data.childPids, data.adapterPid!];
+     for (const pid of recorded) expect(alive(pid)).toBe(true);
+     const inventories = new Map(recorded.map(pid => [pid, descriptors(pid, recorded)]));
++    const platform = process.platform;
++    if (platform === "linux") {
++      const hostStdin = new Map(data.hostPids.map(pid => {
++        const stdin = inventories.get(pid)!.find(fd => fd.fd === 0)!;
++        expect(["PIPE", "UNIX"]).toContain(stdin?.type);
++        expect(stdin?.inode).toBeDefined();
++        return [pid, stdin!] as const;
++      }));
++      expect(new Set([...hostStdin.values()].map(fd => fd.inode)).size).toBe(2);
++      const supervisorInodes = new Set(inventories.get(data.supervisorPid)!.map(fd => fd.inode!));
++      for (const pid of recorded) {
++        if (pid === data.supervisorPid) continue;
++        const stdin = hostStdin.get(pid);
++        const inherited = inventories.get(pid)!.filter(fd => supervisorInodes.has(fd.inode!)
++          && !(stdin?.type === "PIPE" && fd.inode === stdin.inode));
++        expect(inherited).toEqual([]);
++      }
++      return;
++    }
+     const writeEnds = data.hostPids.map(pid => {
+       const stdin = inventories.get(pid)!.find(fd => fd.fd === 0)!;
+       expect(["PIPE", "UNIX"]).toContain(stdin?.type);
+```
+
+### Description and deviations
+
+pr-body-r5.md is based on the unchanged pr-body-r4.md, SHA-256 7d029c7a8fcff89fb97adccc078519d72aebe4d4002b8e0e743767ba8afca3d5, with this correction section and its Linux limitation. Two historical round-2 timing tables are shortened to pointers to this committed historical record and that unchanged prior description to stay below 60000 bytes, under the continuing Addendum 9 description-size rule. All original evidence and prior artifacts remain unchanged. This is description-only condensation.
+
+The initial typecheck failure and local type-only self-fix are recorded above; verification restarted from typecheck. There was no unchanged failed rerun, deliberate break, RED run, added test, changed timeout, skipped assertion or change beyond this authorized Linux correction. The scope-wrapper disposition is recorded in the final receipt below; no implementation scope deviation occurred.
+
+Only the descriptor-hygiene test and this appended build log change. All production files, runtime-harness.ts, bun.lock, dependency files and macOS assertions remain unchanged. Attribution checks and final custody occur after this commit and are reported in the new description/final report without changing the containing commit.
+
+### Verbatim Addendum 13 text
+
+```text
+ADDENDUM 13 TO THE M23-M24 BUILDER PROMPT: Linux sockets in the descriptor listing. Paste this into the Codex session session:codex/m23-m24-r4, open in /Users/michaeldaley/builds/madventures-tui-m23-m24-r1. It is signed by the Founder and is part of the builder prompt, with Addenda 1 to 12.
+
+1. The facts. The Founder pushed dc9087e29c2d2f47d062c5c32a9070f1547501ff. Verify (macOS) passed there. Verify on ubuntu-24.04 failed in the same test, with two PTY hosts and an adapter, no process holds a sibling's lifeline write end, at line 71 of test/phase3a/adversarial/descriptor-hygiene.test.ts: expect(["PIPE", "UNIX"]).toContain(stdin?.type) received undefined. The ENOENT skip of Addendum 12 worked; the log shows descriptor_listing pid=2487 closed_ENOENT_count=1. Every other test passed: 1,870 pass, 1 fail. On Linux each PTY host's descriptor 0 reads as socket:[N] under /proc/PID/fd, not pipe:[N], so the Linux branch of descriptors(), which keeps only pipe entries, never finds it. The two ends of a socket pair have different inodes, and /proc/PID/fd does not show a socket's peer. This is a continuous-integration failure, not a review verdict, so it adds no correction round under plan section 11.3.
+2. My ruling. I authorize one more commit, for this failure only, within DEC-20261028-02 B5: on Linux the test lists only /proc/PID/fd of recorded process IDs and parses only descriptor numbers, types and inodes.
+   a. In the Linux branch of descriptors(), keep socket entries as well as pipe entries, each with its descriptor number, its type, PIPE or UNIX, and its inode. Keep the ENOENT rule and its printed count of Addendum 12.
+   b. On Linux, the test asserts: every recorded process is alive; each host's descriptor 0 is PIPE or UNIX; the two hosts' descriptor 0 inodes differ; and no recorded process other than the supervisor holds any inode the supervisor holds, except a host's own descriptor 0 inode when that descriptor is a pipe. On failure it reports only descriptor numbers, types and inodes.
+   c. The check that the supervisor holds each host's write end cannot be made from /proc/PID/fd for a socket pair. Do not attempt it on Linux and use no other listing; record it as a Linux limitation. The macOS branch, the lsof listing and every macOS assertion stay byte-identical.
+   d. Change no other file, except docs/verification/m23-m24-build-log.md, and no production file.
+3. Verification, under the prompt's TEST OUTPUT rules and Addendum 9, item 5, with new log names that overwrite no existing log. This MacBook cannot run the Linux branch; the Linux run in GitHub Actions after the push verifies it, and the Founder checks it. Here: show git diff; bunx tsc --noEmit; bun test test/phase3a/adversarial/descriptor-hygiene.test.ts; bun test test/phase3a; and bare bun test, each with 0 fail; git diff --check; and git diff --name-only dc9087e29c2d2f47d062c5c32a9070f1547501ff, which lists only the paths of item 2. No RED run and no deliberate break is required; record that.
+4. The commit. One commit on top of dc9087e29c2d2f47d062c5c32a9070f1547501ff, with the subject fix(phase3a): read Linux socket descriptors in the hygiene test, a body that names this addendum and the failure, and the trailers of your seat. Append a section Linux continuous-integration correction 2 to docs/verification/m23-m24-build-log.md in the same commit.
+5. The description. Save a full new description as /Users/michaeldaley/builds/m23-m24-r1-pr/pr-body-r5.md: pr-body-r4.md with a section Linux continuous-integration correction 2 and the limitation of item 2c under Limitations. Keep it under 60,000 bytes, with zero square brackets, zero bare three-hyphen lines, and the three trailers of your seat as its final paragraph. Run attribution-shape-check.sh in pr mode on the branch and in prbody mode on pr-body-r5.md.
+6. Final report: the git diff; each run with its counts, load reading and log SHA-256; the commit's full SHA and parent; the SHA-256 of pr-body-r5.md and of the build log; both attribution results; deviations, or the word none; and the single next decision for the Founder: push the commit without force and replace the pull request description.
+
+Everything else in the builder prompt and Addenda 1 to 12 is unchanged.
+```
+
+### Final local scope receipt
+
+The first scope-only wrapper invocation exited 1 before it opened r4-linux2-scope-run1.log: the generic wrapper put its closing shell syntax on the heredoc terminator line. No scope command output was captured and no run1 log was created; this is a command-wrapper failure, not a test or repository failure. The wrapper was corrected to put the terminator and closing brace on separate lines. No code changed and no test was rerun for this.
+
+The corrected invocation, r4-linux2-scope-run2.log, exited 0, SHA-256 bfb39e195f24b73120464350219c6e6b3580dd6aa3bad65bd0aedbd9b08290bf; uptime was 9:40, up 6 days, 49 mins, 12 users, load averages 4.35 4.71 4.48. git diff --check passed. git diff --name-only dc9087e29c2d2f47d062c5c32a9070f1547501ff listed exactly docs/verification/m23-m24-build-log.md and test/phase3a/adversarial/descriptor-hygiene.test.ts. The gated source, macOS parser/lsof/original assertions/second test, ENOENT handler/count, harness and lock were checked unchanged; the historical build-log prefix remains byte-identical. Adding this receipt changes only the authorized build log and no gated source bytes.

@@ -29,8 +29,8 @@ function descriptors(pid: number, recorded: readonly number[]): Descriptor[] {
           closedDuringListing += 1;
           return [];
         }
-        const match = /^pipe:\[(\d+)\]$/.exec(target);
-        return match ? [{ fd: Number(fd), type: "PIPE", inode: match[1]! }] : [];
+        const match = /^(pipe|socket):\[(\d+)\]$/.exec(target);
+        return match ? [{ fd: Number(fd), type: match[1] === "pipe" ? "PIPE" : "UNIX", inode: match[2]! }] : [];
       });
     } finally {
       console.log(`descriptor_listing pid=${pid} closed_ENOENT_count=${closedDuringListing}`);
@@ -66,6 +66,25 @@ test("with two PTY hosts and an adapter, no process holds a sibling's lifeline w
     const recorded = [data.supervisorPid, ...data.hostPids, ...data.childPids, data.adapterPid!];
     for (const pid of recorded) expect(alive(pid)).toBe(true);
     const inventories = new Map(recorded.map(pid => [pid, descriptors(pid, recorded)]));
+    const platform = process.platform;
+    if (platform === "linux") {
+      const hostStdin = new Map(data.hostPids.map(pid => {
+        const stdin = inventories.get(pid)!.find(fd => fd.fd === 0)!;
+        expect(["PIPE", "UNIX"]).toContain(stdin?.type);
+        expect(stdin?.inode).toBeDefined();
+        return [pid, stdin!] as const;
+      }));
+      expect(new Set([...hostStdin.values()].map(fd => fd.inode)).size).toBe(2);
+      const supervisorInodes = new Set(inventories.get(data.supervisorPid)!.map(fd => fd.inode!));
+      for (const pid of recorded) {
+        if (pid === data.supervisorPid) continue;
+        const stdin = hostStdin.get(pid);
+        const inherited = inventories.get(pid)!.filter(fd => supervisorInodes.has(fd.inode!)
+          && !(stdin?.type === "PIPE" && fd.inode === stdin.inode));
+        expect(inherited).toEqual([]);
+      }
+      return;
+    }
     const writeEnds = data.hostPids.map(pid => {
       const stdin = inventories.get(pid)!.find(fd => fd.fd === 0)!;
       expect(["PIPE", "UNIX"]).toContain(stdin?.type);
