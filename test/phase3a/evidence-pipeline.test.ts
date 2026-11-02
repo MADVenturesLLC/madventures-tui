@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { Database } from "bun:sqlite";
@@ -656,3 +656,33 @@ for (const command of ["verify-ledger", "export-evidence"] as const) {
     }, 15000);
   }
 }
+
+test("export-evidence publishes a fresh package that holds no file it did not write", async () => {
+  await closedEvidenceFixture(async (session, id) => {
+    const output = session.storage.sanitizedEvidenceDir;
+    const siblings = readdirSync(dirname(output)).sort();
+    for (let run = 1; run <= 2; run += 1) {
+      writeFileSync(join(output, `planted-before-export-${run}.txt`), "synthetic planted file\n", { mode: 0o600 });
+      const result = await runCli(["export-evidence", "--session", id, "--json"], { stdin: "", cwd: process.cwd() });
+      expect(result.exitCode).toBe(0);
+      expect(JSON.parse(result.stdout).outputDir).toBe(output);
+      expect(readdirSync(output).sort()).toEqual(["README.txt", "ledger-sanitized.json", "manifest.json"]);
+      expect(readdirSync(dirname(output)).sort()).toEqual(siblings);
+    }
+  });
+}, 15000);
+
+test("export-evidence refuses an explicit output directory that holds a file it did not write", async () => {
+  await closedEvidenceFixture(async (session) => {
+    const output = join(session.storage.sessionDir, "explicit-export");
+    mkdirSync(output, { mode: 0o700 });
+    writeFileSync(join(output, "planted-before-export.txt"), "synthetic planted file\n", { mode: 0o600 });
+    const siblings = readdirSync(session.storage.sessionDir).sort();
+    const result = await runCli(["export-evidence", "--ledger", join(session.storage.ledgerDir, "ledger.sqlite3"),
+      "--output", output, "--json"], { stdin: "", cwd: process.cwd() });
+    expect(result.exitCode).toBe(1);
+    expect(JSON.parse(result.stdout)).toEqual({ error: "output_not_empty", ok: false, path: output });
+    expect(readdirSync(output)).toEqual(["planted-before-export.txt"]);
+    expect(readdirSync(session.storage.sessionDir).sort()).toEqual(siblings);
+  });
+}, 15000);

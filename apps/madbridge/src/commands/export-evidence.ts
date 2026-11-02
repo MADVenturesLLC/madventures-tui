@@ -3,8 +3,8 @@
 // NO raw transcripts or secrets in the output — only sanitized ledger
 // events, artifact hashes, and a final manifest.
 
-import { existsSync, mkdirSync, writeFileSync } from "fs";
-import { join } from "path";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, renameSync, rmSync, writeFileSync } from "fs";
+import { basename, dirname, join } from "path";
 import { Ledger } from "@madventures/ledger";
 import { createManifest } from "@madventures/artifact-store";
 import { ADAPTER_REGISTRY } from "@madventures/protocol";
@@ -22,6 +22,9 @@ const SECRET_PATTERNS = [
   /secret\s*[:=]\s*\S+/gi,          // secret assignments
   /token\s*[:=]\s*[a-zA-Z0-9]{20,}/gi, // token assignments
 ];
+
+// The only files an evidence package holds.
+const PACKAGE_FILES: readonly string[] = ["ledger-sanitized.json", "manifest.json", "README.txt"];
 
 function sanitizeText(text: string, exact: (text: string) => string): string {
   // Match complete values before a token pattern can consume their prefix.
@@ -66,7 +69,8 @@ export async function exportEvidenceCommand(
   const paths = resolveEvidencePaths(flags, ctx);
   if (!paths.ok) return paths.result;
   const { ledgerPath, artifactsDir, outputDir } = paths;
-  if (typeof flags["session"] === "string" && typeof flags["output"] !== "string") {
+  const sessionOutput = typeof flags["session"] === "string" && typeof flags["output"] !== "string";
+  if (sessionOutput) {
     const validation = validateStorageRoot(outputDir, ctx.cwd, ctx.cwd);
     if (!validation.ok) return { exitCode: 1, stdout: ctx.json ? JSON.stringify({ ok: false, error: `storage_root_invalid:${validation.failure}` }) : "",
       stderr: ctx.json ? "" : `storage root failed validation: ${validation.failure}\n` };
@@ -184,30 +188,66 @@ export async function exportEvidenceCommand(
     repoFingerprint,
   ), redaction_rules_applied: [...rules] };
 
-  // Write sanitized evidence package
-  mkdirSync(outputDir, { recursive: true, mode: 0o700 });
+  // The package is written fresh and published only when complete, so it
+  // holds no file this export did not write. The session's own
+  // sanitized-evidence directory is always replaced; an explicit --output
+  // is replaced only when it holds nothing but an earlier package.
+  if (!sessionOutput && existsSync(outputDir)
+    && readdirSync(outputDir).some((name) => !PACKAGE_FILES.includes(name))) {
+    if (ctx.json) {
+      return {
+        exitCode: 1,
+        stdout: JSON.stringify({ error: "output_not_empty", ok: false, path: outputDir }),
+        stderr: "",
+      };
+    }
+    return { exitCode: 1, stdout: "", stderr: `output directory is not empty: ${outputDir}\n` };
+  }
+  mkdirSync(dirname(outputDir), { recursive: true, mode: 0o700 });
+  const staging = mkdtempSync(join(dirname(outputDir), `.${basename(outputDir)}.export-`));
+  const previous = `${staging}.previous`;
+  let replaced = false;
+  try {
+    // Write sanitized ledger events (NO raw transcripts)
+    writeFileSync(
+      join(staging, "ledger-sanitized.json"),
+      JSON.stringify(sanitizedEvents, null, 2),
+    );
 
-  // Write sanitized ledger events (NO raw transcripts)
-  writeFileSync(
-    join(outputDir, "ledger-sanitized.json"),
-    JSON.stringify(sanitizedEvents, null, 2),
-  );
+    // Write final manifest
+    writeFileSync(
+      join(staging, "manifest.json"),
+      JSON.stringify(manifest, null, 2),
+    );
 
-  // Write final manifest
-  writeFileSync(
-    join(outputDir, "manifest.json"),
-    JSON.stringify(manifest, null, 2),
-  );
+    // Write a README explaining sanitization
+    writeFileSync(
+      join(staging, "README.txt"),
+      "Evidence Export Package\n" +
+      "=======================\n" +
+      "This package contains SANITIZED ledger events only.\n" +
+      "Raw transcripts and secrets have been redacted.\n" +
+      "See manifest.json for artifact hashes and chain head.\n",
+    );
 
-  // Write a README explaining sanitization
-  writeFileSync(
-    join(outputDir, "README.txt"),
-    "Evidence Export Package\n" +
-    "=======================\n" +
-    "This package contains SANITIZED ledger events only.\n" +
-    "Raw transcripts and secrets have been redacted.\n" +
-    "See manifest.json for artifact hashes and chain head.\n",
-  );
+    // Publish: move any earlier output aside, then move the complete package in.
+    try {
+      renameSync(outputDir, previous);
+      replaced = true;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+    }
+    try {
+      renameSync(staging, outputDir);
+    } catch (err) {
+      if (replaced) renameSync(previous, outputDir);
+      throw err;
+    }
+  } catch (err) {
+    rmSync(staging, { recursive: true, force: true });
+    throw err;
+  }
+  if (replaced) rmSync(previous, { recursive: true, force: true });
 
   if (ctx.json) {
     return {
