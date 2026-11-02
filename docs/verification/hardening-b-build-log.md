@@ -326,3 +326,83 @@ It covers the second RED run of item 13 (load 11.60) and every later RED or brea
 
 - **Deviations:** none.
 - **Halts:** none.
+
+## Correction 1: entry types in the explicit output guard
+
+- **Authority:** Addendum 1 to the Hardening B builder prompt, signed by the Founder, part of item 13
+  of `DEC-20261102-01` and within `DEC-20261102-02` B2 item 2.
+- **Built on:** `0a80144047b64fffdc684d437b49adbe5f0fac9f`.
+- **Defect, at the item's base:** `apps/madbridge/src/commands/export-evidence.ts` lines 195 and 196,
+  `if (!sessionOutput && existsSync(outputDir)` and
+  `&& readdirSync(outputDir).some((name) => !PACKAGE_FILES.includes(name))) {`, check only the names
+  of the entries of an explicit `--output`. A directory or a symbolic link named `README.txt`,
+  `manifest.json` or `ledger-sanitized.json` passes the guard; the whole output directory is then
+  renamed aside and removed at line 250,
+  `if (replaced) rmSync(previous, { recursive: true, force: true });`, so that entry and everything in
+  it is deleted.
+- **Change:** the guard reads the directory with `readdirSync(outputDir, { withFileTypes: true })` and
+  refuses with the same `output_not_empty` result, in the JSON and the text form, when any entry is not
+  a regular file or has a name outside `PACKAGE_FILES`. A symbolic link is not a regular file, because
+  the entry type is read without following it. Nothing else in the file changed; the `--session`
+  path, the staging, the renames and the restore are as they were.
+- **Files changed:** `apps/madbridge/src/commands/export-evidence.ts`,
+  `test/phase3a/evidence-pipeline.test.ts`, `docs/verification/hardening-b-build-log.md`.
+- **Tests added** to `test/phase3a/evidence-pipeline.test.ts`, next to the existing explicit-output
+  test, which then holds 27 passing tests:
+  - `export-evidence refuses an explicit output directory whose README.txt is a directory` and
+    `export-evidence refuses an explicit output directory whose manifest.json is a symbolic link`,
+    each in its own closed fixture. The directory holds one synthetic file; the link points to a
+    synthetic file in the session directory, outside the output directory. Each asserts exit 1, the
+    `output_not_empty` JSON result, the same output listing as before, the entry's kind by
+    `lstatSync`, the synthetic content unchanged, and the same parent listing as before.
+  - `export-evidence replaces an explicit output directory that holds only an earlier package`: two
+    exports to the same explicit `--output`, created empty first, each exit 0; the directory then
+    lists exactly `README.txt`, `ledger-sanitized.json` and `manifest.json`, and its parent lists the
+    same entries as before the first export.
+- **Failing run,** against `export-evidence.ts` before the change: both refusal tests fail at line 708,
+  `expect(received).toEqual(expected)`, with `exitCode` 0 against 1, the output listing grown to the
+  three package files, and the planted entry now a `regular file` instead of a `directory` or a
+  `symbolic link`: the export succeeded and the planted directory or link is gone. The replacement test
+  passes. Load 1.70 1.56 1.80. Exit 1, 25 pass, 2 fail. `c1-red-evidence-pipeline-run1.log`,
+  `190649c6288ed00d7585051f50b1a629cdf4fc8a4833d5f8384f65772ef92a20`.
+- **After the change:** load 1.31 1.48 1.76. Exit 0, 27 pass, 0 fail.
+  `c1-green-evidence-pipeline-run1.log`,
+  `860842f71976dd5f893da4916e8f9e69d26abbb9e56514e1d6e28a4f5c4ad802`. The file's SHA-256 is then
+  `45577f7d783f01d46c4e50f84bc53ac569eb726efbc8321a6dfaddc369053520`; its diff is saved as
+  `/Users/michaeldaley/builds/hardening-b-r1-pr/c1-production-diff-export-evidence.diff`, SHA-256
+  `4d9d5a22b845fbe3bf144a6e052959d68a86bfd473cd844be7b7ebcde7ddbb0b`.
+- **Break,** for the replacement test, which covers behavior production already had: the guard's
+  predicate replaced by `.some(() => true)`, so it refuses every non-empty explicit output. The diff
+  is saved as `/Users/michaeldaley/builds/hardening-b-r1-pr/c1-break.diff`, SHA-256
+  `c80aa0355ec4f92d1e5274b0b78e454b33a6fa745b80e652f0274d87ab0b2f7a`.
+- **Failing run under the break:** the replacement test fails at line 724 with `export 2`,
+  `Expected: 0` `Received: 1`. The existing test `colliding redacted keys retain every value
+  deterministically`, which also exports twice to one explicit output, fails at line 627 the same way.
+  Load 1.13 1.41 1.73. Exit 1, 25 pass, 2 fail. `c1-break-evidence-pipeline-run1.log`,
+  `b2734695d68eecbe84677a6f02ccde466e88b8863d7c4d5ad1390cc28d61ff03`.
+- **Restored** by an exact-text edit; the file's SHA-256 is again
+  `45577f7d783f01d46c4e50f84bc53ac569eb726efbc8321a6dfaddc369053520`, equal to the SHA-256 after the
+  change, and its diff is byte-identical to the saved diff.
+- **Gates,** each once, in the foreground, each test run exit 0 with 0 fail:
+
+| Command | Load at start | Result | Log | SHA-256 |
+| --- | --- | --- | --- | --- |
+| runtime check | not recorded | unchanged | c1-gate-runtime-check.log | 2b1d8a5ab9bebb7a1de8417a1458f7d8ff03fd90e03fe98190496a94b162ab1f |
+| `bunx tsc --noEmit` | 1.23 1.40 1.71 | no output | c1-gate-tsc-run1.log | e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 |
+| `bun test test/phase3a` | 1.23 1.39 1.70 | 152 pass | c1-gate-test-phase3a-run1.log | 9dbe125f66dda3dc2a340dcd6cea2a2198af0f95c525cc9bf7fcb4da06be97f0 |
+| `bun test apps/madbridge` | 1.12 1.35 1.66 | 518 pass | c1-gate-apps-madbridge-run1.log | 07aad096da67f9e55f339a208acf54abcd07b8c703d6d1fc257694e129022304 |
+| runtime check | not recorded | unchanged | c1-gate-runtime-check-2.log | 2b1d8a5ab9bebb7a1de8417a1458f7d8ff03fd90e03fe98190496a94b162ab1f |
+| bare `bun test` | 1.07 1.32 1.64 | 1886 pass | c1-gate-full-run1.log | f175164cb3d2a1f1dc79e502c6dd585e842cd5958f42d9ad4ab9504b8f9015bb |
+| `git diff --check 68959cf27ee2652d4f9c3287cec4a5ee03798a7a` | not recorded | exit 0, no output | c1-gate-diff-check.log | e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 |
+| `git diff --name-only 68959cf27ee2652d4f9c3287cec4a5ee03798a7a` | not recorded | exit 0, 7 paths, all of B2 item 2 | c1-gate-diff-name-only-base.log | 9eaf22e30ca002c84a1fcd37d7703be898881968eac75916e0b7e06eb9dfd471 |
+| `git diff --name-only 0a80144047b64fffdc684d437b49adbe5f0fac9f` | not recorded | exit 0, exactly the 3 files above | c1-gate-diff-name-only-head.log | 89a66c2ad29b53f72eb3e2e0f723fa47132770f29b3cd618517298843205e901 |
+
+- **Deviations:**
+  - The diff gates ran after the rest of this section was written and before these last rows and
+    lines; the added lines were checked by `grep` for trailing whitespace, and the changed paths do
+    not depend on them.
+  - The replacement test creates the explicit output directory empty before the first export, so
+    that its parent lists the same entries before and after both exports.
+  - A session hook asked for a debugging skill to be invoked; it was not, because the builder prompt
+    starts no other agent.
+- **Halts:** none.

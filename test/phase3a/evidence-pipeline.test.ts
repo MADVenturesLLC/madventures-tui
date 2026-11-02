@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { Database } from "bun:sqlite";
@@ -683,6 +683,47 @@ test("export-evidence refuses an explicit output directory that holds a file it 
     expect(result.exitCode).toBe(1);
     expect(JSON.parse(result.stdout)).toEqual({ error: "output_not_empty", ok: false, path: output });
     expect(readdirSync(output)).toEqual(["planted-before-export.txt"]);
+    expect(readdirSync(session.storage.sessionDir).sort()).toEqual(siblings);
+  });
+}, 15000);
+
+for (const [name, kind] of [["README.txt", "directory"], ["manifest.json", "symbolic link"]] as const) {
+  test(`export-evidence refuses an explicit output directory whose ${name} is a ${kind}`, async () => {
+    await closedEvidenceFixture(async (session) => {
+      const output = join(session.storage.sessionDir, "explicit-export");
+      mkdirSync(output, { mode: 0o700 });
+      const planted = join(output, name);
+      const synthetic = kind === "directory" ? join(planted, "synthetic-inside.txt")
+        : join(session.storage.sessionDir, "synthetic-link-target.txt");
+      if (kind === "directory") mkdirSync(planted, { mode: 0o700 });
+      writeFileSync(synthetic, "synthetic planted content\n", { mode: 0o600 });
+      if (kind === "symbolic link") symlinkSync(synthetic, planted);
+      const entries = readdirSync(output).sort();
+      const siblings = readdirSync(session.storage.sessionDir).sort();
+      const result = await runCli(["export-evidence", "--ledger", join(session.storage.ledgerDir, "ledger.sqlite3"),
+        "--output", output, "--json"], { stdin: "", cwd: process.cwd() });
+      const stat = lstatSync(planted);
+      expect({ exitCode: result.exitCode, entries: readdirSync(output).sort(),
+        kind: stat.isDirectory() ? "directory" : stat.isSymbolicLink() ? "symbolic link" : "regular file" })
+        .toEqual({ exitCode: 1, entries, kind });
+      expect(JSON.parse(result.stdout)).toEqual({ error: "output_not_empty", ok: false, path: output });
+      expect(readFileSync(synthetic, "utf8")).toBe("synthetic planted content\n");
+      expect(readdirSync(session.storage.sessionDir).sort()).toEqual(siblings);
+    });
+  }, 15000);
+}
+
+test("export-evidence replaces an explicit output directory that holds only an earlier package", async () => {
+  await closedEvidenceFixture(async (session) => {
+    const output = join(session.storage.sessionDir, "explicit-export");
+    mkdirSync(output, { mode: 0o700 });
+    const siblings = readdirSync(session.storage.sessionDir).sort();
+    for (let run = 1; run <= 2; run += 1) {
+      const result = await runCli(["export-evidence", "--ledger", join(session.storage.ledgerDir, "ledger.sqlite3"),
+        "--output", output, "--json"], { stdin: "", cwd: process.cwd() });
+      expect(result.exitCode, `export ${run}`).toBe(0);
+    }
+    expect(readdirSync(output).sort()).toEqual(["README.txt", "ledger-sanitized.json", "manifest.json"]);
     expect(readdirSync(session.storage.sessionDir).sort()).toEqual(siblings);
   });
 }, 15000);

@@ -193,7 +193,8 @@ export async function exportEvidenceCommand(
   // sanitized-evidence directory is always replaced; an explicit --output
   // is replaced only when it holds nothing but an earlier package.
   if (!sessionOutput && existsSync(outputDir)
-    && readdirSync(outputDir).some((name) => !PACKAGE_FILES.includes(name))) {
+    && readdirSync(outputDir, { withFileTypes: true })
+      .some((entry) => !entry.isFile() || !PACKAGE_FILES.includes(entry.name))) {
     if (ctx.json) {
       return {
         exitCode: 1,
