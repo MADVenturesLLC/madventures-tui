@@ -72,18 +72,23 @@ Stop and ask the Founder before:
 
 - Starting a Phase 3A task. Plan approval alone starts nothing. Each task
   needs its own written Founder authorization naming the base SHA and scope.
-- Merging a pull request that touches a governance path — `docs/decisions/`,
-  `AGENTS.md`, `SECURITY.md`, `CONTRIBUTING.md`, `.github/`,
-  `packages/founder-act/` — or whose thread carries a canonical deferral, or
-  which an open `HO-*` handoff references, or which carries a
-  `needs-founder-auth` label, or which no milestone authorization names. Merge
-  authorization is a separate Founder act naming the exact head SHA, or a
-  milestone authorization under FounderOS `DEC-20261027-01` naming that head.
-  That FounderOS act is not this repository's `DEC-20261027-01`; a milestone
-  authorization here is a Founder act filed under `docs/decisions/`.
-  Required checks on `main` are `Verify`, `Verify (macOS)`, and `code-review`; a
-  pull request touching none of those paths and meeting none of those conditions
-  merges on those checks with no per-PR Founder act.
+- Merging a pull request that touches a governance path of this
+  repository — `docs/decisions/`, `AGENTS.md`, `SECURITY.md`,
+  `CONTRIBUTING.md`, `.github/`, `packages/founder-act/`, or any other
+  governance instrument of this repository — or whose thread carries a
+  canonical deferral ("requires founder ruling", "awaiting founder
+  authorization" or "founder-gated"), or which an open `HO-*` handoff
+  references, or which carries a `needs-founder-auth` label. Each such pull
+  request needs its own Founder act naming its exact head SHA. A milestone
+  authorization under FounderOS `DEC-20261027-01` never covers it (that
+  decision's clause 4). FounderOS `DEC-20261027-01` is not this
+  repository's `DEC-20261027-01`. Where it is unclear whether a pull
+  request falls under this bullet, it does.
+
+  Any other pull request needs no per-PR Founder authorization act. Once
+  the required checks on `main` (`Verify`, `Verify (macOS)` and
+  `code-review`) pass at its head, the Founder may merge it on them
+  (FounderOS `DEC-20261027-01` clause 8). Agents still never merge.
 - Changing this repository's security posture (secret scanning, push
   protection, code-owner review requirement, CODEOWNERS owners).
 - Certifying a live runtime, connecting the production TUI, or substituting
