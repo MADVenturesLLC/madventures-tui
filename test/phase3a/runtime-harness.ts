@@ -71,6 +71,7 @@ export interface HarnessOptions {
   readonly retainStorage?: boolean;
   readonly processScenario?: ProcessScenario;
   readonly wedgeHostAfter?: number;
+  readonly dropHostAckAfter?: number;
   readonly emitMalformedFrame?: "malformed" | "unknown";
   readonly skewOutputSeq?: "duplicate" | "regression" | "gap";
   readonly skewSnapshotSeq?: boolean;
@@ -111,7 +112,7 @@ export class RealSurfaceRejected extends Error {
 function requestedSurfaces(options: HarnessOptions): readonly SurfaceId[] {
   if (options === null || typeof options !== "object" || Object.getPrototypeOf(options) !== Object.prototype
     || Reflect.ownKeys(options).some(key => !["surfaces", "injectFailureAt", "retainStorage", "processScenario",
-      "wedgeHostAfter", "emitMalformedFrame", "skewOutputSeq", "skewSnapshotSeq", "failLedgerAppendAfter",
+      "wedgeHostAfter", "dropHostAckAfter", "emitMalformedFrame", "skewOutputSeq", "skewSnapshotSeq", "failLedgerAppendAfter",
       "swapBinaryBeforeExec", "expireAuthAfter", "mismatchAttestationAfter", "failSecondSurfaceLaunch", "fixtureMarker", "fixturePayload"].includes(String(key)))) throw new Error("InvalidHarnessOptions");
   const marker = Object.getOwnPropertyDescriptor(options, "fixtureMarker");
   if (marker !== undefined && (!("value" in marker) || typeof marker.value !== "string"
@@ -130,10 +131,10 @@ function requestedSurfaces(options: HarnessOptions): readonly SurfaceId[] {
         ? typeof field.value !== "number" || !Number.isFinite(field.value) || field.value < 0
         : typeof field.value !== "boolean")) throw new Error("InvalidHarnessOptions");
   }
-  for (const key of ["wedgeHostAfter", "emitMalformedFrame", "skewOutputSeq", "skewSnapshotSeq"] as const) {
+  for (const key of ["wedgeHostAfter", "dropHostAckAfter", "emitMalformedFrame", "skewOutputSeq", "skewSnapshotSeq"] as const) {
     const field = Object.getOwnPropertyDescriptor(options, key);
     if (field === undefined) continue;
-    if (!("value" in field) || (key === "wedgeHostAfter"
+    if (!("value" in field) || (key === "wedgeHostAfter" || key === "dropHostAckAfter"
       ? typeof field.value !== "number" || !Number.isFinite(field.value) || field.value < 0
       : key === "emitMalformedFrame" ? !["malformed", "unknown"].includes(field.value)
       : key === "skewOutputSeq" ? !["duplicate", "regression", "gap"].includes(field.value)
@@ -311,7 +312,7 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
   let faultWork = Promise.resolve();
   let faultError: unknown;
   const faultReport: FixtureFaultReport = { detectedMs: 0, deathMs: 0, escalation: null,
-    terminateAcks: 0, terminationStarted: false, errorName: null, sequenceKind: null,
+    terminateAcks: 0, terminationStarted: false, resizeAcks: 0, errorName: null, sequenceKind: null,
     publicationError: null, sqliteCode: null, authExpired: false, reportedModel: null };
   let faultStarted: number | undefined;
   let builderOutputSeq = 0;
@@ -531,6 +532,7 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
           if (host.executionId === "builder" && faultStarted !== undefined) {
             if (fact.kind === "ack" && fact.ofKind === "terminate") faultReport.terminateAcks += 1;
             if (fact.kind === "termination_started") faultReport.terminationStarted = true;
+            if (fact.kind === "ack" && fact.ofKind === "resize") faultReport.resizeAcks += 1;
           }
         }
       })().catch(error => { pumpErrors.push(error); }));
@@ -575,7 +577,7 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
     Object.freeze(client);
     const session = Object.freeze({ client, storage: state.storage, close, interrupt });
     faultReports.set(session, faultReport);
-    if (options.wedgeHostAfter !== undefined || options.emitMalformedFrame !== undefined
+    if (options.wedgeHostAfter !== undefined || options.dropHostAckAfter !== undefined || options.emitMalformedFrame !== undefined
       || options.skewOutputSeq !== undefined || options.skewSnapshotSeq === true || options.failLedgerAppendAfter !== undefined) {
       faultTimer = setTimeout(() => {
         faultWork = (async () => {
@@ -600,6 +602,15 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
           } else if (options.wedgeHostAfter !== undefined) {
             const host = state!.hosts[0]!, child = state!.children[0]!;
             process.kill(host.hostPid, "SIGSTOP");
+            const outcome = await escalateWedgedHost(host.handle, child.pgid!, host.hostPid);
+            faultReport.escalation = outcome;
+            faultReport.detectedMs = outcome.observedMs.ackWindowEndedMs!;
+            if (outcome.sessionInterruptionRequired) await interrupt(outcome.reason);
+          } else if (options.dropHostAckAfter !== undefined) {
+            // The host keeps running, unstopped, but never receives the terminate command and so never
+            // acknowledges it; the resize sent in its place shows it still acknowledges other commands.
+            const host = state!.hosts[0]!, child = state!.children[0]!, send = host.handle.send;
+            host.handle.send = frame => send(frame.kind === "terminate" ? { kind: "resize", cols: 80, rows: 24 } : frame);
             const outcome = await escalateWedgedHost(host.handle, child.pgid!, host.hostPid);
             faultReport.escalation = outcome;
             faultReport.detectedMs = outcome.observedMs.ackWindowEndedMs!;
@@ -638,7 +649,7 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
           faultReport.deathMs = performance.now() - faultStarted;
         })();
         void faultWork.catch(error => { faultError = error; });
-      }, options.wedgeHostAfter ?? 100);
+      }, options.wedgeHostAfter ?? options.dropHostAckAfter ?? 100);
     }
     if (options.processScenario !== undefined) {
       processReports.set(session, {
@@ -690,6 +701,7 @@ export interface FixtureFaultReport {
   escalation: EscalationOutcome | null;
   terminateAcks: number;
   terminationStarted: boolean;
+  resizeAcks: number;
   errorName: string | null;
   sequenceKind: string | null;
   publicationError: string | null;

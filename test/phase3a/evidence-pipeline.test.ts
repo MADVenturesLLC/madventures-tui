@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { Database } from "bun:sqlite";
@@ -652,6 +652,99 @@ for (const command of ["verify-ledger", "export-evidence"] as const) {
           if (previousHome === undefined) delete process.env.HOME; else process.env.HOME = previousHome;
           if (previousRoot === undefined) delete process.env.MADV_STORAGE_DIR; else process.env.MADV_STORAGE_DIR = previousRoot;
         }
+      });
+    }, 15000);
+  }
+}
+
+test("export-evidence publishes a fresh package that holds no file it did not write", async () => {
+  await closedEvidenceFixture(async (session, id) => {
+    const output = session.storage.sanitizedEvidenceDir;
+    const siblings = readdirSync(dirname(output)).sort();
+    for (let run = 1; run <= 2; run += 1) {
+      writeFileSync(join(output, `planted-before-export-${run}.txt`), "synthetic planted file\n", { mode: 0o600 });
+      const result = await runCli(["export-evidence", "--session", id, "--json"], { stdin: "", cwd: process.cwd() });
+      expect(result.exitCode).toBe(0);
+      expect(JSON.parse(result.stdout).outputDir).toBe(output);
+      expect(readdirSync(output).sort()).toEqual(["README.txt", "ledger-sanitized.json", "manifest.json"]);
+      expect(readdirSync(dirname(output)).sort()).toEqual(siblings);
+    }
+  });
+}, 15000);
+
+test("export-evidence refuses an explicit output directory that holds a file it did not write", async () => {
+  await closedEvidenceFixture(async (session) => {
+    const output = join(session.storage.sessionDir, "explicit-export");
+    mkdirSync(output, { mode: 0o700 });
+    writeFileSync(join(output, "planted-before-export.txt"), "synthetic planted file\n", { mode: 0o600 });
+    const siblings = readdirSync(session.storage.sessionDir).sort();
+    const result = await runCli(["export-evidence", "--ledger", join(session.storage.ledgerDir, "ledger.sqlite3"),
+      "--output", output, "--json"], { stdin: "", cwd: process.cwd() });
+    expect(result.exitCode).toBe(1);
+    expect(JSON.parse(result.stdout)).toEqual({ error: "output_not_empty", ok: false, path: output });
+    expect(readdirSync(output)).toEqual(["planted-before-export.txt"]);
+    expect(readdirSync(session.storage.sessionDir).sort()).toEqual(siblings);
+  });
+}, 15000);
+
+for (const [name, kind] of [["README.txt", "directory"], ["manifest.json", "symbolic link"]] as const) {
+  test(`export-evidence refuses an explicit output directory whose ${name} is a ${kind}`, async () => {
+    await closedEvidenceFixture(async (session) => {
+      const output = join(session.storage.sessionDir, "explicit-export");
+      mkdirSync(output, { mode: 0o700 });
+      const planted = join(output, name);
+      const synthetic = kind === "directory" ? join(planted, "synthetic-inside.txt")
+        : join(session.storage.sessionDir, "synthetic-link-target.txt");
+      if (kind === "directory") mkdirSync(planted, { mode: 0o700 });
+      writeFileSync(synthetic, "synthetic planted content\n", { mode: 0o600 });
+      if (kind === "symbolic link") symlinkSync(synthetic, planted);
+      const entries = readdirSync(output).sort();
+      const siblings = readdirSync(session.storage.sessionDir).sort();
+      const result = await runCli(["export-evidence", "--ledger", join(session.storage.ledgerDir, "ledger.sqlite3"),
+        "--output", output, "--json"], { stdin: "", cwd: process.cwd() });
+      const stat = lstatSync(planted);
+      expect({ exitCode: result.exitCode, entries: readdirSync(output).sort(),
+        kind: stat.isDirectory() ? "directory" : stat.isSymbolicLink() ? "symbolic link" : "regular file" })
+        .toEqual({ exitCode: 1, entries, kind });
+      expect(JSON.parse(result.stdout)).toEqual({ error: "output_not_empty", ok: false, path: output });
+      expect(readFileSync(synthetic, "utf8")).toBe("synthetic planted content\n");
+      expect(readdirSync(session.storage.sessionDir).sort()).toEqual(siblings);
+    });
+  }, 15000);
+}
+
+test("export-evidence replaces an explicit output directory that holds only an earlier package", async () => {
+  await closedEvidenceFixture(async (session) => {
+    const output = join(session.storage.sessionDir, "explicit-export");
+    mkdirSync(output, { mode: 0o700 });
+    const siblings = readdirSync(session.storage.sessionDir).sort();
+    for (let run = 1; run <= 2; run += 1) {
+      const result = await runCli(["export-evidence", "--ledger", join(session.storage.ledgerDir, "ledger.sqlite3"),
+        "--output", output, "--json"], { stdin: "", cwd: process.cwd() });
+      expect(result.exitCode, `export ${run}`).toBe(0);
+    }
+    expect(readdirSync(output).sort()).toEqual(["README.txt", "ledger-sanitized.json", "manifest.json"]);
+    expect(readdirSync(session.storage.sessionDir).sort()).toEqual(siblings);
+  });
+}, 15000);
+
+for (const [command, subdirectory] of [["verify-ledger", "ledger"], ["export-evidence", "ledger"],
+  ["export-evidence", "output"]] as const) {
+  for (const fault of ["group-accessible", "symbolic link"] as const) {
+    test(`${command} --session rejects a ${fault} ${subdirectory} subdirectory`, async () => {
+      await closedEvidenceFixture(async (session, id) => {
+        const directory = subdirectory === "ledger" ? session.storage.ledgerDir : session.storage.sanitizedEvidenceDir;
+        if (fault === "group-accessible") chmodSync(directory, 0o750);
+        else {
+          renameSync(directory, `${directory}-target`);
+          symlinkSync(`${directory}-target`, directory);
+        }
+        const before = readdirSync(session.storage.root, { recursive: true }).sort();
+        const result = await runCli([command, "--session", id, "--json"], { stdin: "", cwd: process.cwd() });
+        expect(result.exitCode).toBe(1);
+        expect(JSON.parse(result.stdout)).toEqual({ ok: false, error: fault === "group-accessible"
+          ? "storage_root_invalid:group_or_other_accessible" : "storage_root_invalid:symlink_component" });
+        expect(readdirSync(session.storage.root, { recursive: true }).sort()).toEqual(before);
       });
     }, 15000);
   }
