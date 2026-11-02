@@ -360,7 +360,8 @@ export function spawnPtyHost(
   const hangNetMs = opts.hangNetMs ?? 300000;
   // §3.3 step 2: the lifeline read end is inherited at birth via the
   // spawned process's fd 0; the write end (below) exists only here.
-  const proc = Bun.spawn([BUN_EXECUTABLE, HOST_ENTRY], {
+  // Bun otherwise loads cwd .env files even with an explicit environment.
+  const proc = Bun.spawn([BUN_EXECUTABLE, "--no-env-file", HOST_ENTRY], {
     cwd: REPO_ROOT,
     stdin: "pipe",
     stdout: "pipe",
