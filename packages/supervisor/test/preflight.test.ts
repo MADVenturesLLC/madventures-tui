@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, watch, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, symlinkSync, watch, writeFileSync } from "node:fs";
 import { tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import { ADAPTER_REGISTRY, parseSurfaceId, sha256CanonicalSync, type AdapterRegistrationV1, type ExecutionIdentity, type SurfaceId } from "@madventures/protocol";
@@ -107,6 +107,24 @@ async function failure(f: ReturnType<typeof fixture>, code: PreflightFailure, ex
 test("preflight fails with envelope_invalid", async () => { const f = fixture(); f.envelope.envelope_hash = "0".repeat(64); await failure(f, "envelope_invalid"); });
 test("preflight fails with cardinality", async () => { const f = fixture(); (f.envelope.executions as unknown[]).pop(); f.sign(); await failure(f, "cardinality"); });
 test("preflight fails with repository_fingerprint", async () => { const f = fixture(); f.input.repositoryRoot = f.root; await failure(f, "repository_fingerprint"); });
+test("preflight canonicalizes a symlink-named worktree and preserves the same-repository check", async () => {
+  for (const sameRepository of [true, false]) {
+    const f = fixture();
+    const target = sameRepository ? f.input.worktree : fixture().input.worktree;
+    const named = join(f.root, "worktree-link");
+    symlinkSync(target, named, "dir");
+    f.input.worktree = named;
+    f.envelope.worktree = named;
+    f.sign();
+    const result = await f.run();
+    if (sameRepository) {
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.plan.repositoryFingerprint.worktree).toBe(realpathSync(target));
+    } else {
+      expect(result).toEqual({ ok: false, failure: "repository_fingerprint", detail: "repository_fingerprint" });
+    }
+  }
+});
 test("preflight fails with repository_fingerprint when the envelope names another checkout or commit", async () => {
   const f = fixture(), other = fixture();
   const head = f.git(["rev-parse", "--verify", "HEAD"]);

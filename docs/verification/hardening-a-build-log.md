@@ -2185,3 +2185,143 @@ SHA-256: `d9e066e80a4cdd7fbd515ed261ac34dbda16061d0d4e03871e527437a0bbc3e4`
 
 preflight.test.ts 30 pass, 0 fail; supervisor 79 pass, 0 fail.
 `git diff --check`: exit 0. Deviations: none. No active halt.
+
+## Item 10: symlink-named worktree
+
+Built on: `b7c70ac142344b1bb239d644fd7c14a8b629736f`.
+
+Files changed: packages/supervisor/test/preflight.test.ts and this log.
+
+Spec section 2.1 requires preflight to fingerprint the repository and worktree.
+Spec section 5.2's no-symlink requirement concerns the storage root, not the
+worktree. The existing fingerprint and same-repository checks define this
+case, packages/supervisor/src/preflight.ts:66-80 and :137-145:
+
+```ts
+function fingerprint(root: string, worktree: string, d: PreflightDependencies): LaunchPlan["repositoryFingerprint"] {
+  const canonicalRoot = d.realpath(root) as string;
+  const canonicalWorktree = d.realpath(worktree) as string;
+  function git(args: string[]): Buffer {
+    const p = Bun.spawnSync(["git", "--no-optional-locks", "-C", canonicalWorktree, ...args], { stdout: "pipe", stderr: "pipe" });
+    if (p.exitCode !== 0) throw new Error("git failure");
+    return p.stdout;
+  }
+  if (git(["rev-parse", "--is-inside-work-tree"]).toString().trim() !== "true") throw new Error("not worktree");
+  const head = git(["rev-parse", "--verify", "HEAD"]).toString().trim();
+  if (!/^[0-9a-f]{40}$/.test(head)) throw new Error("unresolved HEAD");
+  // Also establish that the supplied repository root names a git tree.
+  const check = Bun.spawnSync(["git", "--no-optional-locks", "-C", canonicalRoot, "rev-parse", "--is-inside-work-tree"], { stdout: "pipe", stderr: "pipe" });
+  if (check.exitCode !== 0 || check.stdout.toString().trim() !== "true") throw new Error("not repository");
+  return Object.freeze({ root: canonicalRoot, worktree: canonicalWorktree, head, statusSha256: hash(git(["status", "--porcelain=v1", "-z"])) });
+```
+
+```ts
+    repo = fingerprint(input.repositoryRoot, input.worktree, d);
+    const repository = d.realpath(envelope.repository);
+    const common = Bun.spawnSync(["git", "--no-optional-locks", "-C", repo.root, "rev-parse", "--path-format=absolute", "--git-common-dir"], { stdout: "pipe", stderr: "pipe" });
+    const worktreeCommon = Bun.spawnSync(["git", "--no-optional-locks", "-C", repo.worktree, "rev-parse", "--path-format=absolute", "--git-common-dir"], { stdout: "pipe", stderr: "pipe" });
+    if (common.exitCode !== 0 || worktreeCommon.exitCode !== 0) return fail("repository_fingerprint");
+    const commonPath = d.realpath(common.stdout.toString().trim());
+    if (commonPath !== d.realpath(worktreeCommon.stdout.toString().trim())) return fail("repository_fingerprint");
+    if (repository !== repo.root && repository !== commonPath) return fail("repository_fingerprint");
+    if (d.realpath(envelope.worktree) !== repo.worktree || envelope.repository_fingerprint.git_sha !== repo.head) return fail("repository_fingerprint");
+```
+
+Test added: `preflight canonicalizes a symlink-named worktree and preserves
+the same-repository check`. It names the worktree through a real symlink in
+both the input and the signed synthetic envelope. A same-repository target
+must pass with its canonical real path. A symlink to a different repository's
+worktree must fail with repository_fingerprint.
+
+Deliberate break: the test-owned realpath dependency returns the alias itself
+for this symlink. git diff showed the break; the required canonical-path
+assertion failed, displaying worktree-link instead of worktree. The break was
+restored and cmp matched the original file, SHA-256
+`0fc2471b45838c1d0474ca37f0b4be791862f5fcdf721361c9e903fa416820e6`.
+No production change.
+
+Command: `export PATH="/Users/michaeldaley/.bun/bin:$PATH"; command -v bun; command -v bunx; shasum -a 256 "$(command -v bun)"; bun --version; bun -e 'process.stdout.write(Bun.revision)'`
+
+Exit: 0. Summary: runtime match or silent success
+
+Uptime: runtime check, not a test
+
+Log: `/Users/michaeldaley/builds/hardening-a-r1-pr/logs/item-10-runtime-run1.log`
+
+SHA-256: `2b1d8a5ab9bebb7a1de8417a1458f7d8ff03fd90e03fe98190496a94b162ab1f`
+
+Command: `export PATH="/Users/michaeldaley/.bun/bin:$PATH"; bun test packages/supervisor/test/preflight.test.ts -t 'preflight canonicalizes a symlink-named worktree'`
+
+Exit: 1. Summary: 0 pass / 30 filtered out / 1 fail / 6 expect() calls / Ran 1 test across 1 file. [565.00ms]
+
+Uptime: 9:08  up 8 days,  1:17, 17 users, load averages: 1.55 1.48 1.66
+
+Log: `/Users/michaeldaley/builds/hardening-a-r1-pr/logs/item-10-red-run1.log`
+
+SHA-256: `9e201aa2e0449ac9d5b22cbfe17dcf8c3c14486f3577f97157d587589867847f`
+
+Failing diagnostic rendering; full raw run remains in the hashed log:
+
+```text
+bun test v1.4.2 (744846f84)
+
+packages/supervisor/test/preflight.test.ts:
+119 |     const result = await f.run({
+120 |       realpath: path => path === named ? named : f.deps.realpath!(path),
+121 |     }); // deliberate break: leave the symlink name uncanonicalized
+122 |     if (sameRepository) {
+123 |       expect(result.ok).toBe(true);
+124 |       if (result.ok) expect(result.plan.repositoryFingerprint.worktree).toBe(realpathSync(target));
+                                                                              ^
+error: expect(received).toBe(expected)
+
+Expected: "/private/var/folders/x7/q4cptd9d25l_jjks9ms4j5000000gn/T/task45-preflight-NE5ORf/worktree"
+Received: "/private/var/folders/x7/q4cptd9d25l_jjks9ms4j5000000gn/T/task45-preflight-NE5ORf/worktree-link"
+
+      at <anonymous> (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/packages/supervisor/test/preflight.test.ts:124:73)
+(fail) preflight canonicalizes a symlink-named worktree and preserves the same-repository check [549.88ms]
+
+ 0 pass
+ 30 filtered out
+ 1 fail
+ 6 expect() calls
+Ran 1 test across 1 file. [565.00ms]
+```
+
+Command: `export PATH="/Users/michaeldaley/.bun/bin:$PATH"; bunx tsc --noEmit`
+
+Exit: 0. Summary: runtime match or silent success
+
+Uptime: 9:08  up 8 days,  1:17, 17 users, load averages: 1.68 1.51 1.67
+
+Log: `/Users/michaeldaley/builds/hardening-a-r1-pr/logs/item-10-typecheck-run1.log`
+
+SHA-256: `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`
+
+Command: `export PATH="/Users/michaeldaley/.bun/bin:$PATH"; bun test packages/supervisor/test/preflight.test.ts`
+
+Exit: 0. Summary: 31 pass / 0 fail / 367 expect() calls / Ran 31 tests across 1 file. [28.90s]
+
+Uptime: 9:08  up 8 days,  1:17, 17 users, load averages: 1.68 1.51 1.67
+
+Log: `/Users/michaeldaley/builds/hardening-a-r1-pr/logs/item-10-green-run1.log`
+
+SHA-256: `ed8cb87039eabf4f1878d03e82191fe3b65875fe8c44ac7ebd5288fe5f5e9e69`
+
+Command: `export PATH="/Users/michaeldaley/.bun/bin:$PATH"; bun test packages/supervisor`
+
+Exit: 0. Summary: 80 pass / 0 fail / 5842 expect() calls / Ran 80 tests across 5 files. [57.89s]
+
+Uptime: 9:09  up 8 days,  1:18, 17 users, load averages: 1.75 1.54 1.67
+
+Log: `/Users/michaeldaley/builds/hardening-a-r1-pr/logs/item-10-supervisor-run1.log`
+
+SHA-256: `bf6ebe03522645861aaf0893ef51a6fd33d4b4dbaf1a89a6a5445bcbe393945f`
+
+preflight.test.ts 31 pass, 0 fail; supervisor 80 pass, 0 fail.
+`git diff --check`: exit 0. Deviations: none. No active halt.
+
+The required final gates run after this seventh item commit. Their full logs,
+exit statuses and SHA-256 values are retained under the same external logs
+folder and in the saved PR description and final report, preserving the
+required seven-commit sequence without amending an item commit.
