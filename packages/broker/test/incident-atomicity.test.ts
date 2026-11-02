@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, expect, spyOn, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -89,6 +89,7 @@ async function fixture(terminate: () => Promise<void> = async () => {}) {
   return {
     ledger, broker, observations, snapshots, terminations: () => terminations,
     collideNextId: (id: string) => { collision = id; },
+    generated: () => generated,
   };
 }
 
@@ -120,6 +121,50 @@ test("a duplicate incident event_id is refused without appending or interrupting
   expect(f.broker.snapshotSeq).toBe(seq);
   expect(f.broker.snapshotProjectionInput().lifecycle.phase).toBe("active");
   expect(f.terminations()).toBe(0);
+});
+
+test("publishIncident refuses a failing duplicate lookup and appends nothing to the unavailable ledger", async () => {
+  const f = await fixture();
+  const candidate = incident(f.ledger);
+  const rows = f.ledger.readAfter(0);
+  const entry = roots.find(entry => entry.ledger === f.ledger)!;
+  const lookup = spyOn(f.ledger, "hasEventId");
+  f.ledger.close();
+  try {
+    expect(await f.broker.publishIncident(candidate)).toEqual({
+      ok: false, commandId: candidate.event_id, error: "ledger_write_failed", detail: "publishIncident: ledger_write_failed",
+    });
+    expect(lookup).toHaveBeenCalledTimes(1);
+    expect(lookup).toHaveBeenCalledWith(candidate.event_id);
+    expect(lookup.mock.results[0]?.type).toBe("throw");
+    expect(f.ledger.appends.some(value => value.event_id === candidate.event_id)).toBe(false);
+    expect(f.ledger.batches.some(batch => batch.some(value => value.event_id === candidate.event_id))).toBe(false);
+    expect(f.observations).toEqual([]);
+    expect(f.terminations()).toBe(1);
+  } finally {
+    lookup.mockRestore();
+    entry.ledger = new Ledger(join(entry.root, "ledger.sqlite3"));
+  }
+  expect(entry.ledger.readAfter(0)).toEqual(rows);
+});
+
+test("a refused incident duplicate builds no record and consumes no event id", async () => {
+  const f = await fixture();
+  const candidate = { ...incident(f.ledger), event_id: "open-task25" };
+  const generated = f.generated();
+  const record = spyOn(f.broker as any, "record");
+  try {
+    const result = await f.broker.publishIncident(candidate);
+    expect({ records: record.mock.calls.length, ids: f.generated() - generated }).toEqual({ records: 0, ids: 0 });
+    expect(result).toEqual({
+      ok: false, commandId: candidate.event_id, error: "invalid_command", detail: "publish: duplicate event_id",
+    });
+    expect(f.ledger.appends).toEqual([]);
+    expect(f.ledger.batches).toEqual([]);
+    expect(f.observations).toEqual([]);
+  } finally {
+    record.mockRestore();
+  }
 });
 
 test("no snapshot is emitted between the source incident and the derived lifecycle record", async () => {

@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, symlinkSync, watch, writeFileSync } from "node:fs";
 import { tmpdir, userInfo } from "node:os";
 import { join } from "node:path";
 import { ADAPTER_REGISTRY, parseSurfaceId, sha256CanonicalSync, type AdapterRegistrationV1, type ExecutionIdentity, type SurfaceId } from "@madventures/protocol";
@@ -107,6 +107,24 @@ async function failure(f: ReturnType<typeof fixture>, code: PreflightFailure, ex
 test("preflight fails with envelope_invalid", async () => { const f = fixture(); f.envelope.envelope_hash = "0".repeat(64); await failure(f, "envelope_invalid"); });
 test("preflight fails with cardinality", async () => { const f = fixture(); (f.envelope.executions as unknown[]).pop(); f.sign(); await failure(f, "cardinality"); });
 test("preflight fails with repository_fingerprint", async () => { const f = fixture(); f.input.repositoryRoot = f.root; await failure(f, "repository_fingerprint"); });
+test("preflight canonicalizes a symlink-named worktree and preserves the same-repository check", async () => {
+  for (const sameRepository of [true, false]) {
+    const f = fixture();
+    const target = sameRepository ? f.input.worktree : fixture().input.worktree;
+    const named = join(f.root, "worktree-link");
+    symlinkSync(target, named, "dir");
+    f.input.worktree = named;
+    f.envelope.worktree = named;
+    f.sign();
+    const result = await f.run();
+    if (sameRepository) {
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.plan.repositoryFingerprint.worktree).toBe(realpathSync(target));
+    } else {
+      expect(result).toEqual({ ok: false, failure: "repository_fingerprint", detail: "repository_fingerprint" });
+    }
+  }
+});
 test("preflight fails with repository_fingerprint when the envelope names another checkout or commit", async () => {
   const f = fixture(), other = fixture();
   const head = f.git(["rev-parse", "--verify", "HEAD"]);
@@ -231,6 +249,46 @@ test("preflight fails with home_mismatch", async () => { const f = fixture(); f.
 function listing(root: string): unknown {
   return readdirSync(root, { withFileTypes: true }).sort((a,b) => a.name.localeCompare(b.name)).map(e => [e.name, e.isDirectory() ? listing(join(root,e.name)) : e.isFile() ? new Bun.CryptoHasher("sha256").update(readFileSync(join(root,e.name))).digest("hex") : "other"]);
 }
+
+function recordTemporaryPaths(root: string) {
+  const paths = new Set<string>();
+  const errors: string[] = [];
+  const watcher = watch(root, { recursive: true }, (_event, name) => {
+    if (name === null) errors.push("filesystem event without a path");
+    else paths.add(name.toString());
+  });
+  watcher.on("error", error => errors.push(error.name));
+  return {
+    paths,
+    stop: async () => {
+      try { await new Promise(resolve => setTimeout(resolve, 250)); }
+      finally { watcher.close(); }
+      expect(errors).toEqual([]);
+    },
+  };
+}
+
+test("temporary path recording sees files a child creates and removes before returning", async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "hardening-a-path-recording-")));
+  roots.push(root);
+  const recorder = recordTemporaryPaths(root);
+  try {
+    const child = Bun.spawnSync([process.execPath, "--no-env-file", "-e", `
+      const fs = require("node:fs"); const root = ${JSON.stringify(root)};
+      fs.writeFileSync(root + "/ephemeral", "synthetic");
+      fs.unlinkSync(root + "/ephemeral");
+      fs.mkdirSync(root + "/nested");
+      fs.writeFileSync(root + "/nested/ephemeral", "synthetic");
+      fs.unlinkSync(root + "/nested/ephemeral");
+      fs.rmdirSync(root + "/nested");
+    `], { env: {}, stdout: "pipe", stderr: "pipe" });
+    expect(child.exitCode).toBe(0);
+  } finally {
+    await recorder.stop();
+  }
+  expect([...recorder.paths].sort()).toEqual(["ephemeral", "nested", "nested/ephemeral"]);
+});
+
 test("the returned plan's repository fingerprint is frozen", async () => {
   const result = await fixture().run();
   expect(result.ok).toBe(true);
@@ -242,7 +300,9 @@ test("preflight creates nothing", async () => {
   const status=Bun.spawnSync(["git","--no-optional-locks","-C",f.input.worktree,"status","--porcelain=v1","-z"],{stdout:"pipe",stderr:"pipe"});
   expect(status.exitCode).toBe(0);
   const before = listing(f.root); const temporary = readdirSync(f.temp).sort();
-  const r = await f.run(); expect(r.ok).toBe(true);
+  const recorder = recordTemporaryPaths(f.temp);
+  const r = await f.run().finally(() => recorder.stop()); expect(r.ok).toBe(true);
+  expect([...recorder.paths]).toEqual([]);
   expect(listing(f.root)).toEqual(before); expect(readdirSync(f.temp).sort()).toEqual(temporary);
   if (r.ok) { expect(r.plan.repositoryFingerprint.statusSha256).toBe(new Bun.CryptoHasher("sha256").update(status.stdout).digest("hex")); expect(Object.isFrozen(r.plan)).toBe(true); expect(Object.isFrozen(r.plan.executions)).toBe(true); for (const e of r.plan.executions) { expect(Object.isFrozen(e)).toBe(true); expect(Object.isFrozen(e.arguments)).toBe(true); expect(Object.isFrozen(e.environment)).toBe(true); expect(e.artifactSha256).toBe(new Bun.CryptoHasher("sha256").update(readFileSync(e.executablePath)).digest("hex")); } }
 });

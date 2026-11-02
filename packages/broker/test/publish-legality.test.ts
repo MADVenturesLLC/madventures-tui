@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, expect, spyOn, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -118,7 +118,7 @@ async function fixture() {
   ledger.calls.length = 0;
   observations.length = 0;
   observedSnapshots.length = 0;
-  return { ledger, broker, observations, observedSnapshots, terminations: () => terminations };
+  return { ledger, broker, observations, observedSnapshots, terminations: () => terminations, generated: () => generated };
 }
 
 test("publish row: normal collaboration set above in any non-active phase yields session_not_writable", () => {
@@ -428,4 +428,46 @@ test("a duplicate event_id is refused without appending or interrupting the sess
   expect((await client.getSnapshot()).phase).toBe(before.phase);
   expect(before.phase).toBe("active");
   expect(f.terminations()).toBe(0);
+});
+
+test("publish refuses a failing duplicate lookup and appends nothing to the unavailable ledger", async () => {
+  const f = await fixture();
+  const candidate = event();
+  const rows = f.ledger.readAfter(0);
+  const entry = roots.find(entry => entry.ledger === f.ledger)!;
+  const lookup = spyOn(f.ledger, "hasEventId");
+  f.ledger.close();
+  try {
+    expect(await f.broker.publish(candidate)).toEqual({
+      ok: false, commandId: candidate.event_id, error: "ledger_write_failed", detail: "publish: ledger_write_failed",
+    });
+    expect(lookup).toHaveBeenCalledTimes(1);
+    expect(lookup).toHaveBeenCalledWith(candidate.event_id);
+    expect(lookup.mock.results[0]?.type).toBe("throw");
+    expect(f.ledger.calls.some(value => value.event_id === candidate.event_id)).toBe(false);
+    expect(f.observations).toEqual([]);
+    expect(f.terminations()).toBe(1);
+  } finally {
+    lookup.mockRestore();
+    entry.ledger = new Ledger(join(entry.root, "ledger.sqlite3"));
+  }
+  expect(entry.ledger.readAfter(0)).toEqual(rows);
+});
+
+test("a refused publish duplicate builds no record and consumes no event id", async () => {
+  const f = await fixture();
+  const candidate = event({ event_id: "open-task24" });
+  const generated = f.generated();
+  const record = spyOn(f.broker as any, "record");
+  try {
+    const result = await f.broker.publish(candidate);
+    expect({ records: record.mock.calls.length, ids: f.generated() - generated }).toEqual({ records: 0, ids: 0 });
+    expect(result).toEqual({
+      ok: false, commandId: candidate.event_id, error: "invalid_command", detail: "publish: duplicate event_id",
+    });
+    expect(f.ledger.calls).toEqual([]);
+    expect(f.observations).toEqual([]);
+  } finally {
+    record.mockRestore();
+  }
 });
