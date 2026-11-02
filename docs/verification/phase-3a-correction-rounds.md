@@ -1468,3 +1468,50 @@ Round 2's resolution, recorded above as pending, is now closed:
 - **Closed at:** `0da8119820b2ad6d8111c725250dd20e840a7b82`, the merge of PR #167, on the Task 46 and
   Task 47 entries above, under `DEC-20261020-01` B8.
 - **Count:** rubric milestone 6 stays at **2**, reassigned.
+
+## Hardening A review verdict PASS (no rubric milestone, no round)
+
+- **Recorded:** 2026-11-02, under `DEC-20261102-04` B1 and C1.
+- **Plan milestone:** none; Hardening A of `DEC-20261102-02`, items 1, 3, 4, 7, 8, 9 and 10 of
+  `DEC-20261102-01`, not a plan task. **Rubric milestone:** none.
+- **Head reviewed:** `7e1d094ca53797fb88d591d1f05cab677b4332f4` on PR #211, built by
+  `session:codex/hardening-a-r1`.
+- **Reviewer:** `antigravity`, a fresh session on Antigravity on the Founder's MacBook. The harness did
+  not show the model; the Founder confirmed Gemini 4 to the session before it read any file.
+- **Verdict text SHA-256:** `c165b71b57cbd7a65eaec2779f03895e8e2bc8b7ca5f49d71f60ac758a22c54e`, 82,221
+  bytes, 1,029 lines, saved at `/Users/michaeldaley/builds/review-pr211-r1.md`, posted on PR #211 as
+  comments 6583571337 and 6583572134 by `decivantiq`.
+- **Result:** PASS, no findings. **Counted:** no round. Copilot's three later findings are ruled in
+  `DEC-20261102-04` B2. Merged at `e051ed90802f754495d3f3374192b304e29a6218` under `DEC-20261102-02` B7.
+
+## Hardening B review verdict PASS, round 1 (no rubric milestone, no round)
+
+- **Recorded:** 2026-11-02, under `DEC-20261102-04` B1 and C1.
+- **Plan milestone:** none; Hardening B of `DEC-20261102-02`, items 5, 12, 13 and 17 of
+  `DEC-20261102-01`, not a plan task. Item 18 was not built and is closed by `DEC-20261102-04` B4.
+  **Rubric milestone:** none.
+- **Head reviewed:** `0a80144047b64fffdc684d437b49adbe5f0fac9f` on PR #213, built by
+  `session:claude-code/hardening-b-r1`.
+- **Reviewer:** `antigravity`, a fresh session on Antigravity on the Founder's MacBook, started with
+  Gemini 4. The harness did not show the model.
+- **Verdict text SHA-256:** `177315d22be33b77ad4d81181b9f3051450958c178669bd4cf4b499183148f6d`, 59,593
+  bytes, 680 lines, saved at `/Users/michaeldaley/builds/review-pr213-r1.md`, posted on PR #213 as
+  comments 6583234970 and 6583235767 by `decivantiq`.
+- **Result:** PASS, four advisory findings, carried under `DEC-20261102-04` B3. **Counted:** no round.
+  A later Copilot finding led to one correction commit under Hardening B builder addendum 1.
+
+## Hardening B review verdict PASS, round 2 (no rubric milestone, no round)
+
+- **Recorded:** 2026-11-02, under `DEC-20261102-04` B1 and C1.
+- **Plan milestone:** none; the correction of Hardening B under its builder addendum 1, part of item 13
+  of `DEC-20261102-01`, not a plan task. **Rubric milestone:** none.
+- **Head reviewed:** `7a23f9cd085e12ea6ad29ab5e3d8957de1e1baed` on PR #213, one commit on
+  `0a80144047b64fffdc684d437b49adbe5f0fac9f`, built by `session:claude-code/hardening-b-r1`.
+- **Reviewer:** `antigravity`, a fresh session on Antigravity on the Founder's MacBook, showing the
+  model Gemini 4 Argon (High).
+- **Verdict text SHA-256:** `1c5ec2de4362ea97ccd482f96b16e8715c12be5c8688def97f0b5bde64570234`, 43,905
+  bytes, 627 lines, saved at `/Users/michaeldaley/builds/review-pr213-r2.md`, posted on PR #213 as
+  comment 6586956420 by `decivantiq`.
+- **Result:** PASS, two findings classed as not counting under plan §11.3. **Counted:** no round.
+  Rubric milestone 10's total stays at **2**. Merged at `cb0bc264b0224b2943250e138570aa43f17efbae`
+  under `DEC-20261102-02` B7.
