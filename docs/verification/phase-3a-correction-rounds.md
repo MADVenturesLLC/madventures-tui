@@ -1332,3 +1332,139 @@ Round 2's resolution, recorded above as pending, is now closed:
   refused command in the third environment test; and the items of `DEC-20261027-01` B9, unchanged.
 - **Limitations stated:** the PTY host environment capture is what the build hands the host; no session
   path exercises the redaction of a secret-marked value; the Task 49 fixture uses Bun's `_refreshSize`.
+
+## M23 and M24 review verdict FAIL (rubric milestone 10, round 1, recorded after the merge)
+
+- **Recorded:** 2026-11-01, under `DEC-20261101-01` B1 and C1.
+- **Plan milestone:** M23 and M24, Tasks 51 to 55. **Rubric milestone:** 10.
+- **Head reviewed:** `03b31247374cba31fc70f5fa64e018b1b62ec651` on PR #205, built by
+  `session:codex/m23-m24-r1` and `session:codex/m23-m24-r2`.
+- **Reviewer:** `antigravity`, a fresh Gemini 4 session on Antigravity on the Founder's MacBook.
+- **Verdict text SHA-256:** `8a30d88ab446662cfc39d54b1e1d3922d063841c4ddbb41a9febaf81f03f8882`, 66,928
+  bytes, 603 lines, saved at `/Users/michaeldaley/builds/m23-m24-review-r1.md`, posted on PR #205 as
+  comments 6520305862 and 6520306444 by `decivantiq`.
+- **Result:** FAIL, three substantive and three advisory findings. **Counted:** one round. Rubric
+  milestone 10 stands at **1**. The Founder authorized one correction commit under `DEC-20261028-02` B12.
+
+## M23 and M24 review verdict FAIL (rubric milestone 10, round 2, recorded after the merge)
+
+- **Recorded:** 2026-11-01, under `DEC-20261101-01` B1 and C1.
+- **Plan milestone:** M23 and M24, Tasks 51 to 55. **Rubric milestone:** 10.
+- **Head reviewed:** `c4526065216ac86a0c10c1bbcba13b04e36486de` on PR #205, the correction round 1
+  commit, built by `session:codex/m23-m24-r3`.
+- **Reviewer:** `antigravity`, a fresh Gemini 4 session on Antigravity on the Founder's MacBook.
+- **Verdict text SHA-256:** `c2206bce0c8b565fe6339e91282849b6100d80ed1b13f9051435cea74dc9bdaa`, 93,217
+  bytes, 972 lines, saved at `/Users/michaeldaley/builds/m23-m24-review-r2.md`, posted on PR #205 as
+  comments 6542800271 and 6542800622 by `decivantiq` on 2026-10-31, after the branch had moved past
+  that head.
+- **Result:** FAIL, three substantive and two advisory findings. **Counted:** one round. Rubric
+  milestone 10 stands at **2**. The Founder ruled on the second FAIL under `DEC-20261028-02` B12 and
+  authorized one more correction commit.
+
+## M23 and M24 review verdict PASS (rubric milestone 10, no round, recorded after the merge)
+
+- **Recorded:** 2026-11-01, under `DEC-20261101-01` B1 and C1.
+- **Plan milestone:** M23 and M24, Tasks 51 to 55. **Rubric milestone:** 10.
+- **Head reviewed:** `29a6d8e8dda5e4b54c8c73207aa2b68221099682` on PR #205, after the correction round 2
+  commit and two continuous-integration fix commits, all built by `session:codex/m23-m24-r4`.
+- **Reviewer:** `antigravity`, a fresh Gemini 4 session on Antigravity on the Founder's MacBook.
+- **Verdict text SHA-256:** `e5941fa9a9f75c348ffdee1c928b11bdf797bb1700b1d8664c3ff7fc4cc9f4b2`, 101,890
+  bytes, 1,229 lines, saved at `/Users/michaeldaley/builds/m23-m24-review-r3.md`, posted on PR #205 as
+  comments 6561055183 and 6561055498 by `decivantiq`.
+- **Result:** PASS, one advisory finding and two findings that do not count. **Counted:** no round.
+  Rubric milestone 10 stays at **2**. Accepted despite Hermes running when the review began, against
+  `DEC-20261028-01` B5, as the merge authorization records. Merged at
+  `92dd83de6cca9141c7ae53166cdce4ace9da643e` under the authorization in comment 6561961475.
+
+## M23 and M24 review checkpoints closed (rubric milestone 10, count 2)
+
+- **Recorded:** 2026-11-01, under `DEC-20261101-01` B2 and C1.
+- **Plan milestone:** M23 and M24, Tasks 51 to 55. **Rubric milestone:** 10.
+- **Closed at:** `92dd83de6cca9141c7ae53166cdce4ace9da643e`, the merge of PR #205, under
+  `DEC-20261028-02` B13 and the authorization in comment 6561961475.
+- **Count:** rubric milestone 10 stands at **2** correction rounds for the Codex builder sessions of
+  that build. The next verdict with a substantive finding on rubric milestone 10 work by those builders
+  requires reassignment under spec §7.6.
+- **Carried forward (authorization item 7):** no test fails when the checks of the session's ledger and
+  output subdirectories are deleted; the export into a pre-created `sanitized-evidence` directory; an
+  end-to-end malformed-frame scenario through a production receive path, once one exists; the
+  authentication-expiry and attestation scenarios through a production detector, once one exists; the
+  relative import of `packages/supervisor/src` by `export-evidence.ts`; and the three advisory findings
+  of the first review: a silent but running host, a `manifest_hash` that does not cover
+  `redaction_rules_applied`, and a lost exit code in the build log.
+- **Limitations stated:** among those the PR body states, on Linux the descriptor test cannot check
+  that the supervisor holds each host's write end, and no allowlist marks a variable secret.
+
+## M20 corrections review verdict PASS (rubric milestone 6, no round, recorded after the merge)
+
+- **Recorded:** 2026-11-01, under `DEC-20261101-01` B3 and C1.
+- **Plan milestone:** M20, the corrections of `DEC-20261016-01`. **Rubric milestone:** 6.
+- **Head reviewed:** `b7cbce50f3494f2b9bae1e3de9844a558af86360` on PR #183, built by
+  `session:codex/m20-corrections-r1`.
+- **Reviewer:** `antigravity`, a fresh Gemini 4 session on Antigravity on the Founder's MacBook.
+- **Verdict text SHA-256:** `0cb46d7b77d87498f61cb7b0cb4632f90685f521107db8132cf56c83c16ae597`, 44,550
+  bytes, 698 lines, saved at `/Users/michaeldaley/m20-corrections-review-r1.md`, posted on PR #183 as
+  comment 6330234977 by `decivantiq`.
+- **Result:** PASS, no findings. **Counted:** no round. Merged at
+  `3dc42f8b687fbd41cca45456f127e66114ce212c` under the authorization in comment 6331179117.
+
+## Task 24 review verdict PASS (rubric milestone 7, no round, recorded after the merge)
+
+- **Recorded:** 2026-11-01, under `DEC-20261101-01` B3 and C1.
+- **Plan milestone:** M10, Task 24. **Rubric milestone:** 7.
+- **Head reviewed:** `c201cde18077b789b8aefe7c5f88db61d44649e5` on PR #188, built by
+  `session:codex/m10-task24-r1`.
+- **Reviewer:** `antigravity`, a fresh Gemini 4 session on Antigravity on the Founder's MacBook.
+- **Verdict text SHA-256:** `4db3d56c28eccf1aa6c224b3b58f378c53469a5642a0cb126eedb565e3351c1f`, 49,079
+  bytes, 628 lines, saved at `/Users/michaeldaley/m10-task24-review-r1.md`, posted on PR #188 as comment
+  6375320541 by `decivantiq`.
+- **Result:** PASS. **Counted:** no round. The correction of `DEC-20261023-01` Part C followed, which
+  its C8 rules adds no round.
+
+## Task 24 correction review verdict PASS (rubric milestone 7, no round, recorded after the merge)
+
+- **Recorded:** 2026-11-01, under `DEC-20261101-01` B3 and C1.
+- **Plan milestone:** M10, Task 24, the correction of `DEC-20261023-01` Part C. **Rubric milestone:** 7.
+- **Head reviewed:** `85dbf6162b930d775d9023df9c8cb4f4bee61ac1` on PR #188, built by
+  `session:codex/m10-task24-r2`.
+- **Reviewer:** `antigravity`, a fresh Gemini 4 session on Antigravity on the Founder's MacBook.
+- **Verdict text SHA-256:** `8047ebd0567bb65bdfdff9ade986b70c3860218f4473ec4e3f96e64488744fd6`, 44,545
+  bytes, 691 lines, saved at `/Users/michaeldaley/m10-task24-review-r2.md`, posted on PR #188 as comment
+  6388953643 by `decivantiq`.
+- **Result:** PASS. **Counted:** no round. Merged at `7e4572c95d90c19b5403c07c8d4cd146c6d37d98` under the
+  authorization in comment 6389032475.
+
+## Task 25 review verdict PASS (rubric milestone 7, no round, recorded after the merge)
+
+- **Recorded:** 2026-11-01, under `DEC-20261101-01` B3 and C1.
+- **Plan milestone:** M10, Task 25. **Rubric milestone:** 7.
+- **Head reviewed:** `899b73c8aa9e07425b8da1a92978eb020c67ddee` on PR #193, built by
+  `session:codex/m10-task25-r1`.
+- **Reviewer:** `antigravity`, a fresh Gemini 4 session on Antigravity on the Founder's MacBook.
+- **Verdict text SHA-256:** `9d1cfef449efd478c6d8211a247d8d6a2c837bfd8e263bb94cb0e6ee45b611d9`, 68,570
+  bytes, 1,453 lines, saved at `/Users/michaeldaley/m10-task25-review-r1.md`, posted on PR #193 as
+  comments 6399327909 and 6399328180 by `decivantiq`.
+- **Result:** PASS, one advisory finding. **Counted:** no round. Merged at
+  `418a0269b5d360690e3c5cd7c83663f022d1eba7` under the authorization in comment 6404998399.
+
+## Stabilization build review verdict PASS (no rubric milestone, no round, recorded after the merge)
+
+- **Recorded:** 2026-11-01, under `DEC-20261101-01` B3 and C1.
+- **Plan milestone:** none; the stabilization build of `DEC-20261023-01` Part D, not a plan task.
+  **Rubric milestone:** none.
+- **Head reviewed:** `101de437ae37d76dfc4e8e957e4bf9a82d761d31` on PR #195, built by
+  `session:codex/stabilization-r1`.
+- **Reviewer:** `antigravity`, a fresh Gemini 4 session on Antigravity on the Founder's MacBook.
+- **Verdict text SHA-256:** `bc2d42755468e2a1299b966ce34f1801d5ac64f8ca31d6e7de4b6fa942a049e0`, 82,182
+  bytes, 1,349 lines, saved at `/Users/michaeldaley/builds/stabilization-review-r1.md`, posted on PR #195
+  as comments 6428934617 and 6428935159 by `decivantiq`.
+- **Result:** PASS, no findings. **Counted:** no round. Merged at
+  `23ce34bce1e74c9f462e4e4f3c96695e2aa78f72` under the authorization in comment 6431310144.
+
+## M21 review checkpoint closed (rubric milestone 6, count unchanged)
+
+- **Recorded:** 2026-11-01, under `DEC-20261101-01` B4 and C1.
+- **Plan milestone:** M21, Tasks 46 and 47. **Rubric milestone:** 6.
+- **Closed at:** `0da8119820b2ad6d8111c725250dd20e840a7b82`, the merge of PR #167, on the Task 46 and
+  Task 47 entries above, under `DEC-20261020-01` B8.
+- **Count:** rubric milestone 6 stays at **2**, reassigned.
