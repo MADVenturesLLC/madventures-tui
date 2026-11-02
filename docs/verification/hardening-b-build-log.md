@@ -117,3 +117,75 @@ The build therefore has four commits, for items 13, 12, 17 and 5 in that order.
   timing, so it was not treated as a halt under `DEC-20261102-02` B9 and was not rerun. Every RED or
   break run in this build is treated the same way, and its load is recorded.
 - **Halts:** none.
+
+## Founder ruling on the load rule for RED and break runs
+
+Given in the session during item 12, quoted verbatim:
+
+> Founder ruling: resume. The B9 load halt applies only when a test fails unexpectedly in a run whose
+> first load average was 2.0 or more. The failures of a deliberate-break or RED run are the intended
+> failures that show the tests catch the break, so such a run is working as designed, not a B9 halt,
+> at any load. Restore the break, confirm the restored file's SHA-256, run the item's tests in a
+> normal run, and continue. If a test fails unexpectedly in a run whose first load average was 2.0 or
+> more, halt as B9 says; otherwise handle any failure under DEC-20261023-01 Part B. Record this ruling
+> in the build log, and apply it to every later deliberate-break or RED run without stopping.
+
+It covers the second RED run of item 13 (load 11.60) and every later RED or break run.
+
+## Item 12: reject invalid session subdirectories in the evidence commands
+
+- **Built on:** `8c4d3d87ce8a937a4a3f1bedab281603e147442f`.
+- **Relies on, at the item's base:**
+  - The existing rejection tests, `test/phase3a/evidence-pipeline.test.ts` lines 632 to 658 at
+    `68959cf27ee2652d4f9c3287cec4a5ee03798a7a`, `${command} rejects an ${invalid} without
+    exporting`, which run each command with `--session` together with explicit `--ledger` and
+    `--output` paths, so neither subdirectory check is reached.
+  - The ledger subdirectory check, `apps/madbridge/src/commands/verify-ledger.ts` lines 38 to 41,
+    `validateStorageRoot(dirname(ledgerPath), ...)` when `--session` is given without `--ledger`;
+    `resolveEvidencePaths` is shared by both commands.
+  - The output subdirectory check, `apps/madbridge/src/commands/export-evidence.ts` lines 73 to 77
+    after item 13 (lines 69 to 73 at the base), `validateStorageRoot(outputDir, ...)` when `--session`
+    is given without `--output`.
+- **Change:** tests only; no production change.
+- **Files changed:** `test/phase3a/evidence-pipeline.test.ts`, `docs/verification/hardening-b-build-log.md`.
+- **Tests added** to `test/phase3a/evidence-pipeline.test.ts`, which then holds 24 passing tests.
+  Each runs the command with `--session` only, against a closed fixture session whose subdirectory was
+  made group-accessible (mode 750) or replaced by a symbolic link to a sibling directory, and asserts
+  exit 1, the exact `storage_root_invalid:group_or_other_accessible` or
+  `storage_root_invalid:symlink_component` error, and an unchanged storage tree:
+  - `verify-ledger --session rejects a group-accessible ledger subdirectory`
+  - `verify-ledger --session rejects a symbolic link ledger subdirectory`
+  - `export-evidence --session rejects a group-accessible ledger subdirectory`
+  - `export-evidence --session rejects a symbolic link ledger subdirectory`
+  - `export-evidence --session rejects a group-accessible output subdirectory`
+  - `export-evidence --session rejects a symbolic link output subdirectory`
+- **Before the break:** the six tests pass at the item's base. Load 1.76 2.81 2.51. Exit 0, 6 pass.
+  `item12-new-tests-run1.log`, `1316d80dfaa3692977ea0184b981cd3a85c3f1a0ee3f4ef751f97f2ac54f2eea`.
+- **Break:** both subdirectory checks deleted: the four lines above in `verify-ledger.ts` and the
+  five lines above in `export-evidence.ts`. The diff is saved as
+  `/Users/michaeldaley/builds/hardening-b-r1-pr/item12-break.diff`, SHA-256
+  `bea7d09ecb71a6b86c81ae8071c27ee0be65d6502ab5fed13385ea5055e73358`. Original SHA-256:
+  `verify-ledger.ts` `5c9e3e9eb008fbc7f7e11510c95c9487127136a3a633a652ed3fb157d27b7731`,
+  `export-evidence.ts` `b877121499a19d988b983b7077c608ea832b18fb9e2ba52a34fc5ce2a5cd9bfe`.
+- **Failing run under the break:** all six tests fail, each with `Expected: 1` `Received: 0`, the
+  command accepting the invalid subdirectory. Load 2.47 1.67 1.83, an intended failure under the ruling
+  above. Exit 1, 0 pass, 6 fail. `item12-break-run1.log`,
+  `6ef77fa7bd6ce24df1c2aa20c58e3413852c5ef0317d78607971b870e1db68f7`.
+- **Restored** with `git checkout --` on both files; `shasum -a 256 -c` reports both SHA-256 values
+  above as OK.
+- **Runs after the restore,** each exit 0 with 0 fail:
+
+| Command | Load at start | Result | Log | SHA-256 |
+| --- | --- | --- | --- | --- |
+| `bunx tsc --noEmit` | 1.62 1.54 1.77 | no output | item12-tsc-run1.log | e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 |
+| `bun test test/phase3a/evidence-pipeline.test.ts` | 1.62 1.54 1.77 | 24 pass | item12-green-evidence-pipeline-run1.log | ffd27e845b36f9d9bc4a205f19890372e582cd681006c9bcc5cd317896e5d618 |
+| `bun test test/phase3a` | 1.83 1.58 1.79 | 145 pass | item12-suite-test-phase3a-run1.log | 425ff542c1da1057b502537edbdb666bc4255bf2399bf489d6f5e2a3718cc0f5 |
+
+- **Deviations:** the first attempt to apply the break, by line-number `sed`, was blocked by a local
+  pre-tool hook before it ran; both files were confirmed unchanged by SHA-256. After the Founder's
+  ruling to resume, the break was applied by exact-text edits instead.
+- **Deviation, commit subject:** the subject the prompt gives for this item,
+  `test(phase3a): reject invalid session subdirectories in the evidence commands`, is 77 characters,
+  against the prompt's rule that every commit message line is 72 characters or shorter. The exact
+  subject is used verbatim; every other line of the message is 72 characters or shorter.
+- **Halts:** none.

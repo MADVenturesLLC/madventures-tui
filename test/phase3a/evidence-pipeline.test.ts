@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { Database } from "bun:sqlite";
@@ -686,3 +686,25 @@ test("export-evidence refuses an explicit output directory that holds a file it 
     expect(readdirSync(session.storage.sessionDir).sort()).toEqual(siblings);
   });
 }, 15000);
+
+for (const [command, subdirectory] of [["verify-ledger", "ledger"], ["export-evidence", "ledger"],
+  ["export-evidence", "output"]] as const) {
+  for (const fault of ["group-accessible", "symbolic link"] as const) {
+    test(`${command} --session rejects a ${fault} ${subdirectory} subdirectory`, async () => {
+      await closedEvidenceFixture(async (session, id) => {
+        const directory = subdirectory === "ledger" ? session.storage.ledgerDir : session.storage.sanitizedEvidenceDir;
+        if (fault === "group-accessible") chmodSync(directory, 0o750);
+        else {
+          renameSync(directory, `${directory}-target`);
+          symlinkSync(`${directory}-target`, directory);
+        }
+        const before = readdirSync(session.storage.root, { recursive: true }).sort();
+        const result = await runCli([command, "--session", id, "--json"], { stdin: "", cwd: process.cwd() });
+        expect(result.exitCode).toBe(1);
+        expect(JSON.parse(result.stdout)).toEqual({ ok: false, error: fault === "group-accessible"
+          ? "storage_root_invalid:group_or_other_accessible" : "storage_root_invalid:symlink_component" });
+        expect(readdirSync(session.storage.root, { recursive: true }).sort()).toEqual(before);
+      });
+    }, 15000);
+  }
+}
