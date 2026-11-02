@@ -259,3 +259,70 @@ It covers the second RED run of item 13 (load 11.60) and every later RED or brea
   never acknowledges this one.
 - **Deviations:** none.
 - **Halts:** none. No production change was needed, and production detects the fault.
+
+## Item 5: cover refused input, SIGINT exit and the returned session
+
+- **Built on:** `51fc50daafd87b94487bb870d07f5629eaeebace`.
+- **Relies on, at the item's base:**
+  - The harness `request` wrapper, `test/phase3a/runtime-harness.ts` line 564,
+    `if (!accepted.ok) return accepted;`, before it sends `pty_input` or `pty_resize` to the writer's
+    host (lines 565 to 570); the broker refuses a stale fencing token with `stale_fencing_token`
+    (`packages/broker/src/command-legality.ts`, predicate 7).
+  - The fixture's handlers, `test/phase3a/fixture-adapters.ts` lines 31 to 33:
+    `const finish = () => process.stdout.write("", () => process.exit(0));`,
+    `process.on("SIGTERM", finish);`, `process.on("SIGINT", finish);`.
+  - The returned session, `test/phase3a/runtime-harness.ts` line 578,
+    `Object.freeze({ client, storage: state.storage, close, interrupt })`; the existing check,
+    `test/phase3a/harness-lifecycle.test.ts` line 46, uses `Object.keys`, which sees no symbol or
+    non-enumerable key.
+  - The third test of `test/phase3a/environment-equality.test.ts`, lines 97 to 150, `a secret-marked
+    value never appears in any diagnostic, error, or evidence artifact produced by the session`, which
+    issued no refused command, so no error payload was checked against the marker.
+- **Change:** tests only; no production, harness or fixture change.
+- **Files changed:** `test/phase3a/harness-lifecycle.test.ts`, `test/phase3a/environment-equality.test.ts`,
+  `docs/verification/hardening-b-build-log.md`.
+- **Tests added or changed:**
+  - `test/phase3a/harness-lifecycle.test.ts`, which then holds 9 passing tests, gains:
+    - `the returned session holds only its client, storage, close and interrupt`: `Reflect.ownKeys`
+      equals exactly those four keys in order, and the session is frozen.
+    - `a refused pty_input or pty_resize never reaches the child`: a `pty_input` and a `pty_resize`
+      with a stale fencing token are refused with `stale_fencing_token`; after 100 ms, ten periods of
+      the fixture's size check, an accepted input and an accepted resize follow; the output up to the
+      accepted resize report holds the accepted input and neither the refused bytes nor a report of the
+      refused size.
+    - `the fixture child exits cleanly on SIGINT`: the fixture executable runs with `--fixture-run`
+      under a `Bun.Terminal` with a synthetic two-variable environment, prints `FIXTURE_READY`, receives
+      `SIGINT`, and exits with code 0 and no signal.
+  - `test/phase3a/environment-equality.test.ts`, which still holds 3 passing tests: its third test now
+    issues a refused `pty_input` with a stale fencing token, asserts it is refused, and includes its
+    result in the serialized payload checked against the marker.
+- **Before the breaks:** the two files pass at the item's base. Load 1.81 2.32 2.25. Exit 0, 12 pass.
+  `item5-new-tests-run1.log`, `dc8f4232d8ab196c0d6026612b615f17d9b8e75c5cc47e727c0565113beca618`. A
+  typecheck before it: exit 0, `item5-tsc-pre-run1.log`,
+  `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+- **Breaks,** one per check, each applied alone, run, and restored with `git checkout --`; after each,
+  `shasum -a 256 -c` reports the originals OK: `test/phase3a/runtime-harness.ts`
+  `d60464eca2b29575a717ef468e793e8a140f153437854795ecf0353e156610d8` and
+  `test/phase3a/fixture-adapters.ts` `45cb50f6be3b3755a917f6fe6c0ada2716d950f465a7078015328ce171648d50`.
+  Each failure is an intended failure under the Founder ruling above.
+
+| Break | Diff SHA-256 | Load at start | Failing run | Log | SHA-256 |
+| --- | --- | --- | --- | --- | --- |
+| A: the harness forwards a refused `pty_input` or `pty_resize` to the host | 9de659d02f26d3293032ad42ad0a4cece2fe53ca61b857319977177c423cbe34 | 2.07 2.30 2.25 | `expect(received).not.toContain(expected)`, `Expected to not contain: "REFUSED_INPUT"`; the output held the refused bytes and `FIXTURE_RESIZE 77 23`. 1 fail | item5-break-a-run1.log | b723c0bf7be6940a0a3a0706285bcb84e57d7ecc2598ebd63d6625163763af99 |
+| B: the session gains a non-enumerable symbol key holding the broker | 14dda792d905ed249719d2539a0d40b66eeab40151c8e962344616d24d116181 | 1.96 2.26 2.24 | `expect(received).toEqual(expected)`, received adds `Symbol(fixture.broker)`; the existing `Object.keys` test passed under the same break. 1 pass, 1 fail | item5-break-b-run1.log | 225131d112df6ed13afe0527308ce6c580056a23d0b7a0711562fbba99fb695f |
+| C: the fixture's `SIGINT` handler is removed | 38bf715a6be249b0ffa2b3830e4dd4e22cf0cda85aea05f7ac94eda22993748c | 1.96 2.25 2.23 | `Expected: 0`, `Received: 130`. 1 fail | item5-break-c-run1.log | a0f8f488b9e0441659a403b89c43f6007fa92a1da952493ea585691e2c36a05e |
+| D: a refusal's `detail` carries the seeded synthetic marker | a351ff5bc5f756869f1eff72b034c91fab4db921dbfca68954773107ea5253d5 | 2.12 2.27 2.24 | at line 128, `Expected to not contain: "task50-synthetic-secret-marker"`, the `refused` payload's `detail` holding it. 1 fail | item5-break-d-run1.log | 9d4764de0e06841605631af962b200a8d2483b3e1adfa854468cc2f5d08d510d |
+
+  The diffs are saved under `/Users/michaeldaley/builds/hardening-b-r1-pr/` as `item5-break-a.diff`
+  to `item5-break-d.diff`. Break D reads only the seeded synthetic `MADV_SECRET_MARKER`.
+- **Runs after the restores,** each exit 0 with 0 fail:
+
+| Command | Load at start | Result | Log | SHA-256 |
+| --- | --- | --- | --- | --- |
+| `bunx tsc --noEmit` | 2.08 2.25 2.23 | no output | item5-tsc-run1.log | e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 |
+| `bun test test/phase3a/harness-lifecycle.test.ts` | 2.08 2.25 2.23 | 9 pass | item5-green-harness-lifecycle-run1.log | 05d176fb5acf053d5f177c4cb62a56b4102e132b71f8284f6746252c000983d8 |
+| `bun test test/phase3a/environment-equality.test.ts` | 2.00 2.23 2.23 | 3 pass | item5-green-environment-equality-run1.log | aae22b26393a975d5478ae82b507a5e7096b844c38fe6a1b56b01ab41dff73f9 |
+| `bun test test/phase3a` | 2.08 2.25 2.23 | 149 pass | item5-suite-test-phase3a-run1.log | f941ce20838b2511698d7eb8f1dceb2add236f94005f78c989bac9e0a1c3e7ab |
+
+- **Deviations:** none.
+- **Halts:** none.

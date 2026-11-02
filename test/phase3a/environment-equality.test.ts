@@ -108,6 +108,10 @@ test("a secret-marked value never appears in any diagnostic, error, or evidence 
         output: session!.client.output(execution.identity.execution_id)[Symbol.asyncIterator](), frames: [] as OutputFrame[],
       }));
       await Promise.all(streams.map(({ output, frames }) => ready(output, frames)));
+      const refused = await session.client.request({ kind: "pty_input", commandId: crypto.randomUUID(),
+        sessionId: snapshots[0]!.sessionId, executionId: "builder", fencingToken: snapshots[0]!.fencingToken! + 1,
+        bytes: new TextEncoder().encode("Task 50 refused input") });
+      expect(refused.ok).toBe(false);
       const drains = streams.map(async ({ output, frames }) => {
         for (;;) {
           const frame = await output.next();
@@ -121,7 +125,7 @@ test("a secret-marked value never appears in any diagnostic, error, or evidence 
       await Promise.all(drains);
       snapshots.push(await session.client.getSnapshot());
       expect(snapshots[1]!.phase).toBe("closed");
-      expect(JSON.stringify({ snapshots, result })).not.toContain(marker);
+      expect(JSON.stringify({ snapshots, result, refused })).not.toContain(marker);
       for (const { frames } of streams) {
         expect(frames.length).toBeGreaterThan(0);
         expect(JSON.stringify(frames)).not.toContain(marker);
