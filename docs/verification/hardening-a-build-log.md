@@ -842,3 +842,165 @@ SHA-256: `d75037c7ac696a111e8b8394364972556f29527fa3592a90e7c608c918186f41`
 
 Passing file counts: publish-legality.test.ts 24; incident-atomicity.test.ts 9.
 Broker suite 305 pass, 0 fail. `git diff --check`: exit 0. No active halt.
+
+## Item 4: child environment equals the launch frame
+
+Built on: `dcf5fb874c116ce2f075e8f067fc611cef702cd4`.
+
+Files changed: `packages/pty-host/test/environment.test.ts` and this log.
+
+Relies on spec section 3.2: "The host passes only that environment to the
+child." Production packages/pty-host/src/terminal.ts:79-83:
+
+```ts
+  const child = Bun.spawn([path, ...argv], {
+    terminal,
+    detached: true,
+    env: { ...env },
+  });
+```
+
+Test added: `the governed child receives exactly the launch frame environment
+despite a host-only variable` (one passing test in environment.test.ts).
+The real host receives only a synthetic host-only variable. Its real governed
+Bun child receives the launch frame's two synthetic variables, reports its
+entire environment, then is terminated through the host protocol. Both
+runtimes disable dotenv loading. No ambient values can enter the report.
+
+Deliberate break: a test-only host preload made the real governed spawn merge
+the host environment into the launch environment. git diff showed the break.
+The valid RED run reported the extra MADV_HOST_ONLY entry at the exact
+environment-equality assertion. This intended RED began at load 2.02; under
+the Founder's clarified B9 ruling it is evidence, not a halt.
+
+The break was restored, cmp matched the pre-break copy, and restored SHA-256 is
+`561fa2866a8a98a1a257721ae58f73b02615ba5eec217f95240e116e525710f0`.
+
+Deviation/self-fix: the first one-shot /usr/bin/env fixture returned host exit
+code 1 before reaching the environment assertion. This is not accepted RED
+evidence. Its first load was 1.40, so B4 allowed a fixture correction. The
+controlled-lifetime Bun fixture preserves exact environment equality and
+allows protocol-driven termination after the report arrives. Verification
+restarted with typecheck after that correction. No production change.
+
+Command: `export PATH="/Users/michaeldaley/.bun/bin:$PATH"; runtime check`
+
+Exit: 0. Summary: runtime match or silent success
+
+Uptime: runtime check, not a test
+
+Log: `/Users/michaeldaley/builds/hardening-a-r1-pr/logs/item-04-runtime-run1.log`
+
+SHA-256: `2b1d8a5ab9bebb7a1de8417a1458f7d8ff03fd90e03fe98190496a94b162ab1f`
+
+Command: `export PATH="/Users/michaeldaley/.bun/bin:$PATH"; bun test packages/pty-host/test/environment.test.ts`
+
+Exit: 1. Summary: 0 pass / 1 fail / 1 expect() calls / Ran 1 test across 1 file. [3.08s]
+
+Uptime: 8:51  up 8 days, 59 mins, 17 users, load averages: 1.40 2.04 2.23
+
+Log: `/Users/michaeldaley/builds/hardening-a-r1-pr/logs/item-04-red-run1.log`
+
+SHA-256: `40158001f93711cf044db39e7f3a64462ba810a82133b6cc0c8b60297e2e3d2d`
+
+Failing run, verbatim:
+
+```text
+bun test v1.4.2 (744846f84)
+
+packages/pty-host/test/environment.test.ts:
+26 |     host.stdin.flush();
+27 |     const code = await Promise.race([
+28 |       host.exited,
+29 |       new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("host did not exit")), 4000); }),
+30 |     ]);
+31 |     expect(code).toBe(0);
+                      ^
+error: expect(received).toBe(expected)
+
+Expected: 0
+Received: 1
+
+      at <anonymous> (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/packages/pty-host/test/environment.test.ts:31:18)
+(fail) the governed child receives exactly the launch frame environment despite a host-only variable [3068.38ms]
+
+ 0 pass
+ 1 fail
+ 1 expect() calls
+Ran 1 test across 1 file. [3.08s]
+```
+
+Command: `export PATH="/Users/michaeldaley/.bun/bin:$PATH"; bun test packages/pty-host/test/environment.test.ts`
+
+Exit: 1. Summary: 0 pass / 1 fail / 4 expect() calls / Ran 1 test across 1 file. [170.00ms]
+
+Uptime: 8:53  up 8 days,  1:02, 17 users, load averages: 2.02 2.00 2.18
+
+Log: `/Users/michaeldaley/builds/hardening-a-r1-pr/logs/item-04-red-run2.log`
+
+SHA-256: `2522952ba4adf19f21583582c721f42a1e1b76cc123ffa044bc07f98ad6ac18d`
+
+Failing run, verbatim:
+
+```text
+bun test v1.4.2 (744846f84)
+
+packages/pty-host/test/environment.test.ts:
+53 |       new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("host did not exit")), 4000); }),
+54 |     ]);
+55 |     await pumped;
+56 |     expect({ code, stderr: await stderr }).toEqual({ code: 0, stderr: "" });
+57 |     expect(launched).toBe(true);
+58 |     expect(JSON.parse(Buffer.concat(output).toString().trim())).toEqual(launchEnvironment);
+                                                                     ^
+error: expect(received).toEqual(expected)
+
+  {
+    "MADV_CHILD_ONE": "synthetic-child-one",
+    "MADV_CHILD_TWO": "synthetic-child-two",
++   "MADV_HOST_ONLY": "synthetic-host-only",
+  }
+
+- Expected  - 0
++ Received  + 1
+
+      at <anonymous> (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/packages/pty-host/test/environment.test.ts:58:65)
+(fail) the governed child receives exactly the launch frame environment despite a host-only variable [159.45ms]
+
+ 0 pass
+ 1 fail
+ 4 expect() calls
+Ran 1 test across 1 file. [170.00ms]
+```
+
+Command: `export PATH="/Users/michaeldaley/.bun/bin:$PATH"; bunx tsc --noEmit`
+
+Exit: 0. Summary: runtime match or silent success
+
+Uptime: 8:53  up 8 days,  1:02, 17 users, load averages: 1.86 1.97 2.17
+
+Log: `/Users/michaeldaley/builds/hardening-a-r1-pr/logs/item-04-typecheck-run1.log`
+
+SHA-256: `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`
+
+Command: `export PATH="/Users/michaeldaley/.bun/bin:$PATH"; bun test packages/pty-host/test/environment.test.ts`
+
+Exit: 0. Summary: 1 pass / 0 fail / 4 expect() calls / Ran 1 test across 1 file. [150.00ms]
+
+Uptime: 8:53  up 8 days,  1:02, 17 users, load averages: 2.11 2.02 2.19
+
+Log: `/Users/michaeldaley/builds/hardening-a-r1-pr/logs/item-04-green-run1.log`
+
+SHA-256: `ded7634f98600fe093908eff344397936e7ff2d79feda28552762a6d09201f6a`
+
+Command: `export PATH="/Users/michaeldaley/.bun/bin:$PATH"; bun test packages/pty-host`
+
+Exit: 0. Summary: 49 pass / 0 fail / 773 expect() calls / Ran 49 tests across 6 files. [26.39s]
+
+Uptime: 8:53  up 8 days,  1:02, 17 users, load averages: 2.11 2.02 2.19
+
+Log: `/Users/michaeldaley/builds/hardening-a-r1-pr/logs/item-04-pty-host-run1.log`
+
+SHA-256: `aba8bf44f1386501373bdce8b8490c462397d9b8e4526952c722cf21acf3331c`
+
+`git diff --check`: exit 0. PTY-host suite: 49 pass, 0 fail. No active halt.
