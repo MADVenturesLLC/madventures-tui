@@ -2046,3 +2046,142 @@ SHA-256: `de72d8481aff5a996dc5609bbcc8633171de413850deb3413bfd75109bb0045d`
 doctor.test.ts 12 pass, 0 fail; MadBridge 518 pass, 0 fail.
 `git diff --check`: exit 0 after correcting the item 7 log rendering.
 Deviation: item 7 log-formatting/gate-report correction above. No active halt.
+
+## Item 9: observe temporary paths that disappear within preflight
+
+Built on: `458fba01e63081009f5e02699588a409d684ca08`.
+
+Files changed: packages/supervisor/test/preflight.test.ts and this log.
+
+Relies on the parent preflight.test.ts:239-249 test, verbatim:
+
+```ts
+test("preflight creates nothing", async () => {
+  const f = fixture();
+  writeFileSync(join(f.input.worktree,"dirty-fixture"),"fixture dirty status");
+  const status=Bun.spawnSync(["git","--no-optional-locks","-C",f.input.worktree,"status","--porcelain=v1","-z"],{stdout:"pipe",stderr:"pipe"});
+  expect(status.exitCode).toBe(0);
+  const before = listing(f.root); const temporary = readdirSync(f.temp).sort();
+  const r = await f.run(); expect(r.ok).toBe(true);
+  expect(listing(f.root)).toEqual(before); expect(readdirSync(f.temp).sort()).toEqual(temporary);
+  if (r.ok) { expect(r.plan.repositoryFingerprint.statusSha256).toBe(new Bun.CryptoHasher("sha256").update(status.stdout).digest("hex")); expect(Object.isFrozen(r.plan)).toBe(true); expect(Object.isFrozen(r.plan.executions)).toBe(true); for (const e of r.plan.executions) { expect(Object.isFrozen(e)).toBe(true); expect(Object.isFrozen(e.arguments)).toBe(true); expect(Object.isFrozen(e.environment)).toBe(true); expect(e.artifactSha256).toBe(new Bun.CryptoHasher("sha256").update(readFileSync(e.executablePath)).digest("hex")); } }
+});
+test("probe environment equals launch environment", async () => {
+```
+
+It retains every previous root-listing, temporary-listing, fingerprint and
+frozen-plan assertion. A recursive filesystem-event recorder now watches the
+test-owned temporary location throughout the call, retaining path names even
+when a file is already gone. Missing path names or watcher errors fail the
+test. The observer drains for 250 ms before closing; it creates no file.
+
+A new calibration test, `temporary path recording sees files a child creates
+and removes before returning`, creates/deletes a root file, directory and
+nested file inside a child process. It requires the complete three-path set.
+The calibration ran before relying on the observer and passed; its focused
+run filtered 29 other tests only for this supplemental capability check. The
+normal preflight file and supervisor suite subsequently ran unfiltered.
+
+Deliberate break: inject a preflight probe that writes and removes the
+synthetic path created-and-removed-within-call before returning. git diff
+showed the break. `preflight creates nothing` failed at the empty recorded-
+path assertion, although the before/after listings would agree. The break was
+restored; cmp matched its pre-break copy, SHA-256
+`731baccdf2fb4e6d9de8b8ac32da2c94ac30ad84df6530e00a15aa78017d20b1`.
+No production change was required.
+
+Command: `export PATH="/Users/michaeldaley/.bun/bin:$PATH"; command -v bun; command -v bunx; shasum -a 256 "$(command -v bun)"; bun --version; bun -e 'process.stdout.write(Bun.revision)'`
+
+Exit: 0. Summary: runtime match or silent success
+
+Uptime: runtime check, not a test
+
+Log: `/Users/michaeldaley/builds/hardening-a-r1-pr/logs/item-09-runtime-run1.log`
+
+SHA-256: `2b1d8a5ab9bebb7a1de8417a1458f7d8ff03fd90e03fe98190496a94b162ab1f`
+
+Command: `export PATH="/Users/michaeldaley/.bun/bin:$PATH"; bun test packages/supervisor/test/preflight.test.ts -t 'temporary path recording sees files'`
+
+Exit: 0. Summary: 1 pass / 29 filtered out / 0 fail / 3 expect() calls / Ran 1 test across 1 file. [285.00ms]
+
+Uptime: 9:04  up 8 days,  1:13, 17 users, load averages: 1.42 1.43 1.73
+
+Log: `/Users/michaeldaley/builds/hardening-a-r1-pr/logs/item-09-recorder-calibration-run1.log`
+
+SHA-256: `77ae2a8b2252728090f0c59f9a90dbd4ad84c0721b20fe978106319be94caa23`
+
+Command: `export PATH="/Users/michaeldaley/.bun/bin:$PATH"; bun test packages/supervisor/test/preflight.test.ts -t '^preflight creates nothing$'`
+
+Exit: 1. Summary: 0 pass / 29 filtered out / 1 fail / 8 expect() calls / Ran 1 test across 1 file. [932.00ms]
+
+Uptime: 9:05  up 8 days,  1:13, 17 users, load averages: 1.22 1.37 1.69
+
+Log: `/Users/michaeldaley/builds/hardening-a-r1-pr/logs/item-09-red-run1.log`
+
+SHA-256: `2d7204063ab764148df3613b6a4eaedd5b67e305ec9f16b26d66250f824a45e7`
+
+Failing diagnostic rendering; full raw run remains in the hashed log:
+
+```text
+bun test v1.4.2 (744846f84)
+
+packages/supervisor/test/preflight.test.ts:
+286 |   const r = await f.run({ probe: async req => {
+287 |     const transient = join(f.temp, "created-and-removed-within-call");
+288 |     writeFileSync(transient, "synthetic"); rmSync(transient);
+289 |     return f.deps.probe!(req);
+290 |   } }).finally(() => recorder.stop()); expect(r.ok).toBe(true);
+291 |   expect([...recorder.paths]).toEqual([]);
+                                    ^
+error: expect(received).toEqual(expected)
+
+- []
++ [
++   "created-and-removed-within-call",
++ ]
+
+- Expected  - 1
++ Received  + 3
+
+      at <anonymous> (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/packages/supervisor/test/preflight.test.ts:291:31)
+(fail) preflight creates nothing [916.88ms]
+
+ 0 pass
+ 29 filtered out
+ 1 fail
+ 8 expect() calls
+Ran 1 test across 1 file. [932.00ms]
+```
+
+Command: `export PATH="/Users/michaeldaley/.bun/bin:$PATH"; bunx tsc --noEmit`
+
+Exit: 0. Summary: runtime match or silent success
+
+Uptime: 9:05  up 8 days,  1:14, 17 users, load averages: 1.53 1.43 1.70
+
+Log: `/Users/michaeldaley/builds/hardening-a-r1-pr/logs/item-09-typecheck-run1.log`
+
+SHA-256: `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`
+
+Command: `export PATH="/Users/michaeldaley/.bun/bin:$PATH"; bun test packages/supervisor/test/preflight.test.ts`
+
+Exit: 0. Summary: 30 pass / 0 fail / 352 expect() calls / Ran 30 tests across 1 file. [28.53s]
+
+Uptime: 9:05  up 8 days,  1:14, 17 users, load averages: 1.53 1.43 1.70
+
+Log: `/Users/michaeldaley/builds/hardening-a-r1-pr/logs/item-09-green-run1.log`
+
+SHA-256: `27e95aea90b610e04c82aec6070401f9527177574c0c3086a74a5351c6746573`
+
+Command: `export PATH="/Users/michaeldaley/.bun/bin:$PATH"; bun test packages/supervisor`
+
+Exit: 0. Summary: 79 pass / 0 fail / 5827 expect() calls / Ran 79 tests across 5 files. [58.38s]
+
+Uptime: 9:05  up 8 days,  1:14, 17 users, load averages: 1.63 1.46 1.70
+
+Log: `/Users/michaeldaley/builds/hardening-a-r1-pr/logs/item-09-supervisor-run1.log`
+
+SHA-256: `d9e066e80a4cdd7fbd515ed261ac34dbda16061d0d4e03871e527437a0bbc3e4`
+
+preflight.test.ts 30 pass, 0 fail; supervisor 79 pass, 0 fail.
+`git diff --check`: exit 0. Deviations: none. No active halt.
