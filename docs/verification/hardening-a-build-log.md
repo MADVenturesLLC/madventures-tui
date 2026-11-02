@@ -883,7 +883,7 @@ controlled-lifetime Bun fixture preserves exact environment equality and
 allows protocol-driven termination after the report arrives. Verification
 restarted with typecheck after that correction. No production change.
 
-Command: `export PATH="/Users/michaeldaley/.bun/bin:$PATH"; runtime check`
+Command: `export PATH="/Users/michaeldaley/.bun/bin:$PATH"; command -v bun; command -v bunx; shasum -a 256 "$(command -v bun)"; bun --version; bun -e 'process.stdout.write(Bun.revision)'`
 
 Exit: 0. Summary: runtime match or silent success
 
@@ -1031,7 +1031,7 @@ received false. No assertion was removed or weakened. No production change.
 The final test file was restored and cmp matched its saved pre-break copy.
 Restored SHA-256: `eb58a523928693060b78bdda0176031bd84f31bdc7b52d2c097487c117c8adae`.
 
-Command: `export PATH="/Users/michaeldaley/.bun/bin:$PATH"; runtime check`
+Command: `export PATH="/Users/michaeldaley/.bun/bin:$PATH"; command -v bun; command -v bunx; shasum -a 256 "$(command -v bun)"; bun --version; bun -e 'process.stdout.write(Bun.revision)'`
 
 Exit: 0. Summary: runtime match or silent success
 
@@ -1057,7 +1057,7 @@ Failing run, verbatim:
 bun test v1.4.2 (744846f84)
 
 packages/broker/test/fencing.test.ts:
-38 | 
+38 |
 39 | test("both value-import checks catch imports at any indentation", () => {
 40 |   for (const indent of ["", "  ", "\t"]) {
 41 |     expect(VALUE_IMPORT.test(`${indent}import { forbidden } from "unexpected-module";`)).toBe(true);
@@ -1166,9 +1166,9 @@ Failing run, verbatim:
 bun test v1.4.2 (744846f84)
 
 packages/broker/test/fencing.test.ts:
-36 | 
+36 |
 37 | const VALUE_IMPORT = /^import\s+(?!type\b)/;
-38 | 
+38 |
 39 | test("both value-import checks catch imports at any indentation", () => {
 40 |   for (const indent of ["", "  ", "\t"]) {
 41 |     expect(VALUE_IMPORT.test(`${indent}import { forbidden } from "unexpected-module";`)).toBe(true);
@@ -1290,4 +1290,759 @@ Log: `/Users/michaeldaley/builds/hardening-a-r1-pr/logs/item-07-broker-run1.log`
 SHA-256: `b8fac878a40104b205e5c200e82a1bfb77c7329351d572e423517096c4455c56`
 
 fencing.test.ts 70 pass, 0 fail; broker 306 pass, 0 fail.
-`git diff --check`: exit 0. Deviation: control assertion ordering above. No halt.
+`git diff --check` before this commit reported three trailing spaces in
+copied diagnostic blank lines; the shell mistakenly continued to commit.
+The raw external logs retain those bytes; the log rendering is corrected in
+the next item commit. Deviation: assertion ordering and this gate-reporting
+error. No B9 halt applies to the formatting correction.
+
+### Correction carried into the next log commit
+
+Item 7 diff-check evidence: item-07-diffcheck-run1.log, exit 2, SHA-256
+`b0f121a8c99b5e4a9d4e9c9ad8a8ed6aa656292c3c6da85df6689f88711e0d01`. Three copied source-context blank lines are whitespace-
+normalized in this Markdown rendering. The original logs remain full and
+byte-identical; their quoted rendering is not a byte-for-byte log copy.
+Subsequent commit commands fail immediately on diff-check errors.
+
+## Item 8: doctor statuses and both directories
+
+Built on: `f527c00aaf5a9cfe0d98fd17276613911803781c`.
+
+Files changed: apps/madbridge/test/doctor.test.ts and this log.
+
+Relies on these parent doctor.test.ts:53-69 tests, verbatim:
+
+```ts
+  test("no files created in cwd", async () => {
+    const before = readdirSync(tempDir);
+    const result = await runDoctor([], { cwd: tempDir });
+    expect(result.exitCode).toBe(0);
+    const after = readdirSync(tempDir);
+    expect(after).toEqual(before);
+  });
+
+  test("no files created in home .madv-runtime", async () => {
+    // Use a temp runtime dir to verify doctor doesn't write to it
+    const runtimeDir = join(tempDir, "runtime");
+    const before = existsSync(runtimeDir);
+    const result = await runDoctor([], { cwd: tempDir });
+    expect(result.exitCode).toBe(0);
+    const after = existsSync(runtimeDir);
+    expect(after).toBe(before);
+  });
+```
+
+And the parent output-format assertion at lines 132-141, verbatim:
+
+```ts
+  test("each check has name, status, and detail", async () => {
+    const result = await runDoctor(["--json"]);
+    expect(result.exitCode).toBe(0);
+    const json = JSON.parse(result.stdout);
+    for (const check of json.checks) {
+      expect(check).toHaveProperty("name");
+      expect(check).toHaveProperty("status");
+      expect(check).toHaveProperty("detail");
+      expect(["ok", "warn", "fail"]).toContain(check.status);
+    }
+```
+
+The shared fixture runner now compares recursive path listings for the actual
+fixture HOME and cwd before cleanup on every doctor invocation. The eight
+check-coverage tests require their fixture statuses: all ok except absent
+exact-model configuration, which must warn. The output-format test also
+requires the expected status per name. Every pre-existing assertion remains.
+The same twelve tests are strengthened; their names remain unchanged.
+
+Three deliberate breaks, each shown by git diff and restored by cmp:
+1. The synthetic claude executable exits 1: claude status is warn, causing
+   its named coverage test and the output-format test to fail (10 pass/2 fail).
+2. A synthetic file is written in fixture HOME after the command: all twelve
+   calls fail at the home listing assertion (0 pass/12 fail).
+3. A synthetic file is written in fixture cwd: all twelve calls fail at the
+   cwd listing assertion (0 pass/12 fail).
+
+Each restoration matched SHA-256
+`42c676202aabc5f9c8c23076f644d971c8ead72f8efa5dd43354335bf3300ec6`.
+PATH and HOME are restored by the existing finally block after every call,
+including each intended failure. No real provider executable is started.
+No production change and no new dependency.
+
+Command: `export PATH="/Users/michaeldaley/.bun/bin:$PATH"; command -v bun; command -v bunx; shasum -a 256 "$(command -v bun)"; bun --version; bun -e 'process.stdout.write(Bun.revision)'`
+
+Exit: 0. Summary: runtime match or silent success
+
+Uptime: runtime check, not a test
+
+Log: `/Users/michaeldaley/builds/hardening-a-r1-pr/logs/item-08-runtime-run1.log`
+
+SHA-256: `2b1d8a5ab9bebb7a1de8417a1458f7d8ff03fd90e03fe98190496a94b162ab1f`
+
+Command: `export PATH="/Users/michaeldaley/.bun/bin:$PATH"; bun test apps/madbridge/test/doctor.test.ts`
+
+Exit: 1. Summary: 10 pass / 2 fail / 62 expect() calls / Ran 12 tests across 1 file. [4.53s]
+
+Uptime: 8:59  up 8 days,  1:08, 17 users, load averages: 0.95 1.50 1.88
+
+Log: `/Users/michaeldaley/builds/hardening-a-r1-pr/logs/item-08-red-status-run1.log`
+
+SHA-256: `7da00f30bfa810f3f7fe93ba0fe5d2e019f82f3e58302c94d7bcc708046bfe51`
+
+Failing run (raw log remains verbatim; Markdown whitespace normalized):
+
+```text
+bun test v1.4.2 (744846f84)
+
+apps/madbridge/test/doctor.test.ts:
+(pass) doctor: read-only invariant > no files created in cwd [524.07ms]
+(pass) doctor: read-only invariant > no files created in home .madv-runtime [369.97ms]
+(pass) doctor: check coverage > doctor includes platform/architecture check [314.63ms]
+(pass) doctor: check coverage > doctor includes bun check [363.56ms]
+ 96 |   test("doctor includes claude-code check", async () => {
+ 97 |     const result = await runDoctor(["--json"]);
+ 98 |     const json = JSON.parse(result.stdout);
+ 99 |     const names = json.checks.map((c: any) => c.name);
+100 |     expect(names).toContain("claude-code");
+101 |     expect(json.checks.find((check: any) => check.name === "claude-code")?.status).toBe("ok");
+                                                                                         ^
+error: expect(received).toBe(expected)
+
+Expected: "ok"
+Received: "warn"
+
+      at <anonymous> (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:101:84)
+(fail) doctor: check coverage > doctor includes claude-code check [392.49ms]
+(pass) doctor: check coverage > doctor includes agy check [351.76ms]
+(pass) doctor: check coverage > doctor includes opentui check [357.26ms]
+(pass) doctor: check coverage > doctor includes directory-permissions check [393.71ms]
+(pass) doctor: check coverage > doctor includes adapter-protocol check [346.41ms]
+(pass) doctor: check coverage > doctor includes exact-model-visibility check [356.37ms]
+155 |     for (const check of json.checks) {
+156 |       expect(check).toHaveProperty("name");
+157 |       expect(check).toHaveProperty("status");
+158 |       expect(check).toHaveProperty("detail");
+159 |       expect(["ok", "warn", "fail"]).toContain(check.status);
+160 |       expect(check.status).toBe(EXPECTED_STATUSES[check.name]);
+                                 ^
+error: expect(received).toBe(expected)
+
+Expected: "ok"
+Received: "warn"
+
+      at <anonymous> (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:160:28)
+(fail) doctor: output format > each check has name, status, and detail [362.61ms]
+(pass) doctor: output format > ok field reflects aggregate check status [369.95ms]
+
+ 10 pass
+ 2 fail
+ 62 expect() calls
+Ran 12 tests across 1 file. [4.53s]
+```
+
+Command: `export PATH="/Users/michaeldaley/.bun/bin:$PATH"; bun test apps/madbridge/test/doctor.test.ts`
+
+Exit: 1. Summary: 0 pass / 12 fail / 24 expect() calls / Ran 12 tests across 1 file. [4.50s]
+
+Uptime: 8:59  up 8 days,  1:08, 17 users, load averages: 0.88 1.46 1.86
+
+Log: `/Users/michaeldaley/builds/hardening-a-r1-pr/logs/item-08-red-home-run1.log`
+
+SHA-256: `73f2cb6fb97aa8ec37528effa408ac8767ffb08e6031ea41a72834ce1b784be0`
+
+Failing run (raw log remains verbatim; Markdown whitespace normalized):
+
+```text
+bun test v1.4.2 (744846f84)
+
+apps/madbridge/test/doctor.test.ts:
+27 |     const cwdBefore = readdirSync(process.cwd(), { recursive: true }).sort();
+28 |     const homeBefore = readdirSync(root, { recursive: true }).sort();
+29 |     const result = await runHostCli(args, { ...ctx, cwd: process.cwd() });
+30 |     writeFileSync(join(root, "unexpected-doctor-home"), "synthetic"); // deliberate home write
+31 |     expect(readdirSync(process.cwd(), { recursive: true }).sort()).toEqual(cwdBefore);
+32 |     expect(readdirSync(root, { recursive: true }).sort()).toEqual(homeBefore);
+                                                               ^
+error: expect(received).toEqual(expected)
+
+  [
+    "bin",
+    "bin/agy",
+    "bin/bun",
+    "bin/claude",
+    "cwd",
++   "unexpected-doctor-home",
+  ]
+
+- Expected  - 0
++ Received  + 1
+
+      at runCli (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:32:59)
+      at async <anonymous> (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:61:26)
+(fail) doctor: read-only invariant > no files created in cwd [368.67ms]
+27 |     const cwdBefore = readdirSync(process.cwd(), { recursive: true }).sort();
+28 |     const homeBefore = readdirSync(root, { recursive: true }).sort();
+29 |     const result = await runHostCli(args, { ...ctx, cwd: process.cwd() });
+30 |     writeFileSync(join(root, "unexpected-doctor-home"), "synthetic"); // deliberate home write
+31 |     expect(readdirSync(process.cwd(), { recursive: true }).sort()).toEqual(cwdBefore);
+32 |     expect(readdirSync(root, { recursive: true }).sort()).toEqual(homeBefore);
+                                                               ^
+error: expect(received).toEqual(expected)
+
+  [
+    "bin",
+    "bin/agy",
+    "bin/bun",
+    "bin/claude",
+    "cwd",
++   "unexpected-doctor-home",
+  ]
+
+- Expected  - 0
++ Received  + 1
+
+      at runCli (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:32:59)
+      at async <anonymous> (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:71:26)
+(fail) doctor: read-only invariant > no files created in home .madv-runtime [359.19ms]
+27 |     const cwdBefore = readdirSync(process.cwd(), { recursive: true }).sort();
+28 |     const homeBefore = readdirSync(root, { recursive: true }).sort();
+29 |     const result = await runHostCli(args, { ...ctx, cwd: process.cwd() });
+30 |     writeFileSync(join(root, "unexpected-doctor-home"), "synthetic"); // deliberate home write
+31 |     expect(readdirSync(process.cwd(), { recursive: true }).sort()).toEqual(cwdBefore);
+32 |     expect(readdirSync(root, { recursive: true }).sort()).toEqual(homeBefore);
+                                                               ^
+error: expect(received).toEqual(expected)
+
+  [
+    "bin",
+    "bin/agy",
+    "bin/bun",
+    "bin/claude",
+    "cwd",
++   "unexpected-doctor-home",
+  ]
+
+- Expected  - 0
++ Received  + 1
+
+      at runCli (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:32:59)
+      at async <anonymous> (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:80:26)
+(fail) doctor: check coverage > doctor includes platform/architecture check [350.63ms]
+27 |     const cwdBefore = readdirSync(process.cwd(), { recursive: true }).sort();
+28 |     const homeBefore = readdirSync(root, { recursive: true }).sort();
+29 |     const result = await runHostCli(args, { ...ctx, cwd: process.cwd() });
+30 |     writeFileSync(join(root, "unexpected-doctor-home"), "synthetic"); // deliberate home write
+31 |     expect(readdirSync(process.cwd(), { recursive: true }).sort()).toEqual(cwdBefore);
+32 |     expect(readdirSync(root, { recursive: true }).sort()).toEqual(homeBefore);
+                                                               ^
+error: expect(received).toEqual(expected)
+
+  [
+    "bin",
+    "bin/agy",
+    "bin/bun",
+    "bin/claude",
+    "cwd",
++   "unexpected-doctor-home",
+  ]
+
+- Expected  - 0
++ Received  + 1
+
+      at runCli (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:32:59)
+      at async <anonymous> (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:89:26)
+(fail) doctor: check coverage > doctor includes bun check [348.93ms]
+27 |     const cwdBefore = readdirSync(process.cwd(), { recursive: true }).sort();
+28 |     const homeBefore = readdirSync(root, { recursive: true }).sort();
+29 |     const result = await runHostCli(args, { ...ctx, cwd: process.cwd() });
+30 |     writeFileSync(join(root, "unexpected-doctor-home"), "synthetic"); // deliberate home write
+31 |     expect(readdirSync(process.cwd(), { recursive: true }).sort()).toEqual(cwdBefore);
+32 |     expect(readdirSync(root, { recursive: true }).sort()).toEqual(homeBefore);
+                                                               ^
+error: expect(received).toEqual(expected)
+
+  [
+    "bin",
+    "bin/agy",
+    "bin/bun",
+    "bin/claude",
+    "cwd",
++   "unexpected-doctor-home",
+  ]
+
+- Expected  - 0
++ Received  + 1
+
+      at runCli (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:32:59)
+      at async <anonymous> (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:97:26)
+(fail) doctor: check coverage > doctor includes claude-code check [339.99ms]
+27 |     const cwdBefore = readdirSync(process.cwd(), { recursive: true }).sort();
+28 |     const homeBefore = readdirSync(root, { recursive: true }).sort();
+29 |     const result = await runHostCli(args, { ...ctx, cwd: process.cwd() });
+30 |     writeFileSync(join(root, "unexpected-doctor-home"), "synthetic"); // deliberate home write
+31 |     expect(readdirSync(process.cwd(), { recursive: true }).sort()).toEqual(cwdBefore);
+32 |     expect(readdirSync(root, { recursive: true }).sort()).toEqual(homeBefore);
+                                                               ^
+error: expect(received).toEqual(expected)
+
+  [
+    "bin",
+    "bin/agy",
+    "bin/bun",
+    "bin/claude",
+    "cwd",
++   "unexpected-doctor-home",
+  ]
+
+- Expected  - 0
++ Received  + 1
+
+      at runCli (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:32:59)
+      at async <anonymous> (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:105:26)
+(fail) doctor: check coverage > doctor includes agy check [408.66ms]
+27 |     const cwdBefore = readdirSync(process.cwd(), { recursive: true }).sort();
+28 |     const homeBefore = readdirSync(root, { recursive: true }).sort();
+29 |     const result = await runHostCli(args, { ...ctx, cwd: process.cwd() });
+30 |     writeFileSync(join(root, "unexpected-doctor-home"), "synthetic"); // deliberate home write
+31 |     expect(readdirSync(process.cwd(), { recursive: true }).sort()).toEqual(cwdBefore);
+32 |     expect(readdirSync(root, { recursive: true }).sort()).toEqual(homeBefore);
+                                                               ^
+error: expect(received).toEqual(expected)
+
+  [
+    "bin",
+    "bin/agy",
+    "bin/bun",
+    "bin/claude",
+    "cwd",
++   "unexpected-doctor-home",
+  ]
+
+- Expected  - 0
++ Received  + 1
+
+      at runCli (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:32:59)
+      at async <anonymous> (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:113:26)
+(fail) doctor: check coverage > doctor includes opentui check [379.38ms]
+27 |     const cwdBefore = readdirSync(process.cwd(), { recursive: true }).sort();
+28 |     const homeBefore = readdirSync(root, { recursive: true }).sort();
+29 |     const result = await runHostCli(args, { ...ctx, cwd: process.cwd() });
+30 |     writeFileSync(join(root, "unexpected-doctor-home"), "synthetic"); // deliberate home write
+31 |     expect(readdirSync(process.cwd(), { recursive: true }).sort()).toEqual(cwdBefore);
+32 |     expect(readdirSync(root, { recursive: true }).sort()).toEqual(homeBefore);
+                                                               ^
+error: expect(received).toEqual(expected)
+
+  [
+    "bin",
+    "bin/agy",
+    "bin/bun",
+    "bin/claude",
+    "cwd",
++   "unexpected-doctor-home",
+  ]
+
+- Expected  - 0
++ Received  + 1
+
+      at runCli (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:32:59)
+      at async <anonymous> (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:121:26)
+(fail) doctor: check coverage > doctor includes directory-permissions check [359.64ms]
+27 |     const cwdBefore = readdirSync(process.cwd(), { recursive: true }).sort();
+28 |     const homeBefore = readdirSync(root, { recursive: true }).sort();
+29 |     const result = await runHostCli(args, { ...ctx, cwd: process.cwd() });
+30 |     writeFileSync(join(root, "unexpected-doctor-home"), "synthetic"); // deliberate home write
+31 |     expect(readdirSync(process.cwd(), { recursive: true }).sort()).toEqual(cwdBefore);
+32 |     expect(readdirSync(root, { recursive: true }).sort()).toEqual(homeBefore);
+                                                               ^
+error: expect(received).toEqual(expected)
+
+  [
+    "bin",
+    "bin/agy",
+    "bin/bun",
+    "bin/claude",
+    "cwd",
++   "unexpected-doctor-home",
+  ]
+
+- Expected  - 0
++ Received  + 1
+
+      at runCli (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:32:59)
+      at async <anonymous> (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:129:26)
+(fail) doctor: check coverage > doctor includes adapter-protocol check [386.40ms]
+27 |     const cwdBefore = readdirSync(process.cwd(), { recursive: true }).sort();
+28 |     const homeBefore = readdirSync(root, { recursive: true }).sort();
+29 |     const result = await runHostCli(args, { ...ctx, cwd: process.cwd() });
+30 |     writeFileSync(join(root, "unexpected-doctor-home"), "synthetic"); // deliberate home write
+31 |     expect(readdirSync(process.cwd(), { recursive: true }).sort()).toEqual(cwdBefore);
+32 |     expect(readdirSync(root, { recursive: true }).sort()).toEqual(homeBefore);
+                                                               ^
+error: expect(received).toEqual(expected)
+
+  [
+    "bin",
+    "bin/agy",
+    "bin/bun",
+    "bin/claude",
+    "cwd",
++   "unexpected-doctor-home",
+  ]
+
+- Expected  - 0
++ Received  + 1
+
+      at runCli (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:32:59)
+      at async <anonymous> (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:137:26)
+(fail) doctor: check coverage > doctor includes exact-model-visibility check [338.83ms]
+27 |     const cwdBefore = readdirSync(process.cwd(), { recursive: true }).sort();
+28 |     const homeBefore = readdirSync(root, { recursive: true }).sort();
+29 |     const result = await runHostCli(args, { ...ctx, cwd: process.cwd() });
+30 |     writeFileSync(join(root, "unexpected-doctor-home"), "synthetic"); // deliberate home write
+31 |     expect(readdirSync(process.cwd(), { recursive: true }).sort()).toEqual(cwdBefore);
+32 |     expect(readdirSync(root, { recursive: true }).sort()).toEqual(homeBefore);
+                                                               ^
+error: expect(received).toEqual(expected)
+
+  [
+    "bin",
+    "bin/agy",
+    "bin/bun",
+    "bin/claude",
+    "cwd",
++   "unexpected-doctor-home",
+  ]
+
+- Expected  - 0
++ Received  + 1
+
+      at runCli (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:32:59)
+      at async <anonymous> (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:152:26)
+(fail) doctor: output format > each check has name, status, and detail [473.62ms]
+27 |     const cwdBefore = readdirSync(process.cwd(), { recursive: true }).sort();
+28 |     const homeBefore = readdirSync(root, { recursive: true }).sort();
+29 |     const result = await runHostCli(args, { ...ctx, cwd: process.cwd() });
+30 |     writeFileSync(join(root, "unexpected-doctor-home"), "synthetic"); // deliberate home write
+31 |     expect(readdirSync(process.cwd(), { recursive: true }).sort()).toEqual(cwdBefore);
+32 |     expect(readdirSync(root, { recursive: true }).sort()).toEqual(homeBefore);
+                                                               ^
+error: expect(received).toEqual(expected)
+
+  [
+    "bin",
+    "bin/agy",
+    "bin/bun",
+    "bin/claude",
+    "cwd",
++   "unexpected-doctor-home",
+  ]
+
+- Expected  - 0
++ Received  + 1
+
+      at runCli (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:32:59)
+      at async <anonymous> (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:165:26)
+(fail) doctor: output format > ok field reflects aggregate check status [361.74ms]
+
+ 0 pass
+ 12 fail
+ 24 expect() calls
+Ran 12 tests across 1 file. [4.50s]
+```
+
+Command: `export PATH="/Users/michaeldaley/.bun/bin:$PATH"; bun test apps/madbridge/test/doctor.test.ts`
+
+Exit: 1. Summary: 0 pass / 12 fail / 12 expect() calls / Ran 12 tests across 1 file. [4.51s]
+
+Uptime: 9:00  up 8 days,  1:09, 17 users, load averages: 0.98 1.47 1.85
+
+Log: `/Users/michaeldaley/builds/hardening-a-r1-pr/logs/item-08-red-cwd-run1.log`
+
+SHA-256: `be63d877a04f89730f27d71e6c1b55a47e507af00bd2e22065c02bc21ff49f70`
+
+Failing run (raw log remains verbatim; Markdown whitespace normalized):
+
+```text
+bun test v1.4.2 (744846f84)
+
+apps/madbridge/test/doctor.test.ts:
+26 |     process.chdir(ctx.cwd === cwd ? join(root, "cwd") : ctx.cwd);
+27 |     const cwdBefore = readdirSync(process.cwd(), { recursive: true }).sort();
+28 |     const homeBefore = readdirSync(root, { recursive: true }).sort();
+29 |     const result = await runHostCli(args, { ...ctx, cwd: process.cwd() });
+30 |     writeFileSync(join(process.cwd(), "unexpected-doctor-cwd"), "synthetic"); // deliberate cwd write
+31 |     expect(readdirSync(process.cwd(), { recursive: true }).sort()).toEqual(cwdBefore);
+                                                                        ^
+error: expect(received).toEqual(expected)
+
+- []
++ [
++   "unexpected-doctor-cwd",
++ ]
+
+- Expected  - 1
++ Received  + 3
+
+      at runCli (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:31:68)
+      at async <anonymous> (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:61:26)
+(fail) doctor: read-only invariant > no files created in cwd [364.96ms]
+26 |     process.chdir(ctx.cwd === cwd ? join(root, "cwd") : ctx.cwd);
+27 |     const cwdBefore = readdirSync(process.cwd(), { recursive: true }).sort();
+28 |     const homeBefore = readdirSync(root, { recursive: true }).sort();
+29 |     const result = await runHostCli(args, { ...ctx, cwd: process.cwd() });
+30 |     writeFileSync(join(process.cwd(), "unexpected-doctor-cwd"), "synthetic"); // deliberate cwd write
+31 |     expect(readdirSync(process.cwd(), { recursive: true }).sort()).toEqual(cwdBefore);
+                                                                        ^
+error: expect(received).toEqual(expected)
+
+- []
++ [
++   "unexpected-doctor-cwd",
++ ]
+
+- Expected  - 1
++ Received  + 3
+
+      at runCli (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:31:68)
+      at async <anonymous> (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:71:26)
+(fail) doctor: read-only invariant > no files created in home .madv-runtime [363.08ms]
+26 |     process.chdir(ctx.cwd === cwd ? join(root, "cwd") : ctx.cwd);
+27 |     const cwdBefore = readdirSync(process.cwd(), { recursive: true }).sort();
+28 |     const homeBefore = readdirSync(root, { recursive: true }).sort();
+29 |     const result = await runHostCli(args, { ...ctx, cwd: process.cwd() });
+30 |     writeFileSync(join(process.cwd(), "unexpected-doctor-cwd"), "synthetic"); // deliberate cwd write
+31 |     expect(readdirSync(process.cwd(), { recursive: true }).sort()).toEqual(cwdBefore);
+                                                                        ^
+error: expect(received).toEqual(expected)
+
+- []
++ [
++   "unexpected-doctor-cwd",
++ ]
+
+- Expected  - 1
++ Received  + 3
+
+      at runCli (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:31:68)
+      at async <anonymous> (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:80:26)
+(fail) doctor: check coverage > doctor includes platform/architecture check [353.98ms]
+26 |     process.chdir(ctx.cwd === cwd ? join(root, "cwd") : ctx.cwd);
+27 |     const cwdBefore = readdirSync(process.cwd(), { recursive: true }).sort();
+28 |     const homeBefore = readdirSync(root, { recursive: true }).sort();
+29 |     const result = await runHostCli(args, { ...ctx, cwd: process.cwd() });
+30 |     writeFileSync(join(process.cwd(), "unexpected-doctor-cwd"), "synthetic"); // deliberate cwd write
+31 |     expect(readdirSync(process.cwd(), { recursive: true }).sort()).toEqual(cwdBefore);
+                                                                        ^
+error: expect(received).toEqual(expected)
+
+- []
++ [
++   "unexpected-doctor-cwd",
++ ]
+
+- Expected  - 1
++ Received  + 3
+
+      at runCli (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:31:68)
+      at async <anonymous> (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:89:26)
+(fail) doctor: check coverage > doctor includes bun check [351.72ms]
+26 |     process.chdir(ctx.cwd === cwd ? join(root, "cwd") : ctx.cwd);
+27 |     const cwdBefore = readdirSync(process.cwd(), { recursive: true }).sort();
+28 |     const homeBefore = readdirSync(root, { recursive: true }).sort();
+29 |     const result = await runHostCli(args, { ...ctx, cwd: process.cwd() });
+30 |     writeFileSync(join(process.cwd(), "unexpected-doctor-cwd"), "synthetic"); // deliberate cwd write
+31 |     expect(readdirSync(process.cwd(), { recursive: true }).sort()).toEqual(cwdBefore);
+                                                                        ^
+error: expect(received).toEqual(expected)
+
+- []
++ [
++   "unexpected-doctor-cwd",
++ ]
+
+- Expected  - 1
++ Received  + 3
+
+      at runCli (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:31:68)
+      at async <anonymous> (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:97:26)
+(fail) doctor: check coverage > doctor includes claude-code check [482.93ms]
+26 |     process.chdir(ctx.cwd === cwd ? join(root, "cwd") : ctx.cwd);
+27 |     const cwdBefore = readdirSync(process.cwd(), { recursive: true }).sort();
+28 |     const homeBefore = readdirSync(root, { recursive: true }).sort();
+29 |     const result = await runHostCli(args, { ...ctx, cwd: process.cwd() });
+30 |     writeFileSync(join(process.cwd(), "unexpected-doctor-cwd"), "synthetic"); // deliberate cwd write
+31 |     expect(readdirSync(process.cwd(), { recursive: true }).sort()).toEqual(cwdBefore);
+                                                                        ^
+error: expect(received).toEqual(expected)
+
+- []
++ [
++   "unexpected-doctor-cwd",
++ ]
+
+- Expected  - 1
++ Received  + 3
+
+      at runCli (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:31:68)
+      at async <anonymous> (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:105:26)
+(fail) doctor: check coverage > doctor includes agy check [364.46ms]
+26 |     process.chdir(ctx.cwd === cwd ? join(root, "cwd") : ctx.cwd);
+27 |     const cwdBefore = readdirSync(process.cwd(), { recursive: true }).sort();
+28 |     const homeBefore = readdirSync(root, { recursive: true }).sort();
+29 |     const result = await runHostCli(args, { ...ctx, cwd: process.cwd() });
+30 |     writeFileSync(join(process.cwd(), "unexpected-doctor-cwd"), "synthetic"); // deliberate cwd write
+31 |     expect(readdirSync(process.cwd(), { recursive: true }).sort()).toEqual(cwdBefore);
+                                                                        ^
+error: expect(received).toEqual(expected)
+
+- []
++ [
++   "unexpected-doctor-cwd",
++ ]
+
+- Expected  - 1
++ Received  + 3
+
+      at runCli (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:31:68)
+      at async <anonymous> (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:113:26)
+(fail) doctor: check coverage > doctor includes opentui check [513.88ms]
+26 |     process.chdir(ctx.cwd === cwd ? join(root, "cwd") : ctx.cwd);
+27 |     const cwdBefore = readdirSync(process.cwd(), { recursive: true }).sort();
+28 |     const homeBefore = readdirSync(root, { recursive: true }).sort();
+29 |     const result = await runHostCli(args, { ...ctx, cwd: process.cwd() });
+30 |     writeFileSync(join(process.cwd(), "unexpected-doctor-cwd"), "synthetic"); // deliberate cwd write
+31 |     expect(readdirSync(process.cwd(), { recursive: true }).sort()).toEqual(cwdBefore);
+                                                                        ^
+error: expect(received).toEqual(expected)
+
+- []
++ [
++   "unexpected-doctor-cwd",
++ ]
+
+- Expected  - 1
++ Received  + 3
+
+      at runCli (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:31:68)
+      at async <anonymous> (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:121:26)
+(fail) doctor: check coverage > doctor includes directory-permissions check [323.60ms]
+26 |     process.chdir(ctx.cwd === cwd ? join(root, "cwd") : ctx.cwd);
+27 |     const cwdBefore = readdirSync(process.cwd(), { recursive: true }).sort();
+28 |     const homeBefore = readdirSync(root, { recursive: true }).sort();
+29 |     const result = await runHostCli(args, { ...ctx, cwd: process.cwd() });
+30 |     writeFileSync(join(process.cwd(), "unexpected-doctor-cwd"), "synthetic"); // deliberate cwd write
+31 |     expect(readdirSync(process.cwd(), { recursive: true }).sort()).toEqual(cwdBefore);
+                                                                        ^
+error: expect(received).toEqual(expected)
+
+- []
++ [
++   "unexpected-doctor-cwd",
++ ]
+
+- Expected  - 1
++ Received  + 3
+
+      at runCli (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:31:68)
+      at async <anonymous> (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:129:26)
+(fail) doctor: check coverage > doctor includes adapter-protocol check [311.58ms]
+26 |     process.chdir(ctx.cwd === cwd ? join(root, "cwd") : ctx.cwd);
+27 |     const cwdBefore = readdirSync(process.cwd(), { recursive: true }).sort();
+28 |     const homeBefore = readdirSync(root, { recursive: true }).sort();
+29 |     const result = await runHostCli(args, { ...ctx, cwd: process.cwd() });
+30 |     writeFileSync(join(process.cwd(), "unexpected-doctor-cwd"), "synthetic"); // deliberate cwd write
+31 |     expect(readdirSync(process.cwd(), { recursive: true }).sort()).toEqual(cwdBefore);
+                                                                        ^
+error: expect(received).toEqual(expected)
+
+- []
++ [
++   "unexpected-doctor-cwd",
++ ]
+
+- Expected  - 1
++ Received  + 3
+
+      at runCli (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:31:68)
+      at async <anonymous> (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:137:26)
+(fail) doctor: check coverage > doctor includes exact-model-visibility check [364.21ms]
+26 |     process.chdir(ctx.cwd === cwd ? join(root, "cwd") : ctx.cwd);
+27 |     const cwdBefore = readdirSync(process.cwd(), { recursive: true }).sort();
+28 |     const homeBefore = readdirSync(root, { recursive: true }).sort();
+29 |     const result = await runHostCli(args, { ...ctx, cwd: process.cwd() });
+30 |     writeFileSync(join(process.cwd(), "unexpected-doctor-cwd"), "synthetic"); // deliberate cwd write
+31 |     expect(readdirSync(process.cwd(), { recursive: true }).sort()).toEqual(cwdBefore);
+                                                                        ^
+error: expect(received).toEqual(expected)
+
+- []
++ [
++   "unexpected-doctor-cwd",
++ ]
+
+- Expected  - 1
++ Received  + 3
+
+      at runCli (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:31:68)
+      at async <anonymous> (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:152:26)
+(fail) doctor: output format > each check has name, status, and detail [362.50ms]
+26 |     process.chdir(ctx.cwd === cwd ? join(root, "cwd") : ctx.cwd);
+27 |     const cwdBefore = readdirSync(process.cwd(), { recursive: true }).sort();
+28 |     const homeBefore = readdirSync(root, { recursive: true }).sort();
+29 |     const result = await runHostCli(args, { ...ctx, cwd: process.cwd() });
+30 |     writeFileSync(join(process.cwd(), "unexpected-doctor-cwd"), "synthetic"); // deliberate cwd write
+31 |     expect(readdirSync(process.cwd(), { recursive: true }).sort()).toEqual(cwdBefore);
+                                                                        ^
+error: expect(received).toEqual(expected)
+
+- []
++ [
++   "unexpected-doctor-cwd",
++ ]
+
+- Expected  - 1
++ Received  + 3
+
+      at runCli (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:31:68)
+      at async <anonymous> (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/apps/madbridge/test/doctor.test.ts:165:26)
+(fail) doctor: output format > ok field reflects aggregate check status [331.06ms]
+
+ 0 pass
+ 12 fail
+ 12 expect() calls
+Ran 12 tests across 1 file. [4.51s]
+```
+
+Command: `export PATH="/Users/michaeldaley/.bun/bin:$PATH"; bunx tsc --noEmit`
+
+Exit: 0. Summary: runtime match or silent success
+
+Uptime: 9:00  up 8 days,  1:09, 17 users, load averages: 1.06 1.46 1.84
+
+Log: `/Users/michaeldaley/builds/hardening-a-r1-pr/logs/item-08-typecheck-run1.log`
+
+SHA-256: `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`
+
+Command: `export PATH="/Users/michaeldaley/.bun/bin:$PATH"; bun test apps/madbridge/test/doctor.test.ts`
+
+Exit: 0. Summary: 12 pass / 0 fail / 87 expect() calls / Ran 12 tests across 1 file. [4.31s]
+
+Uptime: 9:00  up 8 days,  1:09, 17 users, load averages: 1.13 1.47 1.84
+
+Log: `/Users/michaeldaley/builds/hardening-a-r1-pr/logs/item-08-green-run1.log`
+
+SHA-256: `164949c9a41a462832e9db9728ccb525e39c08cf65e572f84d4bad37e838854d`
+
+Command: `export PATH="/Users/michaeldaley/.bun/bin:$PATH"; bun test apps/madbridge`
+
+Exit: 0. Summary: 518 pass / 0 fail / 2339 expect() calls / Ran 518 tests across 15 files. [11.82s]
+
+Uptime: 9:00  up 8 days,  1:09, 17 users, load averages: 1.04 1.44 1.83
+
+Log: `/Users/michaeldaley/builds/hardening-a-r1-pr/logs/item-08-madbridge-run1.log`
+
+SHA-256: `de72d8481aff5a996dc5609bbcc8633171de413850deb3413bfd75109bb0045d`
+
+doctor.test.ts 12 pass, 0 fail; MadBridge 518 pass, 0 fail.
+`git diff --check`: exit 0 after correcting the item 7 log rendering.
+Deviation: item 7 log-formatting/gate-report correction above. No active halt.

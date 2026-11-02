@@ -24,7 +24,12 @@ async function runCli(args: Array<string>, ctx: CliContext): Promise<CliResult> 
     process.env.HOME = root;
     // doctor reads process.cwd(), so its filesystem assertions need the real cwd.
     process.chdir(ctx.cwd === cwd ? join(root, "cwd") : ctx.cwd);
-    return await runHostCli(args, { ...ctx, cwd: process.cwd() });
+    const cwdBefore = readdirSync(process.cwd(), { recursive: true }).sort();
+    const homeBefore = readdirSync(root, { recursive: true }).sort();
+    const result = await runHostCli(args, { ...ctx, cwd: process.cwd() });
+    expect(readdirSync(process.cwd(), { recursive: true }).sort()).toEqual(cwdBefore);
+    expect(readdirSync(root, { recursive: true }).sort()).toEqual(homeBefore);
+    return result;
   } finally {
     process.chdir(cwd);
     if (path === undefined) delete process.env.PATH;
@@ -59,7 +64,7 @@ describe("doctor: read-only invariant", () => {
   });
 
   test("no files created in home .madv-runtime", async () => {
-    // Use a temp runtime dir to verify doctor doesn't write to it
+    // The shared runner checks the actual fixture HOME and cwd before cleanup.
     const runtimeDir = join(tempDir, "runtime");
     const before = existsSync(runtimeDir);
     const result = await runDoctor([], { cwd: tempDir });
@@ -76,6 +81,7 @@ describe("doctor: check coverage", () => {
     const json = JSON.parse(result.stdout);
     const names = json.checks.map((c: any) => c.name);
     expect(names).toContain("platform");
+    expect(json.checks.find((check: any) => check.name === "platform")?.status).toBe("ok");
   });
 
   test("doctor includes bun check", async () => {
@@ -83,6 +89,7 @@ describe("doctor: check coverage", () => {
     const json = JSON.parse(result.stdout);
     const names = json.checks.map((c: any) => c.name);
     expect(names).toContain("bun");
+    expect(json.checks.find((check: any) => check.name === "bun")?.status).toBe("ok");
   });
 
   test("doctor includes claude-code check", async () => {
@@ -90,6 +97,7 @@ describe("doctor: check coverage", () => {
     const json = JSON.parse(result.stdout);
     const names = json.checks.map((c: any) => c.name);
     expect(names).toContain("claude-code");
+    expect(json.checks.find((check: any) => check.name === "claude-code")?.status).toBe("ok");
   });
 
   test("doctor includes agy check", async () => {
@@ -97,6 +105,7 @@ describe("doctor: check coverage", () => {
     const json = JSON.parse(result.stdout);
     const names = json.checks.map((c: any) => c.name);
     expect(names).toContain("agy");
+    expect(json.checks.find((check: any) => check.name === "agy")?.status).toBe("ok");
   });
 
   test("doctor includes opentui check", async () => {
@@ -104,6 +113,7 @@ describe("doctor: check coverage", () => {
     const json = JSON.parse(result.stdout);
     const names = json.checks.map((c: any) => c.name);
     expect(names).toContain("opentui");
+    expect(json.checks.find((check: any) => check.name === "opentui")?.status).toBe("ok");
   });
 
   test("doctor includes directory-permissions check", async () => {
@@ -111,6 +121,7 @@ describe("doctor: check coverage", () => {
     const json = JSON.parse(result.stdout);
     const names = json.checks.map((c: any) => c.name);
     expect(names).toContain("directory-permissions");
+    expect(json.checks.find((check: any) => check.name === "directory-permissions")?.status).toBe("ok");
   });
 
   test("doctor includes adapter-protocol check", async () => {
@@ -118,6 +129,7 @@ describe("doctor: check coverage", () => {
     const json = JSON.parse(result.stdout);
     const names = json.checks.map((c: any) => c.name);
     expect(names).toContain("adapter-protocol");
+    expect(json.checks.find((check: any) => check.name === "adapter-protocol")?.status).toBe("ok");
   });
 
   test("doctor includes exact-model-visibility check", async () => {
@@ -125,8 +137,14 @@ describe("doctor: check coverage", () => {
     const json = JSON.parse(result.stdout);
     const names = json.checks.map((c: any) => c.name);
     expect(names).toContain("exact-model-visibility");
+    expect(json.checks.find((check: any) => check.name === "exact-model-visibility")?.status).toBe("warn");
   });
 });
+
+const EXPECTED_STATUSES: Record<string, string> = {
+  platform: "ok", bun: "ok", "claude-code": "ok", agy: "ok", opentui: "ok",
+  "directory-permissions": "ok", "adapter-protocol": "ok", "exact-model-visibility": "warn",
+};
 
 describe("doctor: output format", () => {
   test("each check has name, status, and detail", async () => {
@@ -138,6 +156,7 @@ describe("doctor: output format", () => {
       expect(check).toHaveProperty("status");
       expect(check).toHaveProperty("detail");
       expect(["ok", "warn", "fail"]).toContain(check.status);
+      expect(check.status).toBe(EXPECTED_STATUSES[check.name]);
     }
   });
 
