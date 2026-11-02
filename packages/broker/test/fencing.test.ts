@@ -34,6 +34,18 @@ import type { LedgerEventV1, RepositoryFingerprint, SessionLifecycleEventV1 } fr
 import { parseSessionLifecycleEvent } from "../../protocol/src/lifecycle-events";
 import type { LifecycleContext } from "../../protocol/src/lifecycle-events";
 
+const VALUE_IMPORT = /^\s*import(?!\s+type\b)\s+/;
+
+test("both value-import checks catch imports at any indentation", () => {
+  for (const indent of ["", "  ", "\t"]) {
+    expect(VALUE_IMPORT.test(`${indent}import { forbidden } from "unexpected-module";`)).toBe(true);
+  }
+  for (const indent of ["", "  ", "\t"]) {
+    expect(VALUE_IMPORT.test(`${indent}import type { Allowed } from "types-only";`)).toBe(false);
+    expect(VALUE_IMPORT.test(`${indent}import   type { Allowed } from "types-only";`)).toBe(false);
+  }
+});
+
 // ─── Fixtures ───
 
 const SESSION_ID = "ses-fencing-001";
@@ -328,7 +340,7 @@ describe("FencingRecordContext is copied exactly and never generated", () => {
     }
     // The only value import is the protocol version constant; every other
     // workspace import is type-only, so no value import can carry discovery.
-    const valueImports = source.split("\n").filter((l) => /^import\s+(?!type\b)/.test(l));
+    const valueImports = source.split("\n").filter((l) => VALUE_IMPORT.test(l));
     expect(valueImports).toEqual(['import { PROTOCOL_VERSION } from "@madventures/protocol";']);
   });
 });
@@ -1495,7 +1507,7 @@ describe("Task 19 module discipline", () => {
     expect(source.match(/appendMany\(/g)).toHaveLength(2);
     // No module-level mutable binding: no hidden registry or singleton.
     expect(source.split("\n").filter((l) => /^(let|var)\s/.test(l))).toEqual([]);
-    const valueImports = source.split("\n").filter((l) => /^import\s+(?!type\b)/.test(l));
+    const valueImports = source.split("\n").filter((l) => VALUE_IMPORT.test(l));
     expect(valueImports).toEqual([
       'import { GENESIS_HASH, INITIAL_LIFECYCLE_STATE, computeEventHash, reduceLedgerEvent } from "@madventures/ledger";',
       'import { PROTOCOL_VERSION, canonicalJson } from "@madventures/protocol";',

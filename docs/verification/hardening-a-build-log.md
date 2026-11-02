@@ -1004,3 +1004,290 @@ Log: `/Users/michaeldaley/builds/hardening-a-r1-pr/logs/item-04-pty-host-run1.lo
 SHA-256: `aba8bf44f1386501373bdce8b8490c462397d9b8e4526952c722cf21acf3331c`
 
 `git diff --check`: exit 0. PTY-host suite: 49 pass, 0 fail. No active halt.
+
+## Item 7: indented value imports
+
+Built on: `cf91f0d0e9db1bff93cc21000ea3c40442db6a99`.
+
+Files changed: packages/broker/test/fencing.test.ts and this log.
+
+Relies on both checks at parent fencing.test.ts:331 and :1498, verbatim:
+
+```ts
+    const valueImports = source.split("\n").filter((l) => /^import\s+(?!type\b)/.test(l));
+```
+
+Both now use VALUE_IMPORT, `/^\s*import(?!\s+type\b)\s+/`, so indentation
+is caught while type-only imports remain excluded even with multiple spaces.
+The existing expected value-import inventories are unchanged. Test added:
+`both value-import checks catch imports at any indentation`. It exercises
+column zero, spaces and tabs, plus type-only negative controls.
+
+Deliberate break: return the shared pattern to the original column-zero
+pattern. git diff showed the break. The first RED reached the multiple-space
+type-only assertion first; the assertion order was then changed so the second
+RED reaches the required indented-value-import assertion, expected true but
+received false. No assertion was removed or weakened. No production change.
+The final test file was restored and cmp matched its saved pre-break copy.
+Restored SHA-256: `eb58a523928693060b78bdda0176031bd84f31bdc7b52d2c097487c117c8adae`.
+
+Command: `export PATH="/Users/michaeldaley/.bun/bin:$PATH"; runtime check`
+
+Exit: 0. Summary: runtime match or silent success
+
+Uptime: runtime check, not a test
+
+Log: `/Users/michaeldaley/builds/hardening-a-r1-pr/logs/item-07-runtime-run1.log`
+
+SHA-256: `2b1d8a5ab9bebb7a1de8417a1458f7d8ff03fd90e03fe98190496a94b162ab1f`
+
+Command: `export PATH="/Users/michaeldaley/.bun/bin:$PATH"; bun test packages/broker/test/fencing.test.ts`
+
+Exit: 1. Summary: 69 pass / 1 fail / 666 expect() calls / Ran 70 tests across 1 file. [166.00ms]
+
+Uptime: 8:56  up 8 days,  1:05, 17 users, load averages: 1.29 1.71 2.02
+
+Log: `/Users/michaeldaley/builds/hardening-a-r1-pr/logs/item-07-red-run1.log`
+
+SHA-256: `e80bf6e33808e6d12109cac90cf4897c5949fbc38b8b7b091d04a4437c162813`
+
+Failing run, verbatim:
+
+```text
+bun test v1.4.2 (744846f84)
+
+packages/broker/test/fencing.test.ts:
+38 | 
+39 | test("both value-import checks catch imports at any indentation", () => {
+40 |   for (const indent of ["", "  ", "\t"]) {
+41 |     expect(VALUE_IMPORT.test(`${indent}import { forbidden } from "unexpected-module";`)).toBe(true);
+42 |     expect(VALUE_IMPORT.test(`${indent}import type { Allowed } from "types-only";`)).toBe(false);
+43 |     expect(VALUE_IMPORT.test(`${indent}import   type { Allowed } from "types-only";`)).toBe(false);
+                                                                                            ^
+error: expect(received).toBe(expected)
+
+Expected: false
+Received: true
+
+      at <anonymous> (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/packages/broker/test/fencing.test.ts:43:88)
+(fail) both value-import checks catch imports at any indentation [0.42ms]
+(pass) Task 18 named tests > the initial token is exactly 1 [0.06ms]
+(pass) Task 18 named tests > pause neither invalidates nor increments the token [0.43ms]
+(pass) Task 18 named tests > an ownership transfer increments the token and appends fencing_token_issued [0.09ms]
+(pass) Task 18 named tests > no token can be re-issued after interruption [0.07ms]
+(pass) Task 18 named tests > a successor session begins again at 1 [0.03ms]
+(pass) initial issuance > initial issuance is deterministic and returns a protocol-valid record [0.18ms]
+(pass) initial issuance > initial issuance is legal only before activation in the canonical reducer [0.08ms]
+(pass) initial issuance > no token exists during preflight or initial starting until issuance [0.04ms]
+(pass) initial issuance > the initial token value is independent of session, writer, and context values [0.03ms]
+(pass) FencingRecordContext is copied exactly and never generated > every carried value in an issued record equals the caller-supplied context [0.03ms]
+(pass) FencingRecordContext is copied exactly and never generated > every carried value in transfer and invalidation records equals the caller-supplied context [0.06ms]
+(pass) FencingRecordContext is copied exactly and never generated > no ambient timestamp or event id: identical inputs always yield identical records [0.03ms]
+(pass) FencingRecordContext is copied exactly and never generated > the production module performs no clock, random, filesystem, environment, or ledger discovery [0.41ms]
+(pass) ownership transfer > a transfer preserves the session identity and records the new writer [0.03ms]
+(pass) ownership transfer > a transfer increments by exactly one, never more, across a long chain [0.07ms]
+(pass) ownership transfer > a transfer is legal while the issued session is still starting and does not change phase [0.02ms]
+(pass) ownership transfer > a transfer never issues token 1 while a current token exists [0.02ms]
+(pass) ownership transfer > transfer with a null session fails closed with missing_session_id and substitutes nothing [0.04ms]
+(pass) ownership transfer > transfer fails closed on every phase outside starting and active [0.05ms]
+(pass) ownership transfer > transfer fails closed when no current token has been issued [0.02ms]
+(pass) ownership transfer > transfer fails closed on an invalidated, unusable, or malformed token state [0.09ms]
+(pass) invalidation > interruption invalidates the current token and carries the incident id [0.08ms]
+(pass) invalidation > Founder close invalidates the current token at closing with a null incident [0.03ms]
+(pass) invalidation > rollback invalidates the current token at closed with a null incident [0.02ms]
+(pass) invalidation > invalidation never mints a replacement token [0.04ms]
+(pass) invalidation > the incident id is preserved exactly, including a caller-supplied null [0.02ms]
+(pass) invalidation > invalidation with a null session fails closed with missing_session_id [0.03ms]
+(pass) invalidation > invalidation fails closed in starting, active, and paused [0.03ms]
+(pass) invalidation > invalidation fails closed when no token was issued or the token is already invalidated [0.04ms]
+(pass) invalidation > after interruption and invalidation the canonical reducer forbids any further issuance in-session [0.08ms]
+(pass) FencingError > is an Error with a stable name and one of the four approved kinds [0.03ms]
+(pass) FencingError > a null session is reported before any phase or token defect [0.03ms]
+(pass) tokenKey > joins session id and token with exactly one real NUL byte [0.07ms]
+(pass) tokenKey > distinct (session_id, token) pairs produce distinct keys at digit boundaries [0.03ms]
+(pass) tokenKey > the key matches the identity carried by issued records [0.02ms]
+(pass) Task49 prerequisite pause and resume persist canonical events without changing the token [8.84ms]
+(pass) Task49 prerequisite pause and resume refuse invalid phases without adding ledger rows [7.46ms]
+(pass) Task49 prerequisite activation retains isolated execution snapshots and omission preserves null [6.72ms]
+(pass) Task49 prerequisite reconstruction retains isolated execution facts without permitting reactivation [3.54ms]
+(pass) Task 19 named tests > startup appends fencing_token_issued then session_activated in that order [3.39ms]
+(pass) Task 19 named tests > no active snapshot is exposed until both startup records are durable [3.41ms]
+(pass) Task 19 named tests > interruption appends the four records in the specified order [5.51ms]
+(pass) Task 19 named tests > Founder close appends closing, invalidation, then closed [4.86ms]
+(pass) Task 19 named tests > a failed activation append compensates atomically with session_abort then fencing_token_invalidated and never publishes active [3.60ms]
+(pass) Task 19 construction derives everything from the durable ledger > construction fails closed when replay yields no session identity and substitutes nothing [3.96ms]
+(pass) Task 19 construction derives everything from the durable ledger > construction propagates an impossible durable order instead of normalizing it [2.61ms]
+(pass) Task 19 construction derives everything from the durable ledger > the projection and the durable head are derived from existing rows: the first append chains from the last durable row [4.64ms]
+(pass) Task 19 construction derives everything from the durable ledger > session identity is derived from the durable session_open, never from provenance or a generated value [4.62ms]
+(pass) Task 19 construction derives everything from the durable ledger > the head advances only from returned rows: every record chains from the preceding durable row across a full lifecycle [5.14ms]
+(pass) Task 19 activation preconditions > activate fails closed before any write on an empty or duplicated readiness set [4.49ms]
+(pass) Task 19 activation preconditions > activate is refused after activation and after a durable issuance that never activated [5.80ms]
+(pass) Task 19 activation preconditions > interrupt and Founder close are refused before activation and write nothing [2.38ms]
+(pass) Task 19 activation preconditions > a terminal session refuses every further transition and writes nothing [4.95ms]
+(pass) Task 19 observation and snapshotSeq > snapshotSeq starts at 0, increments by exactly one per published observation, and equals the last published value [5.28ms]
+(pass) Task 19 observation and snapshotSeq > every observation is published only after its row is durable and folded: the phase equals the canonical replay through that row [6.05ms]
+(pass) Task 19 observation and snapshotSeq > observation order equals durable order [4.80ms]
+(pass) Task 19 observation and snapshotSeq > the activation record's readiness_snapshot_seq is the broker-owned local sequence current at construction [3.32ms]
+(pass) Task 19 fencing context ownership > issued and invalidated records carry the injected provenance and the deterministic sources in call order [4.38ms]
+(pass) Task 19 fencing context ownership > no projection, session identity, durable head, or pre-built fencing context can be injected [2.03ms]
+(pass) Task 19 durable prefixes are separate transactions > interruption prefixes are durable separately: a rejected session_closing leaves session_interrupted and fencing_token_invalidated durable [4.04ms]
+(pass) Task 19 durable prefixes are separate transactions > a rejected fencing_token_invalidated leaves session_interrupted alone durable [3.41ms]
+(pass) Task 19 durable prefixes are separate transactions > Founder-close prefixes are durable separately: a rejected invalidation leaves session_closing durable and terminates nothing [3.55ms]
+(pass) Task 19 durable prefixes are separate transactions > compensation is all-or-nothing: a rejected invalidation record leaves no session_abort behind [3.17ms]
+(pass) Task 19 governed-process termination > a rejecting terminator leaves an interruption at durable closing with no session_closed and no closed observation [4.44ms]
+(pass) Task 19 governed-process termination > a rejecting terminator leaves a Founder close at durable closing with the token invalidated and no session_closed [3.97ms]
+(pass) Task 19 governed-process termination > session_closed is appended only after the terminator resolves [4.48ms]
+(pass) Task 19 governed-process termination > the terminator is never invoked by activation, by a failed activation, or by a refused transition [6.61ms]
+(pass) Task 19 module discipline > the runtime broker performs no ambient discovery, holds no process authority, and batches only the compensation [0.81ms]
+(pass) Task 19 module discipline > the broker index does not export RuntimeBroker; this test imports it directly [0.07ms]
+
+1 tests failed:
+(fail) both value-import checks catch imports at any indentation [0.42ms]
+
+ 69 pass
+ 1 fail
+ 666 expect() calls
+Ran 70 tests across 1 file. [166.00ms]
+```
+
+Command: `export PATH="/Users/michaeldaley/.bun/bin:$PATH"; bun test packages/broker/test/fencing.test.ts`
+
+Exit: 1. Summary: 69 pass / 1 fail / 665 expect() calls / Ran 70 tests across 1 file. [164.00ms]
+
+Uptime: 8:56  up 8 days,  1:05, 17 users, load averages: 1.27 1.67 2.00
+
+Log: `/Users/michaeldaley/builds/hardening-a-r1-pr/logs/item-07-red-run2.log`
+
+SHA-256: `f6a8930b4fbcbba762421d5c0ef065e2c4f64a831e057bd2c7f12e9da0b51ef1`
+
+Failing run, verbatim:
+
+```text
+bun test v1.4.2 (744846f84)
+
+packages/broker/test/fencing.test.ts:
+36 | 
+37 | const VALUE_IMPORT = /^import\s+(?!type\b)/;
+38 | 
+39 | test("both value-import checks catch imports at any indentation", () => {
+40 |   for (const indent of ["", "  ", "\t"]) {
+41 |     expect(VALUE_IMPORT.test(`${indent}import { forbidden } from "unexpected-module";`)).toBe(true);
+                                                                                              ^
+error: expect(received).toBe(expected)
+
+Expected: true
+Received: false
+
+      at <anonymous> (/Users/michaeldaley/builds/madventures-tui-hardening-a-r1/packages/broker/test/fencing.test.ts:41:90)
+(fail) both value-import checks catch imports at any indentation [0.48ms]
+(pass) Task 18 named tests > the initial token is exactly 1 [0.08ms]
+(pass) Task 18 named tests > pause neither invalidates nor increments the token [0.49ms]
+(pass) Task 18 named tests > an ownership transfer increments the token and appends fencing_token_issued [0.10ms]
+(pass) Task 18 named tests > no token can be re-issued after interruption [0.07ms]
+(pass) Task 18 named tests > a successor session begins again at 1 [0.03ms]
+(pass) initial issuance > initial issuance is deterministic and returns a protocol-valid record [0.17ms]
+(pass) initial issuance > initial issuance is legal only before activation in the canonical reducer [0.08ms]
+(pass) initial issuance > no token exists during preflight or initial starting until issuance [0.04ms]
+(pass) initial issuance > the initial token value is independent of session, writer, and context values [0.03ms]
+(pass) FencingRecordContext is copied exactly and never generated > every carried value in an issued record equals the caller-supplied context [0.02ms]
+(pass) FencingRecordContext is copied exactly and never generated > every carried value in transfer and invalidation records equals the caller-supplied context [0.06ms]
+(pass) FencingRecordContext is copied exactly and never generated > no ambient timestamp or event id: identical inputs always yield identical records [0.03ms]
+(pass) FencingRecordContext is copied exactly and never generated > the production module performs no clock, random, filesystem, environment, or ledger discovery [0.41ms]
+(pass) ownership transfer > a transfer preserves the session identity and records the new writer [0.03ms]
+(pass) ownership transfer > a transfer increments by exactly one, never more, across a long chain [0.07ms]
+(pass) ownership transfer > a transfer is legal while the issued session is still starting and does not change phase [0.02ms]
+(pass) ownership transfer > a transfer never issues token 1 while a current token exists [0.02ms]
+(pass) ownership transfer > transfer with a null session fails closed with missing_session_id and substitutes nothing [0.04ms]
+(pass) ownership transfer > transfer fails closed on every phase outside starting and active [0.05ms]
+(pass) ownership transfer > transfer fails closed when no current token has been issued [0.02ms]
+(pass) ownership transfer > transfer fails closed on an invalidated, unusable, or malformed token state [0.08ms]
+(pass) invalidation > interruption invalidates the current token and carries the incident id [0.05ms]
+(pass) invalidation > Founder close invalidates the current token at closing with a null incident [0.03ms]
+(pass) invalidation > rollback invalidates the current token at closed with a null incident [0.02ms]
+(pass) invalidation > invalidation never mints a replacement token [0.03ms]
+(pass) invalidation > the incident id is preserved exactly, including a caller-supplied null [0.02ms]
+(pass) invalidation > invalidation with a null session fails closed with missing_session_id [0.03ms]
+(pass) invalidation > invalidation fails closed in starting, active, and paused [0.03ms]
+(pass) invalidation > invalidation fails closed when no token was issued or the token is already invalidated [0.04ms]
+(pass) invalidation > after interruption and invalidation the canonical reducer forbids any further issuance in-session [0.09ms]
+(pass) FencingError > is an Error with a stable name and one of the four approved kinds [0.03ms]
+(pass) FencingError > a null session is reported before any phase or token defect [0.03ms]
+(pass) tokenKey > joins session id and token with exactly one real NUL byte [0.06ms]
+(pass) tokenKey > distinct (session_id, token) pairs produce distinct keys at digit boundaries [0.02ms]
+(pass) tokenKey > the key matches the identity carried by issued records [0.01ms]
+(pass) Task49 prerequisite pause and resume persist canonical events without changing the token [8.37ms]
+(pass) Task49 prerequisite pause and resume refuse invalid phases without adding ledger rows [7.31ms]
+(pass) Task49 prerequisite activation retains isolated execution snapshots and omission preserves null [6.68ms]
+(pass) Task49 prerequisite reconstruction retains isolated execution facts without permitting reactivation [3.51ms]
+(pass) Task 19 named tests > startup appends fencing_token_issued then session_activated in that order [3.42ms]
+(pass) Task 19 named tests > no active snapshot is exposed until both startup records are durable [3.40ms]
+(pass) Task 19 named tests > interruption appends the four records in the specified order [5.64ms]
+(pass) Task 19 named tests > Founder close appends closing, invalidation, then closed [4.72ms]
+(pass) Task 19 named tests > a failed activation append compensates atomically with session_abort then fencing_token_invalidated and never publishes active [3.63ms]
+(pass) Task 19 construction derives everything from the durable ledger > construction fails closed when replay yields no session identity and substitutes nothing [3.99ms]
+(pass) Task 19 construction derives everything from the durable ledger > construction propagates an impossible durable order instead of normalizing it [2.70ms]
+(pass) Task 19 construction derives everything from the durable ledger > the projection and the durable head are derived from existing rows: the first append chains from the last durable row [4.73ms]
+(pass) Task 19 construction derives everything from the durable ledger > session identity is derived from the durable session_open, never from provenance or a generated value [4.52ms]
+(pass) Task 19 construction derives everything from the durable ledger > the head advances only from returned rows: every record chains from the preceding durable row across a full lifecycle [4.81ms]
+(pass) Task 19 activation preconditions > activate fails closed before any write on an empty or duplicated readiness set [4.58ms]
+(pass) Task 19 activation preconditions > activate is refused after activation and after a durable issuance that never activated [6.39ms]
+(pass) Task 19 activation preconditions > interrupt and Founder close are refused before activation and write nothing [2.27ms]
+(pass) Task 19 activation preconditions > a terminal session refuses every further transition and writes nothing [4.47ms]
+(pass) Task 19 observation and snapshotSeq > snapshotSeq starts at 0, increments by exactly one per published observation, and equals the last published value [5.33ms]
+(pass) Task 19 observation and snapshotSeq > every observation is published only after its row is durable and folded: the phase equals the canonical replay through that row [5.74ms]
+(pass) Task 19 observation and snapshotSeq > observation order equals durable order [4.36ms]
+(pass) Task 19 observation and snapshotSeq > the activation record's readiness_snapshot_seq is the broker-owned local sequence current at construction [3.10ms]
+(pass) Task 19 fencing context ownership > issued and invalidated records carry the injected provenance and the deterministic sources in call order [4.46ms]
+(pass) Task 19 fencing context ownership > no projection, session identity, durable head, or pre-built fencing context can be injected [2.10ms]
+(pass) Task 19 durable prefixes are separate transactions > interruption prefixes are durable separately: a rejected session_closing leaves session_interrupted and fencing_token_invalidated durable [4.09ms]
+(pass) Task 19 durable prefixes are separate transactions > a rejected fencing_token_invalidated leaves session_interrupted alone durable [3.46ms]
+(pass) Task 19 durable prefixes are separate transactions > Founder-close prefixes are durable separately: a rejected invalidation leaves session_closing durable and terminates nothing [3.46ms]
+(pass) Task 19 durable prefixes are separate transactions > compensation is all-or-nothing: a rejected invalidation record leaves no session_abort behind [3.21ms]
+(pass) Task 19 governed-process termination > a rejecting terminator leaves an interruption at durable closing with no session_closed and no closed observation [4.52ms]
+(pass) Task 19 governed-process termination > a rejecting terminator leaves a Founder close at durable closing with the token invalidated and no session_closed [4.00ms]
+(pass) Task 19 governed-process termination > session_closed is appended only after the terminator resolves [4.78ms]
+(pass) Task 19 governed-process termination > the terminator is never invoked by activation, by a failed activation, or by a refused transition [6.49ms]
+(pass) Task 19 module discipline > the runtime broker performs no ambient discovery, holds no process authority, and batches only the compensation [0.81ms]
+(pass) Task 19 module discipline > the broker index does not export RuntimeBroker; this test imports it directly [0.07ms]
+
+1 tests failed:
+(fail) both value-import checks catch imports at any indentation [0.48ms]
+
+ 69 pass
+ 1 fail
+ 665 expect() calls
+Ran 70 tests across 1 file. [164.00ms]
+```
+
+Command: `export PATH="/Users/michaeldaley/.bun/bin:$PATH"; bunx tsc --noEmit`
+
+Exit: 0. Summary: runtime match or silent success
+
+Uptime: 8:56  up 8 days,  1:05, 17 users, load averages: 1.65 1.75 2.02
+
+Log: `/Users/michaeldaley/builds/hardening-a-r1-pr/logs/item-07-typecheck-run1.log`
+
+SHA-256: `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`
+
+Command: `export PATH="/Users/michaeldaley/.bun/bin:$PATH"; bun test packages/broker/test/fencing.test.ts`
+
+Exit: 0. Summary: 70 pass / 0 fail / 672 expect() calls / Ran 70 tests across 1 file. [159.00ms]
+
+Uptime: 8:56  up 8 days,  1:05, 17 users, load averages: 1.76 1.77 2.03
+
+Log: `/Users/michaeldaley/builds/hardening-a-r1-pr/logs/item-07-green-run1.log`
+
+SHA-256: `071fe34db4ca7bbb4a8feed0f2c561b022d6e5a4180ab78be7e564d51244b72d`
+
+Command: `export PATH="/Users/michaeldaley/.bun/bin:$PATH"; bun test packages/broker`
+
+Exit: 0. Summary: 306 pass / 0 fail / 2720 expect() calls / Ran 306 tests across 17 files. [13.00s]
+
+Uptime: 8:56  up 8 days,  1:05, 17 users, load averages: 1.76 1.77 2.03
+
+Log: `/Users/michaeldaley/builds/hardening-a-r1-pr/logs/item-07-broker-run1.log`
+
+SHA-256: `b8fac878a40104b205e5c200e82a1bfb77c7329351d572e423517096c4455c56`
+
+fencing.test.ts 70 pass, 0 fail; broker 306 pass, 0 fail.
+`git diff --check`: exit 0. Deviation: control assertion ordering above. No halt.
