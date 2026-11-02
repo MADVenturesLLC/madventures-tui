@@ -34,7 +34,7 @@ A3. **The items.** Each item has a number used below.
   14. No end-to-end malformed-frame scenario through a production receive path; none exists in Phase 3A.
   15. The authentication-expiry and attestation scenarios are interrupted by the harness, not by a production detector; none exists in Phase 3A.
   16. `export-evidence.ts` imports `packages/supervisor/src` by a relative path without a declared package dependency.
-  17. A PTY host that is alive but silent is not detected; the deadlines of spec section 9.8 apply to commands only.
+  17. The tests that a host which never acknowledges a command is treated as host failure at 250 ms stop the host with `SIGSTOP`; no test exercises a host that keeps running but drops command acknowledgements, as the first review of pull request 205 noted in its Finding 4.
   18. `manifest_hash` does not cover `redaction_rules_applied`.
   19. A lost exit code in the M23 and M24 build log.
 - From the Task 23 merge entry of the correction-round log:
@@ -46,14 +46,15 @@ A5. **The drafting assistant.** It drafted this act and proposed each dispositio
 
 ## Part B: Founder rulings
 
-B1. **Taken up before Task 58.** Items 1, 3, 4, 5, 7, 8, 9, 10, 12, 13 and 18 are taken up by one or more hardening builds, each authorized by its own act, and each merged before Task 58's candidate commit is fixed. Each change is the smallest that closes its item, with a test that fails without it:
+B1. **Taken up before Task 58.** Items 1, 3, 4, 5, 7, 8, 9, 10, 12, 13, 17 and 18 are taken up by one or more hardening builds, each authorized by its own act, and each merged before Task 58's candidate commit is fixed. Each change is the smallest that closes its item, with a test that fails without it:
 1. Item 1: production starts the PTY host so that no `.env` file in its working directory reaches its environment, with a test that seeds a synthetic file and finds none of its values in the host's environment.
 2. Item 13: `export-evidence` writes a fresh package and publishes it only when complete, so that no file it did not write is in the package, with a test that plants a synthetic file first.
 3. Item 18: `manifest_hash` covers `redaction_rules_applied`, with a test that changing the rule list changes the hash.
 4. Items 3, 4, 5, 7, 8, 9, 10 and 12: the tests the items name. For item 9, the test records every path created inside the preflight's temporary location during the call, including paths removed before it returns; if that cannot be done without a production change, the build halts for my ruling.
+5. Item 17: a test in which a host keeps running but drops its acknowledgement of a command, and production treats it as host failure within the bounds of spec section 9.8, with the same assertions as the `SIGSTOP` test. If that needs a production change, or production does not detect it, the build halts for my ruling.
 A hardening build may change only the production files items 1, 13 and 18 need and the test files the items of B1 need, and no `bun.lock` or manifest.
 
-B2. **Phase 3B, not Phase 3A.** Items 2, 11, 14, 15 and 17 concern the production path from a live PTY host and a live surface into the broker, which spec section 4.2 keeps closed in Phase 3A behind the `start` gate and which Phase 3B connects. They are not Phase 3A work. Each is a stated limitation of Phase 3A, recorded in the Task 59 evidence and in the final merge review, and carried to the first Phase 3B act.
+B2. **Phase 3B, not Phase 3A.** Items 2, 11, 14 and 15 concern the production path from a live PTY host and a live surface into the broker, which spec section 4.2 keeps closed in Phase 3A behind the `start` gate and which Phase 3B connects. They are not Phase 3A work. The acknowledgement deadline of spec section 9.8 applies to `pty_input` and `pty_resize` once production routes them, as part of items 2 and 11. Each is a stated limitation of Phase 3A, recorded in the Task 59 evidence and in the final merge review, and carried to the first Phase 3B act.
 
 B3. **Closed as stated limitations, with no change.**
 1. Item 6, all three parts, stays a stated limitation, recorded in the Task 59 evidence.
