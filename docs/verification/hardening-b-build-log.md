@@ -189,3 +189,73 @@ It covers the second RED run of item 13 (load 11.60) and every later RED or brea
   against the prompt's rule that every commit message line is 72 characters or shorter. The exact
   subject is used verbatim; every other line of the message is 72 characters or shorter.
 - **Halts:** none.
+
+## Item 17: cover a running host that drops acknowledgements
+
+- **Built on:** `a366872b6e770fd1d77ddcd6bacc2824c9ba22b5`.
+- **Relies on, at the item's base:**
+  - `escalateWedgedHost`, `packages/broker/src/pty-host-supervisor.ts` lines 887 to 913, which runs
+    `runOwnedEscalation`: it registers the pending acknowledgement, sends `terminate`, and races the
+    acknowledgement, the host's exit and the 250 ms deadline (lines 1043 to 1073). On expiry it closes
+    host stdin, kills the reported process group, then kills the host while it is alive (state S3),
+    and asks the caller to interrupt the session (lines 1104 to 1179).
+  - The acknowledgement is settled inside the supervisor from the decoded fact stream (lines 743 to
+    749), so a test cannot drop it after the host sends it.
+  - `test/phase3a/adversarial/wedged-host.test.ts` lines 79 to 104: `a SIGSTOPped host is cleared
+    through the direct PGID path`, `a host that never acknowledges a command is treated as host
+    failure at 250 ms` and `a wedged host receives no responsive-host grace`, each through
+    `scenario({ wedgeHostAfter: 50, ... })`, whose assertions at lines 36 to 67 cover the governed
+    descendant, the closed session and invalidated token, the `pty_host_failure` interruption, every
+    host, child and group gone, death within 5,000 ms, state S3, `killOrder` `pgid` then `host`, no
+    terminate acknowledgement or `termination_started`, and the deadline bounds. The harness fault
+    sends the host `SIGSTOP` (`test/phase3a/runtime-harness.ts`, then line 602).
+- **Change:** tests and harness only; no production change.
+  - `test/phase3a/runtime-harness.ts` gains the fault switch `dropHostAckAfter`, validated like
+    `wedgeHostAfter`. When it fires, the harness replaces `send` on the same host handle object, so the
+    production supervisor's records for that handle still apply, and sends no signal. The running host
+    never receives `terminate`, so it never acknowledges it. The harness sends a `resize` in its place.
+    The fault report gains `resizeAcks`, the count of the builder host's `resize` acknowledgements
+    during the fault, which shows the host is unstopped and still acknowledging other commands. The
+    harness still returns to tests only `client`, `storage`, `close` and `interrupt`; it returns no
+    broker, broker delegate, ledger or publishing function (`DEC-20261027-01` B5 item 3).
+  - `test/phase3a/adversarial/wedged-host.test.ts`: the escalation assertions of `scenario` now also
+    apply under `dropHostAckAfter`, and one test is added.
+- **Files changed:** `test/phase3a/runtime-harness.ts`, `test/phase3a/adversarial/wedged-host.test.ts`,
+  `docs/verification/hardening-b-build-log.md`.
+- **Test added** to `test/phase3a/adversarial/wedged-host.test.ts`, which then holds 7 passing tests:
+  `a running host that drops its acknowledgement of a command is treated as host failure at 250 ms`,
+  `scenario({ dropHostAckAfter: 50, processScenario: "grandchild" })`, the same scenario and assertions
+  as the `SIGSTOP` test, plus `resizeAcks` equal to 1 and `escalatedMs` at most 500.
+- **Before the break:** the test passes at the item's base, so production detects the dropped
+  acknowledgement with no production change. Load 3.18 3.05 2.41. Exit 0, 1 pass.
+  `item17-new-test-run1.log`, `6ed5ff8255827c766b30149badb9196c3390266cded3a3c9a581f40b549c9138`.
+  Observed: state S3, acknowledgement window ended at 249.34 ms, stdin closed at 249.58 ms, process
+  group kill at 249.82 ms, host kill at 249.83 ms, `terminateAcks` 0, `terminationStarted` false,
+  `resizeAcks` 1. A typecheck before it: load 3.11 3.03 2.40, exit 0, `item17-tsc-pre-run1.log`,
+  `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+- **Break:** in `packages/broker/src/pty-host-supervisor.ts` line 1072,
+  `if (winner === "ack") acked = true;` became `if (winner === "ack" || winner === "deadline") acked = true;`,
+  so an expired deadline counts as an acknowledgement. The diff is saved as
+  `/Users/michaeldaley/builds/hardening-b-r1-pr/item17-break.diff`, SHA-256
+  `c59afbacb2ab654bc6e93f5f2f824b27277dcac6481ad2c686ae57246fba0811`. Original SHA-256
+  `9ba986edb28133e2f7a177f95280b2088b8bd5051e80ba58794dc0555a5a8bb7`.
+- **Failing run under the break:** `error: the recorded governed descendant must be gone within the
+  outer bound`, `Expected: false` `Received: true`; production never escalated. Load 3.10 3.03 2.42,
+  an intended failure under the Founder ruling above. Exit 1, 0 pass, 1 fail.
+  `item17-break-run1.log`, `5efacae8fd8f204b378ed82601226fe9e7e95e604e9b31554f811cda77323410`.
+- **Restored** with `git checkout --`; `shasum -a 256 -c` reports the original SHA-256 as OK.
+- **Runs after the restore,** each exit 0 with 0 fail:
+
+| Command | Load at start | Result | Log | SHA-256 |
+| --- | --- | --- | --- | --- |
+| `bunx tsc --noEmit` | 2.28 2.84 2.37 | no output | item17-tsc-run1.log | e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855 |
+| `bun test test/phase3a/adversarial/wedged-host.test.ts` | 2.28 2.84 2.37 | 7 pass | item17-green-wedged-host-run1.log | 0a96c4d351bb453b3de39df6dde8330f34ce0066a3dda8cb9a701be56a412d2a |
+| `bun test test/phase3a` | 2.10 2.79 2.35 | 146 pass | item17-suite-test-phase3a-run1.log | 9ded05f6b6ce72e100583cb58cab269ef56a6c83f1c5cf9c18a297f76767281a |
+
+- **Limitation:** the `terminate` frame is withheld at the supervisor's write boundary of the host
+  handle, in the harness, rather than discarded inside the host process; reaching inside the host
+  process would need a production change or a change to the host's environment. To the supervisor the
+  fault is the one the item names: a host that keeps running, keeps acknowledging other commands, and
+  never acknowledges this one.
+- **Deviations:** none.
+- **Halts:** none. No production change was needed, and production detects the fault.
