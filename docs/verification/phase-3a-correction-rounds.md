@@ -1515,3 +1515,22 @@ Round 2's resolution, recorded above as pending, is now closed:
 - **Result:** PASS, two findings classed as not counting under plan §11.3. **Counted:** no round.
   Rubric milestone 10's total stays at **2**. Merged at `cb0bc264b0224b2943250e138570aa43f17efbae`
   under `DEC-20261102-02` B7.
+
+## Hardening C review verdict PASS (no rubric milestone, no round)
+
+- **Recorded:** 2026-11-03, under `DEC-20261103-01` B1 and C1.
+- **Plan milestone:** none; Hardening C of `DEC-20261102-04` B5, the acknowledgement deadline of
+  `escalateWedgedHost` and the calibration of the temporary-path recorder, not a plan task.
+  **Rubric milestone:** none.
+- **Head reviewed:** `038b995de6deee7c67df90276c36d9a8fbb3526e` on PR #215, built by
+  `session:codex/hardening-c-r1`.
+- **Reviewer:** `antigravity`, a fresh session on Antigravity on the Founder's MacBook, started with
+  Gemini 4. The harness did not show the model.
+- **Verdict text SHA-256:** `4c1c8ed99751da227932846338388f8f28b988120665235c2f2f18043e67121f`, 62,094
+  bytes, 800 lines, saved at `/Users/michaeldaley/builds/review-pr215-r1.md`, posted on PR #215 as
+  comments 6595656310 and 6595656646 by `decivantiq`.
+- **Result:** PASS, four advisory findings; three are taken into Hardening D and one is closed under
+  `DEC-20261103-01` B2. The report's description of the deadline test and two of its quotations of
+  `DEC-20261102-04` are inaccurate, as `DEC-20261103-01` A2 item 2 records; the Founder accepted the PASS
+  on the runs its logs record. **Counted:** no round. Rubric milestone 10's total stays at **2**. Merged
+  at `b0722bf0bf6ae81c78ea14443a01add32880554a` under `DEC-20261102-02` B7.
