@@ -1066,7 +1066,13 @@ async function runOwnedEscalation(
       ? await_never<"exit">()
       : lifecycle.exited.then<"exit">(() => "exit");
     const deadlineWon = new Promise<"deadline">((resolve) => {
-      timer = setTimeout(() => resolve("deadline"), Math.max(0, ackDeadline - performance.now()));
+      const checkDeadline = (): void => {
+        const remaining = ackDeadline - performance.now();
+        // A timer may fire early; only the monotonic clock ends the window.
+        if (remaining > 0) timer = setTimeout(checkDeadline, remaining);
+        else resolve("deadline");
+      };
+      timer = setTimeout(checkDeadline, Math.max(0, ackDeadline - performance.now()));
     });
     const winner = await Promise.race([ackWon, exitWon, deadlineWon]);
     if (timer !== undefined) clearTimeout(timer);
