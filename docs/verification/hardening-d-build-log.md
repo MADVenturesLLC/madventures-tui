@@ -376,3 +376,99 @@ live" (added). `packages/broker/test/acknowledgement-deadline.test.ts`
 passes 2 of 2.
 
 Deviations: none. Halts: none.
+
+## Item 4: the lifeline-EOF timer (DEC-20261103-01 B6 item 5)
+
+Built on commit `6afeab9e9706e386e40c9d8c807e00098a46d89a`.
+
+Files changed:
+- `packages/pty-host/src/main.ts`, only the lifeline-EOF timer.
+- `packages/pty-host/test/eof-timer-early-fire.test.ts` (new).
+- `docs/verification/hardening-d-build-log.md`.
+
+### Reliance at the base
+
+`packages/pty-host/src/signals.ts:33-43` defines `HOST_DEADLINES_MS` with
+`outerBound: 5000`. `packages/pty-host/src/main.ts:615-683`: on stdin EOF,
+`runSteadyState` calls `onLifelineEof(session.pgid, emit)` and races
+`session.child.exited` against a timer; the timer at line 662 was
+
+```ts
+          eofTimer = setTimeout(() => {
+            const err = new Error("lifeline-EOF child exit exceeded the §9.8 outer bound");
+            if (!eofRaceSettled) {
+              eofRaceSettled = true;
+              rejectExit(err);
+            }
+            // If the race already settled, this timer's callback is a
+            // no-op — the error is never thrown into a settled promise.
+          }, HOST_DEADLINES_MS.outerBound);
+```
+
+It treated its first firing as the outer bound without reading the
+monotonic clock, the defect `DEC-20261102-04` A4 records for
+`escalateWedgedHost`, so a timer that fired early ended the wait early.
+On rejection, lines 672-683 write "lifeline-EOF containment incomplete"
+to stderr, set exit code 1 and close the session with no `drained` or
+`exited`.
+
+### Change
+
+The timer records `eofArmedAt = performance.now()` when it is armed. Its
+callback computes the time left until `eofArmedAt +
+HOST_DEADLINES_MS.outerBound`; if any is left and the race has not
+settled, it re-arms for the remainder and returns. Otherwise it behaves
+exactly as before: it rejects with the same error if the race is still
+open, and is a no-op if it has settled. A re-arm is stored in `eofTimer`,
+so the child-exit handlers clear the live timer. Nothing else in the file
+changed.
+
+### Test
+
+"a lifeline-EOF timer that fires early does not end the wait before the
+§9.8 outer bound" in the new file
+`packages/pty-host/test/eof-timer-early-fire.test.ts`. It runs the real
+`runSteadyState` over a real governed child (`/bin/sleep 300` in its own
+process group under a real `Bun.Terminal`) whose `exited` is replaced by
+a promise that never settles, as T12 in `eof-timer.test.ts` does, so only
+the timer can end the wait. For the test's duration it replaces the
+global `setTimeout` so the first two timers armed with a delay between
+1000 ms and 5000 ms (only the lifeline-EOF timer and its re-arms) run
+their callbacks after 50 ms; every other timer is real. No production
+seam is used. It records the time just before the command channel
+reports EOF and the time the "lifeline-EOF containment incomplete"
+diagnostic is written, and asserts that the timer was armed for 5000 ms
+and fired early, that the wait ended no earlier than 5000 ms after the
+EOF, and that the fail-closed path is unchanged: the outer-bound error,
+"failing closed", exit code 1, no `drained` or `exited` fact, and the
+frame reader closed once. The test-owned outer bound is 5000 ms.
+
+### Runs
+
+The runtime check before this item's first test run returned the
+custodied build as recorded above.
+
+| Run | Load (1 min) | Exit | Result | Log SHA-256 |
+| --- | --- | --- | --- | --- |
+| `bun x tsc --noEmit` with the new test | 0.12 | 0 | clean | `63a005eaaaf0cf76789e69c40a51f0d034a156bdb01599ba0ea39929163002f1` |
+| The new test against the code before the change | 0.35 | 1 | 1 fail | `b655ab9d7b88dc835af22198dfb7e63b70fdba9aececc9e5103fece3a73d2aa7` |
+| `bun x tsc --noEmit` after the change | 0.27 | 0 | clean | `5989ed43620abcf4146cf7517a7dedbc86c7dbb4daffff13788f6a297098baa4` |
+| The new test after the change | 0.27 | 0 | 1 pass | `33a1c4b8320ce7b4da4cd578d927d5102d0cd870f5656184354b24fb8857c4ce` |
+| `bun test packages/pty-host` | 0.23 | 0 | 50 pass, 0 fail | `4b0a49a5fe04921d73d4db0889f8a79a2fa44acf6c31cbc735d4eb1866326341` |
+| `bun test packages/broker` | 0.13 | 0 | 308 pass, 0 fail | `10526e29a1576517245fcebd056e3eb4d82ed699087ec6855363b3950b4fb7a7` |
+
+`git diff --check` exited 0.
+
+Failing run: with `packages/pty-host/src/main.ts` at SHA-256
+`39981ecb4670a188a13b0251f54fba7634c51889da3d88c23371db4c95dfbc17`, the
+code before the change, the test failed at
+`eof-timer-early-fire.test.ts:133`: `expect(waitEndedAt! - eofAt!)
+.toBeGreaterThanOrEqual(OUTER_BOUND_MS)`, "Expected: >= 5000, Received:
+50.438661". The early firing ended the wait about 50 ms after the EOF.
+No break was needed: this item has a production change.
+
+Tests added: "a lifeline-EOF timer that fires early does not end the wait
+before the §9.8 outer bound". `eof-timer-early-fire.test.ts` passes 1 of
+1; `packages/pty-host` passes 50 of 50.
+
+Deviations: none. Halts: none.
