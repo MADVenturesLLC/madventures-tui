@@ -203,7 +203,7 @@ branches are exactly these:
 | 1 | `packages/pty-host/src/main.ts`, `isZombiePid` | runs `ps -o state= -p <pid>` | reads `/proc/<pid>/stat` | production |
 | 2 | `apps/madbridge/src/commands/doctor.ts`, `checkPlatform` | reports `ok` | reports `ok` | production; any other platform reports `warn`; it reports support, admits nothing, and does not establish the Linux profile above |
 | 3 | `test/phase3a/spike/bun-terminal-spike.ts`, `fdInventory` | runs `lsof -p <pid>` | lists `/proc/<pid>/fd` | spike |
-| 4 | `packages/broker/test/pty-host-supervisor.test.ts`, the environment-forwarding fixture | `/usr/bin/awk` iterating `ENVIRON` | `/usr/bin/awk` reading `/proc/self/environ` | test |
+| 4 | `packages/broker/test/pty-host-supervisor.test.ts`, the environment-forwarding fixture | `/usr/bin/awk` iterating `ENVIRON` | `/usr/bin/cut -z -s -d = -f 1 /proc/self/environ`, emitting NUL-terminated key names, read until the host's `drained` fact | test |
 | 5 | `packages/tui-chaos/src/pty/bridge.mjs`, `repairSpawnHelper` | restores the executable bit on `node-pty`'s `darwin-*` prebuilt helper | no repair | test tooling; selects by prebuild directory name |
 | 6 | `.github/actions/setup-qualified-bun/action.yml`, platform archive selection | `Darwin-arm64` archive | `Linux-x86_64` archive | CI |
 | 7 | `test/phase3a/adversarial/descriptor-hygiene.test.ts`, descriptor enumeration (plan Task 52, not yet built) | runs `lsof -p <pid>` | lists `/proc/<pid>/fd` | test |
