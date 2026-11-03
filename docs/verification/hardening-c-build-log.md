@@ -468,3 +468,203 @@ Local git diff --check exited 0 after the correction. All test output was
 piped through tee to a unique unmodified log. No environment was seeded by
 this item. Final gates will be run after item 2 and reported in the saved
 pull-request description and final report.
+
+## Item 2: watcher calibration
+
+Built on commit `07e79be01bf8efcbde8cb16575bc0d93180495cd`.
+
+Files changed:
+- `packages/supervisor/test/preflight.test.ts`, only the calibration test.
+- `docs/verification/hardening-c-build-log.md`, this appended section.
+
+### Reliance at the item parent
+
+DEC-20261102-04 A2 item 3 and B5 item 4 control this change. The complete
+recordTemporaryPaths, calibration and purity-test source span at
+packages/supervisor/test/preflight.test.ts:253-308 is:
+
+```ts
+function recordTemporaryPaths(root: string) {
+  const paths = new Set<string>();
+  const errors: string[] = [];
+  const watcher = watch(root, { recursive: true }, (_event, name) => {
+    if (name === null) errors.push("filesystem event without a path");
+    else paths.add(name.toString());
+  });
+  watcher.on("error", error => errors.push(error.name));
+  return {
+    paths,
+    stop: async () => {
+      try { await new Promise(resolve => setTimeout(resolve, 250)); }
+      finally { watcher.close(); }
+      expect(errors).toEqual([]);
+    },
+  };
+}
+
+test("temporary path recording sees files a child creates and removes before returning", async () => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "hardening-a-path-recording-")));
+  roots.push(root);
+  const recorder = recordTemporaryPaths(root);
+  try {
+    const child = Bun.spawnSync([process.execPath, "--no-env-file", "-e", `
+      const fs = require("node:fs"); const root = ${JSON.stringify(root)};
+      fs.writeFileSync(root + "/ephemeral", "synthetic");
+      fs.unlinkSync(root + "/ephemeral");
+      fs.mkdirSync(root + "/nested");
+      fs.writeFileSync(root + "/nested/ephemeral", "synthetic");
+      fs.unlinkSync(root + "/nested/ephemeral");
+      fs.rmdirSync(root + "/nested");
+    `], { env: {}, stdout: "pipe", stderr: "pipe" });
+    expect(child.exitCode).toBe(0);
+  } finally {
+    await recorder.stop();
+  }
+  expect([...recorder.paths].sort()).toEqual(["ephemeral", "nested", "nested/ephemeral"]);
+});
+
+test("the returned plan's repository fingerprint is frozen", async () => {
+  const result = await fixture().run();
+  expect(result.ok).toBe(true);
+  if (result.ok) expect(Object.isFrozen(result.plan.repositoryFingerprint)).toBe(true);
+});
+test("preflight creates nothing", async () => {
+  const f = fixture();
+  writeFileSync(join(f.input.worktree,"dirty-fixture"),"fixture dirty status");
+  const status=Bun.spawnSync(["git","--no-optional-locks","-C",f.input.worktree,"status","--porcelain=v1","-z"],{stdout:"pipe",stderr:"pipe"});
+  expect(status.exitCode).toBe(0);
+  const before = listing(f.root); const temporary = readdirSync(f.temp).sort();
+  const recorder = recordTemporaryPaths(f.temp);
+  const r = await f.run().finally(() => recorder.stop()); expect(r.ok).toBe(true);
+  expect([...recorder.paths]).toEqual([]);
+  expect(listing(f.root)).toEqual(before); expect(readdirSync(f.temp).sort()).toEqual(temporary);
+  if (r.ok) { expect(r.plan.repositoryFingerprint.statusSha256).toBe(new Bun.CryptoHasher("sha256").update(status.stdout).digest("hex")); expect(Object.isFrozen(r.plan)).toBe(true); expect(Object.isFrozen(r.plan.executions)).toBe(true); for (const e of r.plan.executions) { expect(Object.isFrozen(e)).toBe(true); expect(Object.isFrozen(e.arguments)).toBe(true); expect(Object.isFrozen(e.environment)).toBe(true); expect(e.artifactSha256).toBe(new Bun.CryptoHasher("sha256").update(readFileSync(e.executablePath)).digest("hex")); } }
+});
+```
+
+### Change, deliberate break and restoration
+
+The calibration requires ephemeral and nested on every host and additionally
+nested/ephemeral on macOS. Linux may attach its recursive watch too late to
+observe a file created and removed inside a newly created directory. The
+comment states what each host reports and why. It accepts an additional
+nested-file report on Linux. recordTemporaryPaths and every assertion of
+"preflight creates nothing" remain unchanged.
+
+The deliberate break was a probe dependency injected only into the purity
+test, running inside preflight. It created and removed a nested directory
+and synthetic file in f.temp before the probe returned:
+
+```ts
+  const r = await f.run({ probe: async req => {
+    const nested = join(f.temp, "nested");
+    mkdirSync(nested);
+    writeFileSync(join(nested, "ephemeral"), "synthetic");
+    rmSync(nested, { recursive: true });
+    return f.deps.probe!(req);
+  } }).finally(() => recorder.stop()); expect(r.ok).toBe(true);
+```
+
+The break's full git diff was shown before its run. "preflight creates
+nothing" failed at the empty recorded-path assertion, receiving both
+nested/ephemeral and nested; preflight itself returned success. No production
+file was edited. After restoring, the test file's SHA-256 exactly equalled
+the pre-break calibrated file's SHA-256:
+92e9e740208fb81322594b2e1edc963c65ba75add909ed4612a5b02f1d16fbe4.
+The original binding-base file's SHA-256 was
+0fc2471b45838c1d0474ca37f0b4be791862f5fcdf721361c9e903fa416820e6.
+
+The pre-item-2 runtime check matched every pinned field and exited 0.
+The changed test is "temporary path recording sees files a child creates
+and removes before returning"; its file passes 31 tests, 0 fail. The existing
+"preflight creates nothing" assertion caught the deliberate break and passes
+after restoration. The supervisor suite passes 80 tests across 5 files,
+0 fail. Typecheck and git diff --check exit 0.
+
+This MacBook does not run the Linux branch of any test. Verify and
+code-review on ubuntu-24.04 after the Founder pushes verify Linux behavior;
+those checks and Verify (macOS) at the final head must pass before review.
+No remote result is claimed here. No environment variable was seeded by this
+item. Deviations: none for item 2. Halts: none.
+
+### Item 2 command evidence
+
+### item2-break-01
+
+Command: `export PATH="/Users/michaeldaley/.bun/bin:$PATH"; bun test packages/supervisor/test/preflight.test.ts --test-name-pattern "^preflight creates nothing$"`
+
+Uptime: 21:37  up 8 days, 13:46, 21 users, load averages: 2.42 2.01 3.03
+
+Exit: 1; tee exit: 0. Log: `/Users/michaeldaley/builds/hardening-c-r1-pr/logs/item2-break-01.log`.
+
+SHA-256: `f817f65adfdc738bc5bf4a336d690112e5758e7efd794c907e869a32821cf784`.
+
+```text
+
+      at <anonymous> (/Users/michaeldaley/builds/madventures-tui-hardening-c-r1/packages/supervisor/test/preflight.test.ts:317:31)
+(fail) preflight creates nothing [824.55ms]
+
+ 0 pass
+ 30 filtered out
+ 1 fail
+ 8 expect() calls
+Ran 1 test across 1 file. [840.00ms]
+```
+
+### item2-preflight-01
+
+Command: `export PATH="/Users/michaeldaley/.bun/bin:$PATH"; bun test packages/supervisor/test/preflight.test.ts`
+
+Uptime: 21:38  up 8 days, 13:46, 21 users, load averages: 2.39 2.01 3.02
+
+Exit: 0; tee exit: 0. Log: `/Users/michaeldaley/builds/hardening-c-r1-pr/logs/item2-preflight-01.log`.
+
+SHA-256: `14787edbbdf1060820e5f4b9876e13c795f2d60a718a7d3d118872001bb21a70`.
+
+```text
+(pass) the auth probe enforces the 5,000 ms execution deadline [5735.99ms]
+(pass) the auth probe escalates SIGTERM to SIGKILL within the forced-cleanup budget [5690.20ms]
+(pass) the auth probe reaps the child successfully [322.79ms]
+(pass) cleanup-budget exhaustion fails closed as auth_not_ready [6189.66ms]
+
+ 31 pass
+ 0 fail
+ 369 expect() calls
+Ran 31 tests across 1 file. [27.96s]
+```
+
+### item2-typecheck-01
+
+Command: `export PATH="/Users/michaeldaley/.bun/bin:$PATH"; bunx tsc --noEmit`
+
+Uptime: 21:38  up 8 days, 13:47, 20 users, load averages: 2.90 2.19 3.03
+
+Exit: 0; tee exit: 0. Log: `/Users/michaeldaley/builds/hardening-c-r1-pr/logs/item2-typecheck-01.log`.
+
+SHA-256: `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
+
+```text
+
+```
+
+### item2-supervisor-01
+
+Command: `export PATH="/Users/michaeldaley/.bun/bin:$PATH"; bun test packages/supervisor`
+
+Uptime: 21:38  up 8 days, 13:47, 20 users, load averages: 2.61 2.15 3.01
+
+Exit: 0; tee exit: 0. Log: `/Users/michaeldaley/builds/hardening-c-r1-pr/logs/item2-supervisor-01.log`.
+
+SHA-256: `b5a0bad18b043cd1c43e18e21741adebee593a1a305a02d69e09078ced716846`.
+
+```text
+(pass) rollback after step activate leaves no partial session [610.90ms]
+(pass) rollback before session_open removes the session directory [24.79ms]
+(pass) rollback never deletes a capability record [4.46ms]
+(pass) rollback uses the same containment path as live interruption [4345.08ms]
+
+ 80 pass
+ 0 fail
+ 5844 expect() calls
+Ran 80 tests across 5 files. [55.67s]
+```
