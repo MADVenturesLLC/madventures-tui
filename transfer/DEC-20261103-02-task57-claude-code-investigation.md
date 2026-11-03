@@ -15,12 +15,16 @@ A1. **What Task 57 is.** Plan Task 57 investigates each surface I approve as a s
 
 A2. **The Claude Code version on my MacBook.** On 2026-11-03 I ran `~/.local/bin/madbridge-claude-v5 --version`, which printed `2.1.314 (Claude Code)`, and its `auth status` filtered to three fields, which showed `loggedIn` true, `authMethod` `claude.ai` and `apiProvider` `firstParty`. The registration and `PLAN-OPEN-1` support only 2.1.296 (`DEC-20261013-05` B1). Under `DEC-20261013-05` B2 a host found on an unsupported version is a stop for my ruling, and under `DEC-20261013-01` B3 a preflight that includes Claude Code on this host fails as `identity_mismatch`. In Phase 3A that costs nothing: spec §4.2 keeps production `start` closed.
 
-A3. **Not established.**
-1. How the launcher reached 2.1.314: whether automatic updates were never turned off under `DEC-20261013-05` B2, were turned back on, or whether the launcher starts a program that another Claude Code installation updated.
-2. Whether `madbridge-claude-v5` is a program, a symbolic link or a script, and so which file preflight would hash for it.
-3. Which configuration directory the `auth status` of A2 read. The governed directory `~/.claude-madventures-v5` of `PLAN-OPEN-2` is read only when `CLAUDE_CONFIG_DIR` names it, and A2's command set it only if the launcher does.
-4. The version of the governed launcher on the Ubuntu PC, where the Hardening D builder runs Claude Code 2.1.316 from `~/.local/bin/claude`. No capability record is written on Linux (`DEC-20261010-02` B5).
-5. What the structured output of Claude Code 2.1.314 carries. No record in this repository has observed it.
+A3. **What my checks on 2026-11-03 established, and what they did not.** Established:
+1. **The launcher.** `/Users/michaeldaley/.local/bin/madbridge-claude-v5` is a shell script of 3,869 bytes with SHA-256 `6cb4ba9225161ffe303dd42f40d796752c200135a171052cbfa0a8934cc1cbb4`, and its real path is itself. Its line 29 exports `CLAUDE_CONFIG_DIR` as `/Users/michaeldaley/.claude-madventures-v5`. Its line 90 runs `exec "/Users/michaeldaley/.local/bin/claude" "$@"`, and that path resolves to `/Users/michaeldaley/.local/share/claude/versions/2.1.314`, the program my everyday Claude Code also runs. Preflight therefore hashes the script, not the program, and an update of my everyday installation changes the program the launcher starts.
+2. **The directory A2 read.** The `auth status` of A2 read the governed directory: its `configDirectory` names it.
+3. **Automatic updates.** I set `DISABLE_AUTOUPDATER` to `1` in the `env` of the governed directory's `settings.json`, and `claude doctor`, run through the launcher, reports automatic updates disabled by that setting. That setting does not stop updates made by my everyday installation, so I set the same value in the `env` of my everyday `~/.claude/settings.json`, and `claude doctor` reports automatic updates disabled there too.
+4. **The account name.** Under `env -i` with only the six required variables of `claude-code-v1`, `auth status` reports `loggedIn` false and `authMethod` `none` for the governed directory. With `USER` added, it reports `loggedIn` true, `authMethod` `claude.ai`, `apiProvider` `firstParty` and `subscriptionType` `max`. With `LOGNAME` added instead, it reports `loggedIn` false. On macOS, Claude Code finds its sign-in only when its environment carries `USER`. `PLAN-OPEN-2` lists `USER` as an optional variable of `claude-code-v1`, so on this evidence a preflight run from an environment without `USER` would fail as `auth_not_ready`. This act does not rule on that.
+
+Not established:
+1. Whether anything other than my everyday installation's own updates moved the launcher from 2.1.296.
+2. The version of the governed launcher on the Ubuntu PC, where the Hardening D builder runs Claude Code 2.1.316 from `~/.local/bin/claude`. No capability record is written on Linux (`DEC-20261010-02` B5).
+3. What the structured output of Claude Code 2.1.314 carries. No record in this repository has observed it.
 
 A4. **What the code at the drafting commit does.**
 1. `parseCapabilityRecord` requires `provider`, `organization_id` and `independence_domain` to equal the registration's. It does not compare `cli_version` with `supported_versions`, so a record of an unsupported version parses.
@@ -35,7 +39,7 @@ A5. **What Task 56 taught.**
 4. The accepted verdict failed spec §2.2 because no run of Antigravity's structured output named a provider, and because its `init.model` could be an echo of `--model` (section 5 of the Task 56 report).
 This act is written to avoid items 1 to 3 and to apply the reading of item 4 to Claude Code without change.
 
-A6. **The drafting assistant.** It drafted this act after reading, at the commit in the header: plan Task 57 and section 9; spec §§2.2 to 2.4, 4.2, 5.4 to 5.6, 6.6 and 9.13; `PLAN-OPEN-1`, `PLAN-OPEN-2` and `PLAN-OPEN-3`; `DEC-20261013-05`; `DEC-20261015-04` and the rulings of the acts that corrected it; the Task 56 report and tests; and `packages/protocol/src/adapter-registry.ts`, `packages/protocol/src/capability-record.ts`, `packages/storage/src/capability-store.ts`, `packages/supervisor/src/attestation.ts` and `packages/supervisor/src/preflight.ts`. It proposed each ruling. None of that is an independent review.
+A6. **The drafting assistant.** It drafted this act after reading, at the commit in the header: plan Task 57 and section 9; spec §§2.2 to 2.4, 4.2, 5.4 to 5.6, 6.6 and 9.13; `PLAN-OPEN-1`, `PLAN-OPEN-2` and `PLAN-OPEN-3`; `DEC-20261013-05`; `DEC-20261015-04` and the rulings of the acts that corrected it; the Task 56 report and tests; and `packages/protocol/src/adapter-registry.ts`, `packages/protocol/src/capability-record.ts`, `packages/storage/src/capability-store.ts`, `packages/supervisor/src/attestation.ts` and `packages/supervisor/src/preflight.ts`. It proposed each ruling and wrote the commands of my checks in A3. None of that is an independent review.
 
 ## Part B: Founder rulings
 
@@ -45,7 +49,7 @@ B2. **The version, ruling the stop of `DEC-20261013-05` B2.**
 1. The registration and `PLAN-OPEN-1` stay at 2.1.296. Neither this act nor Task 57 changes the adapter registry.
 2. Task 57 investigates the launcher as it is installed when the investigation runs. If its version is not in `supported_versions`, the record and the report say so, as B6 item 6 requires.
 3. A later version becomes supported only by a later act of mine that cites host evidence for it, as `DEC-20261013-05` B2 requires. Task 57's record and report may be that evidence.
-4. Before I sign the builder prompt, I confirm that automatic updates are off for the governed launcher and run the pre-check of D1, whose output the builder prompt quotes. While the commands of B4 run, no other Claude Code session runs on my MacBook.
+4. Before I sign the builder prompt, I confirm that automatic updates are off for the governed launcher and, because the launcher starts my everyday installation (A3 item 1), for that installation too, until the record of B6 is written. I then run the pre-check of D1, whose output the builder prompt quotes. While the commands of B4 run, no other Claude Code session runs on my MacBook.
 
 B3. **The rubric and how it is read.** The rubric is spec §2.2 as it stands at the binding base. It is not edited during or after the investigation. It is read as the accepted verdict of Task 56 read it for Antigravity, so that no surface gets a softer reading:
 1. A passing clause is met only by what the session run itself emits in a structured mode, or by a documented primitive that reports on that same session.
@@ -57,15 +61,16 @@ B4. **The primitives.** The builder runs the commands below, each exactly once a
 - Every command runs with stdin from `/dev/null` unless stated.
 - Its stdout and stderr are captured separately, and its exit status and any terminating signal are recorded.
 - Each command has a limit of 120 seconds. If the runner ends a command at that limit, it records that it did.
-- Every command that runs the launcher runs under `env -i` with exactly six variables, the required variables that `PLAN-OPEN-2` names for `claude-code-v1`:
+- Every command that runs the launcher runs under `env -i` with exactly seven variables: the six required variables that `PLAN-OPEN-2` names for `claude-code-v1`, and `USER`, an optional variable on the same list, which A3 item 4 shows the launcher needs to find its sign-in:
   - `HOME=/Users/michaeldaley`;
   - `PATH=/Users/michaeldaley/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin`;
   - `SHELL` set to the passwd shell that the pre-check of D1 records;
   - `TERM=xterm-256color`;
   - `TMPDIR` set to a directory of mode `0700` inside the scratch root;
-  - `CLAUDE_CONFIG_DIR=/Users/michaeldaley/.claude-madventures-v5`.
+  - `CLAUDE_CONFIG_DIR=/Users/michaeldaley/.claude-madventures-v5`;
+  - `USER` set to the account name that `id -un` prints.
   
-  Its working directory is an empty directory inside the scratch root. None of the six values is a secret, and the report shows them.
+  Its working directory is an empty directory inside the scratch root. None of the seven values is a secret, and the report shows them.
 
 In the list, `L` is `/Users/michaeldaley/.local/bin/madbridge-claude-v5`, `R` is what item 2 prints, `P` is the registered `identity_probe.argv` at the binding base written out in full, and `M` and `A` are the model and alias of B5.
 
