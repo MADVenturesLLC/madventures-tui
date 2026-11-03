@@ -263,3 +263,116 @@ child". `test/phase3a/harness-lifecycle.test.ts` passes 9 of 9, twenty
 runs in a row.
 
 Deviations: none. Halts: none.
+
+## Item 3: the deadline test (DEC-20261103-01 B6 item 4)
+
+Built on commit `2abb5fa1db17a2ce8f75597e25366a1e754158b2`.
+
+Files changed:
+- `packages/broker/test/acknowledgement-deadline.test.ts`.
+- `docs/verification/hardening-d-build-log.md`.
+
+No production file changed for this item.
+
+### Reliance at the base
+
+`packages/broker/src/pty-host-supervisor.ts:1056-1082`, the
+acknowledgement window of `escalateWedgedHost` (inside
+`runOwnedEscalation`):
+
+```ts
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    ...
+    const deadlineWon = new Promise<"deadline">((resolve) => {
+      const checkDeadline = (): void => {
+        const remaining = ackDeadline - performance.now();
+        // A timer may fire early; only the monotonic clock ends the window.
+        if (remaining > 0) timer = setTimeout(checkDeadline, remaining);
+        else resolve("deadline");
+      };
+      timer = setTimeout(checkDeadline, Math.max(0, ackDeadline - performance.now()));
+    });
+    const winner = await Promise.race([ackWon, exitWon, deadlineWon]);
+    if (timer !== undefined) clearTimeout(timer);
+```
+
+with `ackDeadline = tAttempt + HOST_DEADLINES_MS.ack` at line 1037 and
+classification at lines 1129-1131, where `probeSignal0(hostPid)` calls
+`process.kill(hostPid, 0)`. The ack race settles on `termination_started`
+or a matching `ack` (lines 745-749).
+
+`packages/broker/test/acknowledgement-deadline.test.ts` at the base held
+one test, "an early acknowledgement timer waits until 250 ms before
+classifying a silent host as failed". It captured only the first
+`setTimeout` (`mockImplementationOnce`), fired it once early, restored
+the real timer, and asserted the window's end only through production's
+own `outcome.observedMs.ackWindowEndedMs >= 250`. A re-arm that happens
+only once, or a re-armed timer left uncleared, passed it
+(DEC-20261103-01 A2 items 1 and 3).
+
+### Change
+
+A helper parks the first two timers of at most 250 ms that the code under
+test arms: each is backed by an inert real timer, so `clearTimeout`
+accepts its handle, its callback runs only when the test fires it, and
+`clearTimeout` is observed.
+
+- "an early acknowledgement timer waits until 250 ms before classifying a
+  silent host as failed" (changed, same name): for a SIGSTOPped host it
+  fires the acknowledgement timer early, then fires the timer that
+  re-arms, also early, two consecutive early firings, both before 250 ms;
+  the next re-arm is a real timer. It records `performance.now()` just
+  before calling `escalateWedgedHost` and again when the signal-0
+  classification probe of the host PID runs, through a pass-through spy
+  on `process.kill`, and asserts that difference is at least 250 ms. Every
+  earlier assertion stays, including `ackWindowEndedMs >= 250`, S3, the
+  reason, `escalated` and `sessionInterruptionRequired`.
+- "an acknowledgement after an early acknowledgement timer leaves no
+  acknowledgement timer live" (new): for a responsive host, it fires the
+  acknowledgement timer early, checks that the window re-armed and that
+  the acknowledgement is still pending, and keeps the re-armed timer
+  parked so only the acknowledgement can end the window. It then asserts
+  S1, not escalated, and that every timer the window armed has fired or
+  been cleared, the re-armed one cleared.
+
+### Runs
+
+The runtime check before this item's first test run returned the
+custodied build as recorded above.
+
+| Run | Load (1 min) | Exit | Result | Log SHA-256 |
+| --- | --- | --- | --- | --- |
+| `bun x tsc --noEmit` | 0.08 | 0 | clean | `326db05180bf50d3ead3a3e3df560c65d943e57eb032f84a07679ff24d138cbf` |
+| `bun test packages/broker/test/acknowledgement-deadline.test.ts` at HEAD | 0.07 | 0 | 2 pass, 0 fail | `6e664b0f876e70e2001f086f3133cfa386fbb6d3613e40443430e69f778d07dc` |
+| Same file under the re-arm-once break | 0.06 | 1 | 1 pass, 1 fail | `ac245bc65686ab19dbf803f217420abc8a4adc1611c92b09e206cf03629ec4e5` |
+| Same file under the uncleared re-arm break | 0.05 | 1 | 1 pass, 1 fail | `2da3afb9377117dd0de7baae8629c8427ed5784397e900700bc5676763adb88f` |
+| `bun test packages/broker` | 0.05 | 0 | 308 pass, 0 fail | `c3dcdc32fcd3c89cb39ee656d789a2a49d892bd60ed71b9ff6c081c54b26d5ba` |
+
+`git diff --check` exited 0.
+
+Break 1, re-arm only once: `packages/broker/src/pty-host-supervisor.ts`
+(SHA-256 `1ac42c07ee5424ea05391b3eef2fc7d254988291fccd1a45172d25bbc9258ad3`)
+was changed to count re-arms and re-arm only on the first early firing
+(`let rearms = 0;` and `if (remaining > 0 && rearms++ < 1)`), shown with
+`git diff`. The first test failed: `expect(classifiedAt! - started)
+.toBeGreaterThanOrEqual(HOST_ACK_MS)`, "Expected: >= 250, Received:
+0.4198340000000016", at `acknowledgement-deadline.test.ts:102`. Restored
+with `git checkout`; SHA-256 again
+`1ac42c07ee5424ea05391b3eef2fc7d254988291fccd1a45172d25bbc9258ad3`.
+
+Break 2, re-armed timer left uncleared: the same file was changed so the
+re-arm no longer assigns `timer` (`if (remaining > 0)
+setTimeout(checkDeadline, remaining);`), so `clearTimeout(timer)` after
+the race clears only the first timer; shown with `git diff`. The second
+test failed: "Expected length: 0, Received length: 1", one live timer, at
+`acknowledgement-deadline.test.ts:153`. Restored with `git checkout`;
+SHA-256 again
+`1ac42c07ee5424ea05391b3eef2fc7d254988291fccd1a45172d25bbc9258ad3`.
+
+Tests: "an early acknowledgement timer waits until 250 ms before
+classifying a silent host as failed" (changed) and "an acknowledgement
+after an early acknowledgement timer leaves no acknowledgement timer
+live" (added). `packages/broker/test/acknowledgement-deadline.test.ts`
+passes 2 of 2.
+
+Deviations: none. Halts: none.
