@@ -182,7 +182,9 @@ test("a refused pty_input or pty_resize never reaches the child", async () => {
       bytes: new TextEncoder().encode("ACCEPTED_INPUT") })).ok).toBe(true);
     expect((await session.client.request({ kind: "pty_resize", ...target(snapshot.fencingToken!), cols: 91, rows: 29 })).ok).toBe(true);
     let text = "";
-    while (!text.includes("FIXTURE_RESIZE 91 29\r\n")) text += new TextDecoder().decode((await nextFrame(output)).bytes);
+    // The echo and the resize report reach the output in either order, so read until both have arrived.
+    while (!text.includes("ACCEPTED_INPUT") || !text.includes("FIXTURE_RESIZE 91 29\r\n"))
+      text += new TextDecoder().decode((await nextFrame(output)).bytes);
     expect(text).toContain("ACCEPTED_INPUT");
     expect(text).not.toContain("REFUSED_INPUT");
     expect(text).not.toContain("FIXTURE_RESIZE 77 23");

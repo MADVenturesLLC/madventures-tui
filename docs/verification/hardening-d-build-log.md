@@ -176,3 +176,90 @@ equality with the launch-frame env, ambient canary absent (C7 evidence 7)".
 `packages/broker/test/pty-host-supervisor.test.ts` passes 27 of 27.
 
 Deviations: none. Halts: none.
+
+## Item 2: the ordering race (DEC-20261103-01 B6 item 3)
+
+Built on commit `8b4d10475b4d7dcc295357757f9dd1dcfeeea836`.
+
+Files changed:
+- `test/phase3a/harness-lifecycle.test.ts`, only the test "a refused
+  pty_input or pty_resize never reaches the child".
+- `docs/verification/hardening-d-build-log.md`.
+
+### Reliance at the base
+
+`test/phase3a/harness-lifecycle.test.ts:184-188` at the base:
+
+```ts
+    let text = "";
+    while (!text.includes("FIXTURE_RESIZE 91 29\r\n")) text += new TextDecoder().decode((await nextFrame(output)).bytes);
+    expect(text).toContain("ACCEPTED_INPUT");
+    expect(text).not.toContain("REFUSED_INPUT");
+    expect(text).not.toContain("FIXTURE_RESIZE 77 23");
+```
+
+The loop stops at the resize report, so an echo of the accepted input
+that arrives after it is never read (DEC-20261103-01 A2 item 4). The
+fixture, `test/phase3a/fixture-adapters.ts:36` and `:39-46`, echoes stdin
+from a `data` handler and reports a size change from a 10 ms interval,
+so the two outputs have no fixed order. `nextFrame` bounds each read at
+2000 ms and the test's timeout is 15000 ms.
+
+### Change
+
+The loop reads until the output holds both `ACCEPTED_INPUT` and
+`FIXTURE_RESIZE 91 29\r\n`, under the same `nextFrame` bound and test
+timeout. Every assertion is unchanged, including that neither
+`REFUSED_INPUT` nor `FIXTURE_RESIZE 77 23` reaches the output. One
+comment line was added.
+
+### Runs
+
+The runtime check before this item's first test run returned the
+custodied build as recorded above.
+
+| Run | Load (1 min) | Exit | Result | Log SHA-256 |
+| --- | --- | --- | --- | --- |
+| The test alone under the break, before the change | 0.27 | 1 | 1 fail | `be881d554a3c476318eb5b2ab77ea784ed7991636288268565faf20f06ed8df9` |
+| The test alone under the break, after the change | 0.25 | 0 | 1 pass | `4d4088907a1f2486dd27ed7b69d0b963013d004cc4170f057c5004f31eddfff9` |
+| `bun test test/phase3a/harness-lifecycle.test.ts`, run 1 | 0.21 | 0 | 9 pass, 0 fail | `622fc38b658511734eb8090b0ff1932efe0265aedf64c07387582ce14ce9b390` |
+| run 2 | 0.21 | 0 | 9 pass, 0 fail | `f89b86979572e38a806a3b206e892d3fd9099cdb17d3b1f4ac967be30fdab5a2` |
+| run 3 | 0.21 | 0 | 9 pass, 0 fail | `9e0249131f1c333c8c62cd6054f981681130a2b14a0c8fdf4ad8f2ebe9b98364` |
+| run 4 | 0.21 | 0 | 9 pass, 0 fail | `673f1ca36b57a5f533012eba7d344c5a3902f86a8e79c3eb61bae97fbdcfc004` |
+| run 5 | 0.21 | 0 | 9 pass, 0 fail | `6225893f967035f0f8e82aec25d0972f266a528280394821f613cf236d1b08f2` |
+| run 6 | 0.36 | 0 | 9 pass, 0 fail | `f495df30e07671ec717a9527ac9aa6970c38e46dfb98071ff15fc27f1f8fa86f` |
+| run 7 | 0.36 | 0 | 9 pass, 0 fail | `042c4554e8f201db36c4ca28c2e6631745c41b224370dfee80e01af199cedca8` |
+| run 8 | 0.36 | 0 | 9 pass, 0 fail | `ee7d2231df993d548579dbaff9c75939e995a35432e671f3ec1764eefabe7958` |
+| run 9 | 0.36 | 0 | 9 pass, 0 fail | `874e9ae90a268a8ed5b7c1d27e3f00cfa4c7ad13d61275aa1c741e6ec25b08a5` |
+| run 10 | 0.36 | 0 | 9 pass, 0 fail | `d151dc25a929586beb4385bfa6cdb085114e9bee5bc91bc9d24d109d69789153` |
+| run 11 | 0.36 | 0 | 9 pass, 0 fail | `af6e2a01a534bb7910e466e157f4c3596331cdfae3c878835c8947f487a13eae` |
+| run 12 | 0.41 | 0 | 9 pass, 0 fail | `ed9afc14b49a1e7d9ff9b7429a47570a6eafcdf2681dea627a674418c2ef326f` |
+| run 13 | 0.41 | 0 | 9 pass, 0 fail | `93e980ef5c5d78d019594016cb16a649bf70d846bcec579f1f662aef1052df5d` |
+| run 14 | 0.41 | 0 | 9 pass, 0 fail | `c8b5fced31120bb1b2282ba4464da79da73567bddcf34faad566755a4b415c5f` |
+| run 15 | 0.41 | 0 | 9 pass, 0 fail | `8cc5bdeea379adf606efc2a0c1547ac5ed9d62e731ca185e0a7ca1e1b38c515c` |
+| run 16 | 0.41 | 0 | 9 pass, 0 fail | `6601f3b292dca6aba390fea605ac0a2a124d6ba66df10df85080b08024fe4f8d` |
+| run 17 | 0.41 | 0 | 9 pass, 0 fail | `a41dff1833abcbeb61a026df234f35030fed5e97bacc98660be6c073680f66c8` |
+| run 18 | 0.62 | 0 | 9 pass, 0 fail | `89214f30262e7b4b6e4bc2660205642ef090d883644d664782186a6d22ab9c84` |
+| run 19 | 0.62 | 0 | 9 pass, 0 fail | `0c2824d7edb65799181c4aedd9a4d04cd0a99e94fffcd6d326fa74e81f119348` |
+| run 20 | 0.62 | 0 | 9 pass, 0 fail | `7958466012b0240d52f8ade5272f86f7842fde37691c7db7e97d90491db4cf03` |
+| `bun x tsc --noEmit` | 0.57 | 0 | clean | `ea4cbd8f86b8a0975dad95512a85f5ea00101217ca9449f28e5e200218068788` |
+| `bun test test/phase3a` | 0.57 | 0 | 152 pass, 0 fail | `0ea8e72ee43e301463ef728323ea7b7a1baab2fc0235fef7255b481f794038ce` |
+
+`git diff --check` exited 0.
+
+Break: `test/phase3a/fixture-adapters.ts` (SHA-256
+`45cb50f6be3b3755a917f6fe6c0ada2716d950f465a7078015328ce171648d50`) was
+changed so that the fixture writes each echo 100 ms after receiving it,
+which makes the resize report reach the output before the echo of the
+accepted input; shown with `git diff`. Before the change the test failed:
+"Expected to contain: "ACCEPTED_INPUT"", received
+"FIXTURE_RESIZE 91 29\r\n", at `harness-lifecycle.test.ts:186`. After
+the change it passed under the same break. The file was restored with
+`git checkout`; its SHA-256 is again
+`45cb50f6be3b3755a917f6fe6c0ada2716d950f465a7078015328ce171648d50`.
+
+Tests changed: "a refused pty_input or pty_resize never reaches the
+child". `test/phase3a/harness-lifecycle.test.ts` passes 9 of 9, twenty
+runs in a row.
+
+Deviations: none. Halts: none.
