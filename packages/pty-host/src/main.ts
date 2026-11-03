@@ -659,7 +659,15 @@ export async function runSteadyState(
               }
             },
           );
-          eofTimer = setTimeout(() => {
+          const eofArmedAt = performance.now();
+          const onEofDeadline = (): void => {
+            // A timer may fire early; only the monotonic clock ends the
+            // wait. An early firing re-arms for the remainder.
+            const remaining = eofArmedAt + HOST_DEADLINES_MS.outerBound - performance.now();
+            if (remaining > 0 && !eofRaceSettled) {
+              eofTimer = setTimeout(onEofDeadline, remaining);
+              return;
+            }
             const err = new Error("lifeline-EOF child exit exceeded the §9.8 outer bound");
             if (!eofRaceSettled) {
               eofRaceSettled = true;
@@ -667,7 +675,8 @@ export async function runSteadyState(
             }
             // If the race already settled, this timer's callback is a
             // no-op — the error is never thrown into a settled promise.
-          }, HOST_DEADLINES_MS.outerBound);
+          };
+          eofTimer = setTimeout(onEofDeadline, HOST_DEADLINES_MS.outerBound);
         });
       } catch (err) {
         const detail = err instanceof Error ? err.message : String(err);
