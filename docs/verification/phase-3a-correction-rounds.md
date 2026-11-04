@@ -1534,3 +1534,24 @@ Round 2's resolution, recorded above as pending, is now closed:
   `DEC-20261102-04` are inaccurate, as `DEC-20261103-01` A2 item 2 records; the Founder accepted the PASS
   on the runs its logs record. **Counted:** no round. Rubric milestone 10's total stays at **2**. Merged
   at `b0722bf0bf6ae81c78ea14443a01add32880554a` under `DEC-20261102-02` B7.
+
+## Hardening D review verdict PASS (no rubric milestone, no round)
+
+- **Recorded:** 2026-11-03, under `DEC-20261103-03` B1 and C1.
+- **Plan milestone:** none; Hardening D of `DEC-20261103-01` B6, the Linux oracle of the
+  environment-forwarding test, the ordering of the refused-input test, the acknowledgement-deadline
+  test and the lifeline-EOF timer, not a plan task. **Rubric milestone:** none.
+- **Head reviewed:** `de72c2e18a437301a081253376c6ad36d55ce87f` on PR #217, built by
+  `session:claude-code/hardening-d-r1`.
+- **Reviewer:** `antigravity`, a fresh session on Antigravity on the Founder's MacBook, started with
+  Gemini 4.
+- **Verdict text SHA-256:** `bc250015e197c65c348cd4df318f72820e38d8472acf5514e2c3d31690551023`, 62,255
+  bytes, 946 lines, saved at `/Users/michaeldaley/builds/review-pr217-r1.md`, posted on PR #217 as
+  comments 6616468245 and 6616468694 by `decivantiq`.
+- **Result:** PASS, no findings. Item 2 of the review prompt was worded wrongly by the drafting
+  assistant, and the reviewer applied `DEC-20261103-01` B6 item 3 instead; the build log's section for
+  item 1 says "Deviations: none" while the builder's description lists three, as `DEC-20261103-03` A2
+  item 5 records. The first run of Verify at this head failed one test outside the pull request, at
+  `test/phase3a/runtime-harness.ts` line 490, and its one re-run passed. **Counted:** no round. Rubric
+  milestone 10's total stays at **2**. Merged at `fe471b844bdfbfd43aff89841ac1f34c3201f63d` under
+  `DEC-20261102-02` B7.
