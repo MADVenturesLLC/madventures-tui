@@ -1555,3 +1555,56 @@ Round 2's resolution, recorded above as pending, is now closed:
   `test/phase3a/runtime-harness.ts` line 490, and its one re-run passed. **Counted:** no round. Rubric
   milestone 10's total stays at **2**. Merged at `fe471b844bdfbfd43aff89841ac1f34c3201f63d` under
   `DEC-20261102-02` B7.
+
+## Task 57 review verdict PASS (rubric milestone 1, no round, recorded after the merge)
+
+- **Recorded:** 2026-11-04, under `DEC-20261104-01` B1 and C1.
+- **Plan milestone:** M25, Task 57. **Rubric milestone:** 1.
+- **Head reviewed:** `df2baba9130f121c8fbc5c83d0406f9b5e8f5202` on PR #219, built by
+  `session:codex/m25-task57-r1` under `DEC-20261103-02` and its Addendum 1.
+- **Reviewer:** `antigravity`, a fresh session on Antigravity on the Founder's MacBook, with Gemini 4
+  Argon selected in the harness's settings.
+- **Verdict text SHA-256:** `c699805e751301fb2a4520143f4b066483ec59eb4fe905ce8cc651ddc23834a1`, 65,087
+  bytes, 1,190 lines, saved at `/Users/michaeldaley/builds/review-pr219-r1.md`, posted on PR #219 as
+  comments 6621443632 and 6621443978 by `decivantiq`.
+- **Result:** PASS, no substantive finding, three advisory findings. The investigation's overall result
+  is pass: the first clause of spec section 2.2 is not established and the second is met. Copilot's
+  three comments were closed by the Founder's note, comment 6623244436. **Counted:** no round. Rubric
+  milestone 1's count is unchanged. Merged at `5d86f42cc396a5fa06b299bd166dc6fd4d3f79f9` under
+  `DEC-20261103-02` E6.
+
+## M25 review checkpoint closed (rubric milestone 1, count unchanged)
+
+- **Recorded:** 2026-11-04, under `DEC-20261104-01` B2 and C1.
+- **Plan milestone:** M25, Tasks 56 and 57. **Rubric milestone:** 1.
+- **Closed at:** the merge of the pull request that files `DEC-20261104-01`, on the Task 56 and Task 57
+  entries above.
+- **Count:** rubric milestone 1's count is unchanged.
+- **Carried forward (act B3):** the three advisory findings of the Task 57 review: test 1 does not
+  require a `system/init` event in items 9 and 11, nor check the model and provider of item 10's
+  responses; test 3's label check misses some ways of writing the labels; and test 2 gives no partial
+  role list. Copilot's comment 4463136336: test 1 does not check the exit status of items 6, 7 and 9 to
+  13. The suggestions in the overview of Copilot's review 5762676488: assert each capture's metadata,
+  item 13's fallback, and the identity metadata of items 10 and 11.
+- **Carried to Phase 3B (act B4):** live attestation for `claude-code` checks the model of every
+  response, and a fallback to another model ends the session as an identity mismatch.
+
+## Hardening E review verdict PASS (no rubric milestone, no round)
+
+- **Recorded:** 2026-11-04, under `DEC-20261104-01` B5 and C1.
+- **Plan milestone:** none; Hardening E of `DEC-20261103-03` B2, the atomic write of the fixture's
+  descendant record and the retried parse of its wait, not a plan task. **Rubric milestone:** none.
+- **Head reviewed:** `4d752aa805f4a41e5c17c4b1e5c8f1144890ed9c` on PR #221, built by
+  `session:claude-code/hardening-e-r1`.
+- **Reviewer:** `antigravity`, a fresh session on Antigravity on the Founder's MacBook, with Gemini 4
+  Argon at the high setting selected in the harness.
+- **Verdict text SHA-256:** `0bac54a4696001b5f80d657df793f47cc7125d3324eec136d6d1862387f29a91`, 66,892
+  bytes, 1,152 lines, saved at `/Users/michaeldaley/builds/review-pr221-r1.md`, posted on PR #221 as
+  comments 6636729420 and 6636730124 by `decivantiq`.
+- **Result:** PASS, no substantive finding, three advisory findings: no test catches the wait
+  accepting an unusable pid, the fixture writing the record directly under its final name, or the wait
+  accepting a partly written record or outliving its deadline. Section 4 of the report quotes three
+  logs wrongly; the logs hold real output, and every other quoted result checked is in its log, as
+  `DEC-20261104-01` A5 item 4 records. **Counted:** no round. Merged at
+  `fef6e64048c30e8df0ba9f44437fc077d8dcaf1e` under `DEC-20261103-03` B2 item 7. The hunt at that merge
+  passed 40 of 40 runs on the two certification hosts.
