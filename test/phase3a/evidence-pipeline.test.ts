@@ -749,3 +749,235 @@ for (const [command, subdirectory] of [["verify-ledger", "ledger"], ["export-evi
     }, 15000);
   }
 }
+
+// Task 57: DEC-20261103-02 B8. These checks consume repository evidence only.
+import * as task57Ts from "typescript";
+import * as task57Protocol from "@madventures/protocol";
+import { parseAuthReadiness } from "../../packages/supervisor/src/attestation";
+
+const TASK57_ROOT = join(import.meta.dir, "..", "..");
+const TASK57_REPORTS = join(TASK57_ROOT, "docs", "verification");
+const TASK57_APPROVED = ["claude-code"];
+
+function task57Reports(): { surface: string; text: string }[] {
+  return readdirSync(TASK57_REPORTS).sort().flatMap(name => {
+    const match = /^2026-08-12-surface-investigation-(.+)\.md$/.exec(name);
+    return match ? [{ surface: match[1]!, text: readFileSync(join(TASK57_REPORTS, name), "utf8") }] : [];
+  });
+}
+
+function task57Captures(report: string) {
+  return [...report.matchAll(/^### B4 item (\d+)\n([\s\S]*?)(?=^### B4 item |^## |$(?![\s\S]))/gm)].map(match => {
+    const text = match[2]!;
+    const streams = [...text.matchAll(/^- \*\*(Stdout|Stderr) \((\d+) bytes\):\*\*\n(`{3,})text\n([\s\S]*?)^\3$/gm)];
+    expect(streams.map(s => s[1])).toEqual(["Stdout", "Stderr"]);
+    for (const stream of streams) {
+      expect(Buffer.byteLength(stream[4]!, "utf8")).toBe(Number(stream[2]));
+      const longest = Math.max(0, ...[...stream[4]!.matchAll(/`+/g)].map(run => run[0].length));
+      expect(stream[3]!.length).toBeGreaterThan(longest);
+    }
+    return {
+      item: Number(match[1]),
+      command: /^- \*\*Command:\*\* `([^`\n]+)`$/m.exec(text)?.[1],
+      exit: Number(/^- \*\*Exit status:\*\* `(-?\d+)`$/m.exec(text)?.[1]),
+      stdout: streams[0]![4]!, stderr: streams[1]![4]!,
+    };
+  });
+}
+
+test("every investigated surface has both a capability record and a committed report", () => {
+  const reports = task57Reports();
+  expect(reports.map(report => report.surface)).toEqual(TASK57_APPROVED);
+  for (const { surface, text } of reports) {
+    const section = extractCapabilityRecordSection(text);
+    expect(section.blocks).toHaveLength(1);
+    const block = section.blocks[0]!;
+    const record = parseCapabilityRecord(JSON.parse(block));
+    const registration = lookupRegistration(parseSurfaceId(surface))!;
+    expect(record.surface).toBe(parseSurfaceId(surface));
+    expect(record.provider).toBe(registration.provider);
+    expect(record.organization_id).toBe(registration.organization_id);
+    expect(record.independence_domain).toBe(registration.independence_domain);
+    expect(block).toBe(JSON.stringify(record));
+    expect(section.recordedFilename).toBe(capabilityRecordFilename(record));
+    expect(section.recordedSha256).toBe(createHash("sha256").update(`${block}\n`).digest("hex"));
+
+    const captures = task57Captures(text);
+    expect(captures.map(c => c.item)).toEqual(Array.from({ length: 18 }, (_, i) => i + 1));
+    const at = (item: number) => captures[item - 1]!;
+    for (let i = 1; i <= 5; i++) {
+      expect(at(i).command).toBe(at(i + 13).command);
+      expect(at(i).exit).toBe(0);
+      expect(at(i + 13).exit).toBe(0);
+    }
+    expect(at(2).stdout.trim()).toBe(record.binary_path);
+    expect(at(15).stdout).toBe(at(2).stdout);
+    expect(at(4).stdout).toBe(`${record.binary_sha256}  ${record.binary_path}\n`);
+    expect(at(17).stdout).toBe(at(4).stdout);
+    expect(at(5).stdout.split(/\s/)[0]).toBe(record.cli_version);
+    expect(at(18).stdout).toBe(at(5).stdout);
+    const events = (item: number): Record<string, unknown>[] => at(item).stdout.split("\n")
+      .filter(line => line.trim()).map(line => JSON.parse(line));
+    const inits = (item: number) => events(item).filter(e => e.type === "system" && e.subtype === "init");
+    for (const item of [9, 10, 11]) {
+      for (const init of inits(item)) expect(init.claude_code_version).toBe(record.cli_version);
+    }
+    expect(record.requested_model).toBe("claude-fable-5-1");
+    expect(record.identity_attestation.primitive).toBe(
+      `madbridge-claude-v5 ${registration.identity_probe.argv.join(" ")} --model ${record.requested_model}`,
+    );
+    expect(record.auth_readiness).toEqual({
+      primitive: "madbridge-claude-v5 auth status",
+      result: at(8).exit === 0 && parseAuthReadiness(at(8).stdout) ? "pass" : "fail",
+    });
+    const overall = record.identity_attestation.result === "pass" && record.auth_readiness.result === "pass" ? "pass" : "fail";
+    expect(record.overall).toBe(overall);
+    expect(record.role_eligibility).toEqual(overall === "pass" ? ["builder", "independent-reviewer"] : []);
+    expect(record.independent_review_eligible).toBe(overall === "pass");
+    expect(record.pty).toEqual({ result: "fail", observed_ms: {} });
+    expect(record.limitations.some(value => value.includes("4.2") && value.includes("no governed session")
+      && value.includes("PTY") && value.includes("process-group") && value.includes("termination") && value.includes("timing"))).toBe(true);
+    if (!registration.supported_versions.includes(record.cli_version)) {
+      expect(record.limitations.some(value => value.includes(record.cli_version)
+        && registration.supported_versions.every(version => value.includes(version)))).toBe(true);
+    }
+    if (!at(3).stdout.includes("Mach-O")) {
+      expect(record.limitations.some(value => value.includes("binary_sha256") && value.includes("launcher")
+        && value.includes("program"))).toBe(true);
+    }
+    if (record.identity_attestation.result === "pass") {
+      expect(inits(10).some(init => init.model === record.requested_model)).toBe(true);
+    }
+  }
+});
+
+function task57Walk(node: task57Ts.Node, visit: (node: task57Ts.Node) => void): void {
+  visit(node);
+  node.forEachChild(child => task57Walk(child, visit));
+}
+
+// Evaluate the committed preflight with an entirely in-memory OS boundary.
+// No probe starts a process, no record store is opened, and no path is read.
+function task57Preflight() {
+  const calls: string[] = [];
+  let rejectedProbe: string | undefined;
+  let record: unknown = {
+    overall: "pass", requested_model: "task57-model", role_eligibility: ["builder", "independent-reviewer"],
+    independent_review_eligible: true,
+  };
+  const source = readFileSync(join(TASK57_ROOT, "packages/supervisor/src/preflight.ts"), "utf8");
+  const javascript = task57Ts.transpileModule(source, {
+    compilerOptions: { module: task57Ts.ModuleKind.CommonJS, target: task57Ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const stat = () => ({ uid: 42, mode: 0o700, isDirectory: () => true, isFile: () => true });
+  const probe = async (request: { kind: string }) => {
+    calls.push(request.kind);
+    return { ok: request.kind !== rejectedProbe };
+  };
+  const modules: Record<string, unknown> = {
+    "node:fs": { constants: { X_OK: 1 }, accessSync() {}, statSync: stat,
+      realpathSync: (path: string) => path, readFileSync: () => Buffer.from("synthetic executable") },
+    "node:os": { userInfo: () => ({ uid: 42, homedir: "/fixture-home", shell: "/bin/zsh" }) },
+    "node:path": { basename: (path: string) => path.split("/").at(-1), isAbsolute: (path: string) => path.startsWith("/"),
+      join: (...parts: string[]) => parts.join("/"), resolve: (path: string) => path, sep: "/" },
+    "@madventures/protocol": { ...task57Protocol, parseTaskEnvelope: (value: unknown) => value },
+    "../../protocol/src/pair-constraints": { evaluatePairEligibilityWithDependencies: () => ({ ok: true }) },
+    "@madventures/storage": { proposeStorageRoot: () => "/fixture-storage", validateStorageRoot: () => ({ ok: true }),
+      latestFreshRecord: () => { calls.push("record"); return record; } },
+    "./environment": { buildAllowlistedEnvironment: () => ({}), MissingRequiredVariableError: class extends Error {} },
+    "./attestation": { IDENTITY_PROBE_INPUT: "synthetic input", runBoundedProbe: probe },
+  };
+  const module = { exports: {} as { runPurePreflight(input: unknown): Promise<{ ok: boolean; failure?: string; detail?: string }> } };
+  new Function("require", "module", "exports", "Bun", javascript)((name: string) => {
+    expect(Object.hasOwn(modules, name), `unexpected preflight dependency ${name}`).toBe(true);
+    return modules[name];
+  }, module, module.exports, {
+    CryptoHasher: Bun.CryptoHasher,
+    spawnSync: (argv: string[]) => ({ exitCode: 0, stdout: Buffer.from(argv.includes("--is-inside-work-tree") ? "true\n"
+      : argv.includes("--verify") ? `${"1".repeat(40)}\n` : argv.includes("--git-common-dir") ? "/fixture-repo/.git\n" : "") }),
+  });
+  const registration = lookupRegistration(parseSurfaceId("claude-code"))!;
+  const input = {
+    envelope: { executions: ["builder", "independent-reviewer"].map(role => ({
+      surface: registration.surface, provider: registration.provider, independence_domain: registration.independence_domain,
+      model: "task57-model", role,
+    })), repository: "/fixture-repo", worktree: "/fixture-repo", repository_fingerprint: { git_sha: "1".repeat(40) } },
+    repositoryRoot: "/fixture-repo", worktree: "/fixture-repo",
+    ambient: { HOME: "/fixture-home", SHELL: "/bin/zsh", TERM: "xterm-256color", PATH: "/fixture-bin",
+      TMPDIR: "/fixture-private", CLAUDE_CONFIG_DIR: "/fixture-home/.claude-madventures-v5" },
+    installation: { installation_uid: 42, passwd_home: "/fixture-home", approved_path: "/fixture-bin",
+      claude_config_dir: "/fixture-home/.claude-madventures-v5" },
+    invocationArguments: [], settingsSources: [], observedHostFacts: {}, now: "2026-11-03T00:00:00.000Z",
+    hostCapabilities: { pty: true, processGroups: true, termination: true, timing: true }, signal: new AbortController().signal,
+  };
+  return { calls, input, run: () => module.exports.runPurePreflight(input),
+    rejectProbe: (kind: string) => { rejectedProbe = kind; }, setRecord: (value: unknown) => { record = value; } };
+}
+
+test("no capability record is treated as a live authorization", async () => {
+  const listing = Bun.spawnSync(["git", "ls-files", "-z", "--", "apps", "packages"], { cwd: TASK57_ROOT });
+  expect(listing.exitCode).toBe(0);
+  const callers = new Set<string>();
+  for (const path of listing.stdout.toString().split("\0").filter(path => /\/src\/.*\.tsx?$/.test(path))) {
+    const source = task57Ts.createSourceFile(path, readFileSync(join(TASK57_ROOT, path), "utf8"), task57Ts.ScriptTarget.Latest, true);
+    const names = new Set(["readCapabilityRecords", "latestFreshRecord"]);
+    task57Walk(source, node => {
+      if (task57Ts.isImportSpecifier(node) && names.has((node.propertyName ?? node.name).text)) names.add(node.name.text);
+    });
+    task57Walk(source, node => {
+      if (!task57Ts.isCallExpression(node)) return;
+      const expression = node.expression;
+      const name = task57Ts.isIdentifier(expression) ? expression.text
+        : task57Ts.isPropertyAccessExpression(expression) ? expression.name.text : "";
+      if (names.has(name) || name === "freshRecord") callers.add(path);
+    });
+  }
+  expect([...callers].sort()).toEqual(["packages/storage/src/capability-store.ts", "packages/supervisor/src/preflight.ts"]);
+  const passing = task57Preflight();
+  expect((await passing.run()).ok).toBe(true);
+  expect(passing.calls).toEqual(["identity", "auth", "identity", "auth", "record", "record"]);
+  for (const kind of ["identity", "auth"]) {
+    const fixture = task57Preflight();
+    fixture.rejectProbe(kind);
+    expect(await fixture.run()).toEqual({ ok: false, failure: kind === "identity" ? "identity_mismatch" : "auth_not_ready",
+      detail: kind === "identity" ? "identity_mismatch" : "auth_not_ready" });
+    expect(fixture.calls).toEqual(kind === "identity" ? ["identity"] : ["identity", "auth"]);
+  }
+  for (const record of [null, { overall: "fail" }, { overall: "pass", requested_model: "other-model" },
+    { overall: "pass", requested_model: "task57-model", role_eligibility: [] },
+    { overall: "pass", requested_model: "task57-model", role_eligibility: ["builder", "independent-reviewer"], independent_review_eligible: false }]) {
+    const fixture = task57Preflight();
+    fixture.setRecord(record);
+    expect(await fixture.run()).toEqual({ ok: false, failure: "capability_record_stale", detail: "capability_record_stale" });
+    expect(fixture.calls.slice(0, 4)).toEqual(["identity", "auth", "identity", "auth"]);
+  }
+});
+
+function task57FieldLines(report: string): string[] {
+  let fence: string | undefined;
+  return report.split("\n").filter(line => {
+    if (fence !== undefined) {
+      if (line === fence) fence = undefined;
+      return false;
+    }
+    const opening = /^(`{3,})\w*$/.exec(line);
+    if (opening) { fence = opening[1]; return false; }
+    return true;
+  });
+}
+
+test("no alternative is marked preselected or default", () => {
+  const reports = [...task57Reports().map(report => report.text), readInvestigationReport()];
+  for (const report of reports) {
+    const section = extractCapabilityRecordSection(report);
+    expect(section.blocks).toHaveLength(1);
+    const record: unknown = JSON.parse(section.blocks[0]!);
+    for (const key of ["preselected", "default", "fallback"]) expect(hasKeyRecursive(record, key)).toBe(false);
+    for (const line of task57FieldLines(report)) {
+      expect(line).not.toMatch(/^\s*(?:[-*|]\s*)?(?:\*\*)?(?:Preselected|Default|Fallback)(?:\*\*)?\s*(?::|\|)/i);
+    }
+  }
+  for (const registration of task57Protocol.ADAPTER_REGISTRY.values()) {
+    for (const key of ["preselected", "default", "fallback"]) expect(hasKeyRecursive(registration, key)).toBe(false);
+  }
+});
