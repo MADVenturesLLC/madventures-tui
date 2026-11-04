@@ -280,6 +280,19 @@ async function terminateFixtures(state: PartialBuildState): Promise<void> {
   if (errors.length) throw new AggregateError(errors, "FixtureTerminationFailed");
 }
 
+// The record is accepted only once it parses and names a usable pid; a record seen
+// before it is complete is read again until the deadline passes.
+export async function waitForDescendantRecord(record: string): Promise<number> {
+  const deadline = performance.now() + HOST_DEADLINES_MS.outerBound;
+  for (;;) {
+    let pid: unknown;
+    try { pid = JSON.parse(readFileSync(record, "utf8")).pid; } catch { pid = undefined; }
+    if (typeof pid === "number" && Number.isSafeInteger(pid) && pid > 1) return pid;
+    if (performance.now() >= deadline) throw new Error("FixtureDescendantIdentityMissing");
+    await Bun.sleep(10);
+  }
+}
+
 export async function startFixtureSession(options: HarnessOptions = {}): Promise<HarnessSession> {
   const surfaces = requestedSurfaces(options);
   const fixtureMarker = options.fixtureMarker;
@@ -389,13 +402,19 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
         if (options.processScenario === "grandchild" || options.processScenario === "setsid" || options.processScenario === "lifeline-eof") {
           const marker = 'if (process.argv.includes("--fixture-run")) {';
           if (!source.includes(marker)) throw new Error("FixtureSourceMarkerMissing");
+          // The fixture source imports only writeFileSync from node:fs; the atomic record write also needs renameSync.
+          const fsImport = 'import { writeFileSync } from "node:fs";';
+          if (!source.includes(fsImport)) throw new Error("FixtureSourceMarkerMissing");
+          source = source.replace(fsImport, 'import { renameSync, writeFileSync } from "node:fs";');
           const detached = options.processScenario === "setsid";
           const childSource = 'process.on("SIGTERM", () => process.exit(0)); setInterval(() => {}, 1000);';
           source = source.replace(marker, marker + `
   const descendant = Bun.spawn([process.execPath, "-e", ${JSON.stringify(childSource)}], {
     detached: ${detached}, env: process.env, stdin: "ignore", stdout: "ignore", stderr: "ignore",
   });
-  writeFileSync(join(dirname(dirname(process.argv[1])), "descendant.json"), JSON.stringify({ pid: descendant.pid }));`);
+  const descendantRecord = join(dirname(dirname(process.argv[1])), "descendant.json");
+  writeFileSync(descendantRecord + "." + process.pid + ".tmp", JSON.stringify({ pid: descendant.pid }));
+  renameSync(descendantRecord + "." + process.pid + ".tmp", descendantRecord);`);
         }
       }
       writeFileSync(path, source, { mode: 0o700 });
@@ -484,11 +503,7 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
       });
       recordChannels(resources, before); resources.pids.add(fixtureAdapter.pid);
       if (options.processScenario === "grandchild" || options.processScenario === "setsid" || options.processScenario === "lifeline-eof") {
-        const record = join(root, "descendant.json");
-        const deadline = performance.now() + HOST_DEADLINES_MS.outerBound;
-        while (!existsSync(record) && performance.now() < deadline) await Bun.sleep(10);
-        const pid: unknown = JSON.parse(readFileSync(record, "utf8")).pid;
-        if (typeof pid !== "number" || !Number.isSafeInteger(pid) || pid <= 1) throw new Error("FixtureDescendantIdentityMissing");
+        const pid = await waitForDescendantRecord(join(root, "descendant.json"));
         descendants.push(pid);
         resources.pids.add(pid);
         if (options.processScenario === "setsid") resources.groups.add(pid);
