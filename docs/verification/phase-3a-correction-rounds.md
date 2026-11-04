@@ -1608,3 +1608,11 @@ Round 2's resolution, recorded above as pending, is now closed:
   `DEC-20261104-01` A5 item 4 records. **Counted:** no round. Merged at
   `fef6e64048c30e8df0ba9f44437fc077d8dcaf1e` under `DEC-20261103-03` B2 item 7. The hunt at that merge
   passed 40 of 40 runs on the two certification hosts.
+
+## M25 closing merge recorded (rubric milestone 1, count unchanged)
+
+- **Recorded:** 2026-11-04, under `DEC-20261104-02` B1 and C1.
+- **Plan milestone:** M25, Tasks 56 and 57. **Rubric milestone:** 1.
+- **Closing merge:** `27d8e83ceca252be753d7994872a3dca50494782`, the merge of PR #222, which filed
+  `DEC-20261104-01` and put the entry headed "M25 review checkpoint closed" on `main` under its B2.
+- **Count:** rubric milestone 1's count is unchanged.
