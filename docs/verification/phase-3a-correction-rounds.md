@@ -1616,3 +1616,40 @@ Round 2's resolution, recorded above as pending, is now closed:
 - **Closing merge:** `27d8e83ceca252be753d7994872a3dca50494782`, the merge of PR #222, which filed
   `DEC-20261104-01` and put the entry headed "M25 review checkpoint closed" on `main` under its B2.
 - **Count:** rubric milestone 1's count is unchanged.
+
+## Hardening F review verdict PASS (no rubric milestone, no round)
+
+- **Recorded:** 2026-11-05, under `DEC-20261105-01` B1 and C1.
+- **Plan milestone:** none; Hardening F of `DEC-20261104-02` B3, as its Addenda 1 and 2 amend it, the
+  printed termination and grace timings of the PTY host signal tests, not a plan task. **Rubric
+  milestone:** none.
+- **Head reviewed:** `d8c91a25978fe8c3b748dd06ac3f87b01e835817` on PR #224, built in two commits by
+  `session:claude-code/hardening-f-r1`.
+- **Reviewer:** `antigravity`, a fresh session on Antigravity on the Founder's MacBook, with Gemini 4
+  Argon (High) as the harness showed it.
+- **Verdict text SHA-256:** `9427abda1f715fa62f7ec185e3c1441cde89a5c86392b826a40839d182254cb2`, 52,041
+  bytes, 812 lines, saved at `/Users/michaeldaley/builds/review-pr224-r1.md`, posted on PR #224 as
+  comment 6658119243 by `decivantiq`.
+- **Result:** PASS, no findings. The smallest `grace_ms` in an unmodified run was 2004.90; a probe that
+  blocked the test's event loop for 50 ms printed 1956.79, the limitation the build log records.
+  **Counted:** no round. Merged at `ffcecaf9dbb6b2de3b406e475825137ddfe726b7` under `DEC-20261104-02` B3
+  item 6. That merge is Task 58's candidate commit under `DEC-20261104-02` B5.
+
+## Task 58 review verdict PASS (rubric milestones 2 and 10, no round, recorded after the merge)
+
+- **Recorded:** 2026-11-05, under `DEC-20261105-02` B1, B2 and C1.
+- **Plan milestone:** M26, Task 58. **Rubric milestones:** 2 and 10.
+- **Head reviewed:** `b40223570e9483559068fd6d2739e83203ccb4be` on PR #225, built by
+  `session:claude-code/m26-task58-r1` under `DEC-20261104-02` B9 and its Addenda 1 to 3.
+- **Reviewer:** `antigravity`, a fresh session on Antigravity on the Founder's MacBook, with Gemini 4
+  Argon · high selected in the harness.
+- **Verdict text SHA-256:** `980e66538ac90e8324652b0b913a8299f854b2346318367004bc02ced35cc4f9`, 68,881
+  bytes, 859 lines, saved at `/Users/michaeldaley/builds/review-pr225-r1.md`, posted on PR #225 as
+  comments 6670880450 and 6670880905 by `decivantiq`.
+- **Result:** PASS, no substantive finding, four advisory findings: no test requires an
+  operating-system version, a complete rather than filtered suite count, the grace row's `grace_ms`,
+  or the same changed-file list in both reports. Copilot's comments 4486725048 and 4486725131 were
+  answered by Addendum 4 to `DEC-20261104-02`. **Counted:** no round. Rubric milestone 2's count is
+  unchanged, and Claude Code's count under rubric milestone 10 stays at 0. Merged at
+  `8095767f51c2ca3dc098f5bfc9ccf519a85a2369` under `DEC-20261104-01` B10 item 3. The tightening of the
+  six tests is carried to the first Phase 3B act under Addendum 4 B3.
