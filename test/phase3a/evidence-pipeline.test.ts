@@ -981,3 +981,226 @@ test("no alternative is marked preselected or default", () => {
     for (const key of ["preselected", "default", "fallback"]) expect(hasKeyRecursive(registration, key)).toBe(false);
   }
 });
+
+/*
+ * Task 58 (plan Task 58 Step 1; DEC-20261104-02 B9 item 2): the six tests
+ * over the two host certification reports, with "all three" read as "both"
+ * under DEC-20261013-04 B4. They read only the two reports in
+ * docs/verification/, never a log or a path outside the repository, and
+ * assert the same form on each report.
+ */
+const TASK58_REPORT_DIR = join(import.meta.dir, "..", "..", "docs", "verification");
+const TASK58_HOSTS = ["macbook", "ubuntu"] as const;
+const TASK58_SOURCE_BASELINE_SHA = "aa16032c56fdf6c7105e99b1765ed9365d605bf4";
+const TASK58_HEADER_LABELS = [
+  "Phase 3A host certification report",
+  "Candidate commit",
+  "Host",
+  "Certification run",
+  "Manifest SHA-256",
+];
+const TASK58_HEADINGS = [
+  "1. Candidate commit and branch",
+  "2. Worktree state",
+  "3. Runtime",
+  "4. Host",
+  "5. Commands and complete counts",
+  "6. Spike criteria, adversarial criteria and measured timings",
+  "7. Failures, retries, warnings and residual risks",
+  "8. Evidence",
+];
+const TASK58_DEADLINE_ROWS = [
+  "Host acknowledgement of a command",
+  "termination_started after terminate",
+  "Escalation after a missed acknowledgement or lifeline loss",
+  "Responsive-host child grace",
+  "Unresponsive or SIGSTOP host grace",
+  "All governed processes gone",
+];
+const TASK58_BARE_SUITE_LABEL = "Last lines of the bare `bun test`, from `";
+const TASK58_RAN = /^Ran (\d+) tests? across (\d+) files?\./;
+
+interface Task58Line {
+  readonly text: string;
+  /** True for a fence line or a line inside a fenced block. */
+  readonly fenced: boolean;
+}
+
+interface Task58Report {
+  readonly host: string;
+  readonly text: string;
+  /** The lines before the first `## ` heading. */
+  readonly header: readonly Task58Line[];
+  /** The lines under each of the eight `## ` headings, in order. */
+  readonly sections: readonly (readonly Task58Line[])[];
+}
+
+function task58Report(host: string): Task58Report {
+  // ENOENT here is the expected RED of plan Task 58 Step 2, before the reports exist.
+  const text = readFileSync(join(TASK58_REPORT_DIR, `2026-08-12-phase-3a-host-certification-${host}.md`), "utf8");
+  const header: Task58Line[] = [];
+  const sections: Task58Line[][] = [];
+  const headings: string[] = [];
+  let fence: string | undefined;
+  for (const raw of text.split("\n")) {
+    const opening = fence === undefined ? /^(`{3,})/.exec(raw) : null;
+    const fenced = fence !== undefined || opening !== null;
+    if (fence !== undefined && raw === fence) fence = undefined;
+    else if (opening) fence = opening[1];
+    const heading = fenced ? null : /^## (.+)$/.exec(raw);
+    if (heading) {
+      headings.push(heading[1]!);
+      sections.push([]);
+      continue;
+    }
+    (sections.at(-1) ?? header).push({ text: raw, fenced });
+  }
+  expect(fence, `${host}: every fenced block is closed`).toBeUndefined();
+  expect(headings, `${host}: the eight sections of plan §8.7, in order`).toEqual(TASK58_HEADINGS);
+  return { host, text, header, sections };
+}
+
+function task58Plain(lines: readonly Task58Line[]): string[] {
+  return lines.filter(line => !line.fenced).map(line => line.text);
+}
+
+/** The value of the one unfenced `<label>: <value>` line, which must carry a value. */
+function task58Value(lines: readonly Task58Line[], label: string): string {
+  const found = task58Plain(lines).filter(line => line.startsWith(`${label}: `));
+  expect(found, `exactly one "${label}:" line`).toHaveLength(1);
+  const value = found[0]!.slice(label.length + 2);
+  expect(value.trim(), `"${label}:" carries a value`).not.toBe("");
+  return value;
+}
+
+/** The log named by the unfenced label line `<prefix><log>\`:` and the content of the fenced block after it. */
+function task58Block(lines: readonly Task58Line[], prefix: string): { log: string; content: string[] } {
+  const at = lines.findIndex(line => !line.fenced && line.text.startsWith(prefix) && line.text.endsWith(".log`:"));
+  expect(at, `a labeled block "${prefix}…"`).toBeGreaterThanOrEqual(0);
+  const log = lines[at]!.text.slice(prefix.length, -2);
+  expect(log).toMatch(/^[\w.-]+\.log$/);
+  let index = at + 1;
+  while (lines[index]?.text === "") index += 1;
+  const marker = /^(`{3,})/.exec(lines[index]?.text ?? "")?.[1];
+  if (marker === undefined) throw new Error(`no fenced block follows "${prefix}${log}\`:"`);
+  const content: string[] = [];
+  for (index += 1; lines[index] !== undefined && lines[index]!.text !== marker; index += 1) content.push(lines[index]!.text);
+  expect(lines[index]?.text, `the block after "${prefix}${log}\`:" is closed`).toBe(marker);
+  return { log, content };
+}
+
+/** The cells of every unfenced Markdown table row; a cell never holds an unescaped " | ". */
+function task58Rows(lines: readonly Task58Line[]): string[][] {
+  return task58Plain(lines)
+    .filter(line => line.startsWith("| ") && line.endsWith(" |"))
+    .map(line => line.slice(2, -2).split(" | ").map(cell => cell.trim()));
+}
+
+test("both host certification reports name the same candidate SHA", () => {
+  const candidates = TASK58_HOSTS.map(host => {
+    const report = task58Report(host);
+    const labels = task58Plain(report.header).filter(line => line !== "").map(line => line.slice(0, line.indexOf(":")));
+    expect(labels, `${host}: the header lines, in order`).toEqual(TASK58_HEADER_LABELS);
+    const lines = report.text.split("\n").filter(line => line.startsWith("Candidate commit:"));
+    expect(lines, `${host}: one "Candidate commit:" line`).toHaveLength(1);
+    const sha = /^Candidate commit: ([0-9a-f]{40})$/.exec(lines[0]!)?.[1];
+    if (sha === undefined) throw new Error(`${host}: the "Candidate commit:" line names no 40-character SHA`);
+    expect(task58Value(report.header, "Host")).toBe(host);
+    task58Value(report.header, "Certification run");
+    expect(task58Value(report.header, "Manifest SHA-256")).toMatch(/^[0-9a-f]{64}$/);
+    expect(task58Block(report.sections[0]!, "Output of `git rev-parse HEAD`, from `").content).toEqual([sha]);
+    return sha;
+  });
+  expect(candidates[0]).toBe(candidates[1]);
+});
+
+test("both reports record architecture, operating-system version and build, Bun path, version and hash, TERM, and shell", () => {
+  for (const host of TASK58_HOSTS) {
+    const report = task58Report(host);
+    const runtime = report.sections[2]!;
+    const machine = report.sections[3]!;
+    for (const label of ["Bun path", "Bun resolved path", "Node path"]) expect(task58Value(runtime, label)).toMatch(/^\//);
+    expect(task58Value(runtime, "Bun version")).toMatch(/^\d+\.\d+\.\d+/);
+    expect(task58Value(runtime, "Bun SHA-256")).toMatch(/^[0-9a-f]{64}$/);
+    expect(task58Value(runtime, "Bun revision")).toMatch(/^[0-9a-f]{40}$/);
+    expect(task58Value(runtime, "Node version")).toMatch(/^v\d+\.\d+\.\d+$/);
+    for (const label of ["Architecture", "Operating system", "OS build", "TERM"]) task58Value(machine, label);
+    expect(task58Value(machine, "Shell")).toMatch(/^\//);
+  }
+});
+
+test("both reports record complete suite counts, not filtered counts", () => {
+  for (const host of TASK58_HOSTS) {
+    const section = task58Report(host).sections[4]!;
+    const bare = task58Block(section, TASK58_BARE_SUITE_LABEL);
+    const ranLines = bare.content.filter(line => TASK58_RAN.test(line));
+    expect(ranLines, `${host}: one "Ran <n> tests across <m> files" line from the bare bun test`).toHaveLength(1);
+    const ran = Number(TASK58_RAN.exec(ranLines[0]!)![1]);
+    const printed = (pattern: RegExp): number => {
+      const hits = bare.content.map(line => pattern.exec(line)).filter((m): m is RegExpExecArray => m !== null);
+      expect(hits, `${host}: one line matching ${pattern}`).toHaveLength(1);
+      return Number(hits[0]![1]);
+    };
+    const pass = printed(/^ *(\d+) pass$/);
+    const fail = printed(/^ *(\d+) fail$/);
+    printed(/^ *(\d+) expect\(\) calls$/);
+    expect(pass + fail).toBe(ran);
+    const rows = task58Rows(section).filter(cells => cells[1] === "`bun test`");
+    expect(rows, `${host}: one table row for the bare bun test`).toHaveLength(1);
+    expect(rows[0]![0]).toBe(`\`${bare.log}\``);
+    expect(rows[0]![3]).toContain(ranLines[0]!);
+    const counts = task58Plain(section).flatMap(line => [...line.matchAll(/Ran (\d+) tests? across/g)].map(m => Number(m[1])));
+    expect(Math.max(...counts), `${host}: no other run in section 5 ran more tests than the reported suite`).toBe(ran);
+  }
+});
+
+test("both reports record observed timings for every deadline", () => {
+  for (const host of TASK58_HOSTS) {
+    const report = task58Report(host);
+    const bareLog = task58Block(report.sections[4]!, TASK58_BARE_SUITE_LABEL).log;
+    const rows = task58Rows(report.sections[5]!);
+    expect(rows.filter(cells => cells[0] === "Measurement")).toEqual([["Measurement", "Bound", "Observed", "Source log"]]);
+    for (const label of TASK58_DEADLINE_ROWS) {
+      const matching = rows.filter(cells => cells[0] === label);
+      expect(matching, `${host}: one "${label}" row`).toHaveLength(1);
+      const [, bound, observed, source] = matching[0]!;
+      expect(bound ?? "", `${host}: "${label}" states its bound`).not.toBe("");
+      expect(observed ?? "", `${host}: "${label}" carries an observed value in ms`).toMatch(/(?<![\w.])\d+(?:\.\d+)? ms(?!\w)/);
+      expect(source, `${host}: "${label}" is taken from the bare bun test log`).toBe(`\`${bareLog}\``);
+    }
+  }
+});
+
+test("both reports record worktree cleanliness and exact changed files", () => {
+  for (const host of TASK58_HOSTS) {
+    const section = task58Report(host).sections[1]!;
+    expect(task58Value(section, "Worktree")).toBe("clean");
+    const status = task58Block(section, "Output of `git status -sb`, from `").content;
+    expect(status, `${host}: git status -sb prints its branch line and no changed path`).toHaveLength(1);
+    expect(status[0]).toMatch(/^## /);
+    expect(task58Block(section, "Output of `git ls-files --others --exclude-standard`, from `").content).toEqual([]);
+    const changed = task58Block(section, `Output of \`git diff --name-only ${TASK58_SOURCE_BASELINE_SHA}\`, from \``).content;
+    expect(changed.length, `${host}: the exact changed files against the source baseline`).toBeGreaterThan(0);
+    for (const path of changed) {
+      expect(path).not.toBe("");
+      expect(path.trim()).toBe(path);
+      expect(path.startsWith("/")).toBe(false);
+    }
+    expect(new Set(changed).size).toBe(changed.length);
+  }
+});
+
+test("both reports carry a checksum", () => {
+  for (const host of TASK58_HOSTS) {
+    const { text } = task58Report(host);
+    expect(text.endsWith("\n"), `${host}: the report ends with a newline`).toBe(true);
+    const lines = text.slice(0, -1).split("\n");
+    expect(lines.filter(line => line.startsWith("Report SHA-256:")), `${host}: one "Report SHA-256:" line`).toHaveLength(1);
+    const declared = /^Report SHA-256: ([0-9a-f]{64})$/.exec(lines.at(-1)!)?.[1];
+    if (declared === undefined) throw new Error(`${host}: the last line is not "Report SHA-256: <64 hex>"`);
+    expect(lines.at(-2), `${host}: a blank line precedes "Report SHA-256:"`).toBe("");
+    // Plan §8.3 step 8: awk '/^Report SHA-256:/{exit} {print}' "$REPORT" | sha256sum
+    const body = lines.slice(0, -1).map(line => `${line}\n`).join("");
+    expect(createHash("sha256").update(body, "utf8").digest("hex")).toBe(declared);
+  }
+});
