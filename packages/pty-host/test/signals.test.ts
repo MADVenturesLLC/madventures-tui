@@ -56,6 +56,8 @@ const GRANDCHILD_ARGV = [
 interface LiveSession {
   readonly host: Subprocess<"pipe", "pipe", "pipe">;
   readonly facts: () => readonly HostFactFrame[];
+  /** The performance.now() time at which the reader decoded `fact`. */
+  readonly factTime: (fact: HostFactFrame) => number;
   readonly waitForFact: (predicate: (f: HostFactFrame) => boolean, timeoutMs?: number) => Promise<HostFactFrame>;
   /** Resolves once any output-fact text contains `marker`. */
   readonly waitForOutputContaining: (marker: string, timeoutMs?: number) => Promise<void>;
@@ -78,6 +80,7 @@ function spawnSignalsHost(argv: readonly string[]): LiveSession {
   host.stdin.flush();
 
   const facts: HostFactFrame[] = [];
+  const factTimes = new Map<HostFactFrame, number>();
   let buffer = new Uint8Array(0);
   let waiters: Array<() => void> = [];
   let pgid = -1;
@@ -100,7 +103,9 @@ function spawnSignalsHost(argv: readonly string[]): LiveSession {
       for (;;) {
         const decoded = decodeFact(buffer);
         if (decoded === null) break;
+        const decodedAt = performance.now();
         if (decoded.frame.kind === "launched") pgid = decoded.frame.pgid;
+        factTimes.set(decoded.frame, decodedAt);
         facts.push(decoded.frame);
         buffer = buffer.subarray(decoded.consumed);
       }
@@ -176,6 +181,11 @@ function spawnSignalsHost(argv: readonly string[]): LiveSession {
   return {
     host,
     facts: () => facts,
+    factTime: (fact) => {
+      const at = factTimes.get(fact);
+      if (at === undefined) throw new Error("factTime: fact not decoded by this session");
+      return at;
+    },
     waitForFact,
     waitForOutputContaining,
     pgid: () => pgid,
@@ -201,7 +211,7 @@ test("termination_started is emitted within 500 ms", async () => {
     s.send({ kind: "terminate" });
     const ts = await s.waitForFact((f) => f.kind === "termination_started");
     const elapsed = performance.now() - t0;
-    console.log(`signals termination_started_ms=${elapsed.toFixed(2)}`);
+    console.log(`signals termination_started_ms=${(s.factTime(ts) - t0).toFixed(2)}`);
     expect(ts.kind).toBe("termination_started");
     expect(elapsed).toBeLessThan(500);
   } finally {
@@ -225,12 +235,13 @@ test("a child ignoring SIGTERM is SIGKILLed after the 2 s grace", async () => {
     s.send({ kind: "terminate" });
     // termination_started must come fast (≤500ms); exit evidence then waits
     // out the responsive-host grace because the child traps TERM.
-    await s.waitForFact((f) => f.kind === "termination_started", 2000);
-    const started = performance.now() - t0;
+    const startedFact = await s.waitForFact((f) => f.kind === "termination_started", 2000);
     const exited = await s.waitForFact((f) => f.kind === "exited", 8000);
     const total = performance.now() - t0;
+    const started = s.factTime(startedFact) - t0;
+    const exitedAt = s.factTime(exited) - t0;
     console.log(
-      `signals sigterm_ignored termination_started_ms=${started.toFixed(2)} exited_ms=${total.toFixed(2)} grace_ms=${(total - started).toFixed(2)}`,
+      `signals sigterm_ignored termination_started_ms=${started.toFixed(2)} exited_ms=${exitedAt.toFixed(2)} grace_ms=${(exitedAt - started).toFixed(2)}`,
     );
     // CodeRabbit CR-10 (PR #35 round): the test is named for the SIGKILL
     // rung, so assert it directly. The child traps TERM and cannot exit
