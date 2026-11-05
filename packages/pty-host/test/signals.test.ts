@@ -201,6 +201,7 @@ test("termination_started is emitted within 500 ms", async () => {
     s.send({ kind: "terminate" });
     const ts = await s.waitForFact((f) => f.kind === "termination_started");
     const elapsed = performance.now() - t0;
+    console.log(`signals termination_started_ms=${elapsed.toFixed(2)}`);
     expect(ts.kind).toBe("termination_started");
     expect(elapsed).toBeLessThan(500);
   } finally {
@@ -225,8 +226,12 @@ test("a child ignoring SIGTERM is SIGKILLed after the 2 s grace", async () => {
     // termination_started must come fast (≤500ms); exit evidence then waits
     // out the responsive-host grace because the child traps TERM.
     await s.waitForFact((f) => f.kind === "termination_started", 2000);
+    const started = performance.now() - t0;
     const exited = await s.waitForFact((f) => f.kind === "exited", 8000);
     const total = performance.now() - t0;
+    console.log(
+      `signals sigterm_ignored termination_started_ms=${started.toFixed(2)} exited_ms=${total.toFixed(2)} grace_ms=${(total - started).toFixed(2)}`,
+    );
     // CodeRabbit CR-10 (PR #35 round): the test is named for the SIGKILL
     // rung, so assert it directly. The child traps TERM and cannot exit
     // voluntarily, so the outcome is deterministic: code null, signal
