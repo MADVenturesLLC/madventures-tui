@@ -2185,3 +2185,436 @@ describe("Task 34 correction C2: the Step 1 runner, entry-path checks and negati
     }
   });
 });
+
+// ═══════════════════════════════════════════════════════════════════════
+// Task 59 — the Phase 3A merge gate (plan Task 59, as DEC-20261106-01 B4
+// reads it). One test for each spec section 6.8 item the plan's Step 1
+// names: items 12, 13, 14, 15, 16 and 1. Each checks its item through
+// production code or the guards M1, M14 and M22 built, and fails when its
+// item is broken. A test cannot observe the result of the run it is part
+// of, so items 2, 6, 7, 8 and 9 are checked by the gate runs and by tests
+// already in the suite, as the Task 59 evidence records.
+// ═══════════════════════════════════════════════════════════════════════
+
+import { runCli } from "../../apps/madbridge/src/cli";
+import * as mergeGateHarness from "./runtime-harness";
+
+describe("Phase 3A merge gate", () => {
+  // The Phase 2 suite floor of spec section 6.8 item 1 and plan section 1
+  // item 23, measured at SOURCE_BASELINE_SHA (plan section 0A).
+  const PHASE_2_FLOOR = { tests: 714, expects: 2606, files: 35 } as const;
+
+  // Spec section 4.2 and 4.3 literals.
+  const START_HUMAN_LINE =
+    "Live runtime not certified. Phase 3A runtime foundation is present; live startup requires Phase 3B certification.";
+  const SHARED_PLACEHOLDER_LINE = "External control unavailable. Use the certified TUI governance controls.";
+  const CLOSE_PLACEHOLDER_LINE =
+    "External control unavailable. Use the certified TUI governance controls. If the TUI is unresponsive during an incident, terminate the foreground supervisor process; supervisor exit terminates all governed children fail-closed.";
+  const SHARED_PLACEHOLDER_JSON =
+    '{"ok":false,"error":"external_control_unavailable","hint":"Use the certified TUI governance controls."}';
+  const CLOSE_PLACEHOLDER_JSON =
+    '{"ok":false,"error":"external_control_unavailable","hint":"Use the certified TUI governance controls. If the TUI is unresponsive during an incident, terminate the foreground supervisor process; supervisor exit terminates all governed children fail-closed."}';
+  const PLACEHOLDERS = [
+    { name: "status", line: SHARED_PLACEHOLDER_LINE, json: SHARED_PLACEHOLDER_JSON },
+    { name: "pause", line: SHARED_PLACEHOLDER_LINE, json: SHARED_PLACEHOLDER_JSON },
+    { name: "resume", line: SHARED_PLACEHOLDER_LINE, json: SHARED_PLACEHOLDER_JSON },
+    { name: "close", line: CLOSE_PLACEHOLDER_LINE, json: CLOSE_PLACEHOLDER_JSON },
+  ] as const;
+
+  const CLI_ENTRY = "apps/madbridge/src/cli.ts";
+  const COMMANDS_DIR = join(REPO_ROOT, "apps", "madbridge", "src", "commands");
+  // A runtime-authority package, named by workspace or by path.
+  const RUNTIME_MODULE =
+    /@madventures\/(broker|ledger|storage|supervisor|pty-host)|packages\/(broker|ledger|storage|supervisor|pty-host)\//;
+  // The test-tree marker of the M22 separation guard (test/phase3a/harness-separation.test.ts).
+  const HARNESS_MARKER = /runtime-harness|phase3a/i;
+  // Globals through which a module could reach host state without importing anything.
+  const HOST_GLOBALS = new Set(["process", "Bun", "require", "globalThis", "global", "fetch", "Deno", "WebSocket", "navigator"]);
+  const IN_REPO = { stdin: "", cwd: REPO_ROOT };
+
+  interface ModuleReach {
+    imports: { specifier: string; typeOnly: boolean }[];
+    dynamic: string[];
+    hostGlobals: string[];
+  }
+
+  /** Every module edge of one source file, read from its TypeScript AST. */
+  function moduleReach(file: string): ModuleReach {
+    const sourceFile = ts.createSourceFile(
+      file,
+      readFileSync(file, "utf8"),
+      ts.ScriptTarget.Latest,
+      /* setParentNodes */ true,
+      scriptKindFor(file),
+    );
+    const reach: ModuleReach = { imports: [], dynamic: [], hostGlobals: [] };
+    const visit = (node: ts.Node): void => {
+      if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)) {
+        const clause = node.importClause;
+        const named = clause?.namedBindings;
+        const typeOnly =
+          clause !== undefined &&
+          (clause.isTypeOnly ||
+            (clause.name === undefined &&
+              named !== undefined &&
+              ts.isNamedImports(named) &&
+              named.elements.length > 0 &&
+              named.elements.every((element) => element.isTypeOnly)));
+        reach.imports.push({ specifier: node.moduleSpecifier.text, typeOnly });
+      } else if (ts.isExportDeclaration(node) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) {
+        reach.imports.push({ specifier: node.moduleSpecifier.text, typeOnly: node.isTypeOnly });
+      } else if (
+        ts.isImportEqualsDeclaration(node) ||
+        (ts.isCallExpression(node) &&
+          (node.expression.kind === ts.SyntaxKind.ImportKeyword ||
+            (ts.isIdentifier(node.expression) && node.expression.text === "require")))
+      ) {
+        reach.dynamic.push(node.getText(sourceFile));
+      } else if (
+        ts.isIdentifier(node) &&
+        HOST_GLOBALS.has(node.text) &&
+        !(ts.isPropertyAccessExpression(node.parent) && node.parent.name === node)
+      ) {
+        reach.hostGlobals.push(node.text);
+      }
+      node.forEachChild(visit);
+    };
+    visit(sourceFile);
+    return reach;
+  }
+
+  /**
+   * The counts a certification report records for its bare `bun test`: the
+   * verbatim summary lines it quotes, which must match its command-table row
+   * for the same log and the unfiltered command.
+   */
+  function bareSuiteCounts(host: "macbook" | "ubuntu") {
+    const report = readFileSync(
+      join(REPO_ROOT, "docs", "verification", `2026-08-12-phase-3a-host-certification-${host}.md`),
+      "utf8",
+    );
+    const block = /^Last lines of the bare `bun test`, from `([^`]+)`:\n\n```text\n((?:.*\n)*?)```$/m.exec(report);
+    if (block === null) throw new Error(`${host} report: no verbatim bare bun test summary`);
+    const log = block[1]!;
+    const lines = block[2]!.trimEnd().split("\n");
+    const pass = /^ (\d+) pass$/.exec(lines[0] ?? "");
+    const fail = /^ (\d+) fail$/.exec(lines[1] ?? "");
+    const expects = /^ (\d+) expect\(\) calls$/.exec(lines[2] ?? "");
+    const ran = /^Ran (\d+) tests across (\d+) files\. \[[^\]]+\]$/.exec(lines[3] ?? "");
+    if (lines.length !== 4 || !pass || !fail || !expects || !ran) {
+      throw new Error(`${host} report: unexpected bare bun test summary ${JSON.stringify(lines)}`);
+    }
+    const row = report.split("\n").find((line) => line.startsWith(`| \`${log}\` | \`bun test\` | `));
+    expect(row, `${host} report: command-table row for ${log}`).toBe(
+      `| \`${log}\` | \`bun test\` | 0 | ${lines.map((line) => line.trim()).join("; ")} |`,
+    );
+    return {
+      pass: Number(pass[1]),
+      fail: Number(fail[1]),
+      expects: Number(expects[1]),
+      tests: Number(ran[1]),
+      files: Number(ran[2]),
+    };
+  }
+
+  test("merge gate item 12: production start still returns live_runtime_not_certified", async () => {
+    // The production dispatch, in process.
+    expect(await runCli(["start"], IN_REPO)).toEqual({ exitCode: 78, stdout: "", stderr: `${START_HUMAN_LINE}\n` });
+    const json = await runCli(["start", "--json"], IN_REPO);
+    expect(json).toEqual({ exitCode: 78, stdout: START_JSON_BODY, stderr: "" });
+    expect(JSON.parse(json.stdout)).toEqual({
+      ok: false,
+      error: "live_runtime_not_certified",
+      hint: "Phase 3A runtime foundation is present; live startup requires Phase 3B certification.",
+    });
+
+    // The shipped entry point, in bounded isolated processes.
+    const jsonChild = await runBoundedChild(process.execPath, [CLI_ENTRY, "start", "--json"], CHILD_ENV);
+    assertCliOutcome(jsonChild);
+    expect(jsonChild.stderr).toBe("");
+    const humanChild = await runBoundedChild(process.execPath, [CLI_ENTRY, "start"], CHILD_ENV);
+    expect({
+      error: humanChild.error,
+      timedOut: humanChild.timedOut,
+      code: humanChild.code,
+      stdout: humanChild.stdout,
+      stderr: humanChild.stderr,
+    }).toEqual({ error: null, timedOut: false, code: 78, stdout: "", stderr: `${START_HUMAN_LINE}\n` });
+  }, 15_000);
+
+  test("merge gate item 13: production start is structurally unable to reach the runtime or harness", async () => {
+    // The CLI routes `start` to startCommand and to nothing else.
+    const cliSource = ts.createSourceFile(
+      CLI_ENTRY,
+      readFileSync(join(REPO_ROOT, CLI_ENTRY), "utf8"),
+      ts.ScriptTarget.Latest,
+      /* setParentNodes */ true,
+      ts.ScriptKind.TS,
+    );
+    const startCases: string[][] = [];
+    const findStartCases = (node: ts.Node): void => {
+      if (ts.isCaseClause(node) && ts.isStringLiteral(node.expression) && node.expression.text === "start") {
+        const callees: string[] = [];
+        const collect = (inner: ts.Node): void => {
+          if (ts.isCallExpression(inner)) callees.push(inner.expression.getText(cliSource));
+          inner.forEachChild(collect);
+        };
+        node.statements.forEach(collect);
+        startCases.push(callees);
+      }
+      node.forEachChild(findStartCases);
+    };
+    findStartCases(cliSource);
+    expect(startCases).toEqual([["startCommand"]]);
+    expect(moduleReach(join(REPO_ROOT, CLI_ENTRY)).imports).toContainEqual({
+      specifier: "./commands/start",
+      typeOnly: false,
+    });
+
+    // Everything start.ts can reach, following every import and re-export:
+    // two files, no package, no dynamic load, no host global, and nothing
+    // loaded at run time.
+    const reached = new Map<string, ModuleReach>();
+    const unresolved: string[] = [];
+    const pending = [join(COMMANDS_DIR, "start.ts")];
+    while (pending.length > 0) {
+      const file = pending.pop()!;
+      if (reached.has(file)) continue;
+      const reach = moduleReach(file);
+      reached.set(file, reach);
+      for (const { specifier } of reach.imports) {
+        const target = resolveRelativeSpecifier(file, specifier);
+        if (target === null) unresolved.push(specifier);
+        else pending.push(target);
+      }
+    }
+    const reaches = [...reached.values()];
+    expect({
+      files: [...reached.keys()].map((file) => toPortablePath(relative(REPO_ROOT, file))).sort(),
+      packageOrUnresolved: unresolved,
+      loadedAtRunTime: reaches.flatMap((r) => r.imports.filter((i) => !i.typeOnly).map((i) => i.specifier)),
+      runtimeOrHarness: reaches
+        .flatMap((r) => r.imports.map((i) => i.specifier))
+        .filter((specifier) => RUNTIME_MODULE.test(specifier) || HARNESS_MARKER.test(specifier)),
+      dynamicLoads: reaches.flatMap((r) => r.dynamic),
+      hostGlobals: reaches.flatMap((r) => r.hostGlobals),
+    }).toEqual({
+      files: ["apps/madbridge/src/commands/start.ts", "apps/madbridge/src/commands/types.ts"],
+      packageOrUnresolved: [],
+      loadedAtRunTime: [],
+      runtimeOrHarness: [],
+      dynamicLoads: [],
+      hostGlobals: [],
+    });
+
+    // No production file names the test-only harness tree in an import,
+    // re-export or dynamic load.
+    const harnessEdges = enumerateProductionFiles(REPO_ROOT).flatMap((file) => {
+      const reach = moduleReach(file);
+      const rel = toPortablePath(relative(REPO_ROOT, file));
+      return [...reach.imports.map((i) => i.specifier), ...reach.dynamic]
+        .filter((edge) => HARNESS_MARKER.test(edge))
+        .map((edge) => `${rel}: ${edge}`);
+    });
+    expect(harnessEdges).toEqual([]);
+
+    // No argument or environment variable opens another path: the shipped
+    // entry point still fails closed and touches nothing it is pointed at.
+    const runtimeDir = mkdtempSync(join(tmpdir(), "merge-gate-13-"));
+    try {
+      const r = await runBoundedChild(
+        process.execPath,
+        [CLI_ENTRY, "start", "--json", "--fixture", "--harness", "--live", "--envelope", join(runtimeDir, "envelope.json")],
+        {
+          ...CHILD_ENV,
+          MADV_RUNTIME_DIR: runtimeDir,
+          MADV_STORAGE_DIR: runtimeDir,
+          MADV_FIXTURE: "1",
+          MADV_HARNESS: "1",
+          MADV_LIVE: "1",
+          DEBUG: "1",
+        },
+      );
+      assertCliOutcome(r);
+      expect(readdirSync(runtimeDir)).toEqual([]);
+    } finally {
+      rmSync(runtimeDir, { recursive: true, force: true });
+    }
+  }, 15_000);
+
+  test("merge gate item 14: external-control placeholders return their stable typed errors and inspect no runtime state", async () => {
+    for (const { name, line, json } of PLACEHOLDERS) {
+      // The production dispatch, in process: exit 69 and the exact output.
+      expect(await runCli([name], IN_REPO)).toEqual({ exitCode: 69, stdout: "", stderr: `${line}\n` });
+      expect(await runCli([name, "--json"], IN_REPO)).toEqual({ exitCode: 69, stdout: json, stderr: "" });
+      expect(JSON.parse(json).error).toBe("external_control_unavailable");
+      // Structure: the module imports types only and names no host global,
+      // so it has no means to probe a socket, PID, file, ledger or variable.
+      const reach = moduleReach(join(COMMANDS_DIR, `${name}.ts`));
+      expect({ name, ...reach }).toEqual({
+        name,
+        imports: [{ specifier: "./types", typeOnly: true }],
+        dynamic: [],
+        hostGlobals: [],
+      });
+    }
+
+    // Behavior: with a live broker.sock listening where the Phase 2 commands
+    // looked for one, the shipped entry point still returns each exact
+    // placeholder, and nothing connects to the socket or writes beside it.
+    const runtimeDir = mkdtempSync(join(tmpdir(), "merge-gate-14-"));
+    const server = await listenUnix(join(runtimeDir, "broker.sock"));
+    let connections = 0;
+    server.on("connection", (socket: net.Socket) => {
+      connections += 1;
+      socket.destroy();
+    });
+    try {
+      for (const { name, json } of PLACEHOLDERS) {
+        const r = await runBoundedChild(process.execPath, [CLI_ENTRY, name, "--json"], {
+          ...CHILD_ENV,
+          MADV_RUNTIME_DIR: runtimeDir,
+          MADV_STORAGE_DIR: runtimeDir,
+        });
+        expect({
+          name,
+          error: r.error,
+          timedOut: r.timedOut,
+          overflowed: r.overflowed,
+          code: r.code,
+          stdout: r.stdout,
+          stderr: r.stderr,
+        }).toEqual({ name, error: null, timedOut: false, overflowed: false, code: 69, stdout: `${json}\n`, stderr: "" });
+      }
+      expect({ connections, entries: readdirSync(runtimeDir) }).toEqual({ connections: 0, entries: ["broker.sock"] });
+    } finally {
+      server.close();
+      rmSync(runtimeDir, { recursive: true, force: true });
+    }
+  }, 15_000);
+
+  test("merge gate item 15: no production or harness path creates broker.sock", async () => {
+    // The dormant socket module, the only code that binds broker.sock, has
+    // no production or harness importer.
+    expect(findModuleSpecifierImporters(REPO_ROOT, "socket")).toEqual(["packages/broker/test/socket.test.ts"]);
+
+    // Both production entry points, in bounded isolated processes, create no
+    // broker.sock at the legacy path or under MADV_RUNTIME_DIR.
+    await runEntryPath({ args: [CLI_ENTRY, "start", "--json"], assertOutcome: assertCliOutcome });
+    await runEntryPath({
+      args: ["apps/madbridge/src/tui/main.tsx"],
+      readiness: TUI_READY,
+      assertOutcome: (r) => expect(tuiPathFailures(r)).toEqual([]),
+    });
+
+    // A fixture session through the test-only harness creates none under its
+    // own storage, the legacy root or the worktree, while active or after close.
+    const sockets = (fixtureRoot: string): string[] =>
+      [fixtureRoot, dirname(LEGACY_SOCKET), REPO_ROOT].flatMap((root) => sweep(root).matches);
+    const session = await mergeGateHarness.startFixtureSession();
+    const fixtureRoot = dirname(session.storage.root);
+    let whileActive: string[] = [];
+    try {
+      expect((await session.client.getSnapshot()).phase).toBe("active");
+      whileActive = sockets(fixtureRoot);
+    } finally {
+      await session.close();
+    }
+    expect({ whileActive, afterClose: sockets(fixtureRoot), fixtureRootRemoved: !existsSync(fixtureRoot) }).toEqual({
+      whileActive: [],
+      afterClose: [],
+      fixtureRootRemoved: true,
+    });
+  }, 30_000);
+
+  test("merge gate item 16: no residual child, descendant, PTY host, descriptor, open session record, or valid token remains after tests", async () => {
+    // This test runs and closes fixture sessions of its own, so its verdict
+    // does not depend on which files Bun ran before it.
+    const before = mergeGateHarness.fixtureResidualReport();
+    const sessionIds: string[] = [];
+    const processes: number[] = [];
+    const observe = async (session: mergeGateHarness.HarnessSession): Promise<void> => {
+      const snapshot = await session.client.getSnapshot();
+      expect({ phase: snapshot.phase, tokenState: snapshot.tokenState }).toEqual({ phase: "active", tokenState: "valid" });
+      sessionIds.push(snapshot.sessionId);
+      for (const execution of snapshot.executions ?? []) {
+        for (const pid of [execution.hostPid, execution.childPid]) if (pid !== null) processes.push(pid);
+      }
+    };
+
+    // A session whose governed child starts a descendant, then a plain session.
+    const grandchild = await mergeGateHarness.startProcessScenario("grandchild");
+    try {
+      await observe(grandchild);
+      const report = mergeGateHarness.fixtureProcessReport(grandchild);
+      expect(report.descendantPids.length).toBeGreaterThan(0);
+      processes.push(...report.descendantPids, ...(report.adapterPid === null ? [] : [report.adapterPid]));
+    } finally {
+      await grandchild.close();
+    }
+    const plain = await mergeGateHarness.startFixtureSession();
+    try {
+      await observe(plain);
+    } finally {
+      await plain.close();
+    }
+
+    // Descriptor closure can trail process exit; wait at most 1 s, as the
+    // adversarial census does.
+    const deadline = performance.now() + 1_000;
+    while (mergeGateHarness.fixtureResidualReport().openDescriptors.length > 0 && performance.now() < deadline) {
+      await Bun.sleep(5);
+    }
+    const after = mergeGateHarness.fixtureResidualReport();
+
+    // The census recorded this test's own hosts, children, descendant and
+    // descriptors.
+    expect({
+      runs: after.recordedRuns - before.recordedRuns,
+      hosts: after.recordedHosts - before.recordedHosts,
+      children: after.recordedChildren - before.recordedChildren,
+      descriptorsRecorded: after.recordedDescriptors > before.recordedDescriptors,
+      processesObserved: processes.length,
+    }).toEqual({ runs: 2, hosts: 4, children: 4, descriptorsRecorded: true, processesObserved: 10 });
+
+    // None of item 16's residuals remains.
+    expect({
+      livePids: after.livePids,
+      liveGroups: after.liveGroups,
+      openDescriptors: after.openDescriptors,
+      openLedgers: after.openLedgers,
+      openSessions: after.openSessions,
+      liveTokens: after.liveTokens,
+      ownProcessesAlive: processes.filter((pid) => after.livePids.includes(pid)),
+      ownSessionsClosedWithTokenInvalidated: sessionIds.map((sessionId) =>
+        after.durableSessions.some(
+          (durable) => durable.sessionId === sessionId && durable.phase === "closed" && durable.tokenState === "invalidated",
+        ),
+      ),
+    }).toEqual({
+      livePids: [],
+      liveGroups: [],
+      openDescriptors: [],
+      openLedgers: 0,
+      openSessions: 0,
+      liveTokens: 0,
+      ownProcessesAlive: [],
+      ownSessionsClosedWithTokenInvalidated: [true, true],
+    });
+  }, 30_000);
+
+  test("merge gate item 1: the suite has not regressed below the Phase 2 floor", () => {
+    for (const host of ["macbook", "ubuntu"] as const) {
+      const counts = bareSuiteCounts(host);
+      expect(counts.tests, `${host} report: tests`).toBeGreaterThanOrEqual(PHASE_2_FLOOR.tests);
+      expect(counts.expects, `${host} report: expect() calls`).toBeGreaterThanOrEqual(PHASE_2_FLOOR.expects);
+      expect(counts.files, `${host} report: files`).toBeGreaterThanOrEqual(PHASE_2_FLOOR.files);
+      // No failure, and no test that neither passed nor failed (skipped or todo).
+      expect({ host, fail: counts.fail, neitherPassedNorFailed: counts.tests - counts.pass - counts.fail }).toEqual({
+        host,
+        fail: 0,
+        neitherPassedNorFailed: 0,
+      });
+    }
+  });
+});
