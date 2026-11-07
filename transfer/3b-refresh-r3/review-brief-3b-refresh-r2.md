@@ -1,0 +1,54 @@
+STEP: independent review of the Phase 3B design spec and implementation plan, revision 3 drafts, for MADVenturesLLC/madventures-tui. Paste this as the first message of a new session on the Founder's MacBook, in a harness running a model not made by Anthropic, opened on the folder /Users/michaeldaley/builds/3b-refresh-review-r2. That folder holds everything you review; a read-only copy of this brief is in its drafts/ subfolder.
+
+FIRST, before you read any file: report exactly as your harness shows them the harness name, the model, and every active workspace. If a field is not shown, say "not shown"; that alone is not a stop. Begin every command with cd /Users/michaeldaley/builds/3b-refresh-review-r2 && and run it from there. Run pwd, git -C tui rev-parse HEAD and git -C surface rev-parse HEAD that way; they are part of this report. Stop and report only if the model is made by Anthropic, pwd does not print that path, tui/ is not at 5be1a586b4a4bb7cc09dfc6239b66b518cf9a23c, or surface/ is not at 270981400324c684abc1a5c0e837c8d8a3b20cf7.
+
+YOUR ROLE
+You are an independent reviewer of two planning documents. You did not write, plan or direct them, and this session has seen no material of them, and no earlier review of them, before this message; if either is untrue, stop and say so. A Claude Code session drafted them, so this review must come from a harness and model outside Anthropic. You review; you do not edit. This is a review of documents before approval. It authorizes nothing and builds nothing.
+
+WHAT YOU MAY READ AND RUN
+Read only inside /Users/michaeldaley/builds/3b-refresh-review-r2. Your harness may also attach /Users/michaeldaley or other folders; read nothing there. Read nothing under ~/.secrets, ~/.ssh, ~/.config, ~/.claude, ~/.codex, ~/.codex-governed, ~/.gemini or ~/.hermes, no other build folder (including /Users/michaeldaley/builds/3b-refresh-review-r1 and its report), no earlier review, and no memory, transcript or notes of any tool. Use no MCP server, start no other agent, and make no network call: no git fetch, no web page. The clones have no remote. You may run only read-only commands: cat, sed -n, grep, git show, git log, git grep, git diff, wc, shasum. Run no test, no Bun, and nothing that prints an environment variable or lists processes. Write only your log folder and your report.
+
+WHAT IS IN THE FOLDER
+- drafts/2026-09-19-phase-3b-live-tui-integration-design.md: the spec under review (revision 3).
+- drafts/2026-09-19-phase-3b-live-tui-integration.md: the plan under review (revision 3).
+- drafts/SHA256.txt: the SHA-256 of each file in drafts/, by bare file name. Check it from inside drafts/ first and log the result.
+- tui/: MADVenturesLLC/madventures-tui at 5be1a586b4a4bb7cc09dfc6239b66b518cf9a23c. Revision 1 of both documents is at the same paths under tui/docs/superpowers/. The Phase 3A design is tui/docs/superpowers/specs/2026-08-12-phase-3a-runtime-foundation-design.md, the Phase 3A plan is tui/docs/superpowers/plans/2026-08-12-phase-3a-runtime-foundation.md, and the Founder's acts are under tui/docs/decisions/.
+- surface/: MADVenturesLLC/madventures-surface at 270981400324c684abc1a5c0e837c8d8a3b20cf7, the madv-surface 0.1.0 tree merged on its main.
+
+CONTEXT YOU TAKE AS GIVEN
+The Founder chose the live pair: Claude Code plus madv-surface. For revision 3 the Founder also chose the minimax profile of madv-surface, a separate early slice that amends the capability record for Linux, and no approval workflow in Phase 3B. Do not argue for another pair, profile or scope; you may report a risk or a gap in how the drafts carry out those choices. Phase 3A merged at a7dbc7def0cd67568b2765c894ff91894707801c under docs/decisions/DEC-20261106-02-phase-3a-final-merge-review.md, and docs/decisions/DEC-20261107-01-task59-records-and-phase-3a-merge.md records that merge and closes M26; both are in tui/. Phase 3A is merged, not certified: the start gate stays closed until Phase 3B. The drafts summarize an earlier review in spec section 0A.4 and plan section 0C; judge the drafts on their own text and the files, not on that summary.
+
+WHAT YOU REVIEW (a PASS, FAIL or INCONCLUSIVE line for each, with the reason)
+1. Fidelity to the Phase 3A design. Does any statement of either draft contradict the Phase 3A design, in particular its sections 1.5, 2.1, 2.2, 2.3, 4.2, 4.3, 5.4 to 5.6, 6.9, 7.7, 9.1, 9.2, 9.8 and 9.13? Does the admission of madv-surface stay inside sections 9.1, 9.2 and 9.13?
+2. Facts about the code. Check every factual statement the drafts make about tui/ or surface/ against the files: the adapter registry entries, the pair constraints, the start gate, the BrokerClient boundary and the snapshot's approval fields, the production probe parsers and the live attester hook, the capability record's host fields, the TUI files the plan lists as naming the second pane (and any such file it misses), and madv-surface's command line, events, exit codes and their order, the minimax profile, its families, host, key prefix and auth verification method. Report each statement the files do not support.
+3. Items carried from Phase 3A. Search tui/docs/decisions/ for every ruling that carries an item to Phase 3B or to "the first Phase 3B act", and every ruling that a Phase 3B slice must satisfy first. Report any such item that plan section 2D omits, quotes inaccurately, or places in a slice that cannot do it.
+4. The admission and attestation design (spec sections 1.1 items 1 and 6, 2.6 and 2.7; plan slices M0 and M1). Is the conditional identity rule of spec section 2.6 item 1, with M0's investigation, enough for Phase 3A design section 2.2? Are the live attestation of spec sections 2.6 item 2 and 2.7 enough for section 9.13 and for DEC-20261104-01 B4? Is the integrity rule enough for section 9.1? What do M0 and M1 leave unspecified that a builder would need?
+5. Process and order. Do the slice order, binding bases, suite-count floor, execution semantics and the certification route (plan sections 0A, 2A, 2B, 2C and slices H2, M6 and M7; spec section 5) agree with the acts they cite and with Phase 3A design sections 4.2 and 6.9? Is any dependency between slices missing, and can any slice certify or merge something before its prerequisites?
+6. Open items. Is every decision the Founder must make listed in plan section 5? Is any listed item already decided by an act?
+7. Exposure. Are the live-call, billing, plan-terms, retention and secret rules of spec sections 1.3 and 2.6 item 4 and plan sections 0A item 6 and 1 complete for what the slices do, including the calls every start makes?
+8. Consistency. Do the spec and the plan agree with each other, and with what revision 1 kept that revision 3 still relies on?
+
+FINDINGS
+Classify each finding:
+- BLOCKING: must change before the Founder approves: a contradiction of the Phase 3A design or an act, a false statement about the code, an omitted carried item, or a design gap that would let a slice certify something the Phase 3A design forbids.
+- ADVISORY: an improvement that approval does not require.
+Do not inflate an advisory, and do not downgrade a real defect. For each finding give the draft, section and line, and what would fix it. Head each finding with a line of the form "### F<n> — BLOCKING: <title>" or "### F<n> — ADVISORY: <title>".
+
+EVIDENCE RULES (the Founder checks these by script; a report that breaks them is void)
+- Your log folder is /Users/michaeldaley/builds/3b-refresh-review-r2/logs/. Pipe every command through tee into its own log file there, named with a three-digit number, a hyphen and a short name ending in .log.
+- Every statement about a file names the file path relative to the folder and its line numbers, and quotes the text you rely on in a fenced block, copied byte for byte from those lines of the file. Put the attribution on its own line directly above the fenced block, in exactly this form: the path, a comma, a space, the word lines, a space, the line range, and a colon, for example tui/packages/protocol/src/adapter-registry.ts, lines 41–49: (a single line is written lines 33:). The Founder's script checks that each fenced block equals the stated lines of the file. Quote only text you read with a command whose log you list.
+- Never write code, diffs or output that you did not read or run. If you did not check something, say INCONCLUSIVE and why.
+- Quote no secret. The folder holds none.
+- Before you write the report, freeze the manifest: compute the SHA-256 of every file in logs/ and list them in report section 5 as a table with one row per log, of the form | 001-pwd.log | <sha-256> |. After the freeze, create or change no log. Then write the report in one pass and run only shasum -a 256 /Users/michaeldaley/builds/3b-refresh-review-r2.md, without tee and without a log, and print its output after the report as your last message. That one command is exempt from logging. If you need another command after the freeze, run it with its log, recompute the manifest and write the report again.
+
+IF YOUR CONTEXT IS COMPACTED
+Before your next step, run shasum -a 256 drafts/review-brief-3b-refresh-r2.md, log it, check it against drafts/SHA256.txt, read this brief in full again, and continue from the step your logs show you last completed. If the value differs, stop and report. Record each re-read in report section 4.
+
+FINAL REPORT (in this order)
+Write the complete report to /Users/michaeldaley/builds/3b-refresh-review-r2.md, then print the same text as your last message, followed by that file's SHA-256 from shasum -a 256.
+1. Identity: the harness and model as shown, every active workspace as shown, pwd and both HEADs, the drafts/SHA256.txt check, and that you did not author or direct the work.
+2. Verdict: APPROVE, CHANGES REQUIRED or INCONCLUSIVE, then one line for each of items 1 to 8 with its reason. Any BLOCKING finding means CHANGES REQUIRED.
+3. Findings, each classified, with draft, section, line, quoted evidence and the fix, or the word none.
+4. What you read and ran, any re-read of this brief after a compaction, and the unlogged final hash command.
+5. Every log in your log folder, by file name and SHA-256.
+6. Anything you could not check, and why.
