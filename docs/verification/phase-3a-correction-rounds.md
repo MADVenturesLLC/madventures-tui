@@ -1653,3 +1653,40 @@ Round 2's resolution, recorded above as pending, is now closed:
   unchanged, and Claude Code's count under rubric milestone 10 stays at 0. Merged at
   `8095767f51c2ca3dc098f5bfc9ccf519a85a2369` under `DEC-20261104-01` B10 item 3. The tightening of the
   six tests is carried to the first Phase 3B act under Addendum 4 B3.
+
+## Task 59 review verdict PASS (rubric milestones 2 and 10, no round, recorded after the merge)
+
+- **Recorded:** 2026-11-07, under `DEC-20261107-01` B1, B2 and C1.
+- **Plan milestone:** M26, Task 59. **Rubric milestones:** 2 and 10.
+- **Head reviewed:** `1d5438202c88f6b76b3b0e3746ac36d9416e7ad2` on PR #228, built by
+  `session:claude-code/m26-task59-r1` under `DEC-20261106-01` B5.
+- **Reviewer:** `antigravity`, a fresh session in the Antigravity command line on the Founder's
+  MacBook, with Gemini 4 Argon · high selected in the harness.
+- **Verdict text SHA-256:** `5baf1774da6d769c0ea054f0c7227d89dd67e189d654050ecb3c1bea79dfe091`, 52,233
+  bytes, 806 lines, saved at `/Users/michaeldaley/builds/review-pr228-r1.md`, posted on PR #228 as
+  comment 6695108029 by `decivantiq`.
+- **Result:** PASS, no substantive finding, one advisory finding: if the test-only harness skips
+  closing a fixture session's ledger, all six tests still pass. Copilot's comments 4497468572,
+  4497468630 and 4497468674 were answered by `DEC-20261106-02` B5. **Counted:** no round. Rubric
+  milestone 2's count is unchanged, and Claude Code's count under rubric milestone 10 stays at 0.
+  Approved under `DEC-20261106-02` B7, the final merge review, and merged at
+  `a7dbc7def0cd67568b2765c894ff91894707801c`. The advisory finding and Copilot's three findings are
+  carried to the first Phase 3B act under its B2 and B5.
+
+## M26 review checkpoint closed and Phase 3A merged (rubric milestones 2 and 10, count unchanged)
+
+- **Recorded:** 2026-11-07, under `DEC-20261107-01` B3, B4 and C1.
+- **Plan milestone:** M26, Tasks 58 and 59. **Rubric milestones:** 2 and 10.
+- **Closed at:** the merge of the pull request that files `DEC-20261107-01`, on the Task 58 and Task 59
+  entries above.
+- **Count:** rubric milestones 2 and 10 keep their counts.
+- **Phase 3A merged:** at `a7dbc7def0cd67568b2765c894ff91894707801c`, the merge of PR #228, with
+  `1d5438202c88f6b76b3b0e3746ac36d9416e7ad2` approved as the candidate SHA by `DEC-20261106-02` B7.
+  This records a merge, not a certification: production `start` still returns
+  `live_runtime_not_certified`, and removing the gate is a Phase 3B certification event under spec
+  §4.2 and §6.9.
+- **Carried to Phase 3B (act B3):** the items quoted in section 6 of the Task 59 evidence; the
+  residual census detects a fixture ledger left open before its storage is removed (`DEC-20261106-02`
+  B2); item 13's check covers the whole module set the shipped entry point loads for `start`; item
+  15's importer check resolves each specifier; and item 15's test fails when a sweep reports an error
+  (`DEC-20261106-02` B5).
