@@ -2,7 +2,7 @@ FOUNDER-ACT-20261108-PHASE-3B-APPROVAL: the Phase 3B design and plan approved at
 
 > **Status:** ISSUED
 > **Repository:** `MADVenturesLLC/madventures-tui`
-> **`origin/main` when drafted:** `5be1a586b4a4bb7cc09dfc6239b66b518cf9a23c` (the merge of pull request 229)
+> **`origin/main` when drafted:** `ae8b3325dcdbc1730ab8f7b9712071ba5e4324d5` (the merge of pull request 212)
 > **Governs:** Phase 3B; `docs/superpowers/specs/2026-09-19-phase-3b-live-tui-integration-design.md`; `docs/superpowers/plans/2026-09-19-phase-3b-live-tui-integration.md`
 > **Read with:** Phase 3A design §2.1, §2.2, §3.6, §4.2, §6.9, §7 and §8; `DEC-20261107-01` B3 and B4; `DEC-20261106-02` B2, B5 and B8; `DEC-20261104-02` Addenda 3 B5 and 4 B3; `DEC-20261104-01` A2, B4, B10 and B11; `DEC-20261102-04` B2; `DEC-20261102-02` B5; `DEC-20261102-01` B2 and B3; `DEC-20261027-01` A3; `DEC-20261022-01` B4; `DEC-20261020-01` B2 and B5; `DEC-20261016-01` B1 and B3; `DEC-20261015-03` B5; `DEC-20261013-01` B5; `DEC-20261010-02` B5
 
@@ -35,7 +35,7 @@ B1. **Approval.** I approve the design and the plan of A1 at those SHA-256 value
 1. No slice starts on this act. Each slice starts only on its own act, as plan §0A item 1 says.
 2. Where this act and either document differ, this act governs.
 
-B2. **The binding base of Phase 3B** is `5be1a586b4a4bb7cc09dfc6239b66b518cf9a23c`, the merge of pull request 229. Its changes since Phase 3A's final merge at `a7dbc7def0cd67568b2765c894ff91894707801c` are docs only.
+B2. **The binding base of Phase 3B** is `ae8b3325dcdbc1730ab8f7b9712071ba5e4324d5`, the merge of pull request 212. Its changes since Phase 3A's final merge at `a7dbc7def0cd67568b2765c894ff91894707801c` are docs only: `DEC-20261106-02`, `DEC-20261107-01` and the correction-round log entries filed by pull request 229, and `DEC-20261102-03` with its change to `CONTRIBUTING.md` filed by pull request 212. The reviews of A2 read the code at `5be1a586b4a4bb7cc09dfc6239b66b518cf9a23c`, the merge of pull request 229, which has the same code.
 
 B3. **The suite floor** is 1914 pass and 0 fail across 140 files on both certification hosts, as `DEC-20261106-02` B6 item 1 records at Task 59's head. It ratchets as plan §2B says.
 
@@ -69,7 +69,7 @@ B13. **When the other open items are ruled.**
 
 B14. **Counting.** These are new Founder rulings, which Phase 3A plan §11.3 does not count. The reviews of A2 reviewed documents; none is a counted verdict.
 
-B15. **What this does not open.** This act authorizes no build, no live call and no change to the `start` gate. Production `start` keeps returning `live_runtime_not_certified` until the certification candidate merges on the route of design §5. It leaves pull request 212 under `DEC-20261104-01` B10 item 4, and changes no earlier ruling except as B10 states.
+B15. **What this does not open.** This act authorizes no build, no live call and no change to the `start` gate. Production `start` keeps returning `live_runtime_not_certified` until the certification candidate merges on the route of design §5. It changes no earlier ruling except as B10 states.
 
 ## Part C: Filing
 
