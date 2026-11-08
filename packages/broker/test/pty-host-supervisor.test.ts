@@ -1280,35 +1280,40 @@ test("governed-child environment forwarding: exact key-set equality with the lau
   // `output` fact channel. No values are emitted, parsed, printed, or
   // asserted; no new fact kind and no codec change.
   //
-  // PLATFORM-DISPATCHED ORACLE, no subtraction on either lane. Both fixtures
-  // are /usr/bin/awk driven by argv — no extra file, and decisively NO SHELL
-  // (a POSIX shell injects PWD, SHLVL and _ into its own environment).
+  // PLATFORM-DISPATCHED ORACLE, no subtraction on either lane. Each fixture
+  // is one program driven by argv — no extra file — and the Linux fixture
+  // starts NO SHELL (a POSIX shell injects PWD, SHLVL and _ into its own
+  // environment).
   //
-  //  - Linux: read the inherited KERNEL environment block from
-  //    /proc/self/environ, split the NUL-delimited entries at the FIRST '='
-  //    and emit key names only. This is immune to interpreter injection.
-  //    CodeRabbit (PR #36, bound to head dda3481) correctly reported that the
-  //    previous ENVIRON oracle fails under gawk. Probed in containers:
-  //      Debian + gawk 5.2.1 : ENVIRON -> AWKPATH,AWKLIBPATH,... (INJECTS)
-  //                            /proc   -> HOSTNAME,HOME,PATH,MADV_...,PWD (clean)
-  //      Ubuntu + mawk 1.3.4 : ENVIRON -> clean ; /proc -> clean
-  //    So /proc is correct under BOTH awk variants; ENVIRON is not.
+  //  - Linux: /usr/bin/cut reads the inherited KERNEL environment block from
+  //    /proc/self/environ as NUL-terminated records (-z), skips any record
+  //    without '=' (-s) and prints each record's text before its FIRST '='
+  //    (-d = -f 1), NUL-terminated: key names only. cut is not an
+  //    interpreter, adds no key and starts no other process. Reading the
+  //    kernel block, never an interpreter's ENVIRON, keeps the lane immune
+  //    to injection: CodeRabbit (PR #36, bound to head dda3481) found that
+  //    ENVIRON gains AWKPATH, AWKLIBPATH under gawk. cut replaces
+  //    /usr/bin/awk reading the same block: mawk 1.3.4 20260129, when its
+  //    standard output is a terminal, reads every file as lines whatever RS
+  //    is, so each read stopped at the first NUL and only the first key was
+  //    seen (DEC-20261013-03 A3). cut prints no marker: the host's `drained`
+  //    fact follows the child's last output, so the key list is complete
+  //    there (DEC-20261103-01 B6 item 2).
   //  - macOS: /proc does not exist, so the verified BWK awk ENVIRON path is
   //    used. Probed on this host: `env -i PATH=... MADV_FIXTURE_MARKER=...`
   //    yields exactly those two keys — no interpreter injection.
   //
   // Node/Bun were rejected as fixture interpreters: Bun auto-loads .env
   // files, which injects unrelated keys into process.env.
-  const fixture = "/usr/bin/awk";
   const isLinux = process.platform === "linux";
-  // Linux: parse the kernel block (keys only). macOS: iterate ENVIRON (keys
-  // only). Neither program reads or emits a single environment VALUE.
-  const linuxProgram =
-    'BEGIN{RS="\\0"; s=""} {i=index($0,"="); if(i>0) s = s substr($0,1,i-1) ","} END{print "@@MADV_ENVKEYS " s "@@"; system("sleep 2")}';
+  const fixture = isLinux ? "/usr/bin/cut" : "/usr/bin/awk";
+  // Linux: cut over the kernel block (keys only). macOS: iterate ENVIRON
+  // (keys only). Neither program reads or emits a single environment VALUE.
+  const linuxArgv = ["-z", "-s", "-d", "=", "-f", "1", "/proc/self/environ"];
   const macosProgram =
     'BEGIN{s="";for(k in ENVIRON) s=s k ",";print "@@MADV_ENVKEYS " s "@@";system("sleep 2")}';
   const fixtureArgv = isLinux
-    ? [linuxProgram, "/proc/self/environ"]
+    ? linuxArgv
     : [macosProgram];
 
   // Plant an ambient canary in the SUPERVISOR's environment. It is absent
@@ -1347,6 +1352,9 @@ test("governed-child environment forwarding: exact key-set equality with the lau
       const next = await iterator.next();
       if (next.done) break;
       const fact = next.value as HostFactFrame;
+      // Linux: `drained` follows cut's last output fact, so every
+      // NUL-terminated key name has arrived.
+      if (isLinux && fact.kind === "drained") markerPayload = accumulated.split("\0").filter((k) => k.length > 0).join(",");
       if (fact.kind !== "output") continue;
       accumulated += new TextDecoder().decode(fact.bytes);
       const match = /@@MADV_ENVKEYS ([^@]*)@@/.exec(accumulated);
@@ -1355,8 +1363,8 @@ test("governed-child environment forwarding: exact key-set equality with the lau
     expect(markerPayload).not.toBeNull();
 
     // EXACT normalized key-set equality: dedupe + sort both sides, UTF-8
-    // string comparison, NO subtraction of any kind. The awk fixture's
-    // ENVIRON is the raw inherited environment, so every observed key must
+    // string comparison, NO subtraction of any kind. Each fixture reads the
+    // raw inherited environment, so every observed key must
     // come from descriptor.env. An empty env fails against a non-empty
     // allowlist by construction.
     const observedKeys = [...new Set((markerPayload as string).split(",").filter((k) => k.length > 0))].sort();

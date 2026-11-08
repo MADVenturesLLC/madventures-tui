@@ -360,7 +360,8 @@ export function spawnPtyHost(
   const hangNetMs = opts.hangNetMs ?? 300000;
   // §3.3 step 2: the lifeline read end is inherited at birth via the
   // spawned process's fd 0; the write end (below) exists only here.
-  const proc = Bun.spawn([BUN_EXECUTABLE, HOST_ENTRY], {
+  // Bun otherwise loads cwd .env files even with an explicit environment.
+  const proc = Bun.spawn([BUN_EXECUTABLE, "--no-env-file", HOST_ENTRY], {
     cwd: REPO_ROOT,
     stdin: "pipe",
     stdout: "pipe",
@@ -1065,7 +1066,13 @@ async function runOwnedEscalation(
       ? await_never<"exit">()
       : lifecycle.exited.then<"exit">(() => "exit");
     const deadlineWon = new Promise<"deadline">((resolve) => {
-      timer = setTimeout(() => resolve("deadline"), Math.max(0, ackDeadline - performance.now()));
+      const checkDeadline = (): void => {
+        const remaining = ackDeadline - performance.now();
+        // A timer may fire early; only the monotonic clock ends the window.
+        if (remaining > 0) timer = setTimeout(checkDeadline, remaining);
+        else resolve("deadline");
+      };
+      timer = setTimeout(checkDeadline, Math.max(0, ackDeadline - performance.now()));
     });
     const winner = await Promise.race([ackWon, exitWon, deadlineWon]);
     if (timer !== undefined) clearTimeout(timer);

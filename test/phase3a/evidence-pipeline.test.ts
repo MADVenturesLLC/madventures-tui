@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { Database } from "bun:sqlite";
@@ -656,3 +656,551 @@ for (const command of ["verify-ledger", "export-evidence"] as const) {
     }, 15000);
   }
 }
+
+test("export-evidence publishes a fresh package that holds no file it did not write", async () => {
+  await closedEvidenceFixture(async (session, id) => {
+    const output = session.storage.sanitizedEvidenceDir;
+    const siblings = readdirSync(dirname(output)).sort();
+    for (let run = 1; run <= 2; run += 1) {
+      writeFileSync(join(output, `planted-before-export-${run}.txt`), "synthetic planted file\n", { mode: 0o600 });
+      const result = await runCli(["export-evidence", "--session", id, "--json"], { stdin: "", cwd: process.cwd() });
+      expect(result.exitCode).toBe(0);
+      expect(JSON.parse(result.stdout).outputDir).toBe(output);
+      expect(readdirSync(output).sort()).toEqual(["README.txt", "ledger-sanitized.json", "manifest.json"]);
+      expect(readdirSync(dirname(output)).sort()).toEqual(siblings);
+    }
+  });
+}, 15000);
+
+test("export-evidence refuses an explicit output directory that holds a file it did not write", async () => {
+  await closedEvidenceFixture(async (session) => {
+    const output = join(session.storage.sessionDir, "explicit-export");
+    mkdirSync(output, { mode: 0o700 });
+    writeFileSync(join(output, "planted-before-export.txt"), "synthetic planted file\n", { mode: 0o600 });
+    const siblings = readdirSync(session.storage.sessionDir).sort();
+    const result = await runCli(["export-evidence", "--ledger", join(session.storage.ledgerDir, "ledger.sqlite3"),
+      "--output", output, "--json"], { stdin: "", cwd: process.cwd() });
+    expect(result.exitCode).toBe(1);
+    expect(JSON.parse(result.stdout)).toEqual({ error: "output_not_empty", ok: false, path: output });
+    expect(readdirSync(output)).toEqual(["planted-before-export.txt"]);
+    expect(readdirSync(session.storage.sessionDir).sort()).toEqual(siblings);
+  });
+}, 15000);
+
+for (const [name, kind] of [["README.txt", "directory"], ["manifest.json", "symbolic link"]] as const) {
+  test(`export-evidence refuses an explicit output directory whose ${name} is a ${kind}`, async () => {
+    await closedEvidenceFixture(async (session) => {
+      const output = join(session.storage.sessionDir, "explicit-export");
+      mkdirSync(output, { mode: 0o700 });
+      const planted = join(output, name);
+      const synthetic = kind === "directory" ? join(planted, "synthetic-inside.txt")
+        : join(session.storage.sessionDir, "synthetic-link-target.txt");
+      if (kind === "directory") mkdirSync(planted, { mode: 0o700 });
+      writeFileSync(synthetic, "synthetic planted content\n", { mode: 0o600 });
+      if (kind === "symbolic link") symlinkSync(synthetic, planted);
+      const entries = readdirSync(output).sort();
+      const siblings = readdirSync(session.storage.sessionDir).sort();
+      const result = await runCli(["export-evidence", "--ledger", join(session.storage.ledgerDir, "ledger.sqlite3"),
+        "--output", output, "--json"], { stdin: "", cwd: process.cwd() });
+      const stat = lstatSync(planted);
+      expect({ exitCode: result.exitCode, entries: readdirSync(output).sort(),
+        kind: stat.isDirectory() ? "directory" : stat.isSymbolicLink() ? "symbolic link" : "regular file" })
+        .toEqual({ exitCode: 1, entries, kind });
+      expect(JSON.parse(result.stdout)).toEqual({ error: "output_not_empty", ok: false, path: output });
+      expect(readFileSync(synthetic, "utf8")).toBe("synthetic planted content\n");
+      expect(readdirSync(session.storage.sessionDir).sort()).toEqual(siblings);
+    });
+  }, 15000);
+}
+
+test("export-evidence replaces an explicit output directory that holds only an earlier package", async () => {
+  await closedEvidenceFixture(async (session) => {
+    const output = join(session.storage.sessionDir, "explicit-export");
+    mkdirSync(output, { mode: 0o700 });
+    const siblings = readdirSync(session.storage.sessionDir).sort();
+    for (let run = 1; run <= 2; run += 1) {
+      const result = await runCli(["export-evidence", "--ledger", join(session.storage.ledgerDir, "ledger.sqlite3"),
+        "--output", output, "--json"], { stdin: "", cwd: process.cwd() });
+      expect(result.exitCode, `export ${run}`).toBe(0);
+    }
+    expect(readdirSync(output).sort()).toEqual(["README.txt", "ledger-sanitized.json", "manifest.json"]);
+    expect(readdirSync(session.storage.sessionDir).sort()).toEqual(siblings);
+  });
+}, 15000);
+
+for (const [command, subdirectory] of [["verify-ledger", "ledger"], ["export-evidence", "ledger"],
+  ["export-evidence", "output"]] as const) {
+  for (const fault of ["group-accessible", "symbolic link"] as const) {
+    test(`${command} --session rejects a ${fault} ${subdirectory} subdirectory`, async () => {
+      await closedEvidenceFixture(async (session, id) => {
+        const directory = subdirectory === "ledger" ? session.storage.ledgerDir : session.storage.sanitizedEvidenceDir;
+        if (fault === "group-accessible") chmodSync(directory, 0o750);
+        else {
+          renameSync(directory, `${directory}-target`);
+          symlinkSync(`${directory}-target`, directory);
+        }
+        const before = readdirSync(session.storage.root, { recursive: true }).sort();
+        const result = await runCli([command, "--session", id, "--json"], { stdin: "", cwd: process.cwd() });
+        expect(result.exitCode).toBe(1);
+        expect(JSON.parse(result.stdout)).toEqual({ ok: false, error: fault === "group-accessible"
+          ? "storage_root_invalid:group_or_other_accessible" : "storage_root_invalid:symlink_component" });
+        expect(readdirSync(session.storage.root, { recursive: true }).sort()).toEqual(before);
+      });
+    }, 15000);
+  }
+}
+
+// Task 57: DEC-20261103-02 B8. These checks consume repository evidence only.
+import * as task57Ts from "typescript";
+import * as task57Protocol from "@madventures/protocol";
+import { parseAuthReadiness } from "../../packages/supervisor/src/attestation";
+
+const TASK57_ROOT = join(import.meta.dir, "..", "..");
+const TASK57_REPORTS = join(TASK57_ROOT, "docs", "verification");
+const TASK57_APPROVED = ["claude-code"];
+
+function task57Reports(): { surface: string; text: string }[] {
+  return readdirSync(TASK57_REPORTS).sort().flatMap(name => {
+    const match = /^2026-08-12-surface-investigation-(.+)\.md$/.exec(name);
+    return match ? [{ surface: match[1]!, text: readFileSync(join(TASK57_REPORTS, name), "utf8") }] : [];
+  });
+}
+
+function task57Captures(report: string) {
+  return [...report.matchAll(/^### B4 item (\d+)\n([\s\S]*?)(?=^### B4 item |^## |$(?![\s\S]))/gm)].map(match => {
+    const text = match[2]!;
+    const streams = [...text.matchAll(/^- \*\*(Stdout|Stderr) \((\d+) bytes\):\*\*\n(`{3,})text\n([\s\S]*?)^\3$/gm)];
+    expect(streams.map(s => s[1])).toEqual(["Stdout", "Stderr"]);
+    for (const stream of streams) {
+      expect(Buffer.byteLength(stream[4]!, "utf8")).toBe(Number(stream[2]));
+      const longest = Math.max(0, ...[...stream[4]!.matchAll(/`+/g)].map(run => run[0].length));
+      expect(stream[3]!.length).toBeGreaterThan(longest);
+    }
+    return {
+      item: Number(match[1]),
+      command: /^- \*\*Command:\*\* `([^`\n]+)`$/m.exec(text)?.[1],
+      exit: Number(/^- \*\*Exit status:\*\* `(-?\d+)`$/m.exec(text)?.[1]),
+      stdout: streams[0]![4]!, stderr: streams[1]![4]!,
+    };
+  });
+}
+
+test("every investigated surface has both a capability record and a committed report", () => {
+  const reports = task57Reports();
+  expect(reports.map(report => report.surface)).toEqual(TASK57_APPROVED);
+  for (const { surface, text } of reports) {
+    const section = extractCapabilityRecordSection(text);
+    expect(section.blocks).toHaveLength(1);
+    const block = section.blocks[0]!;
+    const record = parseCapabilityRecord(JSON.parse(block));
+    const registration = lookupRegistration(parseSurfaceId(surface))!;
+    expect(record.surface).toBe(parseSurfaceId(surface));
+    expect(record.provider).toBe(registration.provider);
+    expect(record.organization_id).toBe(registration.organization_id);
+    expect(record.independence_domain).toBe(registration.independence_domain);
+    expect(block).toBe(JSON.stringify(record));
+    expect(section.recordedFilename).toBe(capabilityRecordFilename(record));
+    expect(section.recordedSha256).toBe(createHash("sha256").update(`${block}\n`).digest("hex"));
+
+    const captures = task57Captures(text);
+    expect(captures.map(c => c.item)).toEqual(Array.from({ length: 18 }, (_, i) => i + 1));
+    const at = (item: number) => captures[item - 1]!;
+    for (let i = 1; i <= 5; i++) {
+      expect(at(i).command).toBe(at(i + 13).command);
+      expect(at(i).exit).toBe(0);
+      expect(at(i + 13).exit).toBe(0);
+    }
+    expect(at(2).stdout.trim()).toBe(record.binary_path);
+    expect(at(15).stdout).toBe(at(2).stdout);
+    expect(at(4).stdout).toBe(`${record.binary_sha256}  ${record.binary_path}\n`);
+    expect(at(17).stdout).toBe(at(4).stdout);
+    expect(at(5).stdout.split(/\s/)[0]).toBe(record.cli_version);
+    expect(at(18).stdout).toBe(at(5).stdout);
+    const events = (item: number): Record<string, unknown>[] => at(item).stdout.split("\n")
+      .filter(line => line.trim()).map(line => JSON.parse(line));
+    const inits = (item: number) => events(item).filter(e => e.type === "system" && e.subtype === "init");
+    for (const item of [9, 10, 11]) {
+      for (const init of inits(item)) expect(init.claude_code_version).toBe(record.cli_version);
+    }
+    expect(record.requested_model).toBe("claude-fable-5-1");
+    expect(record.identity_attestation.primitive).toBe(
+      `madbridge-claude-v5 ${registration.identity_probe.argv.join(" ")} --model ${record.requested_model}`,
+    );
+    expect(record.auth_readiness).toEqual({
+      primitive: "madbridge-claude-v5 auth status",
+      result: at(8).exit === 0 && parseAuthReadiness(at(8).stdout) ? "pass" : "fail",
+    });
+    const overall = record.identity_attestation.result === "pass" && record.auth_readiness.result === "pass" ? "pass" : "fail";
+    expect(record.overall).toBe(overall);
+    expect(record.role_eligibility).toEqual(overall === "pass" ? ["builder", "independent-reviewer"] : []);
+    expect(record.independent_review_eligible).toBe(overall === "pass");
+    expect(record.pty).toEqual({ result: "fail", observed_ms: {} });
+    expect(record.limitations.some(value => value.includes("4.2") && value.includes("no governed session")
+      && value.includes("PTY") && value.includes("process-group") && value.includes("termination") && value.includes("timing"))).toBe(true);
+    if (!registration.supported_versions.includes(record.cli_version)) {
+      expect(record.limitations.some(value => value.includes(record.cli_version)
+        && registration.supported_versions.every(version => value.includes(version)))).toBe(true);
+    }
+    if (!at(3).stdout.includes("Mach-O")) {
+      expect(record.limitations.some(value => value.includes("binary_sha256") && value.includes("launcher")
+        && value.includes("program"))).toBe(true);
+    }
+    if (record.identity_attestation.result === "pass") {
+      expect(inits(10).some(init => init.model === record.requested_model)).toBe(true);
+    }
+  }
+});
+
+function task57Walk(node: task57Ts.Node, visit: (node: task57Ts.Node) => void): void {
+  visit(node);
+  node.forEachChild(child => task57Walk(child, visit));
+}
+
+// Evaluate the committed preflight with an entirely in-memory OS boundary.
+// No probe starts a process, no record store is opened, and no path is read.
+function task57Preflight() {
+  const calls: string[] = [];
+  let rejectedProbe: string | undefined;
+  let record: unknown = {
+    overall: "pass", requested_model: "task57-model", role_eligibility: ["builder", "independent-reviewer"],
+    independent_review_eligible: true,
+  };
+  const source = readFileSync(join(TASK57_ROOT, "packages/supervisor/src/preflight.ts"), "utf8");
+  const javascript = task57Ts.transpileModule(source, {
+    compilerOptions: { module: task57Ts.ModuleKind.CommonJS, target: task57Ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const stat = () => ({ uid: 42, mode: 0o700, isDirectory: () => true, isFile: () => true });
+  const probe = async (request: { kind: string }) => {
+    calls.push(request.kind);
+    return { ok: request.kind !== rejectedProbe };
+  };
+  const modules: Record<string, unknown> = {
+    "node:fs": { constants: { X_OK: 1 }, accessSync() {}, statSync: stat,
+      realpathSync: (path: string) => path, readFileSync: () => Buffer.from("synthetic executable") },
+    "node:os": { userInfo: () => ({ uid: 42, homedir: "/fixture-home", shell: "/bin/zsh" }) },
+    "node:path": { basename: (path: string) => path.split("/").at(-1), isAbsolute: (path: string) => path.startsWith("/"),
+      join: (...parts: string[]) => parts.join("/"), resolve: (path: string) => path, sep: "/" },
+    "@madventures/protocol": { ...task57Protocol, parseTaskEnvelope: (value: unknown) => value },
+    "../../protocol/src/pair-constraints": { evaluatePairEligibilityWithDependencies: () => ({ ok: true }) },
+    "@madventures/storage": { proposeStorageRoot: () => "/fixture-storage", validateStorageRoot: () => ({ ok: true }),
+      latestFreshRecord: () => { calls.push("record"); return record; } },
+    "./environment": { buildAllowlistedEnvironment: () => ({}), MissingRequiredVariableError: class extends Error {} },
+    "./attestation": { IDENTITY_PROBE_INPUT: "synthetic input", runBoundedProbe: probe },
+  };
+  const module = { exports: {} as { runPurePreflight(input: unknown): Promise<{ ok: boolean; failure?: string; detail?: string }> } };
+  new Function("require", "module", "exports", "Bun", javascript)((name: string) => {
+    expect(Object.hasOwn(modules, name), `unexpected preflight dependency ${name}`).toBe(true);
+    return modules[name];
+  }, module, module.exports, {
+    CryptoHasher: Bun.CryptoHasher,
+    spawnSync: (argv: string[]) => ({ exitCode: 0, stdout: Buffer.from(argv.includes("--is-inside-work-tree") ? "true\n"
+      : argv.includes("--verify") ? `${"1".repeat(40)}\n` : argv.includes("--git-common-dir") ? "/fixture-repo/.git\n" : "") }),
+  });
+  const registration = lookupRegistration(parseSurfaceId("claude-code"))!;
+  const input = {
+    envelope: { executions: ["builder", "independent-reviewer"].map(role => ({
+      surface: registration.surface, provider: registration.provider, independence_domain: registration.independence_domain,
+      model: "task57-model", role,
+    })), repository: "/fixture-repo", worktree: "/fixture-repo", repository_fingerprint: { git_sha: "1".repeat(40) } },
+    repositoryRoot: "/fixture-repo", worktree: "/fixture-repo",
+    ambient: { HOME: "/fixture-home", SHELL: "/bin/zsh", TERM: "xterm-256color", PATH: "/fixture-bin",
+      TMPDIR: "/fixture-private", CLAUDE_CONFIG_DIR: "/fixture-home/.claude-madventures-v5" },
+    installation: { installation_uid: 42, passwd_home: "/fixture-home", approved_path: "/fixture-bin",
+      claude_config_dir: "/fixture-home/.claude-madventures-v5" },
+    invocationArguments: [], settingsSources: [], observedHostFacts: {}, now: "2026-11-03T00:00:00.000Z",
+    hostCapabilities: { pty: true, processGroups: true, termination: true, timing: true }, signal: new AbortController().signal,
+  };
+  return { calls, input, run: () => module.exports.runPurePreflight(input),
+    rejectProbe: (kind: string) => { rejectedProbe = kind; }, setRecord: (value: unknown) => { record = value; } };
+}
+
+test("no capability record is treated as a live authorization", async () => {
+  const listing = Bun.spawnSync(["git", "ls-files", "-z", "--", "apps", "packages"], { cwd: TASK57_ROOT });
+  expect(listing.exitCode).toBe(0);
+  const callers = new Set<string>();
+  for (const path of listing.stdout.toString().split("\0").filter(path => /\/src\/.*\.tsx?$/.test(path))) {
+    const source = task57Ts.createSourceFile(path, readFileSync(join(TASK57_ROOT, path), "utf8"), task57Ts.ScriptTarget.Latest, true);
+    const names = new Set(["readCapabilityRecords", "latestFreshRecord"]);
+    task57Walk(source, node => {
+      if (task57Ts.isImportSpecifier(node) && names.has((node.propertyName ?? node.name).text)) names.add(node.name.text);
+    });
+    task57Walk(source, node => {
+      if (!task57Ts.isCallExpression(node)) return;
+      const expression = node.expression;
+      const name = task57Ts.isIdentifier(expression) ? expression.text
+        : task57Ts.isPropertyAccessExpression(expression) ? expression.name.text : "";
+      if (names.has(name) || name === "freshRecord") callers.add(path);
+    });
+  }
+  expect([...callers].sort()).toEqual(["packages/storage/src/capability-store.ts", "packages/supervisor/src/preflight.ts"]);
+  const passing = task57Preflight();
+  expect((await passing.run()).ok).toBe(true);
+  expect(passing.calls).toEqual(["identity", "auth", "identity", "auth", "record", "record"]);
+  for (const kind of ["identity", "auth"]) {
+    const fixture = task57Preflight();
+    fixture.rejectProbe(kind);
+    expect(await fixture.run()).toEqual({ ok: false, failure: kind === "identity" ? "identity_mismatch" : "auth_not_ready",
+      detail: kind === "identity" ? "identity_mismatch" : "auth_not_ready" });
+    expect(fixture.calls).toEqual(kind === "identity" ? ["identity"] : ["identity", "auth"]);
+  }
+  for (const record of [null, { overall: "fail" }, { overall: "pass", requested_model: "other-model" },
+    { overall: "pass", requested_model: "task57-model", role_eligibility: [] },
+    { overall: "pass", requested_model: "task57-model", role_eligibility: ["builder", "independent-reviewer"], independent_review_eligible: false }]) {
+    const fixture = task57Preflight();
+    fixture.setRecord(record);
+    expect(await fixture.run()).toEqual({ ok: false, failure: "capability_record_stale", detail: "capability_record_stale" });
+    expect(fixture.calls.slice(0, 4)).toEqual(["identity", "auth", "identity", "auth"]);
+  }
+});
+
+function task57FieldLines(report: string): string[] {
+  let fence: string | undefined;
+  return report.split("\n").filter(line => {
+    if (fence !== undefined) {
+      if (line === fence) fence = undefined;
+      return false;
+    }
+    const opening = /^(`{3,})\w*$/.exec(line);
+    if (opening) { fence = opening[1]; return false; }
+    return true;
+  });
+}
+
+test("no alternative is marked preselected or default", () => {
+  const reports = [...task57Reports().map(report => report.text), readInvestigationReport()];
+  for (const report of reports) {
+    const section = extractCapabilityRecordSection(report);
+    expect(section.blocks).toHaveLength(1);
+    const record: unknown = JSON.parse(section.blocks[0]!);
+    for (const key of ["preselected", "default", "fallback"]) expect(hasKeyRecursive(record, key)).toBe(false);
+    for (const line of task57FieldLines(report)) {
+      expect(line).not.toMatch(/^\s*(?:[-*|]\s*)?(?:\*\*)?(?:Preselected|Default|Fallback)(?:\*\*)?\s*(?::|\|)/i);
+    }
+  }
+  for (const registration of task57Protocol.ADAPTER_REGISTRY.values()) {
+    for (const key of ["preselected", "default", "fallback"]) expect(hasKeyRecursive(registration, key)).toBe(false);
+  }
+});
+
+/*
+ * Task 58 (plan Task 58 Step 1; DEC-20261104-02 B9 item 2): the six tests
+ * over the two host certification reports, with "all three" read as "both"
+ * under DEC-20261013-04 B4. They read only the two reports in
+ * docs/verification/, never a log or a path outside the repository, and
+ * assert the same form on each report.
+ */
+const TASK58_REPORT_DIR = join(import.meta.dir, "..", "..", "docs", "verification");
+const TASK58_HOSTS = ["macbook", "ubuntu"] as const;
+const TASK58_SOURCE_BASELINE_SHA = "aa16032c56fdf6c7105e99b1765ed9365d605bf4";
+const TASK58_HEADER_LABELS = [
+  "Phase 3A host certification report",
+  "Candidate commit",
+  "Host",
+  "Certification run",
+  "Manifest SHA-256",
+];
+const TASK58_HEADINGS = [
+  "1. Candidate commit and branch",
+  "2. Worktree state",
+  "3. Runtime",
+  "4. Host",
+  "5. Commands and complete counts",
+  "6. Spike criteria, adversarial criteria and measured timings",
+  "7. Failures, retries, warnings and residual risks",
+  "8. Evidence",
+];
+const TASK58_DEADLINE_ROWS = [
+  "Host acknowledgement of a command",
+  "termination_started after terminate",
+  "Escalation after a missed acknowledgement or lifeline loss",
+  "Responsive-host child grace",
+  "Unresponsive or SIGSTOP host grace",
+  "All governed processes gone",
+];
+const TASK58_BARE_SUITE_LABEL = "Last lines of the bare `bun test`, from `";
+const TASK58_RAN = /^Ran (\d+) tests? across (\d+) files?\./;
+
+interface Task58Line {
+  readonly text: string;
+  /** True for a fence line or a line inside a fenced block. */
+  readonly fenced: boolean;
+}
+
+interface Task58Report {
+  readonly host: string;
+  readonly text: string;
+  /** The lines before the first `## ` heading. */
+  readonly header: readonly Task58Line[];
+  /** The lines under each of the eight `## ` headings, in order. */
+  readonly sections: readonly (readonly Task58Line[])[];
+}
+
+function task58Report(host: string): Task58Report {
+  // ENOENT here is the expected RED of plan Task 58 Step 2, before the reports exist.
+  const text = readFileSync(join(TASK58_REPORT_DIR, `2026-08-12-phase-3a-host-certification-${host}.md`), "utf8");
+  const header: Task58Line[] = [];
+  const sections: Task58Line[][] = [];
+  const headings: string[] = [];
+  let fence: string | undefined;
+  for (const raw of text.split("\n")) {
+    const opening = fence === undefined ? /^(`{3,})/.exec(raw) : null;
+    const fenced = fence !== undefined || opening !== null;
+    if (fence !== undefined && raw === fence) fence = undefined;
+    else if (opening) fence = opening[1];
+    const heading = fenced ? null : /^## (.+)$/.exec(raw);
+    if (heading) {
+      headings.push(heading[1]!);
+      sections.push([]);
+      continue;
+    }
+    (sections.at(-1) ?? header).push({ text: raw, fenced });
+  }
+  expect(fence, `${host}: every fenced block is closed`).toBeUndefined();
+  expect(headings, `${host}: the eight sections of plan §8.7, in order`).toEqual(TASK58_HEADINGS);
+  return { host, text, header, sections };
+}
+
+function task58Plain(lines: readonly Task58Line[]): string[] {
+  return lines.filter(line => !line.fenced).map(line => line.text);
+}
+
+/** The value of the one unfenced `<label>: <value>` line, which must carry a value. */
+function task58Value(lines: readonly Task58Line[], label: string): string {
+  const found = task58Plain(lines).filter(line => line.startsWith(`${label}: `));
+  expect(found, `exactly one "${label}:" line`).toHaveLength(1);
+  const value = found[0]!.slice(label.length + 2);
+  expect(value.trim(), `"${label}:" carries a value`).not.toBe("");
+  return value;
+}
+
+/** The log named by the unfenced label line `<prefix><log>\`:` and the content of the fenced block after it. */
+function task58Block(lines: readonly Task58Line[], prefix: string): { log: string; content: string[] } {
+  const at = lines.findIndex(line => !line.fenced && line.text.startsWith(prefix) && line.text.endsWith(".log`:"));
+  expect(at, `a labeled block "${prefix}…"`).toBeGreaterThanOrEqual(0);
+  const log = lines[at]!.text.slice(prefix.length, -2);
+  expect(log).toMatch(/^[\w.-]+\.log$/);
+  let index = at + 1;
+  while (lines[index]?.text === "") index += 1;
+  const marker = /^(`{3,})/.exec(lines[index]?.text ?? "")?.[1];
+  if (marker === undefined) throw new Error(`no fenced block follows "${prefix}${log}\`:"`);
+  const content: string[] = [];
+  for (index += 1; lines[index] !== undefined && lines[index]!.text !== marker; index += 1) content.push(lines[index]!.text);
+  expect(lines[index]?.text, `the block after "${prefix}${log}\`:" is closed`).toBe(marker);
+  return { log, content };
+}
+
+/** The cells of every unfenced Markdown table row; a cell never holds an unescaped " | ". */
+function task58Rows(lines: readonly Task58Line[]): string[][] {
+  return task58Plain(lines)
+    .filter(line => line.startsWith("| ") && line.endsWith(" |"))
+    .map(line => line.slice(2, -2).split(" | ").map(cell => cell.trim()));
+}
+
+test("both host certification reports name the same candidate SHA", () => {
+  const candidates = TASK58_HOSTS.map(host => {
+    const report = task58Report(host);
+    const labels = task58Plain(report.header).filter(line => line !== "").map(line => line.slice(0, line.indexOf(":")));
+    expect(labels, `${host}: the header lines, in order`).toEqual(TASK58_HEADER_LABELS);
+    const lines = report.text.split("\n").filter(line => line.startsWith("Candidate commit:"));
+    expect(lines, `${host}: one "Candidate commit:" line`).toHaveLength(1);
+    const sha = /^Candidate commit: ([0-9a-f]{40})$/.exec(lines[0]!)?.[1];
+    if (sha === undefined) throw new Error(`${host}: the "Candidate commit:" line names no 40-character SHA`);
+    expect(task58Value(report.header, "Host")).toBe(host);
+    task58Value(report.header, "Certification run");
+    expect(task58Value(report.header, "Manifest SHA-256")).toMatch(/^[0-9a-f]{64}$/);
+    expect(task58Block(report.sections[0]!, "Output of `git rev-parse HEAD`, from `").content).toEqual([sha]);
+    return sha;
+  });
+  expect(candidates[0]).toBe(candidates[1]);
+});
+
+test("both reports record architecture, operating-system version and build, Bun path, version and hash, TERM, and shell", () => {
+  for (const host of TASK58_HOSTS) {
+    const report = task58Report(host);
+    const runtime = report.sections[2]!;
+    const machine = report.sections[3]!;
+    for (const label of ["Bun path", "Bun resolved path", "Node path"]) expect(task58Value(runtime, label)).toMatch(/^\//);
+    expect(task58Value(runtime, "Bun version")).toMatch(/^\d+\.\d+\.\d+/);
+    expect(task58Value(runtime, "Bun SHA-256")).toMatch(/^[0-9a-f]{64}$/);
+    expect(task58Value(runtime, "Bun revision")).toMatch(/^[0-9a-f]{40}$/);
+    expect(task58Value(runtime, "Node version")).toMatch(/^v\d+\.\d+\.\d+$/);
+    for (const label of ["Architecture", "Operating system", "OS build", "TERM"]) task58Value(machine, label);
+    expect(task58Value(machine, "Shell")).toMatch(/^\//);
+  }
+});
+
+test("both reports record complete suite counts, not filtered counts", () => {
+  for (const host of TASK58_HOSTS) {
+    const section = task58Report(host).sections[4]!;
+    const bare = task58Block(section, TASK58_BARE_SUITE_LABEL);
+    const ranLines = bare.content.filter(line => TASK58_RAN.test(line));
+    expect(ranLines, `${host}: one "Ran <n> tests across <m> files" line from the bare bun test`).toHaveLength(1);
+    const ran = Number(TASK58_RAN.exec(ranLines[0]!)![1]);
+    const printed = (pattern: RegExp): number => {
+      const hits = bare.content.map(line => pattern.exec(line)).filter((m): m is RegExpExecArray => m !== null);
+      expect(hits, `${host}: one line matching ${pattern}`).toHaveLength(1);
+      return Number(hits[0]![1]);
+    };
+    const pass = printed(/^ *(\d+) pass$/);
+    const fail = printed(/^ *(\d+) fail$/);
+    printed(/^ *(\d+) expect\(\) calls$/);
+    expect(pass + fail).toBe(ran);
+    const rows = task58Rows(section).filter(cells => cells[1] === "`bun test`");
+    expect(rows, `${host}: one table row for the bare bun test`).toHaveLength(1);
+    expect(rows[0]![0]).toBe(`\`${bare.log}\``);
+    expect(rows[0]![3]).toContain(ranLines[0]!);
+    const counts = task58Plain(section).flatMap(line => [...line.matchAll(/Ran (\d+) tests? across/g)].map(m => Number(m[1])));
+    expect(Math.max(...counts), `${host}: no other run in section 5 ran more tests than the reported suite`).toBe(ran);
+  }
+});
+
+test("both reports record observed timings for every deadline", () => {
+  for (const host of TASK58_HOSTS) {
+    const report = task58Report(host);
+    const bareLog = task58Block(report.sections[4]!, TASK58_BARE_SUITE_LABEL).log;
+    const rows = task58Rows(report.sections[5]!);
+    expect(rows.filter(cells => cells[0] === "Measurement")).toEqual([["Measurement", "Bound", "Observed", "Source log"]]);
+    for (const label of TASK58_DEADLINE_ROWS) {
+      const matching = rows.filter(cells => cells[0] === label);
+      expect(matching, `${host}: one "${label}" row`).toHaveLength(1);
+      const [, bound, observed, source] = matching[0]!;
+      expect(bound ?? "", `${host}: "${label}" states its bound`).not.toBe("");
+      expect(observed ?? "", `${host}: "${label}" carries an observed value in ms`).toMatch(/(?<![\w.])\d+(?:\.\d+)? ms(?!\w)/);
+      expect(source, `${host}: "${label}" is taken from the bare bun test log`).toBe(`\`${bareLog}\``);
+    }
+  }
+});
+
+test("both reports record worktree cleanliness and exact changed files", () => {
+  for (const host of TASK58_HOSTS) {
+    const section = task58Report(host).sections[1]!;
+    expect(task58Value(section, "Worktree")).toBe("clean");
+    const status = task58Block(section, "Output of `git status -sb`, from `").content;
+    expect(status, `${host}: git status -sb prints its branch line and no changed path`).toHaveLength(1);
+    expect(status[0]).toMatch(/^## /);
+    expect(task58Block(section, "Output of `git ls-files --others --exclude-standard`, from `").content).toEqual([]);
+    const changed = task58Block(section, `Output of \`git diff --name-only ${TASK58_SOURCE_BASELINE_SHA}\`, from \``).content;
+    expect(changed.length, `${host}: the exact changed files against the source baseline`).toBeGreaterThan(0);
+    for (const path of changed) {
+      expect(path).not.toBe("");
+      expect(path.trim()).toBe(path);
+      expect(path.startsWith("/")).toBe(false);
+    }
+    expect(new Set(changed).size).toBe(changed.length);
+  }
+});
+
+test("both reports carry a checksum", () => {
+  for (const host of TASK58_HOSTS) {
+    const { text } = task58Report(host);
+    expect(text.endsWith("\n"), `${host}: the report ends with a newline`).toBe(true);
+    const lines = text.slice(0, -1).split("\n");
+    expect(lines.filter(line => line.startsWith("Report SHA-256:")), `${host}: one "Report SHA-256:" line`).toHaveLength(1);
+    const declared = /^Report SHA-256: ([0-9a-f]{64})$/.exec(lines.at(-1)!)?.[1];
+    if (declared === undefined) throw new Error(`${host}: the last line is not "Report SHA-256: <64 hex>"`);
+    expect(lines.at(-2), `${host}: a blank line precedes "Report SHA-256:"`).toBe("");
+    // Plan §8.3 step 8: awk '/^Report SHA-256:/{exit} {print}' "$REPORT" | sha256sum
+    const body = lines.slice(0, -1).map(line => `${line}\n`).join("");
+    expect(createHash("sha256").update(body, "utf8").digest("hex")).toBe(declared);
+  }
+});

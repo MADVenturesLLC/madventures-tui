@@ -1,7 +1,9 @@
 import { expect, test } from "bun:test";
-import { existsSync } from "node:fs";
-import { dirname } from "node:path";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import type { BrokerSnapshot, OutputFrame } from "../../packages/broker/src/client";
+import { fixtureExecutableSource } from "./fixture-adapters";
 import { startFixtureSession } from "./runtime-harness";
 
 async function nextFrame(output: AsyncIterator<OutputFrame>): Promise<OutputFrame> {
@@ -150,4 +152,75 @@ test("a typed interruption ends the session and closes client streams", async ()
     expectReaped(initial);
   } finally { await output.return?.(); await session.close(); }
   expect(existsSync(dirname(session.storage.root))).toBe(false);
+}, 15_000);
+
+test("the returned session holds only its client, storage, close and interrupt", async () => {
+  const session = await startFixtureSession();
+  try {
+    expect(Reflect.ownKeys(session)).toEqual(["client", "storage", "close", "interrupt"]);
+    expect(Object.isFrozen(session)).toBe(true);
+    for (const key of ["close", "interrupt"] as const) expect(typeof session[key]).toBe("function");
+  } finally { await session.close(); }
+}, 15_000);
+
+test("a refused pty_input or pty_resize never reaches the child", async () => {
+  const session = await startFixtureSession();
+  const output = session.client.output("builder")[Symbol.asyncIterator]();
+  try {
+    await ready(output);
+    const snapshot = await session.client.getSnapshot();
+    const target = (fencingToken: number) => ({ commandId: crypto.randomUUID(), sessionId: snapshot.sessionId,
+      executionId: "builder", fencingToken });
+    const stale = snapshot.fencingToken! + 1;
+    expect(await session.client.request({ kind: "pty_input", ...target(stale), bytes: new TextEncoder().encode("REFUSED_INPUT") }))
+      .toMatchObject({ ok: false, error: "stale_fencing_token" });
+    expect(await session.client.request({ kind: "pty_resize", ...target(stale), cols: 77, rows: 23 }))
+      .toMatchObject({ ok: false, error: "stale_fencing_token" });
+    // Ten periods of the fixture's 10 ms size check, so a refused resize that reached it would be reported first.
+    await Bun.sleep(100);
+    expect((await session.client.request({ kind: "pty_input", ...target(snapshot.fencingToken!),
+      bytes: new TextEncoder().encode("ACCEPTED_INPUT") })).ok).toBe(true);
+    expect((await session.client.request({ kind: "pty_resize", ...target(snapshot.fencingToken!), cols: 91, rows: 29 })).ok).toBe(true);
+    let text = "";
+    // The echo and the resize report reach the output in either order, so read until both have arrived.
+    while (!text.includes("ACCEPTED_INPUT") || !text.includes("FIXTURE_RESIZE 91 29\r\n"))
+      text += new TextDecoder().decode((await nextFrame(output)).bytes);
+    expect(text).toContain("ACCEPTED_INPUT");
+    expect(text).not.toContain("REFUSED_INPUT");
+    expect(text).not.toContain("FIXTURE_RESIZE 77 23");
+  } finally { await output.return?.(); await session.close(); }
+}, 15_000);
+
+test("the fixture child exits cleanly on SIGINT", async () => {
+  const root = mkdtempSync(join(tmpdir(), "item5-sigint-"));
+  let text = "";
+  let readied: () => void = () => {};
+  const readiness = new Promise<void>(resolve => { readied = resolve; });
+  const terminal = new Bun.Terminal({ cols: 80, rows: 24, name: "xterm-256color", data: (_terminal, chunk) => {
+    text += new TextDecoder().decode(chunk);
+    if (text.includes("FIXTURE_READY")) readied();
+  } });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    mkdirSync(join(root, "bin"), { mode: 0o700 });
+    const path = join(root, "bin", "fixture-sigint");
+    writeFileSync(path, fixtureExecutableSource("fixture-sigint-model"), { mode: 0o700 });
+    // A synthetic environment only: the fixture records its whole environment to a file.
+    const child = Bun.spawn([path, "--fixture-run"], { terminal, detached: true, env: { PATH: "/usr/bin:/bin", TERM: "xterm-256color" } });
+    try {
+      await Promise.race([readiness, new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("Fixture readiness output missing")), 5_000);
+      })]);
+      process.kill(child.pid, "SIGINT");
+      expect(await child.exited).toBe(0);
+      expect(child.signalCode).toBeNull();
+    } finally {
+      if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+      await child.exited;
+    }
+  } finally {
+    clearTimeout(timer);
+    terminal.close();
+    rmSync(root, { recursive: true });
+  }
 }, 15_000);

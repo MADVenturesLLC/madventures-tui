@@ -48,7 +48,7 @@ async function scenario(options: harness.HarnessOptions): Promise<harness.Fixtur
     }
     expect(data.deathMs).toBeGreaterThanOrEqual(0);
     expect(data.deathMs).toBeLessThanOrEqual(5000);
-    if (options.wedgeHostAfter !== undefined) {
+    if (options.wedgeHostAfter !== undefined || options.dropHostAckAfter !== undefined) {
       const escalation = data.escalation!;
       expect(escalation.state).toBe("S3");
       expect(escalation.escalated).toBe(true);
@@ -100,6 +100,11 @@ test("a host that never acknowledges a command is treated as host failure at 250
 }, 15000);
 test("a wedged host receives no responsive-host grace", async () => {
   const data = await scenario({ wedgeHostAfter: 50 });
+  expect(data.escalation!.observedMs.escalatedMs).toBeLessThanOrEqual(500);
+}, 15000);
+test("a running host that drops its acknowledgement of a command is treated as host failure at 250 ms", async () => {
+  const data = await scenario({ dropHostAckAfter: 50, processScenario: "grandchild" });
+  expect(data.resizeAcks, "the unstopped host must still acknowledge the command sent in place of terminate").toBe(1);
   expect(data.escalation!.observedMs.escalatedMs).toBeLessThanOrEqual(500);
 }, 15000);
 test("malformed host frames fail closed and interrupt the session", async () => {

@@ -71,6 +71,7 @@ export interface HarnessOptions {
   readonly retainStorage?: boolean;
   readonly processScenario?: ProcessScenario;
   readonly wedgeHostAfter?: number;
+  readonly dropHostAckAfter?: number;
   readonly emitMalformedFrame?: "malformed" | "unknown";
   readonly skewOutputSeq?: "duplicate" | "regression" | "gap";
   readonly skewSnapshotSeq?: boolean;
@@ -111,7 +112,7 @@ export class RealSurfaceRejected extends Error {
 function requestedSurfaces(options: HarnessOptions): readonly SurfaceId[] {
   if (options === null || typeof options !== "object" || Object.getPrototypeOf(options) !== Object.prototype
     || Reflect.ownKeys(options).some(key => !["surfaces", "injectFailureAt", "retainStorage", "processScenario",
-      "wedgeHostAfter", "emitMalformedFrame", "skewOutputSeq", "skewSnapshotSeq", "failLedgerAppendAfter",
+      "wedgeHostAfter", "dropHostAckAfter", "emitMalformedFrame", "skewOutputSeq", "skewSnapshotSeq", "failLedgerAppendAfter",
       "swapBinaryBeforeExec", "expireAuthAfter", "mismatchAttestationAfter", "failSecondSurfaceLaunch", "fixtureMarker", "fixturePayload"].includes(String(key)))) throw new Error("InvalidHarnessOptions");
   const marker = Object.getOwnPropertyDescriptor(options, "fixtureMarker");
   if (marker !== undefined && (!("value" in marker) || typeof marker.value !== "string"
@@ -130,10 +131,10 @@ function requestedSurfaces(options: HarnessOptions): readonly SurfaceId[] {
         ? typeof field.value !== "number" || !Number.isFinite(field.value) || field.value < 0
         : typeof field.value !== "boolean")) throw new Error("InvalidHarnessOptions");
   }
-  for (const key of ["wedgeHostAfter", "emitMalformedFrame", "skewOutputSeq", "skewSnapshotSeq"] as const) {
+  for (const key of ["wedgeHostAfter", "dropHostAckAfter", "emitMalformedFrame", "skewOutputSeq", "skewSnapshotSeq"] as const) {
     const field = Object.getOwnPropertyDescriptor(options, key);
     if (field === undefined) continue;
-    if (!("value" in field) || (key === "wedgeHostAfter"
+    if (!("value" in field) || (key === "wedgeHostAfter" || key === "dropHostAckAfter"
       ? typeof field.value !== "number" || !Number.isFinite(field.value) || field.value < 0
       : key === "emitMalformedFrame" ? !["malformed", "unknown"].includes(field.value)
       : key === "skewOutputSeq" ? !["duplicate", "regression", "gap"].includes(field.value)
@@ -279,6 +280,19 @@ async function terminateFixtures(state: PartialBuildState): Promise<void> {
   if (errors.length) throw new AggregateError(errors, "FixtureTerminationFailed");
 }
 
+// The record is accepted only once it parses and names a usable pid; a record seen
+// before it is complete is read again until the deadline passes.
+export async function waitForDescendantRecord(record: string): Promise<number> {
+  const deadline = performance.now() + HOST_DEADLINES_MS.outerBound;
+  for (;;) {
+    let pid: unknown;
+    try { pid = JSON.parse(readFileSync(record, "utf8")).pid; } catch { pid = undefined; }
+    if (typeof pid === "number" && Number.isSafeInteger(pid) && pid > 1) return pid;
+    if (performance.now() >= deadline) throw new Error("FixtureDescendantIdentityMissing");
+    await Bun.sleep(10);
+  }
+}
+
 export async function startFixtureSession(options: HarnessOptions = {}): Promise<HarnessSession> {
   const surfaces = requestedSurfaces(options);
   const fixtureMarker = options.fixtureMarker;
@@ -311,7 +325,7 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
   let faultWork = Promise.resolve();
   let faultError: unknown;
   const faultReport: FixtureFaultReport = { detectedMs: 0, deathMs: 0, escalation: null,
-    terminateAcks: 0, terminationStarted: false, errorName: null, sequenceKind: null,
+    terminateAcks: 0, terminationStarted: false, resizeAcks: 0, errorName: null, sequenceKind: null,
     publicationError: null, sqliteCode: null, authExpired: false, reportedModel: null };
   let faultStarted: number | undefined;
   let builderOutputSeq = 0;
@@ -388,13 +402,19 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
         if (options.processScenario === "grandchild" || options.processScenario === "setsid" || options.processScenario === "lifeline-eof") {
           const marker = 'if (process.argv.includes("--fixture-run")) {';
           if (!source.includes(marker)) throw new Error("FixtureSourceMarkerMissing");
+          // The fixture source imports only writeFileSync from node:fs; the atomic record write also needs renameSync.
+          const fsImport = 'import { writeFileSync } from "node:fs";';
+          if (!source.includes(fsImport)) throw new Error("FixtureSourceMarkerMissing");
+          source = source.replace(fsImport, 'import { renameSync, writeFileSync } from "node:fs";');
           const detached = options.processScenario === "setsid";
           const childSource = 'process.on("SIGTERM", () => process.exit(0)); setInterval(() => {}, 1000);';
           source = source.replace(marker, marker + `
   const descendant = Bun.spawn([process.execPath, "-e", ${JSON.stringify(childSource)}], {
     detached: ${detached}, env: process.env, stdin: "ignore", stdout: "ignore", stderr: "ignore",
   });
-  writeFileSync(join(dirname(dirname(process.argv[1])), "descendant.json"), JSON.stringify({ pid: descendant.pid }));`);
+  const descendantRecord = join(dirname(dirname(process.argv[1])), "descendant.json");
+  writeFileSync(descendantRecord + "." + process.pid + ".tmp", JSON.stringify({ pid: descendant.pid }));
+  renameSync(descendantRecord + "." + process.pid + ".tmp", descendantRecord);`);
         }
       }
       writeFileSync(path, source, { mode: 0o700 });
@@ -483,11 +503,7 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
       });
       recordChannels(resources, before); resources.pids.add(fixtureAdapter.pid);
       if (options.processScenario === "grandchild" || options.processScenario === "setsid" || options.processScenario === "lifeline-eof") {
-        const record = join(root, "descendant.json");
-        const deadline = performance.now() + HOST_DEADLINES_MS.outerBound;
-        while (!existsSync(record) && performance.now() < deadline) await Bun.sleep(10);
-        const pid: unknown = JSON.parse(readFileSync(record, "utf8")).pid;
-        if (typeof pid !== "number" || !Number.isSafeInteger(pid) || pid <= 1) throw new Error("FixtureDescendantIdentityMissing");
+        const pid = await waitForDescendantRecord(join(root, "descendant.json"));
         descendants.push(pid);
         resources.pids.add(pid);
         if (options.processScenario === "setsid") resources.groups.add(pid);
@@ -531,6 +547,7 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
           if (host.executionId === "builder" && faultStarted !== undefined) {
             if (fact.kind === "ack" && fact.ofKind === "terminate") faultReport.terminateAcks += 1;
             if (fact.kind === "termination_started") faultReport.terminationStarted = true;
+            if (fact.kind === "ack" && fact.ofKind === "resize") faultReport.resizeAcks += 1;
           }
         }
       })().catch(error => { pumpErrors.push(error); }));
@@ -575,7 +592,7 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
     Object.freeze(client);
     const session = Object.freeze({ client, storage: state.storage, close, interrupt });
     faultReports.set(session, faultReport);
-    if (options.wedgeHostAfter !== undefined || options.emitMalformedFrame !== undefined
+    if (options.wedgeHostAfter !== undefined || options.dropHostAckAfter !== undefined || options.emitMalformedFrame !== undefined
       || options.skewOutputSeq !== undefined || options.skewSnapshotSeq === true || options.failLedgerAppendAfter !== undefined) {
       faultTimer = setTimeout(() => {
         faultWork = (async () => {
@@ -600,6 +617,15 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
           } else if (options.wedgeHostAfter !== undefined) {
             const host = state!.hosts[0]!, child = state!.children[0]!;
             process.kill(host.hostPid, "SIGSTOP");
+            const outcome = await escalateWedgedHost(host.handle, child.pgid!, host.hostPid);
+            faultReport.escalation = outcome;
+            faultReport.detectedMs = outcome.observedMs.ackWindowEndedMs!;
+            if (outcome.sessionInterruptionRequired) await interrupt(outcome.reason);
+          } else if (options.dropHostAckAfter !== undefined) {
+            // The host keeps running, unstopped, but never receives the terminate command and so never
+            // acknowledges it; the resize sent in its place shows it still acknowledges other commands.
+            const host = state!.hosts[0]!, child = state!.children[0]!, send = host.handle.send;
+            host.handle.send = frame => send(frame.kind === "terminate" ? { kind: "resize", cols: 80, rows: 24 } : frame);
             const outcome = await escalateWedgedHost(host.handle, child.pgid!, host.hostPid);
             faultReport.escalation = outcome;
             faultReport.detectedMs = outcome.observedMs.ackWindowEndedMs!;
@@ -638,7 +664,7 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
           faultReport.deathMs = performance.now() - faultStarted;
         })();
         void faultWork.catch(error => { faultError = error; });
-      }, options.wedgeHostAfter ?? 100);
+      }, options.wedgeHostAfter ?? options.dropHostAckAfter ?? 100);
     }
     if (options.processScenario !== undefined) {
       processReports.set(session, {
@@ -690,6 +716,7 @@ export interface FixtureFaultReport {
   escalation: EscalationOutcome | null;
   terminateAcks: number;
   terminationStarted: boolean;
+  resizeAcks: number;
   errorName: string | null;
   sequenceKind: string | null;
   publicationError: string | null;
