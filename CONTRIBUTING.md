@@ -30,10 +30,16 @@ Agents: read `AGENTS.md` before doing any work.
 4. Push the branch and open a **draft** pull request against `main`.
 5. Required status checks on `main` (both branch protection and ruleset
    `main-governed-merge`): `Verify`, `Verify (macOS)`, `code-review`.
-6. Merge happens only after a Founder-authored authorization that names the
-   **exact** head SHA (full 40 characters). Green CI is not merge
-   authorization. Do not push to `main`. Do not use `--admin` unless the
-   Founder explicitly directs it.
+6. A merge needs a Founder-authored authorization that names the **exact**
+   head SHA (full 40 characters) when the pull request falls under the
+   merge bullet of "Approval gates — stop" in `AGENTS.md`, or when an act
+   of the Founder requires one, as `DEC-20261015-05` B1 does for every
+   Phase 3A task pull request. Where it is unclear whether one is needed,
+   it is. Any other pull request may be merged by the Founder once the
+   required checks above pass at its head (FounderOS `DEC-20261027-01`
+   clause 8). Green CI is not merge authorization where one is needed.
+   Agents never merge. Do not push to `main`. Do not use `--admin` unless
+   the Founder explicitly directs it.
 
 In-repo skill `.agents/skills/build-gate/` is the fail-closed exact-SHA
 gate used when preparing to push, open a PR, or declare a build complete.
