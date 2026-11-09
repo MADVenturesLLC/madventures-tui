@@ -39,4 +39,3 @@ export function resolveProxyUrl(env: Record<string, string | undefined>): string
 export function chatCompletionsUrl(proxyUrl: string): string {
   return `${proxyUrl}/v1/chat/completions`;
 }
-
