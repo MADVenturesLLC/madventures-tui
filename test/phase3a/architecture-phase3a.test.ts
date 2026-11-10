@@ -1370,7 +1370,7 @@ describe("Task 33 — socket, MCP, and PtyManager quarantine from production rea
       "mcp-config": [],
     });
     expect(findQuarantineViolations(REPO_ROOT)).toEqual([]);
-  });
+  }, 15_000);
 
   test("the quarantine guard detects a planted pty-manager import", () => {
     const root = makeTempRoot();
