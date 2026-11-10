@@ -184,6 +184,7 @@ function descriptorIdentities(): Set<string> {
 interface FixtureResources {
   storage: SessionStorage | null;
   ledger: Ledger | null;
+  ledgerClosed: boolean;
   closed: boolean;
   durable: Pick<LifecycleState, "sessionId" | "phase" | "tokenState"> | null;
   pids: Set<number>;
@@ -195,7 +196,7 @@ interface FixtureResources {
 }
 const fixtureResources: FixtureResources[] = [];
 function recordFixtureResources(): FixtureResources {
-  const record: FixtureResources = { storage: null, ledger: null, closed: false, durable: null, pids: new Set(), groups: new Set(),
+  const record: FixtureResources = { storage: null, ledger: null, ledgerClosed: false, closed: false, durable: null, pids: new Set(), groups: new Set(),
     hosts: new Set(), children: new Set(), channels: new Set(), swappedBinaryExecuted: false };
   fixtureResources.push(record);
   return record;
@@ -226,7 +227,7 @@ export function fixtureResidualReport() {
     if (record.ledger !== null) {
       let readable = true;
       try { record.ledger.readAfter(0); } catch { readable = false; }
-      if (!record.closed || readable) openLedgers += 1;
+      if (!record.closed || !record.ledgerClosed || readable) openLedgers += 1;
     }
   }
   return freeze({ recordedRuns: fixtureResources.length,
@@ -482,6 +483,11 @@ export async function startFixtureSession(options: HarnessOptions = {}): Promise
     state = result.ok ? result.state : result.partialState;
     resources.storage = state.storage;
     resources.ledger = state.ledger;
+    if (state.ledger !== null) {
+      // Retain the actual close outcome after the storage directory is gone.
+      const ledger = state.ledger, closeLedger = ledger.close.bind(ledger);
+      ledger.close = () => { closeLedger(); resources.ledgerClosed = true; };
+    }
     if (!result.ok) throw new FixtureStartupFailure(result.failedStep, result.failure, state, root);
     if (state.storage === null || state.client === null || state.broker === null || state.ledger === null) throw new Error("FixtureBuildIncomplete");
     const underlying = state.client;
