@@ -4073,3 +4073,1079 @@ export PATH="/Users/michaeldaley/.bun/bin:$PATH"
 cd tui
 bun test
 ~~~~
+
+## Sixth session
+
+Authority: DEC-20261108-03 and Addenda 1 to 8. This section is an addition only; the fourth- and fifth-session evidence above is unchanged.
+
+### Rulings and the two failures
+
+Addendum 7 A1: the Founder pushed the first five commits at d09712a67db06fc6a7cee9bf0674ac8b509a8200 and opened draft pull request 234. A2: Verify and code-review passed; Verify (macOS) twice failed its New York run on the Task 33 quarantine test at 5733.78 ms and 6487.24 ms under the default 5000 ms limit. A3: earlier macOS jobs and the first runs had lower timings; the test parses the repository six times. A4: the Linux replay under Bun 1.4.4 did not reproduce the slowdown and did not establish its cause.
+
+Addendum 6, DEC-20261108-03-addendum-6-names-in-text.md, SHA-256 24cef0ed5c968aa80ada586e473526d0f4f0b1de1331eba1d5a35051b1254ac9, records that the previous 19 counted occurrences were text rather than calls. This session writes only the phrase the six names of Addendum 2 B4 where that inventory needs reference.
+
+Addendum 7, DEC-20261108-03-addendum-7-quarantine-limit.md, SHA-256 cd15d604dacb0bad4f27a18bda7936799076f3f8743301cb893bf3079c270361, authorizes only the closing-line change to an explicit 15_000 ms limit and these sixth and seventh commits. It is not a tightening and requires no break.
+
+Addendum 8, DEC-20261108-03-addendum-8-gate-repeat.md, SHA-256 aca83d3bfcddc137687e0d2339ee409d937a2117342c9ffa6cdb10dc3da40c78, records this session halt and expressly authorizes one repeat of the gates and the New York run, preceded by the logged waits below. Its hash matched both the signed value and prompt/SHA256.txt in log 226.
+
+Addendum 8 A1 to A3: bare-suite log 223 started at load 4.80 and ended with 1912 pass and 2 fail; the two unchanged doctor read-only tests timed out at 5004.44 ms and 5003.07 ms. The Task 33 test passed at 1589.79 ms. The run finished, was not rerun before authorization, and the session halted cleanly. The Founder subsequently stopped unrelated-project orphaned shells and Hermes; the authority records slow child processes and trustd activity but establishes no cause of the timeouts. These are facts of the signed addendum, not a process inspection by this builder. Log 223 remains unchanged.
+
+The three halt packets remain unchanged. The sixth-session halt report SHA-256 is 98f8237e92d0e4961549e743b84dfa7275845c818f98b95e1b0de86f0b1bd83f; its log manifest SHA-256 is 0e8e1890539aa8f87f11d908c1e4b3ea4619dcb551c15e68c97a209392093865.
+
+### Identity, runtime and preconditions
+
+The namespaces and tool names shown by this sixth session are the same as the fifth-session inventory above; there is no difference. The six names of Addendum 2 B4 are not reproduced here. Harness Codex; model GPT-6 by OpenAI; exact model ID, variant, revision and session ID not shown. Agent /root; assigned builder, session:codex/h1-r1, surface codex. Mode Default; shell zsh; date 2026-11-10; timezone America/New_York; four concurrency slots. Shown override identifiers: gpt-6.1-sol, gpt-6-astra, gpt-6.1-terra, gpt-6-sol, gpt-6-luna. No loaded MCP server is shown, and the Founder confirmed none. Only exec with exec_command/write_stdin and wait were called. No barred tool was called and no exec input contained any of the six names of Addendum 2 B4.
+
+The initial sandbox was workspace-write, approval on-request, network restricted, with the three writable roots stated in the identity report. Following the interrupted approval and the Founder continuation, the harness showed read-only. The builder changed no setting. All Bun commands were escalated from their first run; after that harness change, commands that write logs or artifacts were also escalated.
+
+CLI output, verbatim at the initial check and again in logs 212 and 227:
+
+~~~~text
+WARNING: proceeding, even though we could not create PATH aliases: Operation not permitted (os error 1)
+codex-cli 0.167.0
+~~~~
+
+All runtime checks, logs 202, 217, 222, 231 and 243, matched: /Users/michaeldaley/.bun/bin/bun and /Users/michaeldaley/.bun/bin/bunx; Bun 1.4.2; revision 744846f844374847c902b5e7fd59b4342a51ef99; binary SHA-256 35d20dd0263e5c950194434b925454fdfa9ba6e4467da960410fa05b08a7a5b5. Every Bun command starts with the command-local export PATH="/Users/michaeldaley/.bun/bin:$PATH".
+
+Initial preconditions passed in log 209: directory /Users/michaeldaley/builds/h1-r1; build/h1-r1; origin/main and binding base 1678f1839c600cacd38fd426f755afae021861bf; initial HEAD d09712a67db06fc6a7cee9bf0674ac8b509a8200; clean tree and no stash; git identity daley40-lab and 293512385+daley40-lab@users.noreply.github.com; Darwin arm64. The five prescribed commits, authors and parent chain matched. The initial changed-path list was exactly the five paths of B7. All authority hashes, ISSUED statuses and Founder signatures matched. The initial prompt directory held exactly ten expected files and every checksum matched; the Founder added Addendum 8 and its manifest entry for the resumption.
+
+The setup evidence manifest SHA-256 b13569663d459e6486f264389b53bee2da6daffe3a92b47a35fc133aeb7900a7 lists 208 files: 201 logs, highest number 201, and seven files in pr. All entries and the complete initial inventory matched, excluding newly created session logs. Checks passed again at the halt and in log 230. The target test was quoted from initial HEAD in log 209 at test/phase3a/architecture-phase3a.test.ts lines 1366 to 1373, ending with the required closing line.
+
+The sixth-session resume check was logs 211 to 213: bun install --frozen-lockfile and bunx tsc --noEmit each once and successful. bun.lock stayed byte-identical, SHA-256 34224c0133c44d967c4a4da8b75bf11093c573c47e42bcaf502c6d6f61c3e7c0. The install set the executable bit on packages/founder-act/src/main.ts; log 212 records the state and the git checkout restore, leaving a clean tree.
+
+Under Addendum 8, logs 227 to 231 rechecked the CLI, clean branch at 5279efd8a07f0f9545b70519fef76f22e68112f3, both pinned halt hashes, setup evidence and runtime; all passed.
+
+### Sixth commit and diff
+
+Sixth commit: 5279efd8a07f0f9545b70519fef76f22e68112f3. Parent: d09712a67db06fc6a7cee9bf0674ac8b509a8200. Subject: test(phase3a): give the Task 33 quarantine test a 15 s limit. Log 214 shows the one-line diff and trailer check; log 215 stages and scans it with no matches; log 216 makes the commit and records its full SHA, parent and clean tree. No assertion, name or other test changed.
+
+~~~~diff
+diff --git a/test/phase3a/architecture-phase3a.test.ts b/test/phase3a/architecture-phase3a.test.ts
+index b1f2f29..7999b91 100644
+--- a/test/phase3a/architecture-phase3a.test.ts
++++ b/test/phase3a/architecture-phase3a.test.ts
+@@ -1370,7 +1370,7 @@ describe("Task 33 — socket, MCP, and PtyManager quarantine from production rea
+       "mcp-config": [],
+     });
+     expect(findQuarantineViolations(REPO_ROOT)).toEqual([]);
+-  });
++  }, 15_000);
+
+   test("the quarantine guard detects a planted pty-manager import", () => {
+     const root = makeTempRoot();
+~~~~
+
+### Gates, failure, authorized repeat and New York run
+
+The first gate sequence, logs 217 to 223, passed the runtime check, typecheck, architecture file, evidence file and Phase 3A suite, then failed bare bun test. It halted without a code correction. Addendum 8 B2 authorizes the unchanged repeat; B5 requires a halt on any new failure at any load.
+
+Failed bare-suite summary, verbatim; log 223 SHA-256 d61a5ca945f2839abf0ddb36b48fc3351e821ec164292c1fb8d5c6994f33c2a5:
+
+~~~~text
+ 1912 pass
+ 2 fail
+ 23891 expect() calls
+Ran 1914 tests across 140 files. [233.09s]
+~~~~
+
+The repeated gates ran once in order after the waits: typecheck 235, architecture 237, evidence 239, Phase 3A 241, bare suite 245, and New York 247. Runtime check 243 precedes the repeated bare suite. date +%Z printed EST in both bare-suite logs. All repeated runs exited 0.
+
+Wait logs and first load readings:
+
+Run | Wait log | First wait reading | Ready reading | Run first load | Wait SHA-256
+| --- | --- | --- | --- | --- | --- |
+235-repeat-typecheck.log | 234-wait-typecheck-after-interruption.log | 1.54 | 1.54 | 1.74 | 19217d84a5eb5c5b3d00429c036829c22cf120aabf51da85e7c991b0f2a64318
+237-repeat-architecture.log | 236-wait-architecture.log | 1.23 | 1.23 | 1.51 | 576cde06948c1b54ead4aab4bb3a22e337d76baa1105ffadd31dd7ad08481af6
+239-repeat-evidence.log | 238-wait-evidence.log | 1.68 | 1.68 | 1.50 | 2c88c72a57ddb9d83f0756560bf58ea7476164d462ef665f3a8df562df142bdc
+241-repeat-phase3a.log | 240-wait-phase3a.log | 1.58 | 1.58 | 1.45 | 558153985a9594cdb0048ecfb6a7e3ab766998588a8255c1bf6142267eee4203
+245-repeat-bare.log | 244-wait-bare.log | 1.66 | 1.66 | 1.60 | c2cf9c0e48b7450ea616dabd31c22d5da167da4166dbbaf221db65cba218a0c9
+247-junit-new-york.log | 246-wait-new-york.log | 4.11 | 1.82 | 1.55 | cd6b918a880f8fb94cb6a99fe2bce2ae20332d608e1521e030469dc0b69156d1
+
+Wait 232 first read 2.18 and ended at 1.74. The queued typecheck approval was then aborted without a Bun run; no earlier typecheck log existed when log 233 checked. Following the Founder continuation and changed harness permissions, fresh wait 234 preceded the first repeated typecheck. No wait reached its 20-minute deadline.
+
+219-gate-architecture.log summary, verbatim:
+
+~~~~text
+ 55 pass
+ 0 fail
+ 591 expect() calls
+Ran 55 tests across 1 file. [11.72s]
+~~~~
+
+220-gate-evidence.log summary, verbatim:
+
+~~~~text
+ 36 pass
+ 0 fail
+ 6169 expect() calls
+Ran 36 tests across 1 file. [8.03s]
+~~~~
+
+221-gate-phase3a.log summary, verbatim:
+
+~~~~text
+ 168 pass
+ 0 fail
+ 8085 expect() calls
+Ran 168 tests across 18 files. [67.09s]
+~~~~
+
+237-repeat-architecture.log summary, verbatim:
+
+~~~~text
+ 55 pass
+ 0 fail
+ 591 expect() calls
+Ran 55 tests across 1 file. [11.48s]
+~~~~
+
+239-repeat-evidence.log summary, verbatim:
+
+~~~~text
+ 36 pass
+ 0 fail
+ 6169 expect() calls
+Ran 36 tests across 1 file. [6.73s]
+~~~~
+
+241-repeat-phase3a.log summary, verbatim:
+
+~~~~text
+ 168 pass
+ 0 fail
+ 8085 expect() calls
+Ran 168 tests across 18 files. [61.38s]
+~~~~
+
+245-repeat-bare.log summary, verbatim:
+
+~~~~text
+ 1914 pass
+ 0 fail
+ 23893 expect() calls
+Ran 1914 tests across 140 files. [193.09s]
+~~~~
+
+247-junit-new-york.log summary, verbatim:
+
+~~~~text
+ 1914 pass
+ 0 fail
+ 23892 expect() calls
+Ran 1914 tests across 140 files. [188.71s]
+~~~~
+
+New York JUnit report: logs/247-junit-new-york.xml; SHA-256 9b8a178f0c96b969e99824c05e8539f836ab4bfe4ef7945eeb2de1fd763f6c94. The exact test name is "quarantined modules admit only their sanctioned importers: mcp-server one edge, pty-manager none, both mcp-config none". Its time attribute is 1.564776 seconds, as the report gives it. Reporter options were accepted; no fallback was run.
+
+### Command register
+
+Every listed entry gives the command log, pre-command uptime, exit status and full SHA-256. The command appendix below reproduces the command headers as logged.
+
+Log | Uptime | Exit | SHA-256
+| --- | --- | --- | --- |
+202-runtime-initial.log | 12:46  up 16 days,  4:55, 1 user, load averages: 5.44 5.96 6.03 | 0 | 975efa967d4f58cc292f8613647283141662833439558379674c7682cdb91cbc
+203-authority-h1-addenda.log | 12:47  1 user, load averages: 6.42 6.22 6.13 | 0 | 3bfe2a06e4dcc2fdbff2b578bccb36b88778b11ab59fab3352d8a46facf9890c
+204-authority-reread.log | 12:47  1 user, load averages: 5.79 6.10 6.09 | 0 | 0d51b58c8fc6f8ed901b63a962652008610ca9d20fc306e94aa99674f681db52
+205-authority-qualification-approval.log | 12:47  1 user, load averages: 5.21 5.97 6.04 | 0 | 1689618b3b14d3ae5b299191d9e096ee184e0465a20090fd02e8f9881394cbb8
+206-authority-build-rules.log | 12:47  1 user, load averages: 5.04 5.90 6.02 | 0 | 41c0ef27d07798c0251f0caa63efdd211000bfcd5d4116b0b449cc7a2a6cf4e6
+207-authority-runtime.log | 12:47  1 user, load averages: 8.46 6.60 6.26 | 0 | d37bd19f178070b961200f09dbb482aaad7d26469d83b4339a772d91ae028b29
+208-authority-completion-build-gate.log | 12:48  1 user, load averages: 8.34 6.63 6.27 | 0 | 32482f7922b204c232401ffd6376c0b541bc29194502579c08d4505ce6e3370a
+209-preconditions.log | 12:48  1 user, load averages: 22.99 10.32 7.62 | 0 | 81aa38921c10f74ac265eaf824b251ca9bddd5c8b5f8077e026ab9ba23327b47
+210-resume-context.log | 12:49  1 user, load averages: 18.00 10.02 7.58 | 0 | cd45987a81b6f9030153a6a2a75ff2e3d1912c9f77f8fe0b364c3902ce9d7e85
+211-resume-install.log | 12:55  up 16 days,  5:04, 1 user, load averages: 6.59 6.90 6.85 | 0 | 42529d4af5b00ca90f37fc7b43fc924bfb78204488cfa2a198c9c6ae7aa7808c
+212-postinstall-and-identity-recovery.log | 12:55  1 user, load averages: 6.63 6.88 6.85 | 0 | e75017c3c296043b623bbfd8390d228b9fd8fe991a04056c7335c1c7d5c6e25e
+213-resume-typecheck.log | 13:05  up 16 days,  5:14, 1 user, load averages: 10.56 8.02 7.33 | 0 | 2e1a1d05c1ee51ce367d74bd00143de0634eff4da9b24f7639bd6321270220ce
+214-sixth-change-and-message.log | 13:06  1 user, load averages: 8.88 7.81 7.28 | 0 | 9173665102c85f98f81c025531f9dcb035e12ee63565d94c3794636945b8a6c0
+215-sixth-stage-and-scan.log | 13:06  1 user, load averages: 7.74 7.60 7.21 | 0 | 0fc1a0a9bc65746506d80675c953264cef07e6f8a1e730adb784d7d73651c0cd
+216-commit6.log | 13:06  1 user, load averages: 7.36 7.52 7.19 | 0 | 58a5abbdb3c759b05cfb767a9add5f9f3a039a9ee8f32cbcabaf4a42579067ff
+217-pregate-runtime.log | 13:06  up 16 days,  5:15, 1 user, load averages: 6.79 7.38 7.14 | 0 | 9ea0befde4367b2f6272c850d8d0e5b245d4384fbfd775f4075ec5643b5f56cf
+218-gate-typecheck.log | 13:06  up 16 days,  5:15, 1 user, load averages: 6.35 7.27 7.10 | 0 | ada13f46a0c9bbe20ca3a1d54e128003802bc6488d9d302e2ee01a0b980e0327
+219-gate-architecture.log | 13:06  up 16 days,  5:15, 1 user, load averages: 5.89 7.15 7.06 | 0 | e339aef6f6eff16117a46f67149b40a435a10279e34239e6639e6696ba693ec6
+220-gate-evidence.log | 13:07  up 16 days,  5:16, 1 user, load averages: 5.79 7.02 7.02 | 0 | 13ffb758c9da844c1cc8bc12ea1d3b89f1e0beca209edac19ab3f76a8e91772e
+221-gate-phase3a.log | 13:07  up 16 days,  5:16, 1 user, load averages: 7.70 7.37 7.14 | 0 | 0b162ffc19f075173bf769178d9aeb6d19af61013784e02ed8cf1bce9c87b5d4
+222-prebare-runtime.log | 13:10  up 16 days,  5:19, 1 user, load averages: 5.77 6.65 6.87 | 0 | 46a2f98f8642fa9ad4a36b3205efac4690242d926cf6e297ea07a4faebcf97fc
+223-gate-bare.log | 13:10  up 16 days,  5:19, 1 user, load averages: 4.80 6.26 6.72 | 1 | d61a5ca945f2839abf0ddb36b48fc3351e821ec164292c1fb8d5c6994f33c2a5
+224-halt-verification.log | 13:15  1 user, load averages: 7.57 7.33 7.11 | 0 | 8f9fca5708fefae1bc1a41a08ace4eb80ea1c479f77ce5e6cdeaa9aed1be4117
+225-write-session6-halt-report.log | 13:10  up 16 days,  5:19, 1 user, load averages: 4.80 6.26 6.72 | 0 | 754821677632ec50465b2bf91997d8c163330e717606c8074421b24f46d2847a
+226-addendum8-hash-and-read.log | 16:15  2 users, load averages: 1.98 2.36 3.85 | 0 | 905c5092afd4bc3543428bf055b125e222044ca49d810ff7296664c90d81f97a
+227-resume8-version.log | 16:15  2 users, load averages: 2.43 2.45 3.85 | 0 | 0960acb3c082aab0afa7fe3929eecfa96fd46b9ddcd420345b810ec9c22f57d3
+228-resume8-state.log | 16:15  2 users, load averages: 2.43 2.45 3.85 | 0 | 353f80a086df95f70c8f0603973f64debbb8c5a6b6e9d2f047617830336edd19
+229-resume8-halt-hashes.log | 16:15  2 users, load averages: 2.43 2.45 3.85 | 0 | afa46faa8a5bde0d2d0897964d437ff1ce343096c54075e5d34e7d46c502956a
+230-resume8-setup-evidence.log | 16:15  2 users, load averages: 2.43 2.45 3.85 | 0 | 3e47f297dff079935ecb5fe3b10e86beba66281ff3bba6372bca15c7367ec33a
+231-resume8-runtime.log | 16:16  up 16 days,  8:24, 2 users, load averages: 2.37 2.43 3.82 | 0 | 4257182750d5b705b6f65302e36d07faa5f39fcf9539c2989d39ab74cba79bb3
+232-wait-typecheck.log | 16:16  2 users, load averages: 2.18 2.39 3.77 | 0 | 84c67119396b8e44d4bad45381e7bf323d6cb920182131a587025a9e4108f736
+233-interrupted-run-check.log | 16:51  up 16 days, 9 hrs, 2 users, load averages: 1.69 2.05 2.32 | 0 | 0f3ffc370dd2a3960e3df8e3eba10980463042c0c94afb29917a34a91eddc8c0
+234-wait-typecheck-after-interruption.log | 16:51  up 16 days, 9 hrs, 2 users, load averages: 1.54 2.00 2.30 | 0 | 19217d84a5eb5c5b3d00429c036829c22cf120aabf51da85e7c991b0f2a64318
+235-repeat-typecheck.log | 16:52  up 16 days,  9:01, 2 users, load averages: 1.74 2.03 2.31 | 0 | 2fdca60caa35609a46fb5367f34787fabc9dad6526aded3f8afba82d0cf54e0b
+236-wait-architecture.log | 16:53  up 16 days,  9:02, 2 users, load averages: 1.23 1.83 2.21 | 0 | 576cde06948c1b54ead4aab4bb3a22e337d76baa1105ffadd31dd7ad08481af6
+237-repeat-architecture.log | 16:53  up 16 days,  9:02, 2 users, load averages: 1.51 1.87 2.21 | 0 | 12044eba4cc8529e4dff024032ce03facbace67c0b9dd085af17989e8529e9ff
+238-wait-evidence.log | 16:53  up 16 days,  9:02, 2 users, load averages: 1.68 1.89 2.22 | 0 | 2c88c72a57ddb9d83f0756560bf58ea7476164d462ef665f3a8df562df142bdc
+239-repeat-evidence.log | 16:54  up 16 days,  9:03, 2 users, load averages: 1.50 1.85 2.20 | 0 | bf0cb51b85c3f68833b02cd3107e51dbaf0ea0dde8f893942b24f225b463a5e3
+240-wait-phase3a.log | 16:54  up 16 days,  9:03, 2 users, load averages: 1.58 1.85 2.19 | 0 | 558153985a9594cdb0048ecfb6a7e3ab766998588a8255c1bf6142267eee4203
+241-repeat-phase3a.log | 16:54  up 16 days,  9:03, 2 users, load averages: 1.45 1.82 2.18 | 0 | 1f4e4f9b47453514c6fcfa7673651f5ee9702ccc86ad65554c14c96a0410b122
+242-delivery-context.log | 16:54  up 16 days,  9:03, 2 users, load averages: 2.20 1.96 2.22 | 0 | ed2237c2c70cf4ece58b6568360e91b2e15ccfad305764f13b49ba046e06a879
+243-repeat-prebare-runtime.log | 16:56  up 16 days,  9:05, 2 users, load averages: 2.04 2.03 2.22 | 0 | f89f307daffe442eadcb43e0e05c0c4d68bfc7c68fc7521b3a312ddb092ac44f
+244-wait-bare.log | 16:56  up 16 days,  9:05, 2 users, load averages: 1.66 1.94 2.19 | 0 | c2cf9c0e48b7450ea616dabd31c22d5da167da4166dbbaf221db65cba218a0c9
+245-repeat-bare.log | 16:56  up 16 days,  9:05, 2 users, load averages: 1.60 1.93 2.18 | 0 | d14304a93f6f41894868e048cb7f7adbebab1be2dbee0fbadc0ed78a2600e6ff
+246-wait-new-york.log | 17:00  up 16 days,  9:09, 2 users, load averages: 4.11 3.40 2.76 | 0 | cd6b918a880f8fb94cb6a99fe2bce2ae20332d608e1521e030469dc0b69156d1
+247-junit-new-york.log | 17:02  up 16 days,  9:11, 2 users, load averages: 1.55 2.73 2.58 | 0 | aed0b1d8bfa6af53f0146f5f4127a6faf068c77bc2192238842502f572d52d73
+
+### What follows this commit
+
+The seventh commit changes only this build log and is made after this addition. The last four gates then run, each once and in order at that commit: git diff --check against 1678f1839c600cacd38fd426f755afae021861bf; git diff --name-only against that base; git status -sb; git ls-files --others --exclude-standard. Each uses GIT_CONFIG_GLOBAL=/dev/null and GIT_CONFIG_NOSYSTEM=1. Under Addendum 1 B2, their results and log SHA-256 values go in the final report and PR description, not here.
+
+### Work not run and deviations
+
+No tightening or deliberate break was added for the timeout change. No additional code change, host installation, host-setting change, live provider call, MCP call, other agent, memory lookup, GitHub call, fetch, pull or push ran. Existing test suites ran as written. The repository build-gate skill was read as instructions; the signed H1 gates govern rather than its additional scripts. Founder B12 measurements, CI, independent review, the session-tool audit and merge remain Founder work.
+
+The first two exec calls, containing the initial codex --version and directory/Git identity commands, lacked tee logs and pre-command uptime. Their original output is in the session messages; log 212 repeats them as recovery evidence without reconstructing the original uptime. Additional shown identity fields were supplied after commands began. The initial authority-read headers are descriptive labels. The halt-report log self-checksum was emitted after tee closed that log, so it is outside its own log.
+
+The initial bare-suite failure and halt are preserved in log 223 and the unchanged halt packet; Addendum 8 explicitly authorizes the repeat. During resumption the queued typecheck approval was aborted, and the harness later showed read-only. One functions.exec orchestration call then raised TypeError before running any command because its saved wrapper was unavailable. The wrapper was reconstructed, log 233 checked the state, and fresh wait 234 preceded the first repeated typecheck. No failed repository run was repeated without the signed authorization.
+
+### Commands as logged
+
+#### 202-runtime-initial.log
+
+~~~~sh
+export PATH="/Users/michaeldaley/.bun/bin:$PATH"; command -v bun; command -v bunx; shasum -a 256 "$(command -v bun)"; bun --version; bun -e 'process.stdout.write(Bun.revision)'
+~~~~
+
+#### 203-authority-h1-addenda.log
+
+~~~~sh
+read and verify the H1 decision and seven local addenda with git show, SHA-256, and full text
+~~~~
+
+#### 204-authority-reread.log
+
+~~~~sh
+sed -n '155,330p' logs/203-authority-h1-addenda.log
+~~~~
+
+#### 205-authority-qualification-approval.log
+
+~~~~sh
+python3 - <<'PY'
+import subprocess
+items = [
+('docs/decisions/DEC-20261108-02-phase-3b-builder-qualification.md','38ec4066f5c9487547befc81e00b80b69126d9140f1e66c0a8dcb35e5fe815ef'),
+('docs/decisions/DEC-20261108-01-phase-3b-approval.md','319ba65b340696d66a655e21f648fed742a9c38bcbb1d876776abc27a27a9738'),
+('docs/decisions/DEC-20261103-01-hardening-c-records-and-hardening-d.md','43dc423e060b0e7ae04a0e7a0c302a5e38497cc212d704a5a37421d78aa1dd3a')]
+for path, expected in items:
+    data = subprocess.check_output(['git','-C','tui','show','origin/main:'+path])
+    digest = subprocess.check_output(['shasum','-a','256'],input=data).decode().split()[0]
+    print('\nFILE:',path,'\nSHA-256:',digest,'\nMATCH:',digest==expected,flush=True)
+    print(data.decode(),flush=True)
+    assert digest == expected
+PY
+~~~~
+
+#### 206-authority-build-rules.log
+
+~~~~sh
+python3 - <<'PY'
+import subprocess
+items = [
+('docs/decisions/DEC-20261102-02-hardening-builds.md','04342fa77200737b676e51c6523b9813665b3303150309025be40178d9699550'),
+('docs/decisions/DEC-20261023-01-standing-build-rules.md','bafa95f9835c0d14d633ec882234b247ac3ff6841452a28d20332520f41a7ac5'),
+('AGENTS.md','0879ede2d3b07e137d1f3d5f75c131285277b44e61f1305d3d0d59da64f1dbca')]
+for path, expected in items:
+    data = subprocess.check_output(['git','-C','tui','show','origin/main:'+path])
+    digest = subprocess.check_output(['shasum','-a','256'],input=data).decode().split()[0]
+    print('\nFILE:',path,'\nSHA-256:',digest,'\nMATCH:',digest==expected,flush=True)
+    print(data.decode(),flush=True)
+    assert digest == expected
+PY
+~~~~
+
+#### 207-authority-runtime.log
+
+~~~~sh
+python3 - <<'PY'
+import subprocess
+items = [
+('docs/decisions/DEC-20261013-03-tests-4-6-ruling.md','249e80e8e76c2168495353128569b63eff7a7d1bd321fc26156b749a4a8a9cf7'),
+('docs/decisions/DEC-20261104-02-hardening-f-and-task58.md','011fb63332bd6c85bec4f9a9ec8a52e6805230dda690519a7406afcd371528c5')]
+for path, expected in items:
+    data = subprocess.check_output(['git','-C','tui','show','origin/main:'+path])
+    digest = subprocess.check_output(['shasum','-a','256'],input=data).decode().split()[0]
+    print('\nFILE:',path,'\nSHA-256:',digest,'\nMATCH:',digest==expected,flush=True)
+    print(data.decode(),flush=True)
+    assert digest == expected
+PY
+~~~~
+
+#### 208-authority-completion-build-gate.log
+
+~~~~sh
+sed -n '145,162p' logs/203-authority-h1-addenda.log
+sed -n '202,240p' logs/206-authority-build-rules.log
+git -C tui show origin/main:.agents/skills/build-gate/SKILL.md
+git -C tui show origin/main:CONTRIBUTING.md
+git -C tui ls-tree -r --name-only origin/main -- .agents AGENTS.md test/AGENTS.md test/phase3a/AGENTS.md docs/AGENTS.md docs/verification/AGENTS.md
+~~~~
+
+#### 209-preconditions.log
+
+~~~~sh
+python3 - <<'PY'
+from pathlib import Path
+import subprocess,re
+def run(args):
+    print('Command:', ' '.join(args), flush=True)
+    p=subprocess.run(args,stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+    print(p.stdout.decode(),end='',flush=True)
+    assert p.returncode==0,(args,p.returncode)
+    return p.stdout.decode()
+base='1678f1839c600cacd38fd426f755afae021861bf'
+head='d09712a67db06fc6a7cee9bf0674ac8b509a8200'
+assert run(['git','-C','tui','rev-parse','origin/main']).strip()==base
+assert run(['git','-C','tui','rev-parse','HEAD']).strip()==head
+assert run(['git','-C','tui','branch','--show-current']).strip()=='build/h1-r1'
+assert run(['git','-C','tui','status','--porcelain'])==''
+assert run(['git','-C','tui','stash','list'])==''
+history=run(['git','-C','tui','log','--reverse','--format=%H %P %an %s',base+'..HEAD'])
+expected=['f4aefe1e89f566a0f4a76d7cc18c209f70d719e8','8e5b471aed5330dd1b620f2a040540871b6fd047','56775934aa653daefa9bb40f8c42a26e9f8e732a','21e12ad56d7e821e7c8a49c6a2a3c688ab15eed6',head]
+parent=base
+assert len(history.splitlines())==5
+for line,commit in zip(history.splitlines(),expected):
+    assert line.startswith(commit+' '+parent+' daley40-lab ')
+    parent=commit
+paths=run(['git','-C','tui','diff','--name-only',base,'HEAD']).splitlines()
+assert paths==['apps/madv-agent/src/proxy.ts','docs/verification/phase-3b-h1-build-log.md','test/phase3a/architecture-phase3a.test.ts','test/phase3a/evidence-pipeline.test.ts','test/phase3a/runtime-harness.ts']
+run(['shasum','-a','256','-c','prompt/evidence-at-setup.sha256'])
+entries=[line.split(None,1)[1].lstrip('*') for line in Path('prompt/evidence-at-setup.sha256').read_text().splitlines()]
+actual={str(p) for folder in ['logs','pr'] for p in Path(folder).rglob('*') if p.is_file()}
+own={str(p) for p in Path('logs').glob('*.log') if re.match(r'^(20[2-9])-',p.name)}
+assert actual-own==set(entries), sorted((actual-own)^set(entries))
+oldlogs=[p for p in entries if p.startswith('logs/')]
+print('Setup evidence entries:',len(entries),'logs:',len(oldlogs),'highest log number:',max(int(Path(p).name.split('-')[0]) for p in oldlogs),flush=True)
+print('New session logs excluded from setup inventory:',*sorted(own),sep='\n',flush=True)
+run(['shasum','-a','256','prompt/evidence-at-setup.sha256','prompt/SHA256.txt'])
+names=set()
+for line in Path('prompt/SHA256.txt').read_text().splitlines():
+    expected_hash,name=line.split(None,1)
+    name=name.lstrip('*')
+    names.add(name)
+    digest=run(['shasum','-a','256',str(Path('prompt')/name)]).split()[0]
+    assert digest==expected_hash
+assert {p.name for p in Path('prompt').iterdir()}==names|{'SHA256.txt'}
+pins=['ee5edbe2e3b377c11afd63a3b60775a802498d6be093f0dba619283569bd31fd','e04b54065b0f0bb465b2d14e14a39f3b31f9cb34a874f6f8210a7d7e74a8c1c1','f2a0ef1063379902935760d9517b68d532cabf6e24699cdebb789681f78ce15e','e817470aea6be2c176d4ae75856fd793ef982bd28c9eb793df9c9038a5c1dfbc','e86e94a62c7067e4656114afe1713c1478814ffe446d1ffcc8b788accfc3ff3d','24cef0ed5c968aa80ada586e473526d0f4f0b1de1331eba1d5a35051b1254ac9','cd15d604dacb0bad4f27a18bda7936799076f3f8743301cb893bf3079c270361']
+for p,pin in zip(sorted(Path('prompt').glob('*addendum-*.md')),pins):
+    assert run(['shasum','-a','256',str(p)]).split()[0]==pin
+    s=p.read_text()
+    assert '**Status:** ISSUED' in s and '— Michael Daley' in s and 'Actor-Id: founder' in s
+for path in ['docs/decisions/DEC-20261108-03-phase-3b-h1.md','docs/decisions/DEC-20261108-02-phase-3b-builder-qualification.md','docs/decisions/DEC-20261108-01-phase-3b-approval.md','docs/decisions/DEC-20261103-01-hardening-c-records-and-hardening-d.md','docs/decisions/DEC-20261102-02-hardening-builds.md','docs/decisions/DEC-20261023-01-standing-build-rules.md','docs/decisions/DEC-20261013-03-tests-4-6-ruling.md','docs/decisions/DEC-20261104-02-hardening-f-and-task58.md','AGENTS.md']:
+    data=subprocess.check_output(['git','-C','tui','show','origin/main:'+path])
+    print(path,subprocess.check_output(['shasum','-a','256'],input=data).decode().strip(),flush=True)
+    if path!='AGENTS.md':
+        s=data.decode()
+        assert '**Status:** ISSUED' in s and '— Michael Daley' in s and 'Actor-Id: founder' in s
+assert run(['uname','-sm']).strip()=='Darwin arm64'
+p='test/phase3a/architecture-phase3a.test.ts'
+lines=subprocess.check_output(['git','-C','tui','show','HEAD:'+p]).decode().splitlines()
+target='quarantined modules admit only their sanctioned importers: mcp-server one edge, pty-manager none, both mcp-config none'
+starts=[i for i,s in enumerate(lines) if 'test(' in s and target in s]
+assert len(starts)==1
+a=starts[0]
+b=next(i for i in range(a+1,len(lines)) if lines[i]=='  });')
+for i in range(a,b+1):
+    print(f'{p}:{i+1}: {lines[i]}',flush=True)
+print('PRECONDITIONS 1 TO 5: PASS',flush=True)
+PY
+~~~~
+
+#### 210-resume-context.log
+
+~~~~sh
+python3 - <<'PY'
+import subprocess
+from pathlib import Path
+data=subprocess.check_output(['git','-C','tui','show','HEAD:docs/verification/phase-3b-h1-build-log.md']).decode().splitlines()
+for i,s in enumerate(data):
+    if i<100 or i>=len(data)-70:
+        print(f'{i+1}: {s}')
+print('FILE: pr/pr-body.md')
+print(Path('pr/pr-body.md').read_text())
+PY
+git -C tui show origin/main:.github/scripts/attribution-shape-check.sh
+shasum -a 256 tui/bun.lock pr/pr-title.txt
+git -C tui diff --summary
+sed -n '147,165p' logs/206-authority-build-rules.log
+mktemp -d /private/tmp/h1-r1-sixth.XXXXXX
+~~~~
+
+#### 211-resume-install.log
+
+~~~~sh
+export PATH="/Users/michaeldaley/.bun/bin:$PATH"
+cd tui
+bun install --frozen-lockfile
+~~~~
+
+#### 212-postinstall-and-identity-recovery.log
+
+~~~~sh
+python3 - <<'PY'
+import subprocess
+d=subprocess.check_output(['shasum','-a','256','tui/bun.lock']).decode()
+print(d,end='')
+assert d.split()[0]=='34224c0133c44d967c4a4da8b75bf11093c573c47e42bcaf502c6d6f61c3e7c0'
+s=subprocess.check_output(['git','-C','tui','diff','--summary']).decode()
+print('After install:',s or 'no mode change',end='\n')
+if s:
+    assert s.strip()=='mode change 100644 => 100755 packages/founder-act/src/main.ts'
+    subprocess.run(['git','-C','tui','checkout','--','packages/founder-act/src/main.ts'],check=True)
+    print('Restored install executable-bit change with git checkout.')
+    print(subprocess.check_output(['git','-C','tui','diff','--summary']).decode())
+assert subprocess.check_output(['git','-C','tui','status','--porcelain'])==b''
+print('bun.lock byte-identical; repository clean.')
+PY
+codex --version
+pwd
+git -C tui branch --show-current
+git -C tui rev-parse HEAD
+git -C tui config user.name
+git -C tui config user.email
+~~~~
+
+#### 213-resume-typecheck.log
+
+~~~~sh
+export PATH="/Users/michaeldaley/.bun/bin:$PATH"
+cd tui
+bunx tsc --noEmit
+~~~~
+
+#### 214-sixth-change-and-message.log
+
+~~~~sh
+python3 - <<'PY'
+from pathlib import Path
+import subprocess
+p=Path('tui/test/phase3a/architecture-phase3a.test.ts')
+old=p.read_bytes()
+assert old==subprocess.check_output(['git','-C','tui','show','HEAD:test/phase3a/architecture-phase3a.test.ts'])
+name=b'  test("quarantined modules admit only their sanctioned importers: mcp-server one edge, pty-manager none, both mcp-config none", () => {'
+assert old.count(name)==1
+a=old.index(name)
+b=old.index(b'\n  });',a)
+new=old[:b]+old[b:].replace(b'\n  });',b'\n  }, 15_000);',1)
+assert len(new.splitlines())==len(old.splitlines())
+p.write_bytes(new)
+msg='''test(phase3a): give the Task 33 quarantine test a 15 s limit
+
+Under DEC-20261108-03 Addendum 7 B1, change only the closing line of
+test/phase3a/architecture-phase3a.test.ts.
+Give the Task 33 quarantine test an explicit 15_000 ms limit.
+
+Role-Id: builder
+Actor-Id: session:codex/h1-r1
+Execution-Surface: codex
+'''
+assert max(map(len,msg.splitlines()))<=72
+Path('/private/tmp/h1-r1-sixth.nKRWdI/commit6.txt').write_text(msg)
+assert subprocess.check_output(['git','-C','tui','diff','--numstat']).decode()=='1\t1\ttest/phase3a/architecture-phase3a.test.ts\n'
+PY
+git -C tui diff -- test/phase3a/architecture-phase3a.test.ts
+grep -nE '^(Role-Id|Role-Id-Secondary|Actor-Id|Execution-Surface):' /private/tmp/h1-r1-sixth.nKRWdI/commit6.txt
+~~~~
+
+#### 215-sixth-stage-and-scan.log
+
+~~~~sh
+set -e
+git -C tui add test/phase3a/architecture-phase3a.test.ts
+git -C tui diff --cached --stat
+python3 - <<'PY'
+import subprocess
+diff=subprocess.check_output(['git','-C','tui','diff','--cached','-U0'])
+pattern=r'password|secret|api[_-]?key|token|BEGIN (RSA |OPENSSH )?PRIVATE|AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9-]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|glpat-[A-Za-z0-9_-]{20,}'
+p=subprocess.run(['grep','-iE',pattern],input=diff,stdout=subprocess.PIPE)
+assert p.returncode==1 and not p.stdout
+print('Required staged-diff scan: no matches.')
+assert subprocess.check_output(['git','-C','tui','diff','--cached','--numstat']).decode()=='1\t1\ttest/phase3a/architecture-phase3a.test.ts\n'
+PY
+~~~~
+
+#### 216-commit6.log
+
+~~~~sh
+set -e
+git -C tui commit -F /private/tmp/h1-r1-sixth.nKRWdI/commit6.txt
+git -C tui log -1 --format='%H%n%P%n%B'
+git -C tui status --porcelain
+~~~~
+
+#### 217-pregate-runtime.log
+
+~~~~sh
+export PATH="/Users/michaeldaley/.bun/bin:$PATH"
+command -v bun
+command -v bunx
+shasum -a 256 "$(command -v bun)"
+bun --version
+bun -e 'process.stdout.write(Bun.revision)'
+printf '\n'
+~~~~
+
+#### 218-gate-typecheck.log
+
+~~~~sh
+export PATH="/Users/michaeldaley/.bun/bin:$PATH"
+cd tui
+bunx tsc --noEmit
+~~~~
+
+#### 219-gate-architecture.log
+
+~~~~sh
+export PATH="/Users/michaeldaley/.bun/bin:$PATH"
+cd tui
+bun test test/phase3a/architecture-phase3a.test.ts
+~~~~
+
+#### 220-gate-evidence.log
+
+~~~~sh
+export PATH="/Users/michaeldaley/.bun/bin:$PATH"
+cd tui
+bun test test/phase3a/evidence-pipeline.test.ts
+~~~~
+
+#### 221-gate-phase3a.log
+
+~~~~sh
+export PATH="/Users/michaeldaley/.bun/bin:$PATH"
+cd tui
+bun test test/phase3a
+~~~~
+
+#### 222-prebare-runtime.log
+
+~~~~sh
+export PATH="/Users/michaeldaley/.bun/bin:$PATH"
+command -v bun
+command -v bunx
+shasum -a 256 "$(command -v bun)"
+bun --version
+bun -e 'process.stdout.write(Bun.revision)'
+printf '\n'
+~~~~
+
+#### 223-gate-bare.log
+
+~~~~sh
+export PATH="/Users/michaeldaley/.bun/bin:$PATH"
+cd tui
+date +%Z
+bun test
+~~~~
+
+#### 224-halt-verification.log
+
+~~~~sh
+python3 - <<'PY'
+from pathlib import Path
+import json,re,subprocess
+def sha(path):
+    return subprocess.check_output(['shasum','-a','256',str(path)]).decode().split()[0]
+records=[]
+for p in sorted(Path('logs').glob('*.log')):
+    n=int(p.name.split('-')[0])
+    if 202<=n<=223:
+        s=p.read_text()
+        uptime=next(line for line in s.splitlines() if re.match(r'^\s*\d{1,2}:\d{2}.*load averages:',line))
+        status=re.findall(r'^Exit status: (\d+)$',s,re.M)
+        assert status
+        record={'path':str(p),'uptime':uptime,'exit':int(status[-1]),'sha256':sha(p)}
+        records.append(record)
+        print(json.dumps(record),flush=True)
+print('BARE SUMMARY AND FAILURE LINES',flush=True)
+s=Path('logs/223-gate-bare.log').read_text()
+for line in s.splitlines():
+    if re.match(r'^\s*\d+ (pass|fail|expect\(\) calls)',line) or line.startswith('Ran ') or line.startswith('(fail)') or 'this test timed out after' in line:
+        print(line,flush=True)
+assert records[-1]['exit']==1
+for p in ['tui/docs/verification/phase-3b-h1-build-log.md','pr/pr-title.txt','pr/pr-body.md','prompt/evidence-at-setup.sha256','prompt/SHA256.txt']:
+    print(p,sha(p),flush=True)
+p=subprocess.run(['shasum','-a','256','-c','prompt/evidence-at-setup.sha256'],stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+print(p.stdout.decode(),end='',flush=True)
+assert p.returncode==0
+state=subprocess.check_output(['git','-C','tui','status','--porcelain=v1']).decode()
+print('Halt working-tree status:',repr(state),flush=True)
+assert not state
+head=subprocess.check_output(['git','-C','tui','rev-parse','HEAD']).decode().strip()
+assert head=='5279efd8a07f0f9545b70519fef76f22e68112f3'
+print('Halt HEAD:',head,flush=True)
+print(subprocess.check_output(['git','-C','tui','log','-1','--format=%H%n%P%n%B']).decode(),flush=True)
+print(subprocess.check_output(['git','-C','tui','diff','d09712a67db06fc6a7cee9bf0674ac8b509a8200','HEAD','--','test/phase3a/architecture-phase3a.test.ts']).decode(),flush=True)
+assert subprocess.check_output(['git','-C','tui','rev-list','--count','1678f1839c600cacd38fd426f755afae021861bf..HEAD']).strip()==b'6'
+Path('/private/tmp/h1-r1-sixth.nKRWdI/halt-records.json').write_text(json.dumps(records,indent=2)+'\n')
+print('SETUP EVIDENCE STILL INTACT; SIX COMMITS; CLEAN TREE.',flush=True)
+PY
+~~~~
+
+#### 225-write-session6-halt-report.log
+
+~~~~sh
+python3 - <<'PY'
+from pathlib import Path
+import json,re,subprocess
+def sha(p):
+    return subprocess.check_output(['shasum','-a','256',str(p)]).decode().split()[0]
+records=json.loads(Path('/private/tmp/h1-r1-sixth.nKRWdI/halt-records.json').read_text())
+p=Path('logs/224-halt-verification.log')
+s=p.read_text()
+records.append({'path':str(p),'uptime':next(x for x in s.splitlines() if re.match(r'^\s*\d{1,2}:\d{2}.*load averages:',x)),'exit':0,'sha256':sha(p)})
+text='''FOUNDER_DECISION_REQUIRED
+
+H1 sixth-session halt under DEC-20261108-03 Addendum 7 B2.
+
+1. Identity and runtime
+
+Harness: Codex. Model: GPT-6 by OpenAI. Exact model ID, variant,
+revision and session ID are not shown. Agent /root; builder;
+session:codex/h1-r1; execution surface codex. Mode Default, shell zsh,
+date 2026-11-10, timezone America/New_York, four concurrency slots.
+Shown model override identifiers: gpt-6.1-sol, gpt-6-astra,
+gpt-6.1-terra, gpt-6-sol, gpt-6-luna.
+Sandbox workspace-write; approval on-request; network restricted.
+Writable roots: /Users/michaeldaley/builds/h1-r1; /private/tmp;
+/private/var/folders/x7/q4cptd9d25l_jjks9ms4j5000000gn/T.
+Loaded MCP servers: none shown; Founder confirmed none.
+The namespaces and tool inventory match the fifth-session inventory
+at lines 55 to 88 of the existing build log, without difference.
+For the names that may not be written here, see the six names of
+Addendum 2 B4. Only exec with exec_command and write_stdin, and wait,
+were called. No barred tool call and no occurrence of the six names of
+Addendum 2 B4 in any exec input. No memory lookup, other agent,
+GitHub call, or network command other than the authorized install.
+
+CLI output, initially and in the logged identity recovery, verbatim:
+WARNING: proceeding, even though we could not create PATH aliases: Operation not permitted (os error 1)
+codex-cli 0.167.0
+
+All three runtime checks passed: logs 202, 217 and 222.
+Resolved Bun: /Users/michaeldaley/.bun/bin/bun
+Resolved Bunx: /Users/michaeldaley/.bun/bin/bunx
+Bun version: 1.4.2
+Bun revision: 744846f844374847c902b5e7fd59b4342a51ef99
+Bun SHA-256:
+35d20dd0263e5c950194434b925454fdfa9ba6e4467da960410fa05b08a7a5b5
+Every Bun command was escalated from its first run and began with the
+required command-local PATH export. No sandbox or approval setting changed.
+
+2. Directory and preconditions
+
+Directory: /Users/michaeldaley/builds/h1-r1
+Branch: build/h1-r1
+Binding base and origin/main:
+1678f1839c600cacd38fd426f755afae021861bf
+Initial HEAD: d09712a67db06fc6a7cee9bf0674ac8b509a8200
+Halt HEAD: 5279efd8a07f0f9545b70519fef76f22e68112f3
+Git identity: daley40-lab
+Git email: 293512385+daley40-lab@users.noreply.github.com
+Platform: Darwin arm64
+Initial tree clean, no stash. Halt tree clean.
+The five existing commits and their parent chain matched, in order:
+f4aefe1e89f566a0f4a76d7cc18c209f70d719e8
+8e5b471aed5330dd1b620f2a040540871b6fd047
+56775934aa653daefa9bb40f8c42a26e9f8e732a
+21e12ad56d7e821e7c8a49c6a2a3c688ab15eed6
+d09712a67db06fc6a7cee9bf0674ac8b509a8200
+
+The changed paths at initial HEAD are exactly:
+apps/madv-agent/src/proxy.ts
+docs/verification/phase-3b-h1-build-log.md
+test/phase3a/architecture-phase3a.test.ts
+test/phase3a/evidence-pipeline.test.ts
+test/phase3a/runtime-harness.ts
+
+All authority hashes matched the prompt, with ISSUED status and Founder
+signature for every act. The prompt directory contained exactly its ten
+expected files, and every entry of prompt/SHA256.txt matched.
+The setup manifest contains 208 files: 201 logs, highest number 201,
+and seven files in pr. All passed before work and again at halt; no
+setup file was changed. Newly created session logs are additional evidence.
+Setup manifest SHA-256:
+b13569663d459e6486f264389b53bee2da6daffe3a92b47a35fc133aeb7900a7
+Prompt SHA256.txt SHA-256:
+319cd731e6920959ef33e08ae752af4a14dd066049678ea6f8673705b0ae740d
+Signed sixth-session prompt SHA-256:
+eceb3042eef1e449691704ae9fd54a49f8d7e8c65a36efe80083264d74839632
+
+Preconditions 1 to 5 passed in log 209; precondition 6 passed in logs
+211 to 213. Authority records and all hashes appear in logs 203 to 209.
+'''
+p='test/phase3a/architecture-phase3a.test.ts'
+lines=subprocess.check_output(['git','-C','tui','show','d09712a67db06fc6a7cee9bf0674ac8b509a8200:'+p]).decode().splitlines()
+text+='\nInitial-HEAD test, verbatim with file and line:\n'
+for i in range(1365,1373):
+    text+=f'{p}:{i+1}: {lines[i]}\n'
+text+='''
+3. Resume check
+
+Log 211: bun install --frozen-lockfile, once, passed.
+bun.lock remained byte-identical, SHA-256:
+34224c0133c44d967c4a4da8b75bf11093c573c47e42bcaf502c6d6f61c3e7c0
+The install set the executable bit on packages/founder-act/src/main.ts.
+Log 212 records the mode before and after git checkout restored it.
+Log 213: bunx tsc --noEmit, once, passed.
+Each uptime, exit status and log hash is in the register below.
+
+4. Sixth commit
+
+5279efd8a07f0f9545b70519fef76f22e68112f3
+Parent: d09712a67db06fc6a7cee9bf0674ac8b509a8200
+Subject: test(phase3a): give the Task 33 quarantine test a 15 s limit
+Only test/phase3a/architecture-phase3a.test.ts changed, one insertion and
+one deletion. Its line 1373 changed:
+-  });
++  }, 15_000);
+No assertion, test name or other test changed. No break was required.
+Log 214 shows the diff and the grep of the three final trailers.
+Log 215 records the staged-diff scan, which found no matches.
+Log 216 records the commit, full SHA, parent and clean tree.
+Message lines are at most 72 characters; Addendum 7 and the file are named.
+
+5. Gates and the halt
+
+217 runtime check: passed.
+218 bunx tsc --noEmit: passed.
+219 bun test test/phase3a/architecture-phase3a.test.ts: passed.
+220 bun test test/phase3a/evidence-pipeline.test.ts: passed.
+221 bun test test/phase3a: passed.
+222 runtime check immediately before bare suite: passed.
+223 date +%Z printed EST; bare bun test exited 1.
+
+Summary lines, verbatim:
+'''
+for n in [219,220,221,223]:
+    p=next(Path('logs').glob(str(n)+'-*.log'))
+    text+='\n'+p.name+'\n'
+    for line in p.read_text().splitlines():
+        if re.match(r'^\s*\d+ (pass|fail|expect\(\) calls)',line) or line.startswith('Ran '):
+            text+=line+'\n'
+text+='''
+Failure, verbatim:
+(fail) doctor: read-only invariant > no files created in cwd [5004.44ms]
+  ^ this test timed out after 5000ms.
+(fail) doctor: read-only invariant > no files created in home .madv-runtime [5003.07ms]
+  ^ this test timed out after 5000ms.
+
+File: apps/madbridge/test/doctor.test.ts
+The bare run began at:
+~~~~
+
+#### 226-addendum8-hash-and-read.log
+
+~~~~sh
+set -e
+shasum -a 256 prompt/DEC-20261108-03-addendum-8-gate-repeat.md
+python3 - <<'PY'
+from pathlib import Path
+import subprocess
+p=Path('prompt/DEC-20261108-03-addendum-8-gate-repeat.md')
+expected='aca83d3bfcddc137687e0d2339ee409d937a2117342c9ffa6cdb10dc3da40c78'
+digest=subprocess.check_output(['shasum','-a','256',str(p)]).decode().split()[0]
+matches=[line.split()[0] for line in Path('prompt/SHA256.txt').read_text().splitlines() if line.split()[-1]==p.name]
+assert matches==[expected],matches
+assert digest==expected,digest
+print('Prompt manifest and signed hash: MATCH',flush=True)
+print(p.read_text(),flush=True)
+PY
+~~~~
+
+#### 227-resume8-version.log
+
+~~~~sh
+python3 - <<'PY'
+import subprocess
+p=subprocess.run(['codex','--version'],stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
+s=p.stdout.decode()
+print(s,end='',flush=True)
+assert p.returncode==0 and s.splitlines()[-1]=='codex-cli 0.167.0'
+PY
+~~~~
+
+#### 228-resume8-state.log
+
+~~~~sh
+python3 - <<'PY'
+import subprocess
+for args,expected in [
+(['pwd'],'/Users/michaeldaley/builds/h1-r1'),
+(['git','-C','tui','rev-parse','HEAD'],'5279efd8a07f0f9545b70519fef76f22e68112f3'),
+(['git','-C','tui','branch','--show-current'],'build/h1-r1'),
+(['git','-C','tui','status','--porcelain'],'')]:
+    s=subprocess.check_output(args).decode().strip()
+    print('Command:', ' '.join(args),'\nResult:',repr(s),flush=True)
+    assert s==expected
+PY
+~~~~
+
+#### 229-resume8-halt-hashes.log
+
+~~~~sh
+python3 - <<'PY'
+import subprocess
+for p,expected in [
+('pr/h1-session6-halt-report.md','98f8237e92d0e4961549e743b84dfa7275845c818f98b95e1b0de86f0b1bd83f'),
+('pr/h1-session6-halt-log-manifest.sha256','0e8e1890539aa8f87f11d908c1e4b3ea4619dcb551c15e68c97a209392093865')]:
+    s=subprocess.check_output(['shasum','-a','256',p]).decode()
+    print(s,end='',flush=True)
+    assert s.split()[0]==expected
+PY
+~~~~
+
+#### 230-resume8-setup-evidence.log
+
+~~~~sh
+shasum -a 256 -c prompt/evidence-at-setup.sha256
+~~~~
+
+#### 231-resume8-runtime.log
+
+~~~~sh
+export PATH="/Users/michaeldaley/.bun/bin:$PATH"
+command -v bun
+command -v bunx
+shasum -a 256 "$(command -v bun)"
+bun --version
+bun -e 'process.stdout.write(Bun.revision)'
+printf '\n'
+~~~~
+
+#### 232-wait-typecheck.log
+
+~~~~sh
+python3 - <<'PY'
+import datetime,os,time
+started=time.monotonic()
+while True:
+    load=os.getloadavg()[0]
+    print(datetime.datetime.now().astimezone().strftime('%Y-%m-%d %H:%M:%S %Z')+f' one-minute load={load:.2f}',flush=True)
+    if load<2.0:
+        print('READY: first reading below 2.0; start the next prescribed run.',flush=True)
+        break
+    remaining=1200-(time.monotonic()-started)
+    if remaining<=0:
+        print('WAIT EXPIRED: ask the Founder to quiet the MacBook before another wait.',flush=True)
+        raise SystemExit(75)
+    time.sleep(min(30,remaining))
+PY
+~~~~
+
+#### 233-interrupted-run-check.log
+
+~~~~sh
+python3 - <<'PY'
+from pathlib import Path
+import subprocess
+paths=sorted(Path('logs').glob('233-*.log'))
+print('Interrupted typecheck log paths:',*[str(p) for p in paths],flush=True)
+for p in paths:
+    print(p.read_text(),flush=True)
+print('HEAD:',subprocess.check_output(['git','-C','tui','rev-parse','HEAD']).decode().strip(),flush=True)
+print('Branch:',subprocess.check_output(['git','-C','tui','branch','--show-current']).decode().strip(),flush=True)
+print('Working tree:',repr(subprocess.check_output(['git','-C','tui','status','--porcelain']).decode()),flush=True)
+PY
+~~~~
+
+#### 234-wait-typecheck-after-interruption.log
+
+~~~~sh
+python3 - <<'PY'
+import datetime,os,time
+started=time.monotonic()
+while True:
+    load=os.getloadavg()[0]
+    print(datetime.datetime.now().astimezone().strftime('%Y-%m-%d %H:%M:%S %Z')+f' one-minute load={load:.2f}',flush=True)
+    if load<2.0:
+        print('READY: first reading below 2.0; start the next prescribed run.',flush=True)
+        break
+    remaining=1200-(time.monotonic()-started)
+    if remaining<=0:
+        print('WAIT EXPIRED: ask the Founder to quiet the MacBook before another wait.',flush=True)
+        raise SystemExit(75)
+    time.sleep(min(30,remaining))
+PY
+~~~~
+
+#### 235-repeat-typecheck.log
+
+~~~~sh
+export PATH="/Users/michaeldaley/.bun/bin:$PATH"
+cd tui
+bunx tsc --noEmit
+~~~~
+
+#### 236-wait-architecture.log
+
+~~~~sh
+python3 - <<'PY'
+import datetime,os,time
+started=time.monotonic()
+while True:
+    load=os.getloadavg()[0]
+    print(datetime.datetime.now().astimezone().strftime('%Y-%m-%d %H:%M:%S %Z')+f' one-minute load={load:.2f}',flush=True)
+    if load<2.0:
+        print('READY: first reading below 2.0; start the next prescribed run.',flush=True)
+        break
+    remaining=1200-(time.monotonic()-started)
+    if remaining<=0:
+        print('WAIT EXPIRED: ask the Founder to quiet the MacBook before another wait.',flush=True)
+        raise SystemExit(75)
+    time.sleep(min(30,remaining))
+PY
+~~~~
+
+#### 237-repeat-architecture.log
+
+~~~~sh
+export PATH="/Users/michaeldaley/.bun/bin:$PATH"
+cd tui
+bun test test/phase3a/architecture-phase3a.test.ts
+~~~~
+
+#### 238-wait-evidence.log
+
+~~~~sh
+python3 - <<'PY'
+import datetime,os,time
+started=time.monotonic()
+while True:
+    load=os.getloadavg()[0]
+    print(datetime.datetime.now().astimezone().strftime('%Y-%m-%d %H:%M:%S %Z')+f' one-minute load={load:.2f}',flush=True)
+    if load<2.0:
+        print('READY: first reading below 2.0; start the next prescribed run.',flush=True)
+        break
+    remaining=1200-(time.monotonic()-started)
+    if remaining<=0:
+        print('WAIT EXPIRED: ask the Founder to quiet the MacBook before another wait.',flush=True)
+        raise SystemExit(75)
+    time.sleep(min(30,remaining))
+PY
+~~~~
+
+#### 239-repeat-evidence.log
+
+~~~~sh
+export PATH="/Users/michaeldaley/.bun/bin:$PATH"
+cd tui
+bun test test/phase3a/evidence-pipeline.test.ts
+~~~~
+
+#### 240-wait-phase3a.log
+
+~~~~sh
+python3 - <<'PY'
+import datetime,os,time
+started=time.monotonic()
+while True:
+    load=os.getloadavg()[0]
+    print(datetime.datetime.now().astimezone().strftime('%Y-%m-%d %H:%M:%S %Z')+f' one-minute load={load:.2f}',flush=True)
+    if load<2.0:
+        print('READY: first reading below 2.0; start the next prescribed run.',flush=True)
+        break
+    remaining=1200-(time.monotonic()-started)
+    if remaining<=0:
+        print('WAIT EXPIRED: ask the Founder to quiet the MacBook before another wait.',flush=True)
+        raise SystemExit(75)
+    time.sleep(min(30,remaining))
+PY
+~~~~
+
+#### 241-repeat-phase3a.log
+
+~~~~sh
+export PATH="/Users/michaeldaley/.bun/bin:$PATH"
+cd tui
+bun test test/phase3a
+~~~~
+
+#### 242-delivery-context.log
+
+~~~~sh
+python3 - <<'PY'
+from pathlib import Path
+import subprocess
+p=Path('pr/pr-body.md')
+print('PR body bytes:',len(p.read_bytes()),flush=True)
+print(p.read_text(),flush=True)
+s=subprocess.check_output(['git','-C','tui','show','origin/main:.github/scripts/attribution-shape-check.sh']).decode().splitlines()
+for i,line in enumerate(s):
+    if 180<=i<380:
+        print(f'{i+1}: {line}',flush=True)
+PY
+~~~~
+
+#### 243-repeat-prebare-runtime.log
+
+~~~~sh
+export PATH="/Users/michaeldaley/.bun/bin:$PATH"
+command -v bun
+command -v bunx
+shasum -a 256 "$(command -v bun)"
+bun --version
+bun -e 'process.stdout.write(Bun.revision)'
+printf '\n'
+~~~~
+
+#### 244-wait-bare.log
+
+~~~~sh
+python3 - <<'PY'
+import datetime,os,time
+started=time.monotonic()
+while True:
+    load=os.getloadavg()[0]
+    print(datetime.datetime.now().astimezone().strftime('%Y-%m-%d %H:%M:%S %Z')+f' one-minute load={load:.2f}',flush=True)
+    if load<2.0:
+        print('READY: first reading below 2.0; start the next prescribed run.',flush=True)
+        break
+    remaining=1200-(time.monotonic()-started)
+    if remaining<=0:
+        print('WAIT EXPIRED: ask the Founder to quiet the MacBook before another wait.',flush=True)
+        raise SystemExit(75)
+    time.sleep(min(30,remaining))
+PY
+~~~~
+
+#### 245-repeat-bare.log
+
+~~~~sh
+export PATH="/Users/michaeldaley/.bun/bin:$PATH"
+cd tui
+date +%Z
+bun test
+~~~~
+
+#### 246-wait-new-york.log
+
+~~~~sh
+python3 - <<'PY'
+import datetime,os,time
+started=time.monotonic()
+while True:
+    load=os.getloadavg()[0]
+    print(datetime.datetime.now().astimezone().strftime('%Y-%m-%d %H:%M:%S %Z')+f' one-minute load={load:.2f}',flush=True)
+    if load<2.0:
+        print('READY: first reading below 2.0; start the next prescribed run.',flush=True)
+        break
+    remaining=1200-(time.monotonic()-started)
+    if remaining<=0:
+        print('WAIT EXPIRED: ask the Founder to quiet the MacBook before another wait.',flush=True)
+        raise SystemExit(75)
+    time.sleep(min(30,remaining))
+PY
+~~~~
+
+#### 247-junit-new-york.log
+
+~~~~sh
+export PATH="/Users/michaeldaley/.bun/bin:$PATH"
+cd tui
+TZ=America/New_York bun test --reporter=junit --reporter-outfile=/Users/michaeldaley/builds/h1-r1/logs/247-junit-new-york.xml
+~~~~
