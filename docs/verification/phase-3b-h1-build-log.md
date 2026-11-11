@@ -4266,7 +4266,7 @@ Log | Uptime | Exit | SHA-256
 222-prebare-runtime.log | 13:10  up 16 days,  5:19, 1 user, load averages: 5.77 6.65 6.87 | 0 | 46a2f98f8642fa9ad4a36b3205efac4690242d926cf6e297ea07a4faebcf97fc
 223-gate-bare.log | 13:10  up 16 days,  5:19, 1 user, load averages: 4.80 6.26 6.72 | 1 | d61a5ca945f2839abf0ddb36b48fc3351e821ec164292c1fb8d5c6994f33c2a5
 224-halt-verification.log | 13:15  1 user, load averages: 7.57 7.33 7.11 | 0 | 8f9fca5708fefae1bc1a41a08ace4eb80ea1c479f77ce5e6cdeaa9aed1be4117
-225-write-session6-halt-report.log | 13:10  up 16 days,  5:19, 1 user, load averages: 4.80 6.26 6.72 | 0 | 754821677632ec50465b2bf91997d8c163330e717606c8074421b24f46d2847a
+225-write-session6-halt-report.log | 13:16  1 user, load averages: 4.88 6.52 6.81 | 0 | 754821677632ec50465b2bf91997d8c163330e717606c8074421b24f46d2847a
 226-addendum8-hash-and-read.log | 16:15  2 users, load averages: 1.98 2.36 3.85 | 0 | 905c5092afd4bc3543428bf055b125e222044ca49d810ff7296664c90d81f97a
 227-resume8-version.log | 16:15  2 users, load averages: 2.43 2.45 3.85 | 0 | 0960acb3c082aab0afa7fe3929eecfa96fd46b9ddcd420345b810ec9c22f57d3
 228-resume8-state.log | 16:15  2 users, load averages: 2.43 2.45 3.85 | 0 | 353f80a086df95f70c8f0603973f64debbb8c5a6b6e9d2f047617830336edd19
@@ -4836,6 +4836,71 @@ Failure, verbatim:
 
 File: apps/madbridge/test/doctor.test.ts
 The bare run began at:
+13:10  up 16 days,  5:19, 1 user, load averages: 4.80 6.26 6.72
+These failures halt H1 under Addendum 7 B2, at any load.
+The same active run was allowed to finish to preserve its full output.
+No failed run was rerun and no failure was fixed.
+The Task 33 test passed in that run at 1589.79ms.
+The New York run was not started; no JUnit report or JUnit time exists.
+
+6. Seventh commit and last four gates
+
+Not made or run because of the mandatory halt.
+The Sixth session build-log section was not appended.
+The four post-seventh-commit git gates have no result in this session.
+There are six commits above the binding base, not seven.
+
+7. Artifacts and attribution
+
+The existing PR title, PR body and build log are unchanged.
+'''
+for p in ['pr/pr-title.txt','pr/pr-body.md','tui/docs/verification/phase-3b-h1-build-log.md']:
+    text+=p+' SHA-256 '+sha(p)+'\n'
+text+='''
+Neither final attribution-shape-check mode was run because of the halt.
+The sixth commit's three trailers were checked before commit.
+
+8. Deviations and work not run
+
+The first two exec calls, containing codex --version and the five initial
+directory/Git identity commands, were not piped through tee and have no
+recorded pre-command uptime. Their outputs are in this session's messages.
+They were repeated successfully in numbered log 212, which is recovery
+evidence and does not reconstruct the original uptime.
+Additional shown harness fields were supplied in a later identity message,
+rather than all being included before the first command.
+All subsequent command runs have numbered full-output tee logs.
+The self-checksum of the terminal report-writing log is emitted after
+tee closes it, so that checksum cannot be inside its own log.
+The install's expected executable-bit change was restored as authorized.
+The repository build-gate skill was read as repository instructions;
+the signed H1 command order governed, and its extra scripts were not run.
+No New York run, seventh commit, final four gates, final attribution
+checks, PR-body replacement, network call of our own, or GitHub call ran.
+No existing build-log line, setup log, prompt file, or existing PR file
+was changed.
+
+9. Single Founder decision
+
+Rule on the failed bare-suite gate and authorize the next step.
+The requested push/update step is not reached.
+
+Session log register
+
+'''
+for r in records:
+    text+=f"{r['path']}\nUptime: {r['uptime']}\nExit: {r['exit']}\nSHA-256: {r['sha256']}\n\n"
+text+='Role-Id: builder\nActor-Id: session:codex/h1-r1\nExecution-Surface: codex\n'
+text='\n'.join(x.rstrip() for x in text.splitlines())+'\n'
+report=Path('pr/h1-session6-halt-report.md')
+manifest=Path('pr/h1-session6-halt-log-manifest.sha256')
+assert not report.exists() and not manifest.exists()
+report.write_text(text)
+manifest.write_text(''.join(r['sha256']+'  '+r['path']+'\n' for r in records))
+for p in [report,manifest,Path('logs/224-halt-verification.log')]:
+    print(p,'SHA-256',sha(p),flush=True)
+print('Halt report and manifest written; no repository edit.',flush=True)
+PY
 ~~~~
 
 #### 226-addendum8-hash-and-read.log
@@ -5149,3 +5214,658 @@ export PATH="/Users/michaeldaley/.bun/bin:$PATH"
 cd tui
 TZ=America/New_York bun test --reporter=junit --reporter-outfile=/Users/michaeldaley/builds/h1-r1/logs/247-junit-new-york.xml
 ~~~~
+
+
+## Seventh session
+
+### Authority, Finding 1 and corrections
+
+DEC-20261108-03-addendum-9-first-verdict.md, SHA-256 2381ba7b2b3778d4548b64120fe8198e3076e3c25fe28ce64965bf1c8fb902a0, governs this correction. Its A4 records Finding 1: the sixth-session generator selected a reading inside log 225's command and truncated that command at the same reading. B4 authorizes the two corrections and this section in one eighth commit. Finding 1 is substantive, counts as H1's first correction round under rubric milestone 10, and is not a disqualifier under B2 and B3. Advisory Findings 2 and 3 are carried under B10.
+
+The register row of 225-write-session6-halt-report.log is line 4269 before and after. Only its reading changes, copied from that log's own line 213. Its exit status and SHA-256 do not change.
+
+The command block heading stays at line 4689, its opening fence at 4691 and its first command line at 4692. The previous 147 command lines, 4692 through 4838, stay unchanged. Source command lines 148 through 212 are read from log 225 and inserted at build-log lines 4839 through 4903. The last command line moves from 4838 to 4903, and the closing fence moves from 4839 to 4904. No added source line starts with three or more backticks or tildes. Before this section, the correction diff has 66 additions and exactly one deletion: the old register row. Log 298 shows that diff.
+
+Under Addendum 9 B6, quoted lines keep every character except trailing spaces and tabs. This addition and the copied command lines have those trailing characters removed; no existing quoted line was normalized or rewritten.
+
+### Identity and comparison
+
+The namespaces and tool names shown are the same as those the sixth session records. There is no inventory difference. The six names of Addendum 2 B4 are referred to only by that phrase. Harness Codex; model GPT-6 by OpenAI; exact resolved model ID, variant, build, revision and runtime session ID not shown. The label is not machine-verifiable under DEC-20261108-02 B4.
+
+Agent /root; mode Default; four concurrency slots; shell zsh; date 2026-11-11; timezone America/New_York. Shown available model override identifiers: gpt-6.1-sol, gpt-6-astra, gpt-6.1-terra, gpt-6-sol and gpt-6-luna. Assigned role builder; actor session:codex/h1-r1; execution surface codex. Sandbox workspace-write; approval on-request; network restricted. Writable roots shown are /Users/michaeldaley/builds/h1-r1, /private/tmp and /private/var/folders/x7/q4cptd9d25l_jjks9ms4j5000000gn/T. No loaded MCP server is shown; the Founder confirmed none. No setting was changed and no command needed escalation.
+
+Only exec with exec_command was called through this record. No barred tool was called, no exec input contained any of the six names of Addendum 2 B4, and no Bun process was started.
+
+CLI output from log 262, verbatim:
+
+~~~~text
+WARNING: proceeding, even though we could not create PATH aliases: Operation not permitted (os error 1)
+codex-cli 0.167.0
+~~~~
+
+### Preconditions
+
+All six preconditions passed. Logs 292, 294 and 296 contain their source output and assertions.
+
+1. Working directory /Users/michaeldaley/builds/h1-r1; branch build/h1-r1; origin/main and binding base 1678f1839c600cacd38fd426f755afae021861bf; initial HEAD 8c7afeae7e3209be8033ad6315b4be313f907713. The tree was clean with no stash. Git identity was daley40-lab, 293512385+daley40-lab@users.noreply.github.com. The seven commits, authors, sole parents and order matched exactly, and the diff from the base listed exactly the five B7 paths.
+
+Initial commit chain, with each full commit and parent:
+
+f4aefe1e89f566a0f4a76d7cc18c209f70d719e8 1678f1839c600cacd38fd426f755afae021861bf
+8e5b471aed5330dd1b620f2a040540871b6fd047 f4aefe1e89f566a0f4a76d7cc18c209f70d719e8
+56775934aa653daefa9bb40f8c42a26e9f8e732a 8e5b471aed5330dd1b620f2a040540871b6fd047
+21e12ad56d7e821e7c8a49c6a2a3c688ab15eed6 56775934aa653daefa9bb40f8c42a26e9f8e732a
+d09712a67db06fc6a7cee9bf0674ac8b509a8200 21e12ad56d7e821e7c8a49c6a2a3c688ab15eed6
+5279efd8a07f0f9545b70519fef76f22e68112f3 d09712a67db06fc6a7cee9bf0674ac8b509a8200
+8c7afeae7e3209be8033ad6315b4be313f907713 5279efd8a07f0f9545b70519fef76f22e68112f3
+
+Changed paths:
+
+apps/madv-agent/src/proxy.ts
+docs/verification/phase-3b-h1-build-log.md
+test/phase3a/architecture-phase3a.test.ts
+test/phase3a/evidence-pipeline.test.ts
+test/phase3a/runtime-harness.ts
+
+2. All fourteen authority-file hashes matched. Every act was ISSUED and signed by Michael Daley with Founder attribution. All eleven entries of prompt/SHA256.txt passed when checked from prompt; the directory contained exactly twelve files: this prompt, nine addenda, the evidence manifest and SHA256.txt. The repository authority hashes are:
+
+docs/decisions/DEC-20261108-03-phase-3b-h1.md SHA-256 10cdc674ce746568c963aa2c5c34c95a69d9960ea469438b044bfb5fe4b9e9de
+docs/decisions/DEC-20261108-02-phase-3b-builder-qualification.md SHA-256 38ec4066f5c9487547befc81e00b80b69126d9140f1e66c0a8dcb35e5fe815ef
+docs/decisions/DEC-20261102-02-hardening-builds.md SHA-256 04342fa77200737b676e51c6523b9813665b3303150309025be40178d9699550
+docs/decisions/DEC-20261023-01-standing-build-rules.md SHA-256 bafa95f9835c0d14d633ec882234b247ac3ff6841452a28d20332520f41a7ac5
+AGENTS.md SHA-256 0879ede2d3b07e137d1f3d5f75c131285277b44e61f1305d3d0d59da64f1dbca
+
+Addendum hashes:
+
+Addendum 1 SHA-256 ee5edbe2e3b377c11afd63a3b60775a802498d6be093f0dba619283569bd31fd
+Addendum 2 SHA-256 e04b54065b0f0bb465b2d14e14a39f3b31f9cb34a874f6f8210a7d7e74a8c1c1
+Addendum 3 SHA-256 f2a0ef1063379902935760d9517b68d532cabf6e24699cdebb789681f78ce15e
+Addendum 4 SHA-256 e817470aea6be2c176d4ae75856fd793ef982bd28c9eb793df9c9038a5c1dfbc
+Addendum 5 SHA-256 e86e94a62c7067e4656114afe1713c1478814ffe446d1ffcc8b788accfc3ff3d
+Addendum 6 SHA-256 24cef0ed5c968aa80ada586e473526d0f4f0b1de1331eba1d5a35051b1254ac9
+Addendum 7 SHA-256 cd15d604dacb0bad4f27a18bda7936799076f3f8743301cb893bf3079c270361
+Addendum 8 SHA-256 aca83d3bfcddc137687e0d2339ee409d937a2117342c9ffa6cdb10dc3da40c78
+Addendum 9 SHA-256 2381ba7b2b3778d4548b64120fe8198e3076e3c25fe28ce64965bf1c8fb902a0
+
+3. The evidence manifest SHA-256 is 07cbcfde3d5285b9ffcd5f2367a56c98b616a36d3e6eaa20559abb39142d4a17. All 271 listed files passed, with no unlisted initial evidence file: 262 files under logs, comprising 261 command logs and one JUnit XML artifact, highest log number 261; nine files under pr. New command logs begin at 262. Only pr/pr-body.md is to be replaced among the listed evidence; all earlier logs, the title and halt packets stay unchanged.
+
+4. At the initial HEAD the build log SHA-256 was 57d5614a15b48ac2d669a01ffcdc5b2546821ed7fbe173cc4549e51a95cfef65. Log 296 quotes the required lines with their line numbers: 4269, 4689 through 4692, and 4837 through 4839. They matched Addendum 9 A4.
+
+5. Log 225's command occupies lines 1 through 212, followed by its own reading at line 213. The first line has the Command prefix; its shell command starts after that prefix. The block held only the first 147 command lines. The source reading, copied from the log, is:
+
+~~~~text
+13:16  1 user, load averages: 4.88 6.52 6.81
+~~~~
+
+6. uname -sm printed Darwin arm64.
+
+### Complete sixth-session record check
+
+The script /private/tmp/h1-s7-0qvzb8br/audit.py, SHA-256 e63abef61b72deabb91592a7639b1d5234086ad43cc0ac07ab51fa8ee30f6f34, ran once in log 297. It checked all 46 command-register rows, logs 202 through 247, for their actual pre-run reading, exit status and SHA-256, and all 46 blocks under Commands as logged against their commands. It consumed shell here-documents before looking for a reading, so readings embedded in command text could not become the run's reading.
+
+It found exactly two differences: the reading in the row of log 225 and that log's incomplete 147-line block versus its 212-line command. There were zero unexpected differences. Every exit status, every log hash, every other reading and command block, and every already quoted line of log 225 matched. Comparison ignored only trailing spaces and tabs. Log 297 reports every row, block and difference, and its SHA-256 is c31ed4395f9046ef942db2678aea05e68a68ab64d12e862bb9aa33c344a3eaa8.
+
+### Command register
+
+Each row below records a completed command or grouped script, its own pre-run uptime, exit status and log SHA-256. The following appendix copies the command headers from those logs. The shared runner pipes full output through tee and emits each log checksum after tee closes. It creates no second disposable directory.
+
+Log | Uptime | Exit | SHA-256
+| --- | --- | --- | --- |
+262-identity-version.log | 10:38  4 users, load averages: 3.65 3.42 3.23 | 0 | 0deb65ae88baa816ea20cd5689cfd32a38829e6ab8a3871e9bdbf54c64879ec7
+263-identity-pwd.log | 10:38  4 users, load averages: 3.55 3.41 3.23 | 0 | 6879cc10d82e80cd217c5a92be392e716b3e36082d2f52bd20708ff4cee0267d
+264-identity-branch.log | 10:38  4 users, load averages: 3.55 3.41 3.23 | 0 | 2a1103ad867b406a600679b4883c687acf2025ca8f71b6f2797dd4bd61940b55
+265-identity-head.log | 10:38  4 users, load averages: 3.55 3.41 3.23 | 0 | c50fa916ddba746253cac9b060b85665f354d648a16a79ff8236a80b55d4bbf9
+266-identity-name.log | 10:38  4 users, load averages: 3.55 3.41 3.23 | 0 | ebb775626ae87661f2c77cb7275f84b7be0e28b98588707ff03074066a6a6286
+267-identity-email.log | 10:38  4 users, load averages: 3.55 3.41 3.23 | 0 | 712a17ed808bdade15fd7ba90370499b0aecc7253ec668b8ce1a55b1a376390d
+268-authority-h1.log | 10:38  4 users, load averages: 3.30 3.36 3.22 | 0 | cf55daf72e2f11b9bffadbc59c6274541599f085c1b6750a30d3f97deea9cf18
+269-authority-addendum-1.log | 10:38  4 users, load averages: 3.30 3.36 3.22 | 0 | 71c435345f8f129fbe0b81b74fddde90b2eb70a83e6f1c9cafae108e5354c218
+270-authority-addendum-2.log | 10:38  4 users, load averages: 3.30 3.36 3.22 | 0 | 4042000e196a2617dc00b78a166ccac1d65850ca41685a3cc3d70f83f36c1527
+271-authority-addendum-3.log | 10:38  4 users, load averages: 3.30 3.36 3.22 | 0 | 8366d8eefa8fc45efb9a54f8ef7c09993f0eca3ed85bfd7b5518b269e48bc23c
+272-authority-addendum-4.log | 10:38  4 users, load averages: 3.30 3.36 3.22 | 0 | be9a344e93d7b459d3f64f03d01d06c493aa9f664b4fa5760cd5003f87411974
+273-authority-addendum-5.log | 10:38  4 users, load averages: 3.30 3.36 3.22 | 0 | 6a453568a019a4f043e29ce154e680cd8c5a89c30600f3759fbae7d3d5764b04
+274-authority-addendum-6.log | 10:38  4 users, load averages: 3.30 3.36 3.22 | 0 | 405d80a40d30abf0e3de558f99af69887000fa1b2e25495308a808801cb69d29
+275-authority-addendum-7.log | 10:38  4 users, load averages: 3.30 3.36 3.22 | 0 | f0e740313fe980d952a1e805b1cdfa9aa612db904a563c4a84fbebb23f50cb92
+276-authority-addendum-8.log | 10:38  4 users, load averages: 3.30 3.36 3.22 | 0 | 07641d32617652d23dc9e0879a61e5a61e67e42c3cadd8b6e13f0da2fd7367f9
+277-authority-addendum-9.log | 10:38  4 users, load averages: 3.30 3.36 3.22 | 0 | e54035212fa984a6b8f7250d349a1bf858e3769717c282d35077289e0995764e
+278-authority-qualification.log | 10:39  4 users, load averages: 2.73 3.23 3.17 | 0 | ce6d570985e64c797f14b50a14764f70bdde63178003976fcb546bfa2e739bea
+279-authority-hardening.log | 10:39  4 users, load averages: 2.73 3.23 3.17 | 0 | a4d7bddb8981588597334ce93599279fbca8241a24aced935e74aea6afec7124
+280-authority-standing.log | 10:39  4 users, load averages: 2.73 3.23 3.17 | 0 | 2d2b9070d5768896b443f654f28017aea445e283b31b4049787c07030b6f15b6
+281-authority-agents.log | 10:39  4 users, load averages: 2.73 3.23 3.17 | 0 | 9d880404238bd20747e56c4ed1124386e1fe8667bbc131a5da4002008f7eb239
+282-authority-h1-tail.log | 10:39  4 users, load averages: 2.39 3.14 3.14 | 0 | ef624a8a13a082ff80ea9216a3982f22b20058c130af2e0ab56c877e63631cdb
+283-authority-reread-1.log | 10:39  4 users, load averages: 2.39 3.14 3.14 | 0 | 1c2d89415978afa8a1397ffb0fd131f0df8380f59e56ae4d31ee839cdc3a16db
+284-authority-reread-2.log | 10:39  4 users, load averages: 2.39 3.14 3.14 | 0 | 3e480cac0d17cdb1b5c815fd225f55d39bfe2daabcffa68d0638aa6edc0e2fd6
+285-authority-reread-3.log | 10:39  4 users, load averages: 2.39 3.14 3.14 | 0 | 0b9dfbf7912b50f0a9a2d1d6813fde8187e48cda403861b0d242c53c83668f95
+286-authority-reread-4.log | 10:39  4 users, load averages: 2.39 3.14 3.14 | 0 | 7bb9c03de28e124238247fa46dd866aa35f531c16540180def615753fc300dd0
+287-authority-h1-tail-again.log | 10:39  4 users, load averages: 2.08 3.03 3.10 | 0 | bdd5ca40b085a7af8c73ce4d3f8620bb16682dbf6a655f2de8c085dcb22e3f29
+288-authority-standing-reread.log | 10:39  4 users, load averages: 2.08 3.03 3.10 | 0 | cbf3e4179a874f0b234e1e456ef030a510053183a84c00bc0bbd58d790c584cc
+289-authority-reread-5.log | 10:39  4 users, load averages: 2.08 3.03 3.10 | 0 | 1b3c47f51876da170ef7ace8e691f755cad86d4aa21ee6a67ea18c7f7ed08966
+290-authority-reread-6.log | 10:39  4 users, load averages: 2.08 3.03 3.10 | 0 | 52d172fca763042541de5a097105749b78e8c7be1d5ff19daf7a524c392ecc1f
+291-authority-reread-7.log | 10:39  4 users, load averages: 2.08 3.03 3.10 | 0 | 46de1565f98f79659806327768991bd5f7d7de5c71c95716da8204dbf33bdef3
+292-preconditions-source.log | 10:39  4 users, load averages: 2.34 3.01 3.09 | 1 | 28241a1843b8aa77b2319fae41954b6214eefb29424ce1b62d869139ff26985c
+293-create-disposable-logger.log | 10:40  4 users, load averages: 1.46 2.72 2.98 | 0 | 2a57281f2cbe1aea419c4dcbcafa80bd2e52a88c4e074635311932072de2df13
+294-preconditions-source-complete.log | 10:40  4 users, load averages: 1.55 2.70 2.97 | 0 | c655c5b0c5ac053d8017effe54e4fbf48d980aa03b17bb740cdf08f164f465a2
+295-audit-source-context.log | 10:40  4 users, load averages: 1.47 2.64 2.95 | 0 | f4316f0423f5db0bdf09bd5c4d951e01096eace279c22f0c45e8bde6cc978284
+296-verify-preconditions-and-write-audit.log | 10:42  4 users, load averages: 1.27 2.28 2.77 | 0 | 776a765693a18bb6b78b9ef9f474ed6f0624a0e55b624f0af7a7e044c1d1df06
+297-audit-sixth-session-once.log | 10:42  4 users, load averages: 1.90 2.37 2.79 | 0 | c31ed4395f9046ef942db2678aea05e68a68ab64d12e862bb9aa33c344a3eaa8
+298-correct-log225-record.log | 10:42  4 users, load averages: 2.16 2.40 2.80 | 0 | 666e3bef9d5511fb90a315fd40e1e384c2fd58397bc4371b404048d5b5c00e99
+299-precommit-instructions.log | 10:43  4 users, load averages: 2.80 2.53 2.82 | 0 | ffcaf40bb7ad8d246d1e20187ed66c118584c75a4e02921be59a6abfff0f4c71
+
+### Commands as logged
+
+#### 262-identity-version.log
+
+~~~~sh
+codex --version
+~~~~
+
+#### 263-identity-pwd.log
+
+~~~~sh
+pwd
+~~~~
+
+#### 264-identity-branch.log
+
+~~~~sh
+git -C tui branch --show-current
+~~~~
+
+#### 265-identity-head.log
+
+~~~~sh
+git -C tui rev-parse HEAD
+~~~~
+
+#### 266-identity-name.log
+
+~~~~sh
+git -C tui config user.name
+~~~~
+
+#### 267-identity-email.log
+
+~~~~sh
+git -C tui config user.email
+~~~~
+
+#### 268-authority-h1.log
+
+~~~~sh
+git -C tui show origin/main:docs/decisions/DEC-20261108-03-phase-3b-h1.md
+~~~~
+
+#### 269-authority-addendum-1.log
+
+~~~~sh
+cat prompt/DEC-20261108-03-addendum-1-gate-order.md
+~~~~
+
+#### 270-authority-addendum-2.log
+
+~~~~sh
+cat prompt/DEC-20261108-03-addendum-2-codex-harness.md
+~~~~
+
+#### 271-authority-addendum-3.log
+
+~~~~sh
+cat prompt/DEC-20261108-03-addendum-3-image-tool.md
+~~~~
+
+#### 272-authority-addendum-4.log
+
+~~~~sh
+cat prompt/DEC-20261108-03-addendum-4-sandbox-halt.md
+~~~~
+
+#### 273-authority-addendum-5.log
+
+~~~~sh
+cat prompt/DEC-20261108-03-addendum-5-own-work.md
+~~~~
+
+#### 274-authority-addendum-6.log
+
+~~~~sh
+cat prompt/DEC-20261108-03-addendum-6-names-in-text.md
+~~~~
+
+#### 275-authority-addendum-7.log
+
+~~~~sh
+cat prompt/DEC-20261108-03-addendum-7-quarantine-limit.md
+~~~~
+
+#### 276-authority-addendum-8.log
+
+~~~~sh
+cat prompt/DEC-20261108-03-addendum-8-gate-repeat.md
+~~~~
+
+#### 277-authority-addendum-9.log
+
+~~~~sh
+cat prompt/DEC-20261108-03-addendum-9-first-verdict.md
+~~~~
+
+#### 278-authority-qualification.log
+
+~~~~sh
+git -C tui show origin/main:docs/decisions/DEC-20261108-02-phase-3b-builder-qualification.md
+~~~~
+
+#### 279-authority-hardening.log
+
+~~~~sh
+git -C tui show origin/main:docs/decisions/DEC-20261102-02-hardening-builds.md
+~~~~
+
+#### 280-authority-standing.log
+
+~~~~sh
+git -C tui show origin/main:docs/decisions/DEC-20261023-01-standing-build-rules.md
+~~~~
+
+#### 281-authority-agents.log
+
+~~~~sh
+git -C tui show origin/main:AGENTS.md
+~~~~
+
+#### 282-authority-h1-tail.log
+
+~~~~sh
+sed -n 195,260p logs/268-authority-h1.log
+~~~~
+
+#### 283-authority-reread-1.log
+
+~~~~sh
+cat prompt/DEC-20261108-03-addendum-1-gate-order.md
+~~~~
+
+#### 284-authority-reread-2.log
+
+~~~~sh
+cat prompt/DEC-20261108-03-addendum-2-codex-harness.md
+~~~~
+
+#### 285-authority-reread-3.log
+
+~~~~sh
+cat prompt/DEC-20261108-03-addendum-3-image-tool.md
+~~~~
+
+#### 286-authority-reread-4.log
+
+~~~~sh
+cat prompt/DEC-20261108-03-addendum-4-sandbox-halt.md
+~~~~
+
+#### 287-authority-h1-tail-again.log
+
+~~~~sh
+tail -n 35 logs/268-authority-h1.log
+~~~~
+
+#### 288-authority-standing-reread.log
+
+~~~~sh
+sed -n 57,100p logs/280-authority-standing.log
+~~~~
+
+#### 289-authority-reread-5.log
+
+~~~~sh
+cat prompt/DEC-20261108-03-addendum-5-own-work.md
+~~~~
+
+#### 290-authority-reread-6.log
+
+~~~~sh
+cat prompt/DEC-20261108-03-addendum-6-names-in-text.md
+~~~~
+
+#### 291-authority-reread-7.log
+
+~~~~sh
+cat prompt/DEC-20261108-03-addendum-7-quarantine-limit.md
+~~~~
+
+#### 292-preconditions-source.log
+
+~~~~sh
+sed -n '32,53p' logs/280-authority-standing.log
+ git -C tui rev-parse origin/main
+ git -C tui log --reverse --format='%H %P %an %s' 1678f1839c600cacd38fd426f755afae021861bf..HEAD
+ git -C tui status --porcelain=v1
+ git -C tui stash list
+ git -C tui diff --name-only 1678f1839c600cacd38fd426f755afae021861bf HEAD
+ cat prompt/SHA256.txt
+ ls -la prompt
+ shasum -a 256 -c prompt/SHA256.txt
+ shasum -a 256 -c prompt/evidence-at-setup.sha256
+ shasum -a 256 tui/docs/verification/phase-3b-h1-build-log.md
+ sed -n '4269p;4689,4692p;4837,4839p' tui/docs/verification/phase-3b-h1-build-log.md
+ sed -n '1,12p;200,235p' logs/225-write-session6-halt-report.log
+ sed -n '4140,4185p;4215,4225p;4380,4400p' tui/docs/verification/phase-3b-h1-build-log.md
+ cat pr/pr-body.md
+ git -C tui show origin/main:.github/scripts/attribution-shape-check.sh
+ uname -sm
+~~~~
+
+#### 293-create-disposable-logger.log
+
+~~~~sh
+python3 - <<'BOOT'
+from pathlib import Path
+import tempfile
+folder=Path(tempfile.mkdtemp(prefix='h1-s7-',dir='/private/tmp'))
+(folder/'run.py').write_text(r'''from pathlib import Path
+import subprocess,sys
+root=Path('/Users/michaeldaley/builds/h1-r1')
+number,name=sys.argv[1:3]
+command=sys.stdin.read().rstrip('\n')
+path=root/'logs'/f'{number}-{name}.log'
+if path.exists():
+    sys.exit('Refusing to overwrite '+str(path))
+tee=subprocess.Popen(['tee',str(path)],stdin=subprocess.PIPE,cwd=root)
+tee.stdin.write(('COMMAND_BEGIN\n'+command+'\nCOMMAND_END\n').encode());tee.stdin.flush()
+subprocess.run(['uptime'],stdout=tee.stdin,stderr=subprocess.STDOUT,cwd=root)
+result=subprocess.run(['/bin/zsh','-f','-c','set -e\n'+command],stdout=tee.stdin,stderr=subprocess.STDOUT,cwd=root)
+tee.stdin.write(('EXIT_STATUS='+str(result.returncode)+'\n').encode());tee.stdin.close();tee.wait()
+subprocess.run(['shasum','-a','256',str(path.relative_to(root))],cwd=root,check=True)
+sys.exit(result.returncode)
+''')
+print('DISPOSABLE_DIRECTORY='+str(folder))
+BOOT
+~~~~
+
+#### 294-preconditions-source-complete.log
+
+~~~~sh
+(cd prompt && shasum -a 256 -c SHA256.txt)
+shasum -a 256 -c prompt/evidence-at-setup.sha256
+shasum -a 256 tui/docs/verification/phase-3b-h1-build-log.md
+python3 - <<'PY'
+from pathlib import Path
+p=Path('tui/docs/verification/phase-3b-h1-build-log.md')
+lines=p.read_text().splitlines()
+for first,last in [(4269,4269),(4689,4692),(4837,4839),(4140,4185),(4215,4230),(4380,4400)]:
+    for n in range(first,last+1):
+        print(f'{n}: {lines[n-1]}')
+p=Path('logs/225-write-session6-halt-report.log')
+lines=p.read_text().splitlines()
+for n,line in enumerate(lines,1):
+    if n<=12 or 200<=n<=235:
+        print(f'LOG225 {n}: {line}')
+PY
+cat pr/pr-body.md
+git -C tui show origin/main:.github/scripts/attribution-shape-check.sh
+uname -sm
+~~~~
+
+#### 295-audit-source-context.log
+
+~~~~sh
+sed -n '4080,4140p;4240,4310p' tui/docs/verification/phase-3b-h1-build-log.md
+head -n 12 logs/202-runtime-initial.log
+tail -n 5 logs/202-runtime-initial.log
+head -n 8 logs/232-wait-typecheck.log
+tail -n 5 logs/232-wait-typecheck.log
+cat pr/pr-body.md
+git -C tui show origin/main:.github/scripts/attribution-shape-check.sh | sed -n '1,24p;210,310p'
+git -C tui ls-tree -r --name-only HEAD -- AGENTS.md docs/AGENTS.md docs/verification/AGENTS.md
+~~~~
+
+#### 296-verify-preconditions-and-write-audit.log
+
+~~~~sh
+python3 - <<'PY'
+from pathlib import Path
+import json,re,subprocess
+scratch=Path('/private/tmp/h1-s7-0qvzb8br')
+def run(args):
+    p=subprocess.run(args,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,check=True)
+    return p.stdout.decode()
+def sha_bytes(data):
+    return subprocess.run(['shasum','-a','256'],input=data,stdout=subprocess.PIPE,check=True).stdout.decode().split()[0]
+base='1678f1839c600cacd38fd426f755afae021861bf'
+head='8c7afeae7e3209be8033ad6315b4be313f907713'
+commits=['f4aefe1e89f566a0f4a76d7cc18c209f70d719e8','8e5b471aed5330dd1b620f2a040540871b6fd047','56775934aa653daefa9bb40f8c42a26e9f8e732a','21e12ad56d7e821e7c8a49c6a2a3c688ab15eed6','d09712a67db06fc6a7cee9bf0674ac8b509a8200','5279efd8a07f0f9545b70519fef76f22e68112f3',head]
+paths=['apps/madv-agent/src/proxy.ts','docs/verification/phase-3b-h1-build-log.md','test/phase3a/architecture-phase3a.test.ts','test/phase3a/evidence-pipeline.test.ts','test/phase3a/runtime-harness.ts']
+assert run(['pwd']).strip()=='/Users/michaeldaley/builds/h1-r1'
+assert run(['git','-C','tui','branch','--show-current']).strip()=='build/h1-r1'
+assert run(['git','-C','tui','rev-parse','HEAD']).strip()==head
+assert run(['git','-C','tui','rev-parse','origin/main']).strip()==base
+assert not run(['git','-C','tui','status','--porcelain=v1'])
+assert not run(['git','-C','tui','stash','list'])
+records=run(['git','-C','tui','log','--reverse','--format=%H %P %an',base+'..HEAD']).splitlines()
+assert records==[c+' '+p+' daley40-lab' for c,p in zip(commits,[base]+commits[:-1])]
+assert run(['git','-C','tui','diff','--name-only',base,'HEAD']).splitlines()==paths
+assert run(['git','-C','tui','config','user.name']).strip()=='daley40-lab'
+assert run(['git','-C','tui','config','user.email']).strip()=='293512385+daley40-lab@users.noreply.github.com'
+print('PRECONDITION 1 PASS: base, branch, head, clean tree, no stash, identity, seven-commit chain, five paths')
+authority={
+'docs/decisions/DEC-20261108-03-phase-3b-h1.md':'10cdc674ce746568c963aa2c5c34c95a69d9960ea469438b044bfb5fe4b9e9de',
+'docs/decisions/DEC-20261108-02-phase-3b-builder-qualification.md':'38ec4066f5c9487547befc81e00b80b69126d9140f1e66c0a8dcb35e5fe815ef',
+'docs/decisions/DEC-20261102-02-hardening-builds.md':'04342fa77200737b676e51c6523b9813665b3303150309025be40178d9699550',
+'docs/decisions/DEC-20261023-01-standing-build-rules.md':'bafa95f9835c0d14d633ec882234b247ac3ff6841452a28d20332520f41a7ac5',
+'AGENTS.md':'0879ede2d3b07e137d1f3d5f75c131285277b44e61f1305d3d0d59da64f1dbca'}
+for file,digest in authority.items():
+    content=subprocess.check_output(['git','-C','tui','show','origin/main:'+file])
+    assert sha_bytes(content)==digest,file
+    if file!='AGENTS.md':
+        assert '**Status:** ISSUED' in content.decode() and '— Michael Daley' in content.decode() and 'Actor-Id: founder' in content.decode()
+    print('AUTHORITY PASS',file,digest)
+expected=['ee5edbe2e3b377c11afd63a3b60775a802498d6be093f0dba619283569bd31fd','e04b54065b0f0bb465b2d14e14a39f3b31f9cb34a874f6f8210a7d7e74a8c1c1','f2a0ef1063379902935760d9517b68d532cabf6e24699cdebb789681f78ce15e','e817470aea6be2c176d4ae75856fd793ef982bd28c9eb793df9c9038a5c1dfbc','e86e94a62c7067e4656114afe1713c1478814ffe446d1ffcc8b788accfc3ff3d','24cef0ed5c968aa80ada586e473526d0f4f0b1de1331eba1d5a35051b1254ac9','cd15d604dacb0bad4f27a18bda7936799076f3f8743301cb893bf3079c270361','aca83d3bfcddc137687e0d2339ee409d937a2117342c9ffa6cdb10dc3da40c78','2381ba7b2b3778d4548b64120fe8198e3076e3c25fe28ce64965bf1c8fb902a0']
+prompt=Path('prompt')
+listed={}
+for line in (prompt/'SHA256.txt').read_text().splitlines():
+    digest,name=line.split('  ',1);listed[name]=digest
+    assert sha_bytes((prompt/name).read_bytes())==digest,name
+for i,digest in enumerate(expected,1):
+    matches=list(prompt.glob(f'DEC-20261108-03-addendum-{i}-*.md'))
+    assert len(matches)==1
+    file=matches[0];content=file.read_text()
+    assert listed[file.name]==digest
+    assert '**Status:** ISSUED' in content and '— Michael Daley' in content and 'Actor-Id: founder' in content
+    print('ADDENDUM PASS',file.name,digest)
+assert {p.name for p in prompt.iterdir()}==set(listed)|{'SHA256.txt'}
+assert len(listed)==11
+print('PRECONDITION 2 PASS: fourteen authority files, statuses/signatures, eleven manifest entries, twelve prompt files')
+evidence={}
+for line in (prompt/'evidence-at-setup.sha256').read_text().splitlines():
+    digest,name=line.split('  ',1);evidence[name]=digest
+    assert sha_bytes(Path(name).read_bytes())==digest,name
+actual={str(p) for directory in ['logs','pr'] for p in Path(directory).rglob('*') if p.is_file() and not (directory=='logs' and int(p.name.split('-')[0])>=262)}
+assert actual==set(evidence)
+log_files=[n for n in evidence if n.startswith('logs/')]
+print('PRECONDITION 3 PASS:',len(evidence),'evidence files;',len(log_files),'log-directory files;',sum(n.endswith('.log') for n in log_files),'command logs; highest',max(int(Path(n).name.split('-')[0]) for n in log_files))
+print('EVIDENCE_MANIFEST_SHA256',sha_bytes((prompt/'evidence-at-setup.sha256').read_bytes()))
+build=Path('tui/docs/verification/phase-3b-h1-build-log.md').read_bytes()
+assert sha_bytes(build)=='57d5614a15b48ac2d669a01ffcdc5b2546821ed7fbe173cc4549e51a95cfef65'
+lines=build.decode().splitlines()
+assert lines[4268].startswith('225-write-session6-halt-report.log | 13:10 ')
+assert lines[4688]=='#### 225-write-session6-halt-report.log'
+assert lines[4690]=='~~~~sh' and lines[4691]=="python3 - <<'PY'"
+assert lines[4836]=='File: apps/madbridge/test/doctor.test.ts'
+assert lines[4837]=='The bare run began at:' and lines[4838]=='~~~~'
+for n in [4269,4689,4690,4691,4692,4837,4838,4839]:
+    print(f'BUILD_LOG {n}: {lines[n-1]}')
+print('PRECONDITION 4 PASS')
+raw=Path('logs/225-write-session6-halt-report.log').read_text().splitlines()
+assert raw[0]=="Command: python3 - <<'PY'" and raw[211]=='PY'
+assert raw[212]=='13:16  1 user, load averages: 4.88 6.52 6.81'
+print('PRECONDITION 5 PASS: command lines 1 through 212; reading at line 213:',raw[212])
+assert run(['uname','-sm']).strip()=='Darwin arm64'
+print('PRECONDITION 6 PASS: Darwin arm64')
+(scratch/'pr-body-before.md').write_bytes(Path('pr/pr-body.md').read_bytes())
+(scratch/'build-log-before.md').write_bytes(build)
+(scratch/'preconditions.json').write_text(json.dumps({'base':base,'initial_head':head,'commits':commits,'paths':paths,'authority':authority,'addenda':expected,'evidence':evidence},indent=2)+'\n')
+PY
+cat > /private/tmp/h1-s7-0qvzb8br/audit.py <<'PY'
+from pathlib import Path
+import json,re,subprocess,sys
+root=Path('/Users/michaeldaley/builds/h1-r1')
+scratch=Path('/private/tmp/h1-s7-0qvzb8br')
+lines=(root/'tui/docs/verification/phase-3b-h1-build-log.md').read_text().splitlines()
+start=lines.index('## Sixth session')
+register=lines.index('### Command register',start)
+appendix=lines.index('### Commands as logged',register)
+rows=[]
+for i in range(register,appendix):
+    match=re.fullmatch(r'(\d{3}-.+\.log) \| (.+) \| (\d+) \| ([0-9a-f]{64})',lines[i])
+    if match:
+        name,reading,status,digest=match.groups()
+        rows.append({'name':name,'reading':reading,'status':int(status),'digest':digest,'line':i+1})
+def parse_log(name):
+    raw=(root/'logs'/name).read_text().splitlines()
+    assert raw[0].startswith('Command: '),name
+    command=[raw[0][len('Command: '):]]
+    pending=re.findall(r"<<-?\s*['\"]?([A-Za-z_][A-Za-z_0-9]*)['\"]?",command[0])
+    cursor=1
+    while pending:
+        delimiter=pending.pop(0)
+        while cursor<len(raw):
+            line=raw[cursor];command.append(line);cursor+=1
+            if line==delimiter:
+                break
+        else:
+            raise AssertionError('Unterminated here-document '+name)
+    while cursor<len(raw) and not re.fullmatch(r'\s*\d{1,2}:\d{2}.*load averages:.*',raw[cursor]):
+        command.append(raw[cursor]);cursor+=1
+    assert cursor<len(raw),name
+    reading=raw[cursor]
+    assert raw[-1].startswith('Exit status: '),name
+    status=int(raw[-1].split(': ',1)[1])
+    digest=subprocess.check_output(['shasum','-a','256',str(root/'logs'/name)]).decode().split()[0]
+    return {'command':command,'reading':reading,'status':status,'digest':digest,'reading_line':cursor+1}
+blocks=[]
+cursor=appendix+1
+while cursor<len(lines):
+    match=re.fullmatch(r'#### (\d{3}-.+\.log)',lines[cursor])
+    if not match:
+        cursor+=1;continue
+    name=match.group(1)
+    opening=cursor+2
+    assert lines[opening]=='~~~~sh',(name,opening)
+    closing=opening+1
+    while lines[closing]!='~~~~':
+        closing+=1
+    blocks.append({'name':name,'heading_line':cursor+1,'first_line':opening+2,'closing_line':closing+1,'command':lines[opening+1:closing]})
+    cursor=closing+1
+assert rows and len(rows)==len(blocks)
+assert [r['name'] for r in rows]==[b['name'] for b in blocks]
+differences=[];unexpected=[];parsed={}
+for row in rows:
+    name=row['name'];data=parse_log(name);parsed[name]=data
+    fields=[]
+    for key in ['reading','status','digest']:
+        if row[key]!=data[key]:
+            delta={'kind':'row','name':name,'field':key,'before':row[key],'actual':data[key],'line':row['line']}
+            differences.append(delta);fields.append(key)
+            if not (name.startswith('225-') and key=='reading'):
+                unexpected.append(delta)
+    print('ROW',row['line'],name,'CHECKED reading/exit/SHA-256;', 'MATCH' if not fields else 'DIFFERENCE '+','.join(fields))
+for block in blocks:
+    name=block['name'];actual=[x.rstrip(' \t') for x in parsed[name]['command']]
+    quoted=[x.rstrip(' \t') for x in block['command']]
+    if quoted!=actual:
+        delta={'kind':'block','name':name,'before_lines':len(quoted),'actual_lines':len(actual),'first_line':block['first_line'],'closing_line':block['closing_line']}
+        differences.append(delta)
+        if not (name.startswith('225-') and quoted==actual[:len(quoted)] and len(quoted)<len(actual)):
+            unexpected.append(delta)
+    print('BLOCK',block['first_line'],name,'CHECKED',len(quoted),'quoted /',len(actual),'logged lines;', 'MATCH' if quoted==actual else 'DIFFERENCE')
+for delta in differences:
+    print('DIFFERENCE',json.dumps(delta,sort_keys=True))
+result={'rows':len(rows),'blocks':len(blocks),'differences':differences,'unexpected':unexpected,'parsed':parsed,'command_blocks':blocks,'register_rows':rows}
+(scratch/'audit-result.json').write_text(json.dumps(result,indent=2)+'\n')
+print('AUDIT_TOTAL rows='+str(len(rows))+' blocks='+str(len(blocks))+' differences='+str(len(differences))+' unexpected='+str(len(unexpected)))
+if unexpected:
+    sys.exit('FOUNDER_DECISION_REQUIRED: unexpected sixth-session evidence difference')
+assert len(differences)==2
+print('PASS: only the two differences authorized by Addendum 9 B4')
+PY
+shasum -a 256 /private/tmp/h1-s7-0qvzb8br/audit.py
+~~~~
+
+#### 297-audit-sixth-session-once.log
+
+~~~~sh
+python3 /private/tmp/h1-s7-0qvzb8br/audit.py
+~~~~
+
+#### 298-correct-log225-record.log
+
+~~~~sh
+python3 - <<'PY'
+from pathlib import Path
+import json,re,subprocess
+scratch=Path('/private/tmp/h1-s7-0qvzb8br')
+audit=json.loads((scratch/'audit-result.json').read_text())
+assert audit['rows']==46 and audit['blocks']==46
+assert len(audit['differences'])==2 and not audit['unexpected']
+path=Path('tui/docs/verification/phase-3b-h1-build-log.md')
+before=path.read_text()
+assert before==(scratch/'build-log-before.md').read_text()
+lines=before.splitlines()
+name=next(r['name'] for r in audit['register_rows'] if r['name'].startswith('225-'))
+raw=Path('logs',name).read_text().splitlines()
+logged=[raw[0].removeprefix('Command: ')]+raw[1:212]
+reading=raw[212]
+block=next(b for b in audit['command_blocks'] if b['name']==name)
+assert lines[block['first_line']-1:block['closing_line']-1]==[x.rstrip(' \t') for x in logged[:147]]
+missing=[x.rstrip(' \t') for x in logged[147:]]
+assert len(missing)==65
+for index,line in enumerate(missing,148):
+    if line.startswith(chr(96)*3) or line.startswith(chr(126)*3):
+        raise SystemExit('FOUNDER_DECISION_REQUIRED: fence prefix on source command line '+str(index))
+row=next(r for r in audit['register_rows'] if r['name']==name)
+fields=lines[row['line']-1].split(' | ')
+assert len(fields)==4
+fields[1]=reading
+lines[row['line']-1]=' | '.join(fields)
+lines[block['closing_line']-1:block['closing_line']-1]=missing
+after='\n'.join(lines)+'\n'
+assert not re.search(r'[ \t]+$',after,re.M)
+path.write_text(after)
+numstat=subprocess.check_output(['git','-C','tui','diff','--numstat']).decode()
+assert numstat=='66\t1\tdocs/verification/phase-3b-h1-build-log.md\n',numstat
+(scratch/'build-log-corrected.md').write_text(after)
+(scratch/'corrections.json').write_text(json.dumps({'row_before':4269,'row_after':4269,'command_first_before':4692,'command_last_before':4838,'command_first_after':4692,'command_last_after':4903,'added_first':4839,'added_last':4903,'closing_before':4839,'closing_after':4904,'added_command_lines':65},indent=2)+'\n')
+print('CORRECTION PASS: row 4269; source lines 148 through 212 inserted at build-log lines 4839 through 4903; closing fence 4839 to 4904')
+print('DIFF NUMSTAT',numstat,end='')
+PY
+git -C tui diff -- docs/verification/phase-3b-h1-build-log.md
+~~~~
+
+#### 299-precommit-instructions.log
+
+~~~~sh
+git -C tui show origin/main:CONTRIBUTING.md
+git -C tui show origin/main:.agents/skills/build-gate/SKILL.md
+~~~~
+
+
+### What follows this commit and work not run
+
+The eighth commit has parent 8c7afeae7e3209be8033ad6315b4be313f907713 and changes only this build log. The last four gates run after this section is committed, each once and in order: git diff --check against binding base 1678f1839c600cacd38fd426f755afae021861bf; git diff --name-only against that base; git status -sb; git ls-files --others --exclude-standard. Every git command in those gates uses command-local GIT_CONFIG_GLOBAL=/dev/null and GIT_CONFIG_NOSYSTEM=1. Under Addendum 1 B2 their results and log SHA-256 values belong in the final report and replacement pull request description, not here.
+
+The replacement description keeps the sixth session's account, replaces its erratum with these corrections, and adds Addendum 9, Finding 1, this audit, the eighth commit and its gates. Both attribution-shape-check modes run after the eighth commit.
+
+Under Addendum 9 B5 this session starts no Bun process: no test, install or type check. No GitHub call, network call, fetch, pull, push, live provider call, MCP call, collaboration call, other agent, memory lookup, host change, amend, rebase or squash ran. No prompt file or earlier log changed. No path other than this markdown file changes in the clone. The repository build-gate skill was read as instructions in log 299; Addendum 9's specific four git gates govern, and its extra scripts and Bun gates are not run. The Founder's B12 suite, CI, tool-count audit, independent review, push and PR update remain Founder work.
+
+### Deviations
+
+The initial version wrapper verified the evidence inventory before invoking codex --version so that it could choose an unused log number. Its log header records the version command rather than that wrapper, and its count and checksum were emitted after tee closed. Logs 262 through 291 record their child command headers rather than the shared Python logging scaffolding. Every command's full output went through tee; no earlier log was changed.
+
+The first identity message omitted /root, Default mode, the concurrency count, shell/date/timezone and available override labels. They were supplied in a later identity message and are recorded above.
+
+Log 282's requested range was beyond the file's end and printed no authority text; log 287 read the tail. Log 288's standing-rule range did not include B4 through B8; log 292 read those lines. Some tool displays abbreviated long outputs; the files written through tee retain full output.
+
+Log 292 invoked the prompt manifest check from the workspace root, where its relative file names did not resolve. That grouped script exited 1 before its remaining commands. Log 294 corrected the working directory to prompt for that manifest and completed the outstanding checks. No evidence hash differed; log 296 asserts every precondition.
+
+One exec orchestration input raised SyntaxError: Unexpected string before any shell command ran. Its quoting was corrected and the disposable logger was created in log 293. No repository test or failed gate was rerun.
+
+This register captures all completed logged commands through 299. Its own generation, append, final verification and staging, the commit, and later delivery commands cannot have their completed checksums inside the content they produce or commit. Their commands, readings, exit statuses and hashes are recorded in the final report and replacement description. The four post-commit gates are excluded here as Addendum 1 B2 expressly requires. This checksum cut-off is disclosed rather than filling in a future result.
