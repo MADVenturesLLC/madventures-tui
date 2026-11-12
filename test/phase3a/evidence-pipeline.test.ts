@@ -1125,6 +1125,7 @@ test("both reports record architecture, operating-system version and build, Bun 
     expect(task58Value(runtime, "Bun revision")).toMatch(/^[0-9a-f]{40}$/);
     expect(task58Value(runtime, "Node version")).toMatch(/^v\d+\.\d+\.\d+$/);
     for (const label of ["Architecture", "Operating system", "OS build", "TERM"]) task58Value(machine, label);
+    expect(task58Value(machine, "Operating system"), `${host}: operating-system version`).toMatch(/\d+(?:\.\d+)+/);
     expect(task58Value(machine, "Shell")).toMatch(/^\//);
   }
 });
@@ -1136,6 +1137,9 @@ test("both reports record complete suite counts, not filtered counts", () => {
     const ranLines = bare.content.filter(line => TASK58_RAN.test(line));
     expect(ranLines, `${host}: one "Ran <n> tests across <m> files" line from the bare bun test`).toHaveLength(1);
     const ran = Number(TASK58_RAN.exec(ranLines[0]!)![1]);
+    const files = Number(TASK58_RAN.exec(ranLines[0]!)![2]);
+    expect(ran, `${host}: complete-suite test floor`).toBeGreaterThanOrEqual(1902);
+    expect(files, `${host}: complete-suite file floor`).toBeGreaterThanOrEqual(140);
     const printed = (pattern: RegExp): number => {
       const hits = bare.content.map(line => pattern.exec(line)).filter((m): m is RegExpExecArray => m !== null);
       expect(hits, `${host}: one line matching ${pattern}`).toHaveLength(1);
@@ -1143,6 +1147,7 @@ test("both reports record complete suite counts, not filtered counts", () => {
     };
     const pass = printed(/^ *(\d+) pass$/);
     const fail = printed(/^ *(\d+) fail$/);
+    expect(fail, `${host}: no failed tests in the bare run`).toBe(0);
     printed(/^ *(\d+) expect\(\) calls$/);
     expect(pass + fail).toBe(ran);
     const rows = task58Rows(section).filter(cells => cells[1] === "`bun test`");
@@ -1166,12 +1171,21 @@ test("both reports record observed timings for every deadline", () => {
       const [, bound, observed, source] = matching[0]!;
       expect(bound ?? "", `${host}: "${label}" states its bound`).not.toBe("");
       expect(observed ?? "", `${host}: "${label}" carries an observed value in ms`).toMatch(/(?<![\w.])\d+(?:\.\d+)? ms(?!\w)/);
+      if (label === "Responsive-host child grace") {
+        for (const field of ["grace_ms", "termination_started_ms", "exited_ms"]) {
+          const valueInMs = new RegExp(
+            "(?:`" + field + "` \\d+(?:\\.\\d+)? ms|\\d+(?:\\.\\d+)? ms as `" + field + "`)",
+          );
+          expect(observed, `${host}: grace row names ${field} with a value in ms`).toMatch(valueInMs);
+        }
+      }
       expect(source, `${host}: "${label}" is taken from the bare bun test log`).toBe(`\`${bareLog}\``);
     }
   }
 });
 
 test("both reports record worktree cleanliness and exact changed files", () => {
+  const changedLists: string[][] = [];
   for (const host of TASK58_HOSTS) {
     const section = task58Report(host).sections[1]!;
     expect(task58Value(section, "Worktree")).toBe("clean");
@@ -1187,7 +1201,9 @@ test("both reports record worktree cleanliness and exact changed files", () => {
       expect(path.startsWith("/")).toBe(false);
     }
     expect(new Set(changed).size).toBe(changed.length);
+    changedLists.push(changed);
   }
+  expect(changedLists[0], "both reports list the same changed files in the same order").toEqual(changedLists[1]);
 });
 
 test("both reports carry a checksum", () => {

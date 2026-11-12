@@ -1247,9 +1247,10 @@ function collectNamedExportIdentifiers(filePath: string, visited: Set<string> = 
 
 /**
  * Files (production or test/harness) under packages/ and apps/ whose
- * import/export module specifier's final path segment is exactly
- * `moduleBaseName` (e.g. "socket" matches "./socket" and "../src/socket"
- * but not "socket-io" or "polysocket"). Repo-relative, portable-slash,
+ * import/export module specifier names `moduleBaseName` after removing
+ * a source-file extension and a trailing index segment. For example,
+ * "socket" matches "./socket.ts" and "../socket/index", but not
+ * "socket-io" or "polysocket". Repo-relative, portable-slash,
  * sorted paths.
  */
 function findModuleSpecifierImporters(root: string, moduleBaseName: string): string[] {
@@ -1277,7 +1278,10 @@ function findModuleSpecifierImporters(root: string, moduleBaseName: string): str
           ? node.moduleSpecifier
           : null;
       if (specifier && ts.isStringLiteral(specifier)) {
-        const lastSegment = specifier.text.split("/").pop();
+        const segments = specifier.text.replace(/\\/g, "/").split("/").filter(Boolean);
+        const withoutExtension = (segment: string | undefined) => segment?.replace(/\.[cm]?[jt]sx?$/, "");
+        let lastSegment = withoutExtension(segments.pop());
+        if (lastSegment === "index") lastSegment = withoutExtension(segments.pop());
         if (lastSegment === moduleBaseName) matched = true;
       }
       node.forEachChild(visit);
@@ -1366,7 +1370,7 @@ describe("Task 33 — socket, MCP, and PtyManager quarantine from production rea
       "mcp-config": [],
     });
     expect(findQuarantineViolations(REPO_ROOT)).toEqual([]);
-  });
+  }, 15_000);
 
   test("the quarantine guard detects a planted pty-manager import", () => {
     const root = makeTempRoot();
@@ -2283,6 +2287,54 @@ describe("Phase 3A merge gate", () => {
     return reach;
   }
 
+  /** Walk every run-time repository import; list external modules without following them. */
+  function runtimeModuleSet(entry: string) {
+    const config = ts.readConfigFile(join(REPO_ROOT, "tsconfig.json"), ts.sys.readFile);
+    if (config.error) throw new Error(ts.flattenDiagnosticMessageText(config.error.messageText, "\n"));
+    const converted = ts.parseJsonConfigFileContent(config.config, ts.sys, REPO_ROOT);
+    if (converted.errors.length) throw new Error("CLI walk: invalid compiler options");
+    const workspaceNames = ["packages", "apps"].flatMap((dir) =>
+      readdirSync(join(REPO_ROOT, dir)).flatMap((name) => {
+        const manifest = join(REPO_ROOT, dir, name, "package.json");
+        return existsSync(manifest) ? [JSON.parse(readFileSync(manifest, "utf8")).name as string] : [];
+      }),
+    );
+    const reached = new Map<string, ModuleReach>();
+    const external = new Set<string>(), unresolved: string[] = [];
+    const pending = [entry];
+    while (pending.length > 0) {
+      const file = pending.pop()!;
+      if (reached.has(file)) continue;
+      const reach = moduleReach(file);
+      reached.set(file, reach);
+      for (const { specifier, typeOnly } of reach.imports) {
+        if (typeOnly) continue;
+        const repositorySpecifier = specifier.startsWith(".") || specifier.startsWith("/") ||
+          workspaceNames.some((name) => specifier === name || specifier.startsWith(name + "/"));
+        if (!repositorySpecifier) {
+          external.add(specifier);
+          continue;
+        }
+        const target = ts.resolveModuleName(specifier, file, converted.options, ts.sys).resolvedModule?.resolvedFileName;
+        const path = target === undefined ? null : toPortablePath(relative(REPO_ROOT, target));
+        if (path === null || path.startsWith("../") || path.startsWith("node_modules/") || path.includes("/node_modules/")) {
+          unresolved.push(toPortablePath(relative(REPO_ROOT, file)) + ": " + specifier);
+        } else {
+          pending.push(target!);
+        }
+      }
+    }
+    return {
+      files: [...reached.keys()].map((file) => toPortablePath(relative(REPO_ROOT, file))).sort(),
+      external: [...external].sort(),
+      unresolved,
+      dynamic: [...reached.values()].flatMap((reach) => reach.dynamic),
+      harness: [...reached].flatMap(([file, reach]) =>
+        [toPortablePath(relative(REPO_ROOT, file)), ...reach.imports.map((edge) => edge.specifier)]
+          .filter((value) => HARNESS_MARKER.test(value))),
+    };
+  }
+
   /**
    * The counts a certification report records for its bare `bun test`: the
    * verbatim summary lines it quotes, which must match its command-table row
@@ -2407,6 +2459,20 @@ describe("Phase 3A merge gate", () => {
       hostGlobals: [],
     });
 
+    // cli.ts imports every command before dispatch, so follow its whole
+    // run-time module set as well as the stricter start.ts walk above.
+    const runtime = runtimeModuleSet(join(REPO_ROOT, CLI_ENTRY));
+    console.info("merge gate item 13 external modules: " + runtime.external.join(", "));
+    expect(runtime.files).toContain(CLI_ENTRY);
+    expect({
+      forbiddenFiles: runtime.files.filter((file) =>
+        /^packages\/(broker|pty-host)\//.test(file) ||
+        (file.startsWith("packages/supervisor/") && file !== "packages/supervisor/src/environment.ts")),
+      unresolved: runtime.unresolved,
+      dynamicLoads: runtime.dynamic,
+      harness: runtime.harness,
+    }).toEqual({ forbiddenFiles: [], unresolved: [], dynamicLoads: [], harness: [] });
+
     // No production file names the test-only harness tree in an import,
     // re-export or dynamic load.
     const harnessEdges = enumerateProductionFiles(REPO_ROOT).flatMap((file) => {
@@ -2510,7 +2576,11 @@ describe("Phase 3A merge gate", () => {
     // A fixture session through the test-only harness creates none under its
     // own storage, the legacy root or the worktree, while active or after close.
     const sockets = (fixtureRoot: string): string[] =>
-      [fixtureRoot, dirname(LEGACY_SOCKET), REPO_ROOT].flatMap((root) => sweep(root).matches);
+      [fixtureRoot, dirname(LEGACY_SOCKET), REPO_ROOT].flatMap((root) => {
+        const result = sweep(root);
+        expect(result.errors, "broker.sock sweep errors under " + root).toEqual([]);
+        return result.matches;
+      });
     const session = await mergeGateHarness.startFixtureSession();
     const fixtureRoot = dirname(session.storage.root);
     let whileActive: string[] = [];
