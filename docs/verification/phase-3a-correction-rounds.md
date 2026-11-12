@@ -1690,3 +1690,86 @@ Round 2's resolution, recorded above as pending, is now closed:
   B2); item 13's check covers the whole module set the shipped entry point loads for `start`; item
   15's importer check resolves each specifier; and item 15's test fails when a sweep reports an error
   (`DEC-20261106-02` B5).
+
+## H1 first review verdict FAIL (rubric milestone 10, round 1, recorded after the merge)
+
+- **Recorded:** 2026-11-12, under `DEC-20261112-01` B1, B2 and C1.
+- **Plan milestone:** Phase 3B slice H1, plan §2D items 6 to 11. **Rubric milestone:** 10.
+- **Head reviewed:** `8c7afeae7e3209be8033ad6315b4be313f907713` on PR #234 (`build/h1-r1`), built by
+  `session:codex/h1-r1` from binding base `1678f1839c600cacd38fd426f755afae021861bf` under
+  `DEC-20261108-03` and its Addenda 1 to 8.
+- **Reviewer:** `antigravity`, a fresh Gemini session in Antigravity on the Founder's MacBook, with
+  Gemini 4 Carbon selected by the Founder; the report records the model as not shown. Review prompt
+  SHA-256 `47aa83bbb8427a340feaaafb6bab54cfba1cfacd78939e8f3c9b29164ae53653`.
+- **Verdict text SHA-256:** `6a20836e8fd506720caaf17cffb86c32704fad3c4203a0e29e853c7d440fefed`, 79,667
+  bytes, 916 lines, saved at `/Users/michaeldaley/builds/review-h1-r1-r2.md`, posted on PR #234 as
+  comments 6800079155 and 6800079742 by `decivantiq`. It is the session's second report, written
+  after the Founder's message asking for a change of format only (Addendum 9 A2 and B1).
+- **Result:** FAIL, one substantive and two advisory findings. Finding 1: in the build log, the load
+  reading given before log 225 of the sixth session is not the one that log holds, and the block
+  quoting that log's command holds 147 lines where the report gives the command as 212. Findings 2
+  and 3: a `createRequire` load of a file under `packages/pty-host/` by a module that
+  `apps/madbridge/src/cli.ts` loads, and a lazy `import()` of `packages/broker/src/socket.ts` in
+  `test/phase3a/runtime-harness.ts`, pass the checks of `DEC-20261108-03` B5 items 9 and 10.
+  **Counted:** one round, H1's first, under rubric milestone 10 (Addendum 9 B2). H1's count stands at
+  **1**. Phase 3A's counts are unchanged and do not carry into H1 (`DEC-20261108-01` B9 item 2).
+- **Ruling:** Addendum 9 to `DEC-20261108-03`: one correction commit, of the build log alone, by a
+  seventh builder session; Findings 2 and 3 carried to the act that records H1's merge.
+
+## H1 second review verdict FAIL (rubric milestone 10, no round, recorded after the merge)
+
+- **Recorded:** 2026-11-12, under `DEC-20261112-01` B1, B2 and C1.
+- **Plan milestone:** Phase 3B slice H1, plan §2D items 6 to 11. **Rubric milestone:** 10.
+- **Head reviewed:** `915dd0c4431e8f51458556c9f7ee64f6d8c303c6` on PR #234, the correction round 1
+  commit, which changes only the build log, built by `session:codex/h1-r1` in its seventh session under
+  Addendum 9 B4.
+- **Reviewer:** `antigravity`, a fresh Gemini session in the Antigravity command-line interface on the
+  Founder's MacBook, with Gemini 4 Carbon selected by the Founder; the report records the model as not
+  shown. Review prompt SHA-256 `e971c6d96159cd7b1e6ff47efa265bfd2d02b9240b33754bf8fdacc50fd890c0`. An
+  earlier session started for this review in Antigravity's remote environment stopped at its identity
+  check and is set aside.
+- **Verdict text SHA-256:** `844716e3022f284889534a662021ff8b8f932cbfe9145b110993e85245a3e1de`, 44,406
+  bytes, 490 lines, saved at `/Users/michaeldaley/builds/review-h1-r2.md`, posted on PR #234 as
+  comment 6808073618 by `decivantiq`.
+- **Result:** FAIL, one substantive finding: the session record of the seventh session records
+  `cli_version` 0.167.1, against Addendum 2 B1. Its item 8 finds Finding 1 of the first verdict
+  corrected. **Counted:** no round: the finding requires no implementation or required-test change
+  (design §7.3, Addendum 10 B4). H1's count stays at **1**. Not a disqualifier under design §7.6, and
+  not a recurrence of the first verdict's Finding 1.
+- **Ruling:** Addendum 10 to `DEC-20261108-03`: the sixth session from 2026-11-10T21:46:10Z and the
+  whole seventh session ran under Codex 0.167.1 in a background app server of the governed
+  configuration that updated itself; the Founder accepts that version as a material deviation, and
+  the read-only sandbox of the sixth session's turn from 21:51:00Z as a change of the governed
+  configuration that the Founder did not make (B2); no further commit (B3); the environment fix of B5
+  before any further governed Codex session; and a third review, of item 6 alone (B7).
+
+## H1 third review verdict PASS and H1 merged (rubric milestone 10, no round, count 1)
+
+- **Recorded:** 2026-11-12, under `DEC-20261112-01` B1, B2, B4, B6 and C1.
+- **Plan milestone:** Phase 3B slice H1, plan §2D items 6 to 11. **Rubric milestone:** 10.
+- **Head reviewed:** `915dd0c4431e8f51458556c9f7ee64f6d8c303c6` on PR #234, as in the second review.
+- **Reviewer:** `antigravity`, a fresh Gemini session in the Antigravity command-line interface on the
+  Founder's MacBook, with Gemini 4 Carbon selected by the Founder; the report records the model as not
+  shown. Review prompt SHA-256 `0cd7f0957899631dd0873decbff339c5d0ae526e0c2c15cc5f87f674b7726941`, on
+  item 6 of the second review alone, under Addendum 10 B7.
+- **Verdict text SHA-256:** `08cc87d596734223b6051c4b5a512e68d87f61481fedeb0c3037ed10fb59a7c7`, 46,619
+  bytes, 535 lines, saved at `/Users/michaeldaley/builds/review-h1-r3.md`, posted on PR #234 as
+  comment 6811012944 by `decivantiq`.
+- **Result:** PASS, no finding. **Counted:** no round. H1's count under rubric milestone 10 closes at
+  **1**. No verdict of H1 is a disqualifier.
+- **Checks at the head:** Verify, code-review, tui-chaos on both hosts, attribution-shape,
+  validate-code-review, CodeQL and every Analyze job succeeded, and Verify (macOS) succeeded on one
+  re-run, job 130704966691, after its first attempt, job 130694824207, failed the test carried below.
+  The Founder's run of `DEC-20261108-03` B12 passed: 1914 pass, 0 fail, across 140 files.
+- **Merged:** PR #234 was marked ready at that head on 2026-11-12, after the PASS was posted, and
+  Copilot's review 5867422948 there opened no thread. Under the Founder's merge authorization in
+  comment 6811281202, SHA-256 `93b3f1bfc230973fb90e0b2c168a25f2422e471569a5b04047f74ed892f9209d`, it
+  merged at `a7251235f94dcc4a3149b638a1acdac69236a26d`, with parents
+  `aeca237eea1062c31b2c4a63f487349f2fc8f633` and `915dd0c4431e8f51458556c9f7ee64f6d8c303c6`, changing
+  exactly the five paths of `DEC-20261108-03` B7. Every run on the merge commit succeeded.
+- **Harness:** the first to fifth builder sessions ran under Codex 0.167.0, the sixth under 0.167.0
+  and then 0.167.1, and the seventh under 0.167.1. Every turn of the six session records names the
+  model `gpt-6.1-sol`; the effort is `xhigh` in records 1 to 5 and `ultra` in record 6.
+- **Carried to a hardening act issued before M6 (`DEC-20261112-01` B6):** Finding 2 of the first
+  verdict (`createRequire`); Finding 3 of the first verdict (lazy `import()`); and the cause of the one
+  failure of `packages/broker/test/pty-host-supervisor.test.ts:631` on Verify (macOS).
