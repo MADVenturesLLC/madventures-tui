@@ -13,8 +13,43 @@
 // DEC-20261008-01 confines that identity and container to the current call.
 
 import { lookupRegistration } from "./adapter-registry";
+import { sha256CanonicalSync } from "./canonical-json";
 import { parseSurfaceId, type SurfaceId } from "./surface-id";
 import { KNOWN_ROLES, type ExecutionRole } from "./task-envelope";
+
+/** The pre-H2 macOS shape; optional never keys are absent from every record. */
+export interface MacOSCapabilityHostV1 {
+  readonly arch: string;
+  readonly macos_version: string;
+  readonly macos_build: string;
+  readonly bun_version: string;
+  readonly bun_path: string;
+  readonly bun_sha256: string;
+  readonly term: string;
+  readonly shell: string;
+  readonly os_name?: never;
+  readonly os_version?: never;
+  readonly kernel_release?: never;
+  readonly reported_model?: never;
+  readonly adapter_registration?: never;
+}
+
+/** DEC-20261108-04 B5: other host facts reuse the record's existing fields. */
+export interface LinuxCapabilityHostV1 {
+  readonly os_name: string;
+  readonly os_version: string;
+  readonly kernel_release: string;
+  readonly reported_model: string;
+  readonly adapter_registration: SurfaceId;
+  readonly arch?: never;
+  readonly macos_version?: never;
+  readonly macos_build?: never;
+  readonly bun_version?: never;
+  readonly bun_path?: never;
+  readonly bun_sha256?: never;
+  readonly term?: never;
+  readonly shell?: never;
+}
 
 export interface CapabilityRecordV1 {
   readonly surface: SurfaceId;
@@ -28,16 +63,7 @@ export interface CapabilityRecordV1 {
   readonly binary_sha256: string;
   readonly evaluated_at: string;
   readonly expires_at: string;
-  readonly host: {
-    readonly arch: string;
-    readonly macos_version: string;
-    readonly macos_build: string;
-    readonly bun_version: string;
-    readonly bun_path: string;
-    readonly bun_sha256: string;
-    readonly term: string;
-    readonly shell: string;
-  };
+  readonly host: MacOSCapabilityHostV1 | LinuxCapabilityHostV1;
   readonly identity_attestation: {
     readonly result: "pass" | "fail";
     readonly primitive: string;
@@ -51,11 +77,15 @@ export interface CapabilityRecordV1 {
   readonly redaction_rules_applied: readonly string[];
 }
 
-/** What a caller observed about the surface now. PLAN-OPEN-3 compares these and nothing else. */
+/** Caller-supplied facts; PLAN-OPEN-3 and DEC-20261108-04 B5 fix comparisons. */
 export interface ObservedSurfaceFacts {
   readonly cli_version: string;
   readonly binary_sha256: string;
-  readonly host: CapabilityRecordV1["host"];
+  // Observations are comparison inputs, not admitted records. Missing facts
+  // remain representable and fail the corresponding freshness comparison.
+  readonly host: {
+    readonly [K in keyof MacOSCapabilityHostV1 | keyof LinuxCapabilityHostV1]?: string;
+  };
 }
 
 export type StalenessReason = "binary_hash_changed" | "cli_version_changed" | "host_changed" | "horizon_expired";
@@ -112,6 +142,10 @@ const HOST_FIELDS = [
   "term",
   "shell",
 ] as const;
+const LINUX_HOST_FIELDS = [
+  "os_name", "os_version", "kernel_release", "reported_model", "adapter_registration",
+] as const;
+const LINUX_FRESHNESS_FIELDS = ["os_name", "os_version", "kernel_release"] as const;
 const IDENTITY_ATTESTATION_FIELDS = ["result", "primitive", "sanitized_facts"] as const;
 const AUTH_READINESS_FIELDS = ["result", "primitive"] as const;
 const PTY_FIELDS = ["result", "observed_ms"] as const;
@@ -192,20 +226,21 @@ export function parseCapabilityRecord(raw: Record<string, unknown>): CapabilityR
   function readClosed<K extends string>(
     value: unknown,
     path: string,
-    keys: readonly K[],
+    keys: readonly K[] | ((own: readonly PropertyKey[]) => readonly K[]),
   ): Record<K, unknown> {
     const container = path === "" ? "record" : path;
     if (!isPlainObject(value, container)) return reject("schema", container);
     const own = probe(container, () => Reflect.ownKeys(value));
+    const selected = typeof keys === "function" ? keys(own) : keys;
     const snapshot = {} as Record<K, unknown>;
-    for (const key of keys) {
+    for (const key of selected) {
       const field = path === "" ? key : `${path}.${key}`;
       if (!own.includes(key)) reject("schema", field);
       snapshot[key] = ownDataValue(value, key, field, container);
     }
     // Every expected key is present and own keys are unique, so any surplus is
     // an unknown key. It is named by its container, never by the key itself.
-    if (own.length !== keys.length) reject("schema", container);
+    if (own.length !== selected.length) reject("schema", container);
     return snapshot;
   }
 
@@ -263,6 +298,18 @@ export function parseCapabilityRecord(raw: Record<string, unknown>): CapabilityR
     }
   }
 
+  function readLinuxHost(host: Record<string, unknown>, surface: SurfaceId): LinuxCapabilityHostV1 {
+    const adapter = readString(host.adapter_registration, "host.adapter_registration");
+    if (adapter !== surface) reject("registration_mismatch", "host.adapter_registration");
+    return {
+      os_name: readString(host.os_name, "host.os_name"),
+      os_version: readString(host.os_version, "host.os_version"),
+      kernel_release: readString(host.kernel_release, "host.kernel_release"),
+      reported_model: readString(host.reported_model, "host.reported_model"),
+      adapter_registration: surface,
+    };
+  }
+
   try {
     return readRecord(raw);
   } catch (thrown) {
@@ -297,7 +344,10 @@ export function parseCapabilityRecord(raw: Record<string, unknown>): CapabilityR
     const binarySha256 = readString(record.binary_sha256, "binary_sha256");
     if (!SHA256_HEX.test(binarySha256)) reject("schema", "binary_sha256");
 
-    const host = readClosed(record.host, "host", HOST_FIELDS);
+    // Decide from the record's own key set, within the same defensive read.
+    // A mixed shape cannot pass either closed set, even with undefined values.
+    const host = readClosed<string>(record.host, "host", own =>
+      LINUX_HOST_FIELDS.some(key => own.includes(key)) ? LINUX_HOST_FIELDS : HOST_FIELDS);
     const identity = readClosed(record.identity_attestation, "identity_attestation", IDENTITY_ATTESTATION_FIELDS);
     if (typeof identity.sanitized_facts !== "string") reject("schema", "identity_attestation.sanitized_facts");
     const auth = readClosed(record.auth_readiness, "auth_readiness", AUTH_READINESS_FIELDS);
@@ -316,7 +366,7 @@ export function parseCapabilityRecord(raw: Record<string, unknown>): CapabilityR
       binary_sha256: binarySha256,
       evaluated_at: new Date(evaluatedMs).toISOString(),
       expires_at: new Date(expiresMs).toISOString(),
-      host: {
+      host: Object.hasOwn(host, "os_name") ? readLinuxHost(host, surface) : {
         arch: readString(host.arch, "host.arch"),
         macos_version: readString(host.macos_version, "host.macos_version"),
         macos_build: readString(host.macos_build, "host.macos_build"),
@@ -364,8 +414,16 @@ export function evaluateCapabilityFreshness(
   const nowMs = canonicalTimestampMs(now, "invalid_now", "now");
   if (record.binary_sha256 !== observed.binary_sha256) return stale("binary_hash_changed");
   if (record.cli_version !== observed.cli_version) return stale("cli_version_changed");
-  for (const field of HOST_FIELDS) {
-    if (record.host[field] !== observed.host[field]) return stale("host_changed");
+  if (record.host.os_name !== undefined) {
+    if (observed.host.os_name === undefined) return stale("host_changed");
+    for (const field of LINUX_FRESHNESS_FIELDS) {
+      if (record.host[field] !== observed.host[field]) return stale("host_changed");
+    }
+  } else {
+    if (observed.host.os_name !== undefined) return stale("host_changed");
+    for (const field of HOST_FIELDS) {
+      if (record.host[field] !== observed.host[field]) return stale("host_changed");
+    }
   }
   // Stale when now >= expires_at, with no grace period. Written as "not
   // strictly before" so a record built without the parser whose expires_at
@@ -376,7 +434,9 @@ export function evaluateCapabilityFreshness(
 
 /**
  * `${evaluated_at}-${binary_sha256.slice(0, 12)}.json`. The surface is the
- * directory (spec section 5.1), not part of the name.
+ * directory (spec section 5.1), not part of the name. macOS keeps that name.
+ * Linux uses the full binary hash and a hash of B5's host identity, so hosts
+ * and binaries sharing a prefix can coexist at the same observation time.
  */
 export function capabilityRecordFilename(record: CapabilityRecordV1): string {
   // The parser already guarantees both. They are checked again so a record
@@ -386,6 +446,11 @@ export function capabilityRecordFilename(record: CapabilityRecordV1): string {
   canonicalTimestampMs(evaluatedAt, "timestamp", "evaluated_at");
   if (typeof binarySha256 !== "string" || !SHA256_HEX.test(binarySha256)) {
     reject("schema", "binary_sha256");
+  }
+  if (record.host.os_name !== undefined) {
+    const { os_name, os_version, kernel_release } = record.host;
+    const hostHash = sha256CanonicalSync({ os_name, os_version, kernel_release });
+    return `${evaluatedAt}-${binarySha256}-linux-${hostHash}.json`;
   }
   return `${evaluatedAt}-${binarySha256.slice(0, 12)}.json`;
 }

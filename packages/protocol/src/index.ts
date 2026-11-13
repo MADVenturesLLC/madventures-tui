@@ -63,6 +63,7 @@ export type {
   ObservedSurfaceFacts,
   StalenessReason,
 } from "./capability-record";
+export type { MacOSCapabilityHostV1, LinuxCapabilityHostV1 } from "./capability-record";
 
 export { assertActiveSurfaceCardinality, evaluatePairEligibility, CardinalityError } from "./pair-constraints";
 export type { PairConstraintsV1, PairEligibility, PairEligibilityFailure } from "./pair-constraints";

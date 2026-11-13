@@ -76,7 +76,7 @@ export function readCapabilityRecords(
   }
   const records: { entry: string; record: CapabilityRecordV1 }[] = [];
   for (const entry of entries) {
-    const match = /^((?:\d{4}|[+-]\d{6})-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z)-[0-9a-f]{12}\.json$/.exec(entry);
+    const match = /^((?:\d{4}|[+-]\d{6})-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z)-(?:[0-9a-f]{12}|[0-9a-f]{64}-linux-[0-9a-f]{64})\.json$/.exec(entry);
     const timestamp = match?.[1];
     const ms = timestamp === undefined ? NaN : Date.parse(timestamp);
     if (!Number.isFinite(ms) || new Date(ms).toISOString() !== timestamp) {
@@ -113,6 +113,27 @@ export function readCapabilityRecords(
   return records.map(({ record }) => record);
 }
 
+/** Opt in to B5 tuple selection on the legacy macOS lookup as well. */
+export interface CapabilitySelectionOptions {
+  readonly by_host: true;
+}
+
+function matchesObservedHost(record: CapabilityRecordV1, observed: ObservedSurfaceFacts): boolean {
+  const linux = record.host.os_name !== undefined;
+  if (linux !== (observed.host.os_name !== undefined)) return false;
+  const fields = linux
+    ? ["os_name", "os_version", "kernel_release"] as const
+    : ["arch", "macos_version", "macos_build", "bun_version", "bun_path", "bun_sha256", "term", "shell"] as const;
+  return fields.every(field => record.host[field] === observed.host[field]);
+}
+
+/**
+ * B5: choose the newest record for a host/surface/full-binary tuple, then
+ * evaluate its freshness; an older record never masks a stale successor.
+ * Existing macOS calls keep their latest-surface-only refusal semantics.
+ * Linux defaults to tuple selection; macOS can explicitly opt in.
+ * All host decisions use supplied facts, never the running operating system.
+ */
 export function latestFreshRecord(
   root: string,
   repositoryRoot: string,
@@ -120,8 +141,13 @@ export function latestFreshRecord(
   surface: SurfaceId,
   now: string,
   observed: ObservedSurfaceFacts,
+  options?: CapabilitySelectionOptions,
 ): CapabilityRecordV1 | null {
-  const latest = readCapabilityRecords(root, repositoryRoot, worktree, surface)[0];
+  const records = readCapabilityRecords(root, repositoryRoot, worktree, surface);
+  const byHost = observed.host.os_name !== undefined || options?.by_host === true;
+  const latest = byHost
+    ? records.find(record => record.binary_sha256 === observed.binary_sha256 && matchesObservedHost(record, observed))
+    : records[0];
   if (latest === undefined) return null;
   return evaluateCapabilityFreshness(latest, now, observed).fresh ? latest : null;
 }

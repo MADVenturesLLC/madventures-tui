@@ -16,3 +16,4 @@ export {
   latestFreshRecord,
   CapabilityStoreError,
 } from "./capability-store";
+export type { CapabilitySelectionOptions } from "./capability-store";
