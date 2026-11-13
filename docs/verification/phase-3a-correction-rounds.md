@@ -1773,3 +1773,45 @@ Round 2's resolution, recorded above as pending, is now closed:
 - **Carried to a hardening act issued before M6 (`DEC-20261112-01` B6):** Finding 2 of the first
   verdict (`createRequire`); Finding 3 of the first verdict (lazy `import()`); and the cause of the one
   failure of `packages/broker/test/pty-host-supervisor.test.ts:631` on Verify (macOS).
+
+## H2 review verdict PASS and H2 merged (rubric milestone 4, no round, count 0)
+
+- **Recorded:** 2026-11-13, under `DEC-20261113-01` B1 to B3, B5, B9 and C1.
+- **Plan milestone:** Phase 3B slice H2, the Linux capability record (plan §3 H2, `DEC-20261108-04`
+  B5 and C1). **Rubric milestone:** 4.
+- **Head reviewed:** `ea39a3a069191f848dc9f7937985f706a8e91146` on PR #238 (`build/3b-h2-r1`), built by
+  `session:codex/3b-h2-r1` from binding base `a7251235f94dcc4a3149b638a1acdac69236a26d` under
+  `DEC-20261108-04`, `DEC-20261112-03` and its Addenda 1 and 2.
+- **Reviewer:** `antigravity`, a fresh Gemini session in the Antigravity command-line interface on the
+  Founder's MacBook, with Gemini 4 Carbon selected by the Founder; the report records the model as not
+  shown. Review prompt SHA-256 `67f5c25aff7177153285b4a95ad7bdc51f65a2f2c812ddadd7b6b6dbe257de54`.
+- **Verdict text SHA-256:** `daf9a325a111b7553dac2fe8546199c673ae3d4d394133ce1cc14d38b6a1bee7`, 58,025
+  bytes, 611 lines, saved at `/Users/michaeldaley/builds/review-h2-r1.md`, posted on PR #238 as
+  comments 6853131015 and 6853131615 by `decivantiq`.
+- **Result:** PASS, items 1 to 14, no SUBSTANTIVE and no ADVISORY finding, and four findings the
+  reviewer classifies NOT COUNTING under Phase 3A plan §11.3. Findings 1 to 3: no test pins the check
+  of a Linux host's keys with `Reflect.ownKeys`, the guard at line 423 of `capability-record.ts`, or
+  the comparison of the whole binary hash in `latestFreshRecord`. Finding 4: twelve quoted blocks of
+  the build log join lines from different parts of a log without marking the gap. The Founder rules
+  all four NOT COUNTING (`DEC-20261113-01` B3). **Counted:** no round. The builder's halts and stops
+  add no round. H2's count under rubric milestone 4 closes at **0**. No verdict of H2 is a
+  disqualifier.
+- **Checks at the head:** Verify, Verify (macOS), tui-chaos on both hosts, attribution-shape,
+  validate-code-review, code-review, CodeQL and every Analyze job succeeded on their first attempt.
+  The Founder's runs of `DEC-20261108-04` B9 passed on the MacBook and on the Ubuntu PC: 1945 pass,
+  0 fail, across 142 files on each.
+- **Merged:** PR #238 was marked ready at that head on 2026-11-13, after the PASS was posted.
+  Copilot's review 5891232740 there opened one thread, comment 4563404681, which the Founder's note in
+  comment 6859583757 closed with no change. Under the Founder's merge authorization in comment
+  6859585534, SHA-256 `0ccb2ead5d1d2edf76e60ee69bb0431954cae73e9ac83585f91694ff36bd6094`, it merged at
+  `0825a1e349ca5ea6427eea5f2de79dff234dc8f7`, with parents `9115b63d97cef972f6bdfb0da0c0ee5931d10bf0`
+  and `ea39a3a069191f848dc9f7937985f706a8e91146`, changing exactly seven paths, all within
+  `DEC-20261112-03` B3. Every run on the merge commit succeeded.
+- **Harness:** one builder session under Codex 0.167.0, the governed build of `DEC-20261108-03`
+  Addendum 11. Every turn of its one session record names the model `gpt-6.1-sol` and the effort
+  `xhigh`; one turn ran with a read-only sandbox and no call, which Addendum 1 to `DEC-20261112-03`
+  accepts.
+- **Carried to a hardening act issued before M6 (`DEC-20261113-01` B9):** the cause of the one failure
+  of `test/phase3a/adversarial/ledger-failure.test.ts:50` in the builder's log 187; tests for Findings
+  1 to 3; and the check of the Linux host values in `capabilityRecordFilename` (Copilot's comment
+  4563404681).
