@@ -1,0 +1,70 @@
+STEP: file DEC-20261115-02, M0's act. Paste this as the first message of a new Claude Code session started on the Founder's MacBook by the Founder's launch command, which loads the agent identity and opens the session inside the fresh clone /Users/michaeldaley/madventures-tui-dec-20261115-02-filing, detached at the origin/main commit the Founder's clone command recorded.
+
+You are the filing session for one Founder act in MADVenturesLLC/madventures-tui. You work in a Claude Code session on the Founder's MacBook. This is a docs-only change. Land it as one commit on a branch named docs/dec-20261115-02-filing and open one draft pull request. You build no slice, and you change nothing in any other repository.
+
+FIRST: YOUR WORKING DIRECTORY AND IDENTITY
+Run pwd. It must be /Users/michaeldaley/madventures-tui-dec-20261115-02-filing. Then run gh api user --jq .login. It must print daley40-lab. Then run git config user.name and git config user.email; they must print daley40-lab and 293512385+daley40-lab@users.noreply.github.com. Then run git remote get-url origin; it must be an https URL, not an SSH one. If any differs, stop now and report FOUNDER_DECISION_REQUIRED without doing anything else. Do not inspect how gh obtains its credential: read no wrapper script, credential file or environment file, list no environment variables, and never print a token or any part of one. Do not run gh auth status. On any 401, stop and report. Never use env -u GH_TOKEN or the keyring. Run no process-listing command. Use no MCP server and start no other agent. Read nothing outside your own clone other than what this prompt names, fetch no web page, and run no test.
+
+ASSIGNED ROLE AND ATTRIBUTION
+Role-Id: builder
+Actor-Id: session:claude-code/tui-dec-20261115-02-filing
+Execution-Surface: claude-code
+Use exactly these three trailers as the final paragraph of your commit message and of the pull request body, after any Co-Authored-By line, with a blank line before them and no bare three-hyphen line anywhere in either.
+
+WHY
+The Founder signed FOUNDER-ACT-20261115-PHASE-3B-M0 (DEC-20261115-02) on 2026-11-15. It is the act of Phase 3B slice M0: it adds the madv-surface registration and its allowlist, rules madv-surface's identity probe and auth-readiness probe, governs M0's build by governed Codex in two phases, has every live call made by the Founder's own commands on both certification hosts, sets the verdict rule of the investigation and the capability records, records the Founder's reading of MiniMax's Terms of Service, and amends the claude-code registration's supported version to 2.1.325, the version pinned on both hosts. B17 of the act has one docs-only pull request, made by a Claude Code filing session, add it unchanged and change nothing else, before M0's builder session starts. The act authorizes no live call by any agent session, no build in this pull request and no change in madventures-surface.
+
+AUTHORITY
+Read AGENTS.md first, including its merge bullet as DEC-20261031-01 amended it, and B8 of docs/decisions/DEC-20261102-02-hardening-builds.md, which lets a filing session the Founder names push its branch and open its draft pull request as daley40-lab. This host is macOS: use shasum -a 256. Name every commit by its full 40-character SHA and every artifact by its full 64-character SHA-256. After git fetch origin claude/awesome-cray-vqrzbt, read the act from the latest commit of origin/claude/awesome-cray-vqrzbt that touches it, found with git log -1 --format=%H origin/claude/awesome-cray-vqrzbt -- PATH, and report that commit. It must be the transfer commit named here; if it differs, stop:
+- DEC-20261115-02: transfer/DEC-20261115-02-phase-3b-m0.md, at transfer commit 116bd78e7f401005b25c6db0daf26b91fad9e6dd
+Read it in full before you write anything. Install nothing and run no test: this change touches no code.
+
+PRECONDITIONS (verify each, and report each result)
+1. git fetch origin main. Report its SHA. It must be 7c7192ca3587f2f95cd79c489f3b22130b07534b, the merge of pull request 241, or a descendant whose changes since that commit touch no path under docs/decisions/. Report every changed path. HEAD equals origin/main and the working tree is clean. The branch docs/dec-20261115-02-filing must not exist on origin.
+2. The act has SHA-256 5d8bd4a446d8b3120bddbc34dc11a5fdf83e3a07d9efcd04fbd7b8efdad8d22b, 149 lines and 29,918 bytes. If any value differs, stop.
+3. Check the act with grep, not by eye, and report each count: Status ISSUED; the signature (Michael Daley, a Date, and the founder Actor-Id line); zero bare three-hyphen lines; zero lines ending in a space; zero square brackets; zero runs of two or more underscores; none of the strings FOUNDER CHOICE, FOUNDER CONFIRM, PENDING or "to be completed"; and the word DRAFT nowhere in capitals. It holds 50 section signs (U+00A7) and one em dash (U+2014), before the name in its signature, and no other character outside ASCII; keep each as that one character.
+4. On origin/main docs/decisions/DEC-20261115-02-phase-3b-m0.md does not exist, and under docs/ neither of the strings DEC-20261115-02 and FOUNDER-ACT-20261115-PHASE-3B-M0 appears. Any use is a stop.
+5. Check the facts Part A of the act cites, and stop if any is false. Read-only, with git and gh api. Run every git command of this item with GIT_CONFIG_GLOBAL=/dev/null and GIT_CONFIG_NOSYSTEM=1 set for that command.
+   a. The base (A3). git log --first-parent --format='%H %s' 0825a1e349ca5ea6427eea5f2de79dff234dc8f7..7c7192ca3587f2f95cd79c489f3b22130b07534b lists exactly three commits, the merges of pull requests 239, 240 and 241. git diff --name-only 0825a1e349ca5ea6427eea5f2de79dff234dc8f7 7c7192ca3587f2f95cd79c489f3b22130b07534b lists exactly eight paths, each under docs/decisions/ or docs/verification/; report them.
+   b. The texts the act cites, at 7c7192ca3587f2f95cd79c489f3b22130b07534b. Quote with line numbers: in docs/superpowers/plans/2026-09-19-phase-3b-live-tui-integration.md, line 255 (the M0 row of §2A), line 415 (the auth-readiness probe in §3 M0), and the first line of §5 items 1, 12 and 13 (lines 583, 627 and 631); in docs/decisions/DEC-20261108-04-phase-3b-standing-commission.md, the first lines of B6 (line 120) and B7 (line 129), and all of B7; in docs/decisions/DEC-20261108-01-phase-3b-approval.md, B5 (line 44) and B10 (line 56); in docs/decisions/DEC-20261113-01-h2-records-and-merge.md, the first line of A10 (line 60) and B11 (line 93); and in docs/decisions/DEC-20261114-02-minimax-plan-terms.md, A4 (line 25), B3 (line 40) and B5 (line 44).
+   c. The code at the base, 0825a1e349ca5ea6427eea5f2de79dff234dc8f7 (A5). Quote with line numbers: lines 37, 40, 61 and 64 of packages/protocol/src/adapter-registry.ts; lines 173, 183, 186 and 189 of packages/supervisor/src/preflight.ts; lines 3, 42, 47 and 68 of packages/supervisor/src/attestation.ts; and lines 15 and 30 of packages/supervisor/src/environment.ts. Confirm that environment.ts defines exactly two allowlists, claude-code-v1 and antigravity-v1, and that adapter-registry.ts holds exactly two registrations, claude-code and antigravity.
+   d. madventures-surface, read-only with gh api only (A4). gh api repos/MADVenturesLLC/madventures-surface/tags lists exactly one tag, v0.1.1, at 91bfb38549bcab37740d2c4564c371ee390a63e7. Read with gh api -H "Accept: application/vnd.github.raw" "repos/MADVenturesLLC/madventures-surface/contents/PATH?ref=91bfb38549bcab37740d2c4564c371ee390a63e7", and quote with line numbers: lines 133, 145 and 146 of README.md; lines 147, 149, 153, 154 and 159 of src/profiles.ts; and line 3 of package.json. Clone nothing from that repository and change nothing there. A 404 or 403 for that repository is a stop.
+   The facts that rest on the Founder's hosts and outside GitHub, which are the Founder's reading of MiniMax's Terms of Service in A2, the release binaries on the hosts in A4, MiniMax's pages in A7 and everything A8 records of the Founder's MacBook and Ubuntu PC, rest on the Founder's own checks; read none of them, fetch no web page, and report them as not checked.
+
+ALLOWED SCOPE
+One commit, exactly one path, new and byte for byte from its transfer blob:
+  docs/decisions/DEC-20261115-02-phase-3b-m0.md
+Before committing, git status --porcelain must list only that path. Do not change any other file.
+
+ATTRIBUTION-SHAPED LINES
+The pull request body becomes the merge commit message on main, where the attribution check reads every line. In the commit message and in the pull request body, no line other than the three trailers in the final paragraph, and the Co-Authored-By line, may begin with Role-Id:, Role-Id-Secondary:, Actor-Id: or Execution-Surface:. That includes a wrapped line in your prose, such as one quoting the act's signature. Check both texts with grep -nE '^(Role-Id|Role-Id-Secondary|Actor-Id|Execution-Surface):' and confirm that the only matches are the three trailers. Rewrap any other match before you commit or create the pull request.
+
+COMMIT AND PULL REQUEST
+- Commit subject: docs: file DEC-20261115-02, the act of Phase 3B slice M0. The body says the Founder signed it on 2026-11-15; that it governs M0, madv-surface's admission with its registration, allowlist, probes, build, live investigation on both certification hosts and capability records, and amends the claude-code registration's supported version to 2.1.325; that under its B17 this one pull request files it unchanged before M0's builder session starts; that the text comes from the transfer commit you reported; that it authorizes no live call by any agent session and no change in madventures-surface; and docs only. Then the Co-Authored-By line your tooling adds and the three trailers.
+- Run the CONTRIBUTING.md secret scan over the staged diff before you commit, and classify each hit as CONTRIBUTING.md says. The act names an environment variable that holds a key and a key prefix, and holds no key; a hit that is an actual credential value is a stop.
+- cmp the committed text against its transfer blob, and report that the bytes match and that the committed git blob ID equals the transfer blob ID.
+- Push the branch with git push -u origin docs/dec-20261115-02-filing over the https remote. Do not force-push. If the push is refused for any reason, do not retry or work around it: stop, report the commit SHA and the error text, and save the prepared PR title and body to files under /tmp.
+- Open a draft pull request against main. Read the body of pull request 241 with gh api repos/MADVenturesLLC/madventures-tui/pulls/241 --jq .body and mirror its structure: what and why, the paths changed, the hashes, the preconditions with results, the verification you ran, not-run items, deviations, not done, then the three trailers as the final paragraph. Say in it that docs/decisions/ is a governance path, so the pull request merges only on a Founder act naming its exact head. Create it with gh api repos/MADVenturesLLC/madventures-tui/pulls -f title=... -F body=@file -f head=docs/dec-20261115-02-filing -f base=main -F draft=true, not gh pr create. Before you create it, check that the body has zero bare three-hyphen lines and zero square brackets anywhere, including the line that names Claude Code: write that line as plain text without a link, and do not write the Copilot reviewer's login in the body. Quote no line in the body that holds a square bracket; describe it instead, and quote it in your final report.
+- Run .github/scripts/attribution-shape-check.sh in pr mode on the branch and in prbody mode on the body, and report both results. If you edit the body after a prbody check, run the check again on the edited body and report both runs.
+- A check named Cursor Security Agent, from the GitHub app cursor, may start on the pull request. Under DEC-20261112-01 B7 it is not a check, review or gate. Report its name, status and conclusion, and do nothing about it.
+- The PR stays a draft. Do not mark it ready, do not merge, do not re-run any job, do not request any review, do not touch any other pull request or repository, do not resolve threads, do not change any repository setting, do not post any authorization, and post no comment of your own, on this PR or any other.
+
+STOP CONDITIONS
+Return FOUNDER_DECISION_REQUIRED and do not improvise when any of these occurs. State what passed, what failed, what is unchanged, and the single next decision.
+- Your working directory is not the named clone, gh is not daley40-lab, the git identity differs, or the origin remote is not https.
+- A hash, line count or byte count differs, or the transfer commit or blob is missing or is not the latest commit touching its path.
+- main has moved outside precondition 1, or a file name or identifier of precondition 4 is already used under docs/.
+- Any fact in precondition 5 is false, or gh api returns 404 or 403 for madventures-surface.
+- Any path other than the one of ALLOWED SCOPE would change.
+- An attribution-shaped line outside the final trailers cannot be rewrapped, or the secret scan finds a credential value.
+- The branch exists on origin, the push is refused, or gh returns 401.
+
+FINAL REPORT (in this order)
+1. Your working directory, the host from uname -s, which must be Darwin, the gh login, the git identity, the origin remote's scheme, and the preconditions, each result with full SHAs, hashes, line and byte counts, and every quoted line.
+2. The commit: full 40-character SHA, the one path, the diff stat, and the cmp and blob-ID results.
+3. The attribution-shaped-line check on the commit message and on the body, with every match.
+4. The secret-scan hits and their classification.
+5. attribution-shape-check results in pr and prbody modes.
+6. The PR number, its head SHA and state, the checks that have started, the count of square brackets in the body, and the body's SHA-256 as printed by gh api repos/MADVenturesLLC/madventures-tui/pulls/N --jq .body | shasum -a 256.
+7. Deviations from this prompt, or the word none.
+8. The single next decision for the Founder: marking the PR ready with the guarded command of DEC-20261015-05 B4.
