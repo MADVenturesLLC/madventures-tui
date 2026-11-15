@@ -1815,3 +1815,49 @@ Round 2's resolution, recorded above as pending, is now closed:
   of `test/phase3a/adversarial/ledger-failure.test.ts:50` in the builder's log 187; tests for Findings
   1 to 3; and the check of the Linux host values in `capabilityRecordFilename` (Copilot's comment
   4563404681).
+
+## madv-surface 0.1.1 review verdict PASS and release (no rubric milestone, no round)
+
+- **Recorded:** 2026-11-15, under `DEC-20261115-01` B1 to B5 and C1.
+- **What it reviews:** the madv-surface 0.1.1 follow-up build of `DEC-20261114-01`, in
+  `MADVenturesLLC/madventures-surface`; not a Phase 3B slice. **Rubric milestone:** none
+  (`DEC-20261114-01` B5).
+- **Head reviewed:** `a249da6dbeab879b2d68b97975e8a9a42db07437` on pull request 2 of
+  `MADVenturesLLC/madventures-surface` (`build/v0.1.1`), built by `session:codex/surface-0.1.1-r1` from
+  `d259cb5f9797101868391a0e4e81fc3a40ad3ea4` under builder prompt SHA-256
+  `084f7a3a7af6692a03fdb5d653ba8bdb3de4e27b7dd4ff25a045ce8899a7c77f` and one resume message, SHA-256
+  `15da73708241a0c78f77ee13e7d68264e647c6958e3175fe17c51d9f2c8468f9`, after one halt on the width of a
+  commit message line.
+- **Reviewer:** `antigravity`, a fresh session in Antigravity on the Founder's MacBook, with a Gemini
+  model the Founder selected; the report records the model as not shown. Review prompt SHA-256
+  `f739865f8bf6e0d1db60f862bab0f929836ad1f39bb095948fcad620da4e331f`; the Founder's message 1, SHA-256
+  `29fc9757f324c87afadf6f7f288e61b67bd7fba1d0ad285859bcaa8a1a7d324b`, replaced its load rule with that
+  of `DEC-20261102-02` B4.
+- **Verdict text SHA-256:** `fee768e75b957363ba2eb12465039f7599bb57ba912b7242c3fe0eef274f23ce`, 61,230
+  bytes, 654 lines, saved at `/Users/michaeldaley/builds/review-surface-0.1.1-r1.md`, posted on pull
+  request 2 of `MADVenturesLLC/madventures-surface` as comments 6888455782 and 6888455972 by
+  `decivantiq`.
+- **Result:** PASS, items 1 to 12, no finding. The report records three attempts that keep every test it
+  ran passing: a cut before redaction at the cap plus 25 characters, a rule written to the ten listed
+  Claude ids, and a fixed `localhost` in place of the recorded host. The Founder rules them, and the
+  Claude ids the rule does not match, limits of the tests and not defects, carried to the act of any
+  later build of madv-surface (`DEC-20261115-01` B4). One mutation run, log 033, started after a wait
+  that ended without a reading below 2.0; it is recorded and does not change item 2 (`DEC-20261115-01`
+  B3). **Counted:** no round, under no rubric milestone. The builder's halt adds no round.
+- **Checks at the head:** the repository has no CI. Every gate of `DEC-20261114-01` B3 passed in the
+  build: 126 pass, 0 fail, across 23 files. The Founder's runs of `DEC-20261114-01` B4 passed on the
+  MacBook under Bun 1.4.2 and on the Ubuntu PC under the custodied Bun 1.4.1: 126 pass, 0 fail, across
+  23 files on each, with the TLS test's assertion on a reused connection run on both.
+- **Merged and tagged:** pull request 2 was marked ready at that head on 2026-11-15, after the PASS was
+  posted. Under the Founder's merge authorization in comment 6888592205, SHA-256
+  `72e149a30e1888eafbe8f007bbac3f5e65773eb492b988b058d607fa7d0548e4`, it merged at
+  `91bfb38549bcab37740d2c4564c371ee390a63e7`, with parents `d259cb5f9797101868391a0e4e81fc3a40ad3ea4`
+  and `a249da6dbeab879b2d68b97975e8a9a42db07437` and the head's tree, changing exactly the ten paths of
+  `DEC-20261114-01` B1, and was tagged `v0.1.1`, the release commit. Copilot's review 5908857167 came
+  after the merge, opened no thread and changes nothing (`DEC-20261115-01` B7).
+- **Release builds (`DEC-20261114-01` B7):** MacBook, Bun 1.4.2, SHA-256
+  `daf7ffe5922a3b538d69e6408d4c14c96978b17d16aca2cdeb57e7b6f1852024`, 62,292,978 bytes; Ubuntu PC, the
+  custodied Bun 1.4.1, SHA-256 `8dcced0bbc3b6ff3e7372977cae2d48036fa8dabae03e6aa5485efc1bc766a63`,
+  80,573,976 bytes. Evidence: `docs/verification/2026-11-15-madv-surface-0.1.1-release.md`.
+- **Harness:** one builder session under Codex 0.167.0, the governed build of `DEC-20261108-03` Addendum
+  11. Both turns of its one session record name the model `gpt-6.1-sol` and the effort `xhigh`.
