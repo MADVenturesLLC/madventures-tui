@@ -1988,3 +1988,883 @@ Before the opening commit, log 094 removes trailing spaces/tabs from
 these quotations. Source text, line numbers and complete logs remain
 unchanged. The log's final exit 0 came from the last hash command, not
 the earlier whitespace check; no commit followed that failed check.
+
+## Phase 1: implementation and offline evidence
+
+
+Code head: 6b456f468fc3a72894a8f39b8a07c86b9cf077b4. Opening prefix SHA-256: 0e00d512fa435ebeef494aa2453dd85f01f4941afdeae436b243735fa772386a. The opening's bytes and lines remain unchanged.
+
+
+R1: CLAUDE_CODE_REGISTRATION.supported_versions is exactly 2.1.325. Only the expressly authorized expected-version and shared-fixture values change.
+
+R2: MADV_SURFACE_REGISTRATION and its ENTRIES line add the single static B2 registration after Antigravity. Field-for-field testing checks every value; no argument vector adds shell permission.
+
+R3: environment.ts adds madv-surface-v1, preserving construction, redaction and preflight installation/TMPDIR validation. New environment and preflight tests cover exact names, missing required variables, excluded state/override variables, canary redaction and one environment shared by both probes and the launch plan's host/child consumers. Actual M1 launch wiring remains deferred.
+
+R4: the private ESM adapter has no dependencies or subprocess/shell/state behavior. encodeUserInput, MadvSurfaceParser, beginRequest, checkDeadline, finish, parseMadvIdentity and parseMadvAuthReadiness provide bound events, ordering, every-response checks, typed failure precedence, whole-session interruption with retry false and a 30-second missing-evidence deadline. It follows the Claude package layout, identity binding and typed failure contracts, while leaving legacy launch/configuration/MCP notification contracts behind as the opening task detail explains.
+
+R5: supervisor dependency, tsconfig path and lockfile line connect the adapter. ProbeRequest carries registration; runBoundedProbe selects the madv parser, 30-second limit and natural exit from that registration. Claude parser/input/five-second constants and existing attestation tests remain unchanged. preflight keeps probe order, protected repository/provider/domain checks and launch arguments, and rejects unsupported madv roles before any probe using pair_ineligible.
+
+R6: record/m0-record.ts is outside the clone and uncommitted. It validates manifest-covered captures, CLI/host/runtime/binary/version pins, allowlisted captured environment names, auth and actual response evidence; builds schema-accepted records; prints required Claude init facts/tool counts and passwd-home storage resolution; and gates its sole store call behind --write. Only synthetic no-write runs occurred, against fourth-commit code that the fifth documentation commit does not change. No Linux run occurred.
+
+
+### Upheld halt and resumed rulings
+
+
+The first halt before baseline was upheld by the Founder and resolved by Addendum 2 and the signed first resume. Halt report SHA-256 4fef47b6a4f9c26e142347967f4e01b80758162e4fd0f6e6f2e3f79a36f44be4; it remains pr/m0-phase1-halt-1-report.md.
+
+Addendum 2 SHA-256 a6512b4ad4cadb10f014256922bd09efd4d1eb9d65d0a8e4c91102f4f4ca60a0. Resume SHA-256 41ea2ae2e3d45842c77d8594040d866050ddd2334f1f9a38c47ff7a74bd11536. Addendum 2 B1 authorizes environment.test.ts base line 138 in redaction reports which rules ran. B2 authorizes only version replacement at preflight.test.ts base lines 32, 67, 85 and 327; base line 176 and all other existing bytes remain. The table below names every affected test and shared helper.
+
+
+### Added tests
+
+
+| File | Full Bun test name | Requirement and ruling |
+| --- | --- | --- |
+| packages/adapter-madv-surface/test/parser.test.ts | a fail-closed event after valid evidence still interrupts | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | a new request starts its own evidence deadline without a second parser | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | auth accepts exactly the passing predicate and ignores additive metadata | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | auth rejects authMethod | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | auth rejects endpointHost | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | auth rejects loggedIn | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | auth rejects malformed shape, nonzero exit and signal | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | auth rejects profile | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | auth rejects provider | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | auth rejects verified | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | auth rejects verifyMethod | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | event order rejects assistant before response | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | event order rejects duplicate init | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | event order rejects duplicate tool id | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | event order rejects missing init | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | event order rejects out-of-session event | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | event order rejects response before pending tool result | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | event order rejects result before response | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | event order rejects tool before response | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | event order rejects unmatched tool result | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | every later response is checked before its tools | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | exit precedence fails closed without relying on an emitted event | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | exit without evidence for a later request fails closed | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | failure precedence: absent model | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | failure precedence: Anthropic model | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | failure precedence: domain mismatch | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | failure precedence: HTTP 401 | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | failure precedence: HTTP 403 | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | failure precedence: HTTP error | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | failure precedence: invalid body | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | failure precedence: model mismatch | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | failure precedence: redirect | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | failure precedence: unnamed family | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | identity rejects init endpoint_host | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | identity rejects init profile | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | identity rejects init provider | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | identity rejects init requested_model | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | identity rejects init surface | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | identity rejects init surface_version | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | identity rejects response endpoint_host | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | identity rejects response profile | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | identity rejects response provider | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | identity rejects response response_independence_domain | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | identity rejects response response_model | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | identity rejects response tls_verified_host | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | identity requires a model response and clean zero exit | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | input encoder preserves one text in one newline-terminated user message | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | missing evidence fails at the 30-second deadline | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | stream chunks preserve UTF-8 and malformed JSON fails closed | R4; B3-B4 and B7 item 1 |
+| packages/adapter-madv-surface/test/parser.test.ts | valid identity evidence binds execution and session | R4; B3-B4 and B7 item 1 |
+| packages/protocol/test/adapter-registry.test.ts | madv-surface registration matches DEC-20261115-02 field for field | R2; B2 |
+| packages/supervisor/test/madv-environment.test.ts | madv-surface redacts its synthetic canary | R3; B6 |
+| packages/supervisor/test/madv-environment.test.ts | madv-surface-v1 drops state, overrides and unlisted variables | R3; B6 |
+| packages/supervisor/test/madv-environment.test.ts | madv-surface-v1 has exactly the approved variables | R3; B6 |
+| packages/supervisor/test/madv-environment.test.ts | madv-surface-v1 requires exactly the six required variables | R3; B6 |
+| packages/supervisor/test/madv-preflight.test.ts | madv-surface hash and version changes refuse the capability record | R5; B3-B5 and B7 item 1 |
+| packages/supervisor/test/madv-preflight.test.ts | madv-surface probes run exactly once with pinned arguments and input | R5; B3-B5 and B7 item 1 |
+| packages/supervisor/test/madv-preflight.test.ts | madv-surface reuses one allowlisted environment for four consumers | R3; B6 |
+| packages/supervisor/test/madv-preflight.test.ts | missing MINIMAX_API_KEY maps to auth_not_ready before probes | R3; B6 |
+| packages/supervisor/test/madv-preflight.test.ts | real registry admits Claude with madv-surface and refuses shared review control | R5; B3-B5 and B7 item 1 |
+| packages/supervisor/test/madv-preflight.test.ts | real-registry Antigravity is refused before its probes | R5; B3-B5 and B7 item 1 |
+| packages/supervisor/test/madv-preflight.test.ts | unsupported madv-surface roles fail before any probe | R5; B3-B5 and B7 item 1 |
+| packages/supervisor/test/madv-probes.test.ts | dispatch keeps Claude probes and input unchanged | R5; B3-B5 and B7 item 1 |
+| packages/supervisor/test/madv-probes.test.ts | madv-surface auth failures map to auth_not_ready | R5; B3-B5 and B7 item 1 |
+| packages/supervisor/test/madv-probes.test.ts | madv-surface cancellation retains bounded cleanup and reaping | R5; B3-B5 and B7 item 1 |
+| packages/supervisor/test/madv-probes.test.ts | madv-surface identity continues beyond init to natural exit | R5; B3-B5 and B7 item 1 |
+| packages/supervisor/test/madv-probes.test.ts | madv-surface identity failures map to identity_mismatch | R5; B3-B5 and B7 item 1 |
+| packages/supervisor/test/madv-probes.test.ts | madv-surface keeps both raw stream limits and metadata-only diagnostics | R5; B3-B5 and B7 item 1 |
+| packages/supervisor/test/madv-probes.test.ts | madv-surface pre-spawn cancellation and spawn failure fail closed | R5; B3-B5 and B7 item 1 |
+| packages/supervisor/test/madv-probes.test.ts | registration chooses 30 seconds beside Claude's 5 seconds | R5; B3-B5 and B7 item 1 |
+
+
+### Existing tests and shared helpers changed
+
+
+All line references here are binding-base lines. Each preflight test below retains its assertion bytes; its affected version values are in the shared fixture/hang helpers only. The complete authorized diff is logs/229-existing-test-final-diffs.log; SHA-256 593de0b5b8efa97541039f39c7ca5d3c19f9d0ccff989358719b23d9ceb82414.
+
+| File | Test | Base lines and scope | Authority |
+| --- | --- | --- | --- |
+| packages/protocol/test/adapter-registry.test.ts | claude-code registration matches the PLAN-OPEN-1 ruling field for field | 18, shared expected registration | R1; EXISTING TESTS item 1; B15 item 1 |
+| packages/protocol/test/adapter-registry.test.ts | the registry contains exactly the three Founder-ratified surfaces | 64-67; authorized rename | R2; Addendum 1 B3 item 1 |
+| packages/protocol/test/adapter-registry.test.ts | registry membership cannot be mutated at runtime | 124-126 | R2; Addendum 1 B3 item 1 |
+| packages/supervisor/test/environment.test.ts | no ambient variable outside the allowlist survives | 23-24 helper; 46 | R3/R2; Addendum 1 B3 item 2 |
+| packages/supervisor/test/environment.test.ts | a missing required allowlisted variable is a typed failure | 23-24 helper | R3; Addendum 1 B3 item 2 |
+| packages/supervisor/test/environment.test.ts | secret-marked values are redacted from diagnostics while their names are retained | 23-24 helper; existing assertions unchanged | R3; Addendum 1 B3 item 2 |
+| packages/supervisor/test/environment.test.ts | redaction reports which rules ran | 23-24 helper; 138 | R3; Addendum 1 B3 item 2, extended by Addendum 2 B1 |
+| packages/supervisor/test/environment.test.ts | the same registration produces byte-identical environments on repeated calls | 23-24 helper | R3; Addendum 1 B3 item 2 |
+| test/phase3a/harness-separation.test.ts | no file under apps/ or packages/*/src statically imports, command-dispatches to, or argument-gates runtime-harness | 24; registry hash alone | R2; Addendum 1 B3 item 3 |
+| test/phase3a/evidence-pipeline.test.ts | every investigated surface has both a capability record and a committed report | 840 and 842; historical 2.1.296 literal | R1/R2; Addendum 1 B3 item 4 |
+| packages/supervisor/test/preflight.test.ts | preflight fails with envelope_invalid | 32, 67, 85 shared helpers; 327 hang helper where used; test/assertion bytes unchanged | R1; Addendum 2 B2; version value alone |
+| packages/supervisor/test/preflight.test.ts | preflight fails with cardinality | 32, 67, 85 shared helpers; 327 hang helper where used; test/assertion bytes unchanged | R1; Addendum 2 B2; version value alone |
+| packages/supervisor/test/preflight.test.ts | preflight fails with repository_fingerprint | 32, 67, 85 shared helpers; 327 hang helper where used; test/assertion bytes unchanged | R1; Addendum 2 B2; version value alone |
+| packages/supervisor/test/preflight.test.ts | preflight canonicalizes a symlink-named worktree and preserves the same-repository check | 32, 67, 85 shared helpers; 327 hang helper where used; test/assertion bytes unchanged | R1; Addendum 2 B2; version value alone |
+| packages/supervisor/test/preflight.test.ts | preflight fails with repository_fingerprint when the envelope names another checkout or commit | 32, 67, 85 shared helpers; 327 hang helper where used; test/assertion bytes unchanged | R1; Addendum 2 B2; version value alone |
+| packages/supervisor/test/preflight.test.ts | preflight fails with repository_fingerprint when the repository root and the worktree belong to different repositories | 32, 67, 85 shared helpers; 327 hang helper where used; test/assertion bytes unchanged | R1; Addendum 2 B2; version value alone |
+| packages/supervisor/test/preflight.test.ts | preflight fails with executable_unresolved | 32, 67, 85 shared helpers; 327 hang helper where used; test/assertion bytes unchanged | R1; Addendum 2 B2; version value alone |
+| packages/supervisor/test/preflight.test.ts | preflight fails with identity_mismatch | 32, 67, 85 shared helpers; 327 hang helper where used; test/assertion bytes unchanged | R1; Addendum 2 B2; version value alone |
+| packages/supervisor/test/preflight.test.ts | preflight fails with identity_mismatch when the independence domain differs from the registration | 32, 67, 85 shared helpers; 327 hang helper where used; test/assertion bytes unchanged | R1; Addendum 2 B2; version value alone |
+| packages/supervisor/test/preflight.test.ts | preflight fails with auth_not_ready | 32, 67, 85 shared helpers; 327 hang helper where used; test/assertion bytes unchanged | R1; Addendum 2 B2; version value alone |
+| packages/supervisor/test/preflight.test.ts | preflight fails with pair_ineligible | 32, 67, 85 shared helpers; 327 hang helper where used; test/assertion bytes unchanged | R1; Addendum 2 B2; version value alone |
+| packages/supervisor/test/preflight.test.ts | preflight threads its fixture registration resolver through pair eligibility | 32, 67, 85 shared helpers; 327 hang helper where used; test/assertion bytes unchanged | R1; Addendum 2 B2; version value alone |
+| packages/supervisor/test/preflight.test.ts | public preflight rejects fixture dependencies before and after a test-seam call | 32, 67, 85 shared helpers; 327 hang helper where used; test/assertion bytes unchanged | R1; Addendum 2 B2; version value alone |
+| packages/supervisor/test/preflight.test.ts | fixture preflight keeps pair policy and registration overrides local to each call | 32, 67, 85 shared helpers; 327 hang helper where used; test/assertion bytes unchanged | R1; Addendum 2 B2; version value alone |
+| packages/supervisor/test/preflight.test.ts | preflight fails with storage_root_invalid | 32, 67, 85 shared helpers; 327 hang helper where used; test/assertion bytes unchanged | R1; Addendum 2 B2; version value alone |
+| packages/supervisor/test/preflight.test.ts | preflight fails with host_capability_missing | 32, 67, 85 shared helpers; 327 hang helper where used; test/assertion bytes unchanged | R1; Addendum 2 B2; version value alone |
+| packages/supervisor/test/preflight.test.ts | preflight fails with capability_record_stale | 32, 67, 85 shared helpers; 327 hang helper where used; test/assertion bytes unchanged | R1; Addendum 2 B2; version value alone |
+| packages/supervisor/test/preflight.test.ts | preflight fails with home_mismatch | 32, 67, 85 shared helpers; 327 hang helper where used; test/assertion bytes unchanged | R1; Addendum 2 B2; version value alone |
+| packages/supervisor/test/preflight.test.ts | temporary path recording sees files a child creates and removes before returning | 32, 67, 85 shared helpers; 327 hang helper where used; test/assertion bytes unchanged | R1; Addendum 2 B2; version value alone |
+| packages/supervisor/test/preflight.test.ts | the returned plan's repository fingerprint is frozen | 32, 67, 85 shared helpers; 327 hang helper where used; test/assertion bytes unchanged | R1; Addendum 2 B2; version value alone |
+| packages/supervisor/test/preflight.test.ts | preflight creates nothing | 32, 67, 85 shared helpers; 327 hang helper where used; test/assertion bytes unchanged | R1; Addendum 2 B2; version value alone |
+| packages/supervisor/test/preflight.test.ts | probe environment equals launch environment | 32, 67, 85 shared helpers; 327 hang helper where used; test/assertion bytes unchanged | R1; Addendum 2 B2; version value alone |
+| packages/supervisor/test/preflight.test.ts | a cached attestation is not reused across sessions | 32, 67, 85 shared helpers; 327 hang helper where used; test/assertion bytes unchanged | R1; Addendum 2 B2; version value alone |
+| packages/supervisor/test/preflight.test.ts | a surface without an actual-session identity primitive is ineligible | 32, 67, 85 shared helpers; 327 hang helper where used; test/assertion bytes unchanged | R1; Addendum 2 B2; version value alone |
+| packages/supervisor/test/preflight.test.ts | missing TERM fails preflight as auth_not_ready | 32, 67, 85 shared helpers; 327 hang helper where used; test/assertion bytes unchanged | R1; Addendum 2 B2; version value alone |
+| packages/supervisor/test/preflight.test.ts | missing TMPDIR fails preflight as auth_not_ready | 32, 67, 85 shared helpers; 327 hang helper where used; test/assertion bytes unchanged | R1; Addendum 2 B2; version value alone |
+| packages/supervisor/test/preflight.test.ts | a caught MissingRequiredVariableError maps to auth_not_ready | 32, 67, 85 shared helpers; 327 hang helper where used; test/assertion bytes unchanged | R1; Addendum 2 B2; version value alone |
+| packages/supervisor/test/preflight.test.ts | the auth probe enforces the 5,000 ms execution deadline | 32, 67, 85 shared helpers; 327 hang helper where used; test/assertion bytes unchanged | R1; Addendum 2 B2; version value alone |
+| packages/supervisor/test/preflight.test.ts | the auth probe escalates SIGTERM to SIGKILL within the forced-cleanup budget | 32, 67, 85 shared helpers; 327 hang helper where used; test/assertion bytes unchanged | R1; Addendum 2 B2; version value alone |
+| packages/supervisor/test/preflight.test.ts | the auth probe reaps the child successfully | 32, 67, 85 shared helpers; 327 hang helper where used; test/assertion bytes unchanged | R1; Addendum 2 B2; version value alone |
+| packages/supervisor/test/preflight.test.ts | cleanup-budget exhaustion fails closed as auth_not_ready | 32, 67, 85 shared helpers; 327 hang helper where used; test/assertion bytes unchanged | R1; Addendum 2 B2; version value alone |
+
+
+### Required breaks and restores
+
+
+Break 5: Adding XDG_STATE_HOME leaks an excluded ambient variable.
+Runtime: logs/110-break-5-runtime.log; SHA-256 11ba93708c8b5111fa34d20387a364e4fb7864ca5825d51a6f6a2b37ea3ecfde
+Wait: logs/111-break-5-load.log; SHA-256 669848e89bdbc93b38876a3fe93c790b65c1735930efba013ba61e6fbc622af8
+Run: logs/112-break-5-test.log; SHA-256 49d07f655835a4d4e756745473273acee63afe27b1b1f0593c214ec502283b3d
+ 6:27  up  6:58, 1 user, load averages: 1.46 1.42 1.50
+Diff, with trailing whitespace removed from every quoted line; logs/109-break-5-diff.log; SHA-256 c5db03871ccc06c5bf9b47c4387387fe4400fcda68ef583b6a1a2881d6633451
+```diff
+diff --git a/packages/supervisor/src/environment.ts b/packages/supervisor/src/environment.ts
+index 58815fc..0d15489 100644
+--- a/packages/supervisor/src/environment.ts
++++ b/packages/supervisor/src/environment.ts
+@@ -12,6 +12,22 @@ export interface EnvironmentAllowlistV1 {
+ // PLAN-OPEN-2, as bound by DEC-20261010-03 B1. No installation validation
+ // occurs here; the caller supplies an already eligible ambient environment.
+ const allowlists: Readonly<Record<string, EnvironmentAllowlistV1>> = Object.freeze({
++  "madv-surface-v1": Object.freeze({
++    ref: "madv-surface-v1",
++    variables: Object.freeze([
++      { name: "HOME", required: true, secret: false },
++      { name: "PATH", required: true, secret: false },
++      { name: "SHELL", required: true, secret: false },
++      { name: "TERM", required: true, secret: false },
++      { name: "TMPDIR", required: true, secret: false },
++      { name: "MINIMAX_API_KEY", required: true, secret: true },
++      { name: "XDG_STATE_HOME", required: false, secret: false },
++      { name: "LANG", required: false, secret: false },
++      { name: "LC_ALL", required: false, secret: false },
++      { name: "LC_CTYPE", required: false, secret: false },
++      { name: "USER", required: false, secret: false },
++    ].map(variable => Object.freeze(variable))),
++  }),
+   "claude-code-v1": Object.freeze({
+     ref: "claude-code-v1",
+     variables: Object.freeze([
+```
+Failure excerpt, verbatim; gaps explicitly marked:
+```text
+31 |   const result = buildAllowlistedEnvironment(madvRegistration(), values);
+32 |   expect(result).toEqual(ambient());
+                      ^
+error: expect(received).toEqual(expected)
+(lines omitted)
+(fail) madv-surface-v1 drops state, overrides and unlisted variables [0.86ms]
+(lines omitted)
+ 3 pass
+ 1 fail
+ 34 expect() calls
+Ran 4 tests across 1 file. [14.00ms]
+```
+Every test result in that file, without timings, derived from the cited run:
+(pass) madv-surface-v1 has exactly the approved variables
+(pass) madv-surface-v1 requires exactly the six required variables
+(fail) madv-surface-v1 drops state, overrides and unlisted variables
+(pass) madv-surface redacts its synthetic canary
+Restore: logs/113-break-5-restore.log; SHA-256 20f2841df6a572b5e22a26c07700bf39031c001aa6bc854f989ae1248d9c55f4
+Committed empty-status and equal-hash proof: logs/119-break-5-committed-restore-proof.log; SHA-256 5f0e4d73054062342b32ad3b5b63eeaf191fcc70c4ff53f0850625951e6ef1de
+Restored and committed SHA-256: 8225434d5934ee6e218e317c1d6324a304b8de61e5c31b5929d8b8224d7310fb
+
+
+Break 1: Removing response-model equality admits a different valid MiniMax model, including a later response.
+Runtime: logs/130-break-1-runtime.log; SHA-256 de5671ba5ba537912bcd4d2c0bc0fa195af3bf09f462c629b5f3d61c9bac2899
+Wait: logs/131-break-1-load.log; SHA-256 cdf9db8bf1366ad4dc67f43b5ba70e221d1142ec4b40d25ad9993fd18da68e08
+Run: logs/132-break-1-test.log; SHA-256 8baaf66accae12f4199c30de40c90b2d323d15613ea76dae66e78a8be3dd8e2b
+ 8:24  up  8:55, 1 user, load averages: 1.38 2.59 2.46
+Diff, with trailing whitespace removed from every quoted line; logs/129-break-1-diff.log; SHA-256 d200be4b9edc6718821f29f2615e6568251a9a1dfdc5fbde2e863ccb32ddf21a
+```diff
+diff --git a/private/tmp/m0-r1.devPEJ/r4-parser-before-break.ts b/packages/adapter-madv-surface/src/index.ts
+index 37d289c..e075bd1 100644
+--- a/private/tmp/m0-r1.devPEJ/r4-parser-before-break.ts
++++ b/packages/adapter-madv-surface/src/index.ts
+@@ -149,8 +149,7 @@ export class MadvSurfaceParser {
+       if (typeof value.response_model !== "string" || value.response_model.length === 0) { this.fail("identity_unavailable", "model_field_absent"); return; }
+       if (/(?:^|[/:.])claude|anthropic/i.test(value.response_model)) { this.fail("model_refused", "anthropic_model"); return; }
+       if (!/^minimax[-_]/i.test(value.response_model)) { this.fail("domain_unresolved", "unknown_family"); return; }
+-      if (value.response_model !== this.context.model
+-        || value.response_independence_domain !== this.context.independenceDomain
++      if (value.response_independence_domain !== this.context.independenceDomain
+         || value.provider !== this.context.provider || value.profile !== "minimax"
+         || value.endpoint_host !== "api.minimax.io" || value.tls_verified_host !== "api.minimax.io") {
+         this.fail("identity_mismatch", "response_predicate"); return;
+```
+Failure excerpt, verbatim; gaps explicitly marked:
+```text
+56 | for (const field of ["response_model", "response_independence_domain", "tls_verified_host", "provider", "profile", "endpoint_host"]) {
+57 |   test("identity rejects response " + field, () => {
+58 |     for (const value of [undefined, null, 42, field === "response_model" ? "MiniMax-other" : "wrong"]) expect(parseMadvIdentity(wire(init(), response({ [field]: value })), model, ["0.1.1"]).ok).toBe(false);
+                                                                                                                                                                                                       ^
+error: expect(received).toBe(expected)
+
+Expected: false
+Received: true
+
+      at <anonymous> (/Users/michaeldaley/builds/m0-r1/tui/packages/adapter-madv-surface/test/parser.test.ts:58:195)
+(fail) identity rejects response response_model [1.61ms]
+(pass) identity rejects response response_independence_domain [0.09ms]
+(lines omitted)
+(fail) identity rejects response response_model [1.61ms]
+(lines omitted)
+(fail) every later response is checked before its tools [0.15ms]
+(lines omitted)
+(fail) identity rejects response response_model [1.61ms]
+(lines omitted)
+(fail) every later response is checked before its tools [0.15ms]
+(lines omitted)
+ 48 pass
+ 2 fail
+ 218 expect() calls
+Ran 50 tests across 1 file. [17.00ms]
+```
+Every test result in that file, without timings, derived from the cited run:
+(pass) input encoder preserves one text in one newline-terminated user message
+(pass) valid identity evidence binds execution and session
+(pass) failure precedence: HTTP 401
+(pass) failure precedence: HTTP 403
+(pass) failure precedence: redirect
+(pass) failure precedence: HTTP error
+(pass) failure precedence: invalid body
+(pass) failure precedence: absent model
+(pass) failure precedence: Anthropic model
+(pass) failure precedence: unnamed family
+(pass) failure precedence: model mismatch
+(pass) failure precedence: domain mismatch
+(pass) identity rejects init surface
+(pass) identity rejects init surface_version
+(pass) identity rejects init profile
+(pass) identity rejects init provider
+(pass) identity rejects init endpoint_host
+(pass) identity rejects init requested_model
+(fail) identity rejects response response_model
+(pass) identity rejects response response_independence_domain
+(pass) identity rejects response tls_verified_host
+(pass) identity rejects response provider
+(pass) identity rejects response profile
+(pass) identity rejects response endpoint_host
+(pass) auth rejects loggedIn
+(pass) auth rejects authMethod
+(pass) auth rejects profile
+(pass) auth rejects provider
+(pass) auth rejects endpointHost
+(pass) auth rejects verified
+(pass) auth rejects verifyMethod
+(pass) auth accepts exactly the passing predicate and ignores additive metadata
+(pass) auth rejects malformed shape, nonzero exit and signal
+(pass) identity requires a model response and clean zero exit
+(pass) missing evidence fails at the 30-second deadline
+(pass) a new request starts its own evidence deadline without a second parser
+(pass) exit without evidence for a later request fails closed
+(pass) event order rejects missing init
+(pass) event order rejects duplicate init
+(pass) event order rejects out-of-session event
+(pass) event order rejects assistant before response
+(pass) event order rejects tool before response
+(pass) event order rejects unmatched tool result
+(pass) event order rejects response before pending tool result
+(pass) event order rejects duplicate tool id
+(pass) event order rejects result before response
+(pass) a fail-closed event after valid evidence still interrupts
+(fail) every later response is checked before its tools
+(pass) stream chunks preserve UTF-8 and malformed JSON fails closed
+(pass) exit precedence fails closed without relying on an emitted event
+(fail) identity rejects response response_model
+(fail) every later response is checked before its tools
+Restore: logs/133-break-1-restore.log; SHA-256 7ed1f12af4f9b514bb7124ec3561daded263ce69794f45e1884b0f8c91c6bbe6
+Committed empty-status and equal-hash proof: logs/141-break-1-committed-restore-proof.log; SHA-256 45db76bf3f8769f32f3bc1e4cc7c43f6c76b1d2b2e53b0883c11b2e77b773440
+Restored and committed SHA-256: 3893b14275b823e82e5d6d43c486ef9b746d854d3e9de1fedbbfab813f2ceec6
+
+
+Break 2: Waking at init prevents madv identity from reaching its own response and exit; it also wrongly accepts the injected over-budget identity case.
+Runtime: logs/160-break-2-runtime.log; SHA-256 47d8bf82ad712c8bea4c8b4d2b4f9d4dd2bf02ab1f6a07fd77a6fed4bbdafc59
+Wait: logs/161-break-2-wait.log; SHA-256 7bd33b9947c9ac9fa295a873f0ea6ea725b332cae496c9ad7a9babd6ed080d02
+Run: logs/165-break-2-test.log; SHA-256 35b1586f66e569a8e5ff780b62a8c29225defe39af9db4b99c7767a365ee150f
+10:32  up 11:03, 1 user, load averages: 4.67 2.16 1.67
+Diff, with trailing whitespace removed from every quoted line; logs/159-break-2-diff.log; SHA-256 d54e2b102ee1c9c8f3e941334b4394e31849f46ad4c8ce464813437074d4e8c3
+```diff
+diff --git a/private/tmp/m0-r1.devPEJ/r5-attestation-before-break.ts b/packages/supervisor/src/attestation.ts
+index 8397014..d263bf3 100644
+--- a/private/tmp/m0-r1.devPEJ/r5-attestation-before-break.ts
++++ b/packages/supervisor/src/attestation.ts
+@@ -133,7 +133,7 @@ export async function runBoundedProbe(request: ProbeRequest, overrides: Partial<
+           output += decoder.decode(value, { stream: true });
+           // Detect only the event boundary while streaming. Identity field
+           // validation, like auth parsing, happens after exit and reaping.
+-          if (request.kind === "identity" && !madv && firstInit(output) !== undefined) wake("identity");
++          if (request.kind === "identity" && firstInit(output) !== undefined) wake("identity");
+         }
+       }
+       if (name === "stdout") output += decoder.decode();
+```
+Failure excerpt, verbatim; gaps explicitly marked:
+```text
+48 |   };
+49 |   const result = await runBoundedProbe(request(), { spawn });
+50 |   expect(result.ok).toBe(true); expect(killed).toEqual([]);
+                         ^
+error: expect(received).toBe(expected)
+
+Expected: true
+Received: false
+
+      at <anonymous> (/Users/michaeldaley/builds/m0-r1/tui/packages/supervisor/test/madv-probes.test.ts:50:21)
+(fail) madv-surface identity continues beyond init to natural exit [6.03ms]
+56 |   const claude = JSON.stringify({ loggedIn: true, authMethod: "claude.ai", apiProvider: "firstParty", subscriptionType: "max" });
+(lines omitted)
+(fail) madv-surface identity continues beyond init to natural exit [6.03ms]
+(lines omitted)
+(fail) registration chooses 30 seconds beside Claude's 5 seconds [3.98ms]
+(lines omitted)
+ 6 pass
+ 2 fail
+ 120 expect() calls
+Ran 8 tests across 1 file. [584.00ms]
+```
+Every test result in that file, without timings, derived from the cited run:
+(pass) dispatch keeps Claude probes and input unchanged
+(fail) madv-surface identity continues beyond init to natural exit
+(fail) registration chooses 30 seconds beside Claude's 5 seconds
+(pass) madv-surface identity failures map to identity_mismatch
+(pass) madv-surface auth failures map to auth_not_ready
+(pass) madv-surface keeps both raw stream limits and metadata-only diagnostics
+(pass) madv-surface pre-spawn cancellation and spawn failure fail closed
+(pass) madv-surface cancellation retains bounded cleanup and reaping
+Restore: logs/166-break-2-restore.log; SHA-256 16dc9d631ef26abc45ad8b67fa67fbefd2fdc7b40b43a732eae9f682914fc153
+Committed empty-status and equal-hash proof: logs/187-commit-4-restore-proof.log; SHA-256 d163c0a07106286b2ee7396ae0908330f1244bc51287f32359918ef344dfc2ae
+Restored and committed SHA-256: d8a69d71cac8d2f008b9d65c0868146716aa1766aa82760c86753a516dd5287e
+
+
+Break 3: A five-second madv limit rejects valid evidence at six seconds.
+Runtime: logs/168-break-3-runtime.log; SHA-256 ec87da7ff01098bc2adfab819ef7a0942ff3016cfbd8c18683b0a6d5ec4ae74c
+Wait: logs/169-break-3-wait.log; SHA-256 9df69887fc3f25d2b74b8f0d59ca1cd6e3cd2b38d4dddc8b953d0f8c5f990b1c
+Run: logs/173-break-3-test.log; SHA-256 4832382d5366e6ffec88c3aec93d8898530391c2e3843f9e5b3ac22d3b5038c8
+10:43  up 11:14, 1 user, load averages: 1.55 1.56 1.58
+Diff, with trailing whitespace removed from every quoted line; logs/167-break-3-diff.log; SHA-256 1936120b4b8b47027908052ae4542d846a8d7a77e4ab92785ef53bc540a55d2a
+```diff
+diff --git a/private/tmp/m0-r1.devPEJ/r5-attestation-before-break.ts b/packages/supervisor/src/attestation.ts
+index 8397014..3cc9a1c 100644
+--- a/private/tmp/m0-r1.devPEJ/r5-attestation-before-break.ts
++++ b/packages/supervisor/src/attestation.ts
+@@ -88,7 +88,7 @@ const runtime: ProbeRuntime = {
+ export async function runBoundedProbe(request: ProbeRequest, overrides: Partial<ProbeRuntime> = {}): Promise<ProbeResult> {
+   const rt = { ...runtime, ...overrides };
+   const madv = request.registration?.surface === "madv-surface";
+-  const executionMs = madv ? 30_000 : EXECUTION_MS;
++  const executionMs = madv ? 5_000 : EXECUTION_MS;
+   const started = rt.now();
+   let stdoutBytes = 0, stderrBytes = 0;
+   let exitCode: number | null = null;
+```
+Failure excerpt, verbatim; gaps explicitly marked:
+```text
+55 |   // Auth runs to exit; Claude identity deliberately wakes at its first init.
+56 |   const claude = JSON.stringify({ loggedIn: true, authMethod: "claude.ai", apiProvider: "firstParty", subscriptionType: "max" });
+57 |   expect((await runBoundedProbe(request(), complete(madv, { elapsed: 6_000 }))).ok).toBe(true);
+                                                                                         ^
+error: expect(received).toBe(expected)
+
+Expected: true
+Received: false
+
+      at <anonymous> (/Users/michaeldaley/builds/m0-r1/tui/packages/supervisor/test/madv-probes.test.ts:57:85)
+(fail) registration chooses 30 seconds beside Claude's 5 seconds [4.23ms]
+(pass) madv-surface identity failures map to identity_mismatch [3.45ms]
+(lines omitted)
+(fail) registration chooses 30 seconds beside Claude's 5 seconds [4.23ms]
+(lines omitted)
+ 7 pass
+ 1 fail
+ 118 expect() calls
+Ran 8 tests across 1 file. [586.00ms]
+```
+Every test result in that file, without timings, derived from the cited run:
+(pass) dispatch keeps Claude probes and input unchanged
+(pass) madv-surface identity continues beyond init to natural exit
+(fail) registration chooses 30 seconds beside Claude's 5 seconds
+(pass) madv-surface identity failures map to identity_mismatch
+(pass) madv-surface auth failures map to auth_not_ready
+(pass) madv-surface keeps both raw stream limits and metadata-only diagnostics
+(pass) madv-surface pre-spawn cancellation and spawn failure fail closed
+(pass) madv-surface cancellation retains bounded cleanup and reaping
+Restore: logs/174-break-3-restore.log; SHA-256 df695ee8009f2280cd42337b60da0975d5b3c5257b097c57b84ebbb8477c0df2
+Committed empty-status and equal-hash proof: logs/187-commit-4-restore-proof.log; SHA-256 d163c0a07106286b2ee7396ae0908330f1244bc51287f32359918ef344dfc2ae
+Restored and committed SHA-256: d8a69d71cac8d2f008b9d65c0868146716aa1766aa82760c86753a516dd5287e
+
+
+Break 4: Removing the role guard returns an admitted plan for an unsupported madv role.
+Runtime: logs/176-break-4-runtime.log; SHA-256 19a6b22cd2ca7458984b0f4e2e3960e3150e9b2119bca52907319eec9ce6a592
+Wait: logs/177-break-4-wait.log; SHA-256 4996ceeb4b424b8db08a12cc0d78b08b03dbfe6dcf95c679b0d959858e83c942
+Run: logs/178-break-4-test.log; SHA-256 1a0fc4216cc51d8f8be9c66b5348035b32e000cd494b598cc21223cf377cf46e
+10:44  up 11:14, 1 user, load averages: 1.65 1.58 1.59
+Diff, with trailing whitespace removed from every quoted line; logs/175-break-4-diff.log; SHA-256 b2f5ab5911d52dce0e2a9da58291e0fde96dad106cae747bf2cbad6d270a37d8
+```diff
+diff --git a/private/tmp/m0-r1.devPEJ/r5-preflight-before-break.ts b/packages/supervisor/src/preflight.ts
+index 4361919..266ee03 100644
+--- a/private/tmp/m0-r1.devPEJ/r5-preflight-before-break.ts
++++ b/packages/supervisor/src/preflight.ts
+@@ -149,9 +149,6 @@ export async function runPurePreflightWithDependencies(input: PreflightInput, ov
+   // Unknown registrations cannot supply an approved executable or environment.
+   if (registrations.some(r => r === undefined)) return fail("executable_unresolved");
+   const admitted = registrations as AdapterRegistrationV1[];
+-  for (const [index, execution] of envelope.executions.entries()) {
+-    if (admitted[index]!.surface === "madv-surface" && execution.role !== "independent-reviewer") return fail("pair_ineligible");
+-  }
+   try { if (!validateEnvironment(input, admitted, d)) return fail("auth_not_ready"); }
+   catch { return fail("auth_not_ready"); }
+   const resolved: { path: string; sha256: string }[] = [];
+```
+Failure excerpt, verbatim; gaps explicitly marked:
+```text
+54 |   let probes = 0;
+55 |   const result = await f.run({ probe: async request => { probes++; return f.deps.probe!(request); } });
+56 |   expect(result).toEqual({ ok: false, failure: "pair_ineligible", detail: "pair_ineligible" });
+                      ^
+error: expect(received).toEqual(expected)
+
+  {
+-   "detail": "pair_ineligible",
+-   "failure": "pair_ineligible",
+-   "ok": false,
++   "ok": true,
++   "plan": {
+(lines omitted)
+(fail) unsupported madv-surface roles fail before any probe [106.25ms]
+(lines omitted)
+ 6 pass
+ 1 fail
+ 40 expect() calls
+Ran 7 tests across 1 file. [815.00ms]
+```
+Every test result in that file, without timings, derived from the cited run:
+(pass) missing MINIMAX_API_KEY maps to auth_not_ready before probes
+(pass) madv-surface reuses one allowlisted environment for four consumers
+(pass) madv-surface probes run exactly once with pinned arguments and input
+(fail) unsupported madv-surface roles fail before any probe
+(pass) madv-surface hash and version changes refuse the capability record
+(pass) real registry admits Claude with madv-surface and refuses shared review control
+(pass) real-registry Antigravity is refused before its probes
+Restore: logs/179-break-4-restore.log; SHA-256 d09e1336b0863116ad2afe90aec047cbbf4440b0208124f9cc6b6df261c5ca3b
+Committed empty-status and equal-hash proof: logs/187-commit-4-restore-proof.log; SHA-256 d163c0a07106286b2ee7396ae0908330f1244bc51287f32359918ef344dfc2ae
+Restored and committed SHA-256: 18756ff1120edee8a1fb04d057ec78334577d5a3dd816fb813da7b75d6c96a51
+
+
+
+### The two lockfile diffs
+
+
+Every quoted diff has trailing spaces and tabs removed from each line. The full original logs are unchanged.
+
+logs/124-r4-lockfile-diff.log; SHA-256 89d0ab15b75c0c9082293b3635204f1b0a706d7f4093eee89b9a9bc4995f1d59
+
+```diff
+diff --git a/bun.lock b/bun.lock
+index 88796f6..036b33d 100644
+--- a/bun.lock
++++ b/bun.lock
+@@ -102,6 +102,10 @@
+         "@madventures/protocol": "workspace:*",
+       },
+     },
++    "packages/adapter-madv-surface": {
++      "name": "@madventures/adapter-madv-surface",
++      "version": "0.1.0",
++    },
+     "packages/artifact-store": {
+       "name": "@madventures/artifact-store",
+       "version": "0.1.0",
+@@ -292,6 +296,8 @@
+
+     "@madventures/adapter-claude-code": ["@madventures/adapter-claude-code@workspace:packages/adapter-claude-code"],
+
++    "@madventures/adapter-madv-surface": ["@madventures/adapter-madv-surface@workspace:packages/adapter-madv-surface"],
++
+     "@madventures/artifact-store": ["@madventures/artifact-store@workspace:packages/artifact-store"],
+
+     "@madventures/broker": ["@madventures/broker@workspace:packages/broker"],
+ mode change 100644 => 100755 packages/founder-act/src/main.ts
+ M bun.lock
+ M packages/founder-act/src/main.ts
+?? packages/adapter-madv-surface/
+```
+
+
+logs/150-r5-lockfile-diff.log; SHA-256 11d384e89c51ca6e7db4a12cf4a4a1e95d59de297ce6aa998ee72737beb6be00
+
+```diff
+diff --git a/bun.lock b/bun.lock
+index 036b33d..fef55ab 100644
+--- a/bun.lock
++++ b/bun.lock
+@@ -204,6 +204,7 @@
+       "name": "@madventures/supervisor",
+       "version": "0.1.0",
+       "dependencies": {
++        "@madventures/adapter-madv-surface": "workspace:*",
+         "@madventures/protocol": "workspace:*",
+         "@madventures/storage": "workspace:*",
+       },
+ mode change 100644 => 100755 packages/founder-act/src/main.ts
+ M bun.lock
+ M packages/founder-act/src/main.ts
+ M packages/protocol/src/adapter-registry.ts
+ M packages/protocol/test/adapter-registry.test.ts
+ M packages/supervisor/package.json
+ M packages/supervisor/src/attestation.ts
+ M packages/supervisor/src/preflight.ts
+ M packages/supervisor/test/environment.test.ts
+ M packages/supervisor/test/madv-preflight.test.ts
+ M packages/supervisor/test/preflight.test.ts
+ M test/phase3a/evidence-pipeline.test.ts
+ M test/phase3a/harness-separation.test.ts
+ M tsconfig.json
+?? packages/supervisor/test/madv-probes.test.ts
+```
+
+
+
+### Preserved callers and read-only redaction evidence
+
+
+logs/226-head-preservation-and-redaction.log; SHA-256 a05d0ea31af1decc2ff0b3464f7698e29d1ab4eba70a95bde915e13f12e94f4a
+
+Read-only source excerpts below retain file/line labels. The source excerpt omits gaps explicitly.
+
+```text
+apps/madbridge/src/commands/export-evidence.ts
+78-  const rules = new Set<string>();
+79-  const exact = (text: string): string => {
+80-    rules.add("known_token_patterns");
+81-    rules.add("exact_allowlisted_secret_values");
+82:    for (const registration of ADAPTER_REGISTRY.values()) {
+83:      const result = redact(text, process.env as Readonly<Record<string, string>>, registration);
+84-      text = result.text;
+85-      for (const rule of result.rulesApplied) rules.add(rule);
+86-    }
+```
+
+
+Base preflight/test/harness blobs: ced2364d85c0117563533e6dc419575f06a09161; 182285abde26fae13f9403dba676349608a61265; 8e63d73f723c3fa7eea2e300c3e378e107957b0b. Head blobs and the exact protected lines are in the same cited log:
+
+```text
+43619191f47e3f9cdaefd8aa45cd436770690160
+f8f117aaf90d8b3218fbec4f0331563b036eae05
+8e63d73f723c3fa7eea2e300c3e378e107957b0b
+tui/packages/supervisor/src/preflight.ts:143:    if (commonPath !== d.realpath(worktreeCommon.stdout.toString().trim())) return fail("repository_fingerprint");
+tui/packages/supervisor/src/preflight.ts:195:    if (execution.provider !== admitted[index]!.provider
+tui/packages/supervisor/src/preflight.ts:196:      || execution.independence_domain !== admitted[index]!.independence_domain) return fail("identity_mismatch");
+tui/packages/supervisor/test/preflight.test.ts:298:test("the returned plan's repository fingerprint is frozen", async () => {
+tui/test/phase3a/runtime-harness.ts:14:import { runPurePreflightWithDependencies } from "../../packages/supervisor/src/preflight";
+```
+
+
+
+### Full Phase 1 run at the fourth commit
+
+
+Frozen install: logs/189-full-frozen-install.log; SHA-256 89095224bd3bfe088bbeed0535547086e5a8d2ecc0514038fcb03bb54591085a; runtime logs/188-full-runtime-before-install.log; SHA-256 a75e088406776ed2f4a09f96621c7d8feb3f82037df0356ea76fb6b370747010. Lock SHA-256 before/after/commit: a4456b4e2133404912b477ccf0196e4cfa41aed132f117d5ef85d4a25ce99830. The known mode change and clean restore are logs/190-full-install-state.log; SHA-256 27e4231d605f900107262ba756bfd1ffd0c1fa6efb2a3559fbec3cbb4eeaecb1 and logs/191-full-install-mode-restore.log; SHA-256 49a87de42739d373a657c6a94b70422a6066ad5a4b632954df37f7443eca50f1.
+
+Typecheck: logs/193-full-typecheck.log; SHA-256 803f95cd5b1ec54627c40f400bb5ca54a17e8de12fa4dd41f3d0b6e251faceaf; wait logs/192-full-typecheck-wait.log; SHA-256 2f95073f73a831ed8f623e2bedf0c6bffc9d40f3a8fbda664441bf38676f58ac. Exit 0; no compiler output.
+
+Bare suite: logs/199-full-suite.log; SHA-256 ecb4ef94bf74b7d4f59865c72d8668cd2c813073d0f0207c920bbfb2fe19aeb1; runtime logs/194-full-runtime-before-suite.log; SHA-256 27d8d3d27509b1660849639fe9def6e1def885e0b850dea4043c78a56793c7a9; wait logs/195-full-suite-wait.log; SHA-256 d2d2eeb802adec4ef44d2c28e4af3e6d6461ac10a7df6f1d3237fe8062ede4c6.
+
+```text
+ 2015 pass
+ 0 fail
+ 27280 expect() calls
+Ran 2015 tests across 146 files. [180.63s]
+```
+
+
+Head list: logs/200-head-test-list.log; SHA-256 fad5e4ec9862cecca1d88acb7efdc7e70a1ea4d0e89896aa0d89ea5c4d5eb036; comparison: logs/201-full-test-comparison.log; SHA-256 c33675929fffb7f04935bcbf81f0b6f6977198c4538598b8a3f38dd8b7cb50be. No JUnit listing run was needed. Every base file/name/pass is retained with the authorized two-to-three registry-name mapping. No skipped or todo result occurred.
+
+```text
+BASE_TESTS=1945
+HEAD_TESTS=2015
+ADDED_TESTS=70
+AUTHORIZED_NAME_MAPS=1
+BASE_FILES=142
+HEAD_FILES=146
+ADDED_FILES=4
+ARITHMETIC=1945+70=2015; 142+4=146
+ALL_BASE_NAMES_AND_PASSES_PRESERVED=yes
+```
+
+
+Seventy added tests comprise four environment, seven madv preflight, eight probe, fifty parser and one registry test. Four added files are the environment, preflight, probe and parser test files. The 1945/142 floor is met.
+
+Diff-check, changed paths, registry-only diff, status and untracked checks: logs/202-full-diff-check.log; SHA-256 e7ce0b8d659a475c1387b6fc30abff85ad9bc94ee6a051ed243671ba45a938f3
+logs/203-full-changed-paths.log; SHA-256 60422b69101a787275272032550c108a9fcd64a5aed0e22a89e50cbbcac600e2
+logs/204-full-registry-diff.log; SHA-256 38a59444c7de7125cbd25e1750fbbf36eb0856d272472f4daf35b67d87d90c6b
+logs/205-full-status.log; SHA-256 04649fd7f4fcf46a35bb160b3447546dddec9950b2e796128d190226f50a7016
+logs/206-full-untracked.log; SHA-256 1685cc849c0c24a4883a688a708e1e5855a4996ea6c3790c5ed1cf7f8b3e9cd0. Each used isolated Git configuration and exited zero; diff-check and untracked printed nothing.
+
+
+### Record script
+
+
+Path: /Users/michaeldaley/builds/m0-r1/record/m0-record.ts
+SHA-256: de3ea7cc7ded52c5ab14eed40280d420ce375e9c56b12cfd838cf2010a5550dd
+Full script shown in logs/244-record-script-final-source.log; SHA-256 e2717fc9c0841dfd9d573393e7138fdf4fa8aefac6d6e88b938b1e44728d70c3. It is not committed. Only the six-character marker appears in its one synthetic negative capture, verified as six bytes. Synthetic generator SHA-256 d1914c34b67b24da916118e7a3713e1f76437ce9d1646c0501456a670f9dbfd7.
+
+| Run | Result | Wait log | Run log and SHA-256 |
+| --- | --- | --- | --- |
+| 218 | schema accepted; identity pass, auth pass, overall pass; exit 0 | logs/217-r6-madv-pass-wait.log; SHA-256 22bfd04e0814aea13aacca736c544750ad74535e40a8ee4699d6a24158202907 | logs/218-r6-madv-pass.log; SHA-256 1b488f7eb826fba7747352f81240a405824b47145203e476af7c4a18ba79556b |
+| 220 | schema accepted; identity fail, auth pass, overall fail; exit 0 | logs/219-r6-madv-echo-wait.log; SHA-256 322aca90b0f354b792038a691f55215324ebdd85612101a67c4fb17b675cc7cc | logs/220-r6-madv-echo.log; SHA-256 6555fccd64369fd3dd34ba7f384dc043313f16dae93453ed4723c70617ab6bcd |
+| 222 | schema accepted; identity pass, auth pass, overall pass; exit 0 | logs/221-r6-claude-pass-wait.log; SHA-256 be8406297313409b8da7a8ea45ca7e2666542533c56f501ec2ca137de0a96e8a | logs/222-r6-claude-pass.log; SHA-256 86979ad16e927995a6f92fff3b4378eb504f0f1e8eb35307b9d177bc833189c1 |
+| 224 | schema accepted; identity fail, auth pass, overall fail; exit 0 | logs/223-r6-claude-wrong-model-wait.log; SHA-256 629d9dbea76959559c3d1bbfacdf2e081d2c6be49f072c8fe33182e66ff785f9 | logs/224-r6-claude-wrong-model.log; SHA-256 13e9df088bc1083d2f653e27b3f08d989dcdbd500e6376b210a46c7697726434 |
+| 227 | REFUSED MINIMAX_API_KEY is set; exit 1 | logs/225-r6-key-set-wait.log; SHA-256 f426946582efafe8920dfb4150fdf8c6f0a4e20e1bbde304290dc65580e0db60 | logs/227-r6-key-set.log; SHA-256 f80696ca28780d12babbe4e6d9b0399bf35e30a0156f8d47c0c05fb91def6076 |
+| 231 | REFUSED MADV_STORAGE_DIR is set; exit 1 | logs/228-r6-storage-set-wait.log; SHA-256 db523f84861ec26503cfc1a45801669640465b405f803ef79d50bf1982b6d871 | logs/231-r6-storage-set.log; SHA-256 952500574e8d61e96bcdac04d911f421cb94588b8f6ebf0730955146ab90c4ca |
+| 233 | REFUSED missing or unsafe file: madv-surface/04.stdout; exit 1 | logs/232-r6-missing-file-wait.log; SHA-256 511e54d6b4d2065a8d0f424a3949164853a148d830fdc7050d1bbbf8e9871097 | logs/233-r6-missing-file.log; SHA-256 84ab06d7ff474bd4628ddbea0850c1b59489bf6612771974bd3d8ed371d11bd5 |
+| 235 | REFUSED file not covered by manifest: madv-surface/04.stdout; exit 1 | logs/234-r6-uncovered-file-wait.log; SHA-256 79c51440b5ad23d881a9c14c8bd2c7c921e31c70a4b1aa2e9dada5690da09e1a | logs/235-r6-uncovered-file.log; SHA-256 68fd21abdc6d503d4efccd7e48587628edb780d3fda451e4d46570d58b3a274c |
+| 237 | REFUSED manifest hash mismatch: madv-surface/04.stdout; exit 1 | logs/236-r6-changed-file-wait.log; SHA-256 f33505b0e80737c2adf191689b45314e6f6ae2ff649d2790e8b56f81df95e2ae | logs/237-r6-changed-file.log; SHA-256 35eeff90822091aa9fb78039bb3912d97e57c38e4333b0f54f76dfbd4835072e |
+| 239 | REFUSED forbidden marker: madv-surface/03.stderr; exit 1 | logs/238-r6-marker-file-wait.log; SHA-256 c30f51e3f260d7bc1adbcd8ef70fc2b98019b3e9087f3d7f3ed6e46a156b9da8 | logs/239-r6-marker-file.log; SHA-256 f2bea18d6a0d919af4888d860bee83840ba6b11628fdfdc0079f2781e1e26b0e |
+| 241 | REFUSED ROOT is not a git work tree; exit 1 | logs/240-r6-non-work-tree-wait.log; SHA-256 aebdeb0a14cdc5a0f00fe69f485a278d41e27564a62a3b2b33824cfce6dcccf7 | logs/241-r6-non-work-tree.log; SHA-256 b26fb669a2005eb9cd4229daca472e8cd0c79c1b7ad18cc3b4495f6668fa1234 |
+| 243 | REFUSED missing MANIFEST.sha256; exit 1 | logs/242-r6-missing-manifest-wait.log; SHA-256 240497e018141598d1929582391c1177ff67767d9340bcd5d1e2a6ae3412fdab | logs/243-r6-missing-manifest.log; SHA-256 74f15bee521491c76fc5826790fefad27d869c8b6af35b951e986292993e46de |
+
+All twelve runs omitted --write. No Linux run occurred. The no-write source and clean clone proof are logs/244-record-script-final-source.log; SHA-256 e2717fc9c0841dfd9d573393e7138fdf4fa8aefac6d6e88b938b1e44728d70c3.
+
+
+### Task-detail refinements and self-fixes
+
+
+The R4 boundary tests were expanded with malformed UTF-8/chunking, clean exit, exit precedence, per-request deadline and early-exit cases. Before Break 1, the mismatch tests were strengthened to use a different valid model with exit zero and to finish tool/result order, avoiding masking the break. The R5 injected-clock test uses Claude auth for a clean-exit five-second comparison because identity intentionally wakes at init. R6 derives the Linux reported model from response evidence and uses only Linux schema fields; captured TERM/SHELL remain validated inputs. There is no other task-scope change.
+
+Own uncommitted self-fixes: R3 fixture failure in logs/102-r3-red.log; SHA-256 6ff64f8d90ec37af3bb7bfb2ee9a2ae67443c8f96c8a6c4fc7c99c6e49044484, corrected before logs/107-r3-green.log; SHA-256 77c382310200966d6b3c068166db60169fd1bc7a06b590fafde5ebcb7f929c33; R5 clock fixture failure in logs/153-r5-tests.log; SHA-256 13648ab9f6532ca6df5bffc08eaf7d263d61b4c8f20e2152aa0948eaed61742a, corrected before logs/157-r5-targeted.log; SHA-256 cd25727242682fea70d1aa7c084f502ff08ad69847bd63f0a42438dce0bf0057. No full-run failure or self-fix commit occurred.
+
+
+### Command ledger since baseline
+
+
+Each cited log begins with its complete command and uptime and ends with the invocation's exit status. This table records every invocation after baseline through closure; wait commands have their own entries, and the test/break/record sections map each test run to its wait. All log hashes were independently gathered by shasum -a 256 in log 247. No log was truncated, compressed, encoded or overwritten. Tool display truncation does not alter files.
+
+| Command log, containing the full command and output | Uptime before invocation | Exit | SHA-256 |
+| --- | --- | --- | --- |
+| logs/090-baseline-final-state.log |  0:42  1 user, load averages: 2.85 2.39 2.56 | 0 | f2cafe1aa372c7e858f87d0a1e4cd8102124a3086f53312d2a6b6807b11f8983 |
+| logs/091-draft-task-detail.log |  0:43  1 user, load averages: 1.70 2.15 2.46 | 0 | 6d77732de5870111e9ff3b4e844bdc71d3315f8af6f2cfca8e284b56123d5813 |
+| logs/092-opening-log-manifest.log |  0:45  1 user, load averages: 1.38 1.93 2.34 | 0 | bec4c935bb091617b6ffcf0e9762afd366190a64152d079adbdb5988d9bbc2d8 |
+| logs/093-write-build-log-opening.log |  0:45  1 user, load averages: 1.38 1.93 2.34 | 0 | 17aeb66827395ba4326146eac8a4bd8ef0671586f8688fa0190be239b258a6e9 |
+| logs/094-fix-opening-quote-whitespace.log |  0:45  1 user, load averages: 1.73 1.94 2.32 | 0 | dcc3db05d01b0ea4e490caa9a002c57411c62cc9eefbdca66258a169074d0c5a |
+| logs/095-check-commit-1-message.log |  0:45  1 user, load averages: 1.73 1.94 2.32 | 0 | a4377e9bcc9abaf4008adfd86af1a12ab7f32ec0b65fd1e50266050146ab6a98 |
+| logs/096-stage-commit-1.log |  0:45  1 user, load averages: 1.73 1.94 2.32 | 0 | 977bc3862afe7a50cbd2496c71f40927efc798eea3bdb7def0abf6511519eda2 |
+| logs/097-review-commit-1-staged-diff.log |  0:46  1 user, load averages: 1.61 1.91 2.30 | 0 | bd55ceecb0a847bb2deb12dd64e2d1f2480f8b185da5771fe29a1c62afba806f |
+| logs/098-commit-1.log |  0:46  1 user, load averages: 1.61 1.91 2.30 | 0 | 831b82b40c49f5f3ae10ce857e7aa2ac8aef42ef726031143ca095eabf5840f2 |
+| logs/099-write-r3-tests.log |  0:48  1 user, load averages: 1.66 1.81 2.20 | 0 | 34021716f35a3e8a14267222ee5bf60b30746e28fd9f0bd3bd313a9e431f6987 |
+| logs/100-r3-runtime.log |  0:48  up  1:19, 1 user, load averages: 1.74 1.82 2.20 | 0 | 34f5460b1560020f5e97f951ac6fed21f8759125dd91b9696ba0c2047ca91c8a |
+| logs/101-r3-red-load.log |  0:48  1 user, load averages: 1.74 1.82 2.20 | 0 | 759ae3477e9314c293cffd87bccb38f98d6117ee0fc3d46e6b20d6defb14673f |
+| logs/102-r3-red.log |  0:48  up  1:19, 1 user, load averages: 1.68 1.81 2.19 | 1 | 6ff64f8d90ec37af3bb7bfb2ee9a2ae67443c8f96c8a6c4fc7c99c6e49044484 |
+| logs/103-inspect-own-r3-envelope-failure.log |  0:49  1 user, load averages: 1.53 1.77 2.17 | 0 | 189db6ed886e6f225df6ea848009c2c639f718e843c3a13365624ad92ad14e05 |
+| logs/104-inspect-own-r3-parser-constraints.log |  0:49  1 user, load averages: 1.45 1.74 2.15 | 0 | da042854066f880d43c68e195357f6673d5a13b91dafa64a6fdaf7be12324fe1 |
+| logs/105-r3-production-change.log |  0:49  1 user, load averages: 1.63 1.76 2.15 | 0 | 39293a4a573337e5b0fba0189d6218e4687284e7cefca3474cd2e3c7c90b9e79 |
+| logs/106-r3-green-load.log |  0:49  1 user, load averages: 1.63 1.76 2.15 | 0 | 72f95dd0565e3838e9f823db27b62aea22a55c5ee71167f339cfe00673b6737a |
+| logs/107-r3-green.log |  6:25  up  6:55, 1 user, load averages: 1.63 1.48 1.54 | 0 | 77c382310200966d6b3c068166db60169fd1bc7a06b590fafde5ebcb7f929c33 |
+| logs/108-break-5-save.log |  6:25  1 user, load averages: 1.51 1.46 1.53 | 0 | d56758570270c1fabc2279c4e5a36181774551c6f5a9e82c68372347581272b7 |
+| logs/109-break-5-diff.log |  6:25  1 user, load averages: 1.51 1.46 1.53 | 0 | c5db03871ccc06c5bf9b47c4387387fe4400fcda68ef583b6a1a2881d6633451 |
+| logs/110-break-5-runtime.log |  6:25  up  6:56, 1 user, load averages: 1.51 1.46 1.53 | 0 | 11ba93708c8b5111fa34d20387a364e4fb7864ca5825d51a6f6a2b37ea3ecfde |
+| logs/111-break-5-load.log |  6:25  1 user, load averages: 1.51 1.46 1.53 | 0 | 669848e89bdbc93b38876a3fe93c790b65c1735930efba013ba61e6fbc622af8 |
+| logs/112-break-5-test.log |  6:27  up  6:58, 1 user, load averages: 1.46 1.42 1.50 | 1 | 49d07f655835a4d4e756745473273acee63afe27b1b1f0593c214ec502283b3d |
+| logs/113-break-5-restore.log |  6:27  1 user, load averages: 1.51 1.43 1.50 | 0 | 20f2841df6a572b5e22a26c07700bf39031c001aa6bc854f989ae1248d9c55f4 |
+| logs/114-r3-typecheck-load.log |  6:27  1 user, load averages: 1.51 1.43 1.50 | 0 | a1b6c7d0b42d1bcde3235b90d9e3f294d2b24b458e5b4609fa464d9ba2d52d45 |
+| logs/115-r3-typecheck.log |  6:27  up  6:58, 1 user, load averages: 1.51 1.43 1.50 | 0 | 57463e4b4aae46913f6ceb24b932e485c5937eca7bcb9e9459cbb5a006086a3a |
+| logs/116-check-commit-2-message.log |  6:28  1 user, load averages: 1.31 1.39 1.48 | 0 | 663e332b82dc8932aa87d49142f905b8b7760daac2b947bffb8da0e8492f1a83 |
+| logs/117-stage-and-review-commit-2.log |  6:28  1 user, load averages: 1.31 1.39 1.48 | 0 | 354e1cc82968f38e6370468079feab2811cdb2f3af4002a68605412a74d364a9 |
+| logs/118-commit-2.log |  6:28  1 user, load averages: 1.31 1.39 1.48 | 0 | e773812fb118ab8f020f4428c190c4d77479a013a5ef247e7f5a45300956e4a4 |
+| logs/119-break-5-committed-restore-proof.log |  6:28  1 user, load averages: 1.31 1.39 1.48 | 0 | 5f0e4d73054062342b32ad3b5b63eeaf191fcc70c4ff53f0850625951e6ef1de |
+| logs/120-write-r4-tests.log |  6:30  1 user, load averages: 1.20 1.32 1.44 | 0 | c36151762b9f6bf58c29ee461b1544daef1f637bf046b7d2cdad5f6d041b20f3 |
+| logs/121-write-r4-parser.log |  6:31  1 user, load averages: 1.27 1.33 1.43 | 0 | f69391347df330f24430ffd25b7d698807baf8c943010fcf22ddc54e33a24d8b |
+| logs/122-r4-runtime.log |  7:56  up  8:27, 1 user, load averages: 5.66 4.21 2.79 | 0 | 00d430161216f80c967efcaa0281142b8d73467a47539ddf1503ce93d4bc5539 |
+| logs/123-r4-workspace-install.log |  7:56  up  8:27, 1 user, load averages: 5.66 4.21 2.79 | 0 | 634920e71e742b1c20622a08993a28b468514315cfca0498fa4f7117344a3c35 |
+| logs/124-r4-lockfile-diff.log |  7:57  1 user, load averages: 5.25 4.18 2.81 | 0 | 89d0ab15b75c0c9082293b3635204f1b0a706d7f4093eee89b9a9bc4995f1d59 |
+| logs/125-r4-tests-load.log |  7:57  1 user, load averages: 5.25 4.18 2.81 | 0 | f39409a044a58524aeeb61b395ed2c2ed917a3d3e6a7aee0be14c423bacf4176 |
+| logs/126-r4-install-mode-restore.log |  7:57  1 user, load averages: 3.78 3.96 2.80 | 0 | 2fa727b782856b935ecac22ef56b0c832875e4ca49ef1dd44cdaa817ca2bdc3b |
+| logs/127-r4-tests.log |  8:19  up  8:50, 1 user, load averages: 2.08 2.03 2.14 | 0 | 4ac52b7d5f4c3e83a1d9647ced3aebc020ce266d9209e9f42b1afd0572f3be44 |
+| logs/128-break-1-save.log |  8:20  1 user, load averages: 1.71 1.95 2.10 | 0 | 0dbc95c6c6d379079a9ceda382679f81067a7c641b18dc312e7ff2f0b5d0f7a8 |
+| logs/129-break-1-diff.log |  8:20  1 user, load averages: 1.71 1.95 2.10 | 1 | d200be4b9edc6718821f29f2615e6568251a9a1dfdc5fbde2e863ccb32ddf21a |
+| logs/130-break-1-runtime.log |  8:23  up  8:54, 1 user, load averages: 2.56 3.00 2.59 | 0 | de5671ba5ba537912bcd4d2c0bc0fa195af3bf09f462c629b5f3d61c9bac2899 |
+| logs/131-break-1-load.log |  8:23  1 user, load averages: 2.56 3.00 2.59 | 0 | cdf9db8bf1366ad4dc67f43b5ba70e221d1142ec4b40d25ad9993fd18da68e08 |
+| logs/132-break-1-test.log |  8:24  up  8:55, 1 user, load averages: 1.38 2.59 2.46 | 1 | 8baaf66accae12f4199c30de40c90b2d323d15613ea76dae66e78a8be3dd8e2b |
+| logs/133-break-1-restore.log |  8:24  1 user, load averages: 1.33 2.54 2.44 | 0 | 7ed1f12af4f9b514bb7124ec3561daded263ce69794f45e1884b0f8c91c6bbe6 |
+| logs/134-r4-typecheck-load.log |  8:24  1 user, load averages: 1.33 2.54 2.44 | 0 | e65357ee64c53e2851bc502423d8fd2f6456173918fababde624b098af1e2c0c |
+| logs/135-r4-typecheck.log |  8:25  up  8:55, 1 user, load averages: 1.33 2.54 2.44 | 0 | 4c46b3d6a926410c4b1ab5d547b2c17b6de8a75d4582347b48f051bb08b44873 |
+| logs/136-r4-restored-tests-load.log |  8:25  1 user, load averages: 1.54 2.44 2.41 | 0 | 24a1d050d8335d45046b3635d248ec24424ff44c825b2fca1f2d0654b9216555 |
+| logs/137-r4-restored-tests.log |  8:26  up  8:56, 1 user, load averages: 1.18 2.29 2.36 | 0 | faea4502c9a515fa9e0a8b3d752b28e89eb91ff232f3aad593965d8086e927b8 |
+| logs/138-check-commit-3-message.log |  8:26  1 user, load averages: 1.36 2.28 2.35 | 0 | eaac6d127a07b5e49ca0199001bec7c6ed1b79f2f7965993ea353303c6ec8b9f |
+| logs/139-stage-and-review-commit-3.log |  8:26  1 user, load averages: 1.36 2.28 2.35 | 0 | bf00263c7f26411db674b88c3a4611c9ae58dd8bf806bc363605d852f327d6f0 |
+| logs/140-commit-3.log |  8:26  1 user, load averages: 1.36 2.28 2.35 | 0 | 4f8bf32c9ecb1809ab5c80df302ed1fc9c171fdd71d7cc05a7a77c315a82bc01 |
+| logs/141-break-1-committed-restore-proof.log |  8:26  1 user, load averages: 1.36 2.28 2.35 | 0 | 45db76bf3f8769f32f3bc1e4cc7c43f6c76b1d2b2e53b0883c11b2e77b773440 |
+| logs/142-r5-pair-and-freshness-test-contracts.log |  8:27  1 user, load averages: 1.60 2.11 2.27 | 0 | b978a670a4da13d9aeab1551d32a659c2289cfb022e2181c49bb329433c6f502 |
+| logs/143-r5-pair-evaluator-contract.log |  8:28  1 user, load averages: 1.59 2.09 2.26 | 0 | 0a9a3c4287c140a90b8b8f8da8b30c9da90ce8a0a2573fc145fccd11d223a24e |
+| logs/144-write-r5-probe-tests.log |  8:30  1 user, load averages: 2.00 2.08 2.24 | 0 | 9e58ab713cdb7532ff2d9319b0a14dccb86136205dedd1b92c1c3c58e78b38a5 |
+| logs/145-write-r2-registration-test.log |  8:31  1 user, load averages: 1.82 2.07 2.22 | 0 | 78f6d5ef0ab90aab0061cf9585083dfc76fbe6f81c6a22d9007d2ac9bea72a1f |
+| logs/146-r5-authorized-existing-test-updates.log |  8:31  1 user, load averages: 1.85 2.05 2.21 | 0 | fa9ceebcdd33d9f73c3d0aeb4c64162b4c206cc49bd38d39a1559d9292625b11 |
+| logs/147-r5-production-diff.log |  8:32  1 user, load averages: 1.78 2.00 2.18 | 0 | ad21f11924d92e70e83d01dcc6e95a5407721fe740c69a2d6bbfebfda98bf890 |
+| logs/148-r5-runtime.log |  8:40  up  9:11, 1 user, load averages: 2.06 1.92 2.02 | 0 | eb155ac1922ba5ec9b220072f4a1cfd2e963f8814e67614684c024c01c6b4d1a |
+| logs/149-r5-dependency-install.log |  8:40  up  9:11, 1 user, load averages: 2.06 1.92 2.02 | 0 | 057ea2288ebfbe8fc7ae09e876ef3fb02f6b6cb5271249ba82214c94a2e9d1d8 |
+| logs/150-r5-lockfile-diff.log |  8:40  1 user, load averages: 1.75 1.85 2.00 | 0 | 11d384e89c51ca6e7db4a12cf4a4a1e95d59de297ce6aa998ee72737beb6be00 |
+| logs/151-r5-install-mode-restore.log |  8:40  1 user, load averages: 1.75 1.85 2.00 | 0 | 02586ac9c47415d10c6b646c3d20d3ef3cd91c0a16c893df6cbc64eba9ab4129 |
+| logs/152-r5-tests-load.log |  8:40  1 user, load averages: 1.75 1.85 2.00 | 0 | a1670a3048c7463a03fcedfd2dc0989a9da922ad8db93b5a00aa3e12f3a2cdc9 |
+| logs/153-r5-tests.log |  8:40  up  9:11, 1 user, load averages: 1.46 1.78 1.97 | 1 | 13648ab9f6532ca6df5bffc08eaf7d263d61b4c8f20e2152aa0948eaed61742a |
+| logs/154-r5-test-result.log |  8:45  1 user, load averages: 1.17 1.62 1.85 | 0 | 852f29016a5c3a820e4971d1f818e1d696df11ec4447935bd81e53e6f99e68d8 |
+| logs/155-r5-clock-review.log |  8:45  1 user, load averages: 1.29 1.63 1.85 | 0 | f4f330c8d95b39d68402ad05f8989900125dc178cafb4fd8fd6295ffe770e6a8 |
+| logs/156-r5-fixed-clock-wait.log |  8:45  1 user, load averages: 1.49 1.66 1.86 | 0 | 931c4a768a6f030990e4835ac960ed6ea900cec98f39012a9a7e20bee07821d0 |
+| logs/157-r5-targeted.log |  8:48  up  9:19, 1 user, load averages: 1.82 1.67 1.82 | 0 | cd25727242682fea70d1aa7c084f502ff08ad69847bd63f0a42438dce0bf0057 |
+| logs/158-r5-break-baselines.log |  8:49  1 user, load averages: 2.30 1.89 1.89 | 0 | 1e0475cf56faf6ba2687fa0d12593221b22250208dae16e50d7b4aebeb662d57 |
+| logs/159-break-2-diff.log |  8:50  1 user, load averages: 2.18 1.87 1.88 | 1 | d54e2b102ee1c9c8f3e941334b4394e31849f46ad4c8ce464813437074d4e8c3 |
+| logs/160-break-2-runtime.log |  8:59  up  9:30, 1 user, load averages: 1.42 1.43 1.61 | 0 | 47d8bf82ad712c8bea4c8b4d2b4f9d4dd2bf02ab1f6a07fd77a6fed4bbdafc59 |
+| logs/161-break-2-wait.log |  9:00  1 user, load averages: 2.70 1.74 1.71 | 0 | 7bd33b9947c9ac9fa295a873f0ea6ea725b332cae496c9ad7a9babd6ed080d02 |
+| logs/162-record-schema-review.log |  9:00  1 user, load averages: 2.77 1.88 1.77 | 0 | 57609f6be4dac3397fb8f2a871480d491e9d4f639318eaa030c9e6ece10702dd |
+| logs/163-record-rulings-review.log |  9:01  1 user, load averages: 2.23 1.83 1.75 | 0 | 761e521722d3043aa6589fbc10d109457c8bb4d11996a3738341af2a25b481bb |
+| logs/164-record-pins-review.log |  9:01  1 user, load averages: 2.18 1.83 1.75 | 0 | 9300fac6bd63dd4d4e5c76308cff3357e417b95da187ac59e0ded706d85e2798 |
+| logs/165-break-2-test.log | 10:32  up 11:03, 1 user, load averages: 4.67 2.16 1.67 | 1 | 35b1586f66e569a8e5ff780b62a8c29225defe39af9db4b99c7767a365ee150f |
+| logs/166-break-2-restore.log | 10:32  1 user, load averages: 4.07 2.15 1.67 | 0 | 16dc9d631ef26abc45ad8b67fa67fbefd2fdc7b40b43a732eae9f682914fc153 |
+| logs/167-break-3-diff.log | 10:32  1 user, load averages: 4.07 2.15 1.67 | 1 | 1936120b4b8b47027908052ae4542d846a8d7a77e4ab92785ef53bc540a55d2a |
+| logs/168-break-3-runtime.log | 10:32  up 11:03, 1 user, load averages: 3.90 2.15 1.67 | 0 | ec87da7ff01098bc2adfab819ef7a0942ff3016cfbd8c18683b0a6d5ec4ae74c |
+| logs/169-break-3-wait.log | 10:32  1 user, load averages: 3.90 2.15 1.67 | 0 | 9df69887fc3f25d2b74b8f0d59ca1cd6e3cd2b38d4dddc8b953d0f8c5f990b1c |
+| logs/170-r5-preflight-review.log | 10:32  1 user, load averages: 3.59 2.11 1.66 | 0 | 848ec20c308d094b61b7af8f88e185a4a1ebf3563f70c2d21a12dd952a886de8 |
+| logs/171-record-evidence-review.log | 10:35  1 user, load averages: 2.22 2.15 1.74 | 0 | e5d1cdb0bbab6a1745bdf3ff4941863b64563937950a7aa74eddf5e825d830c5 |
+| logs/172-identity-clause-review.log | 10:35  1 user, load averages: 2.01 2.11 1.74 | 0 | 88cc71f2e208d0cd64ea6356f15f3b41a1c155501269651ae03a348d9832235c |
+| logs/173-break-3-test.log | 10:43  up 11:14, 1 user, load averages: 1.55 1.56 1.58 | 1 | 4832382d5366e6ffec88c3aec93d8898530391c2e3843f9e5b3ac22d3b5038c8 |
+| logs/174-break-3-restore.log | 10:43  1 user, load averages: 1.62 1.57 1.59 | 0 | df695ee8009f2280cd42337b60da0975d5b3c5257b097c57b84ebbb8477c0df2 |
+| logs/175-break-4-diff.log | 10:43  1 user, load averages: 1.49 1.55 1.58 | 1 | b2f5ab5911d52dce0e2a9da58291e0fde96dad106cae747bf2cbad6d270a37d8 |
+| logs/176-break-4-runtime.log | 10:43  up 11:14, 1 user, load averages: 1.61 1.57 1.58 | 0 | 19a6b22cd2ca7458984b0f4e2e3960e3150e9b2119bca52907319eec9ce6a592 |
+| logs/177-break-4-wait.log | 10:44  1 user, load averages: 1.61 1.57 1.58 | 0 | 4996ceeb4b424b8db08a12cc0d78b08b03dbfe6dcf95c679b0d959858e83c942 |
+| logs/178-break-4-test.log | 10:44  up 11:14, 1 user, load averages: 1.65 1.58 1.59 | 1 | 1a0fc4216cc51d8f8be9c66b5348035b32e000cd494b598cc21223cf377cf46e |
+| logs/179-break-4-restore.log | 10:44  1 user, load averages: 2.01 1.66 1.62 | 0 | d09e1336b0863116ad2afe90aec047cbbf4440b0208124f9cc6b6df261c5ca3b |
+| logs/180-r5-typecheck-wait.log | 10:44  1 user, load averages: 2.01 1.66 1.62 | 0 | 43efec1200ab2bb00eba561b6cbb6c816e0bc23d9cea204b1b14521a29219d75 |
+| logs/181-r5-commit-review.log | 10:45  1 user, load averages: 1.96 1.69 1.63 | 0 | 86b6a111932721c2c377110d31161f68ab88000db979e5409003c5b84b92b6c6 |
+| logs/182-commit-4-message-check.log | 10:45  1 user, load averages: 1.96 1.76 1.66 | 0 | 23900afb4a156689e8e56f9bef0b583f14940a3d74d0077a718537f3b460e705 |
+| logs/183-r5-typecheck.log | 10:48  up 11:18, 1 user, load averages: 1.55 1.69 1.64 | 0 | 25ef2f8261618f97df16f23116c9f6904bcb63e189379c9efc951ed7118425e9 |
+| logs/184-commit-4-stage.log | 10:48  1 user, load averages: 1.99 1.78 1.68 | 0 | d897a485eb5cc6b1a199d90efc008b8a375e4604eb7bd09025ffbb3b0f7e6ded |
+| logs/185-commit-4-staged-review.log | 10:48  1 user, load averages: 1.99 1.78 1.68 | 0 | 2a0a55aa3f63269111cc81e144d035aa3c4d90e9cdfdc92e9feba44d6bf69c1a |
+| logs/186-commit-4.log | 10:48  1 user, load averages: 1.99 1.79 1.68 | 0 | 22cf0b992654a13c6427864e8e983293003a028becf5b8520bf62c24f9cc7893 |
+| logs/187-commit-4-restore-proof.log | 10:48  1 user, load averages: 1.99 1.79 1.68 | 0 | d163c0a07106286b2ee7396ae0908330f1244bc51287f32359918ef344dfc2ae |
+| logs/188-full-runtime-before-install.log | 11:49  up 12:19, 1 user, load averages: 1.68 1.79 1.89 | 0 | a75e088406776ed2f4a09f96621c7d8feb3f82037df0356ea76fb6b370747010 |
+| logs/189-full-frozen-install.log | 11:54  up 12:25, 1 user, load averages: 1.92 1.66 1.78 | 0 | 89095224bd3bfe088bbeed0535547086e5a8d2ecc0514038fcb03bb54591085a |
+| logs/190-full-install-state.log | 11:54  1 user, load averages: 1.92 1.67 1.78 | 0 | 27e4231d605f900107262ba756bfd1ffd0c1fa6efb2a3559fbec3cbb4eeaecb1 |
+| logs/191-full-install-mode-restore.log | 11:54  1 user, load averages: 1.93 1.67 1.78 | 0 | 49a87de42739d373a657c6a94b70422a6066ad5a4b632954df37f7443eca50f1 |
+| logs/192-full-typecheck-wait.log | 11:54  1 user, load averages: 1.93 1.67 1.78 | 0 | 2f95073f73a831ed8f623e2bedf0c6bffc9d40f3a8fbda664441bf38676f58ac |
+| logs/193-full-typecheck.log | 12:27  up 12:58, 1 user, load averages: 2.81 1.68 1.61 | 0 | 803f95cd5b1ec54627c40f400bb5ca54a17e8de12fa4dd41f3d0b6e251faceaf |
+| logs/194-full-runtime-before-suite.log | 12:28  up 12:58, 1 user, load averages: 3.17 1.85 1.67 | 0 | 27d8d3d27509b1660849639fe9def6e1def885e0b850dea4043c78a56793c7a9 |
+| logs/195-full-suite-wait.log | 12:28  1 user, load averages: 3.17 1.85 1.67 | 0 | d2d2eeb802adec4ef44d2c28e4af3e6d6461ac10a7df6f1d3237fe8062ede4c6 |
+| logs/196-full-comparison-preparation.log | 12:28  1 user, load averages: 3.00 1.85 1.67 | 0 | b79f5d0a0297e294800737cc92617c6aa95bf33aec3fbec902a2b97092eb0b79 |
+| logs/197-base-list-path.log | 12:28  1 user, load averages: 2.85 1.86 1.68 | 0 | ce6c5657a4b8f0ed3ed44482d2ad98d1a4821dc1d8955faffdb930daf05e8cea |
+| logs/198-base-list-command.log | 12:28  1 user, load averages: 2.56 1.83 1.67 | 0 | 9bfb82a97407dff4c6dcbbe85c9544dc46fedce1e243941314bb8e9e4a476856 |
+| logs/199-full-suite.log | 12:29  up 13 hrs, 1 user, load averages: 1.71 1.70 1.63 | 0 | ecb4ef94bf74b7d4f59865c72d8668cd2c813073d0f0207c920bbfb2fe19aeb1 |
+| logs/200-head-test-list.log | 12:32  1 user, load averages: 1.17 1.53 1.57 | 0 | fad5e4ec9862cecca1d88acb7efdc7e70a1ea4d0e89896aa0d89ea5c4d5eb036 |
+| logs/201-full-test-comparison.log | 12:32  1 user, load averages: 1.36 1.53 1.57 | 0 | c33675929fffb7f04935bcbf81f0b6f6977198c4538598b8a3f38dd8b7cb50be |
+| logs/202-full-diff-check.log | 12:33  1 user, load averages: 1.65 1.59 1.59 | 0 | e7ce0b8d659a475c1387b6fc30abff85ad9bc94ee6a051ed243671ba45a938f3 |
+| logs/203-full-changed-paths.log | 12:33  1 user, load averages: 1.65 1.59 1.59 | 0 | 60422b69101a787275272032550c108a9fcd64a5aed0e22a89e50cbbcac600e2 |
+| logs/204-full-registry-diff.log | 12:33  1 user, load averages: 1.65 1.59 1.59 | 0 | 38a59444c7de7125cbd25e1750fbbf36eb0856d272472f4daf35b67d87d90c6b |
+| logs/205-full-status.log | 12:33  1 user, load averages: 1.65 1.59 1.59 | 0 | 04649fd7f4fcf46a35bb160b3447546dddec9950b2e796128d190226f50a7016 |
+| logs/206-full-untracked.log | 12:33  1 user, load averages: 1.65 1.59 1.59 | 0 | 1685cc849c0c24a4883a688a708e1e5855a4996ea6c3790c5ed1cf7f8b3e9cd0 |
+| logs/207-record-runtime-and-parser.log | 12:33  1 user, load averages: 1.80 1.62 1.60 | 0 | e26fff1684ee23030b68c5935d651ea27f04c669f0099e50067e752e126bc891 |
+| logs/208-record-event-shape-review.log | 12:33  1 user, load averages: 1.60 1.59 1.59 | 0 | ce5ade2ea7a5623b65ad39b8e96fee9bcd0f9a6dec19b0fa58a7656c485f818f |
+| logs/209-record-script-static-review.log | 12:36  1 user, load averages: 3.47 2.42 1.91 | 0 | 9b1ef52e52b2f4a110e782742c0b539586cbf8b5fc5de4b7f38886d31afdd611 |
+| logs/210-record-environment-contract.log | 12:36  1 user, load averages: 3.27 2.39 1.91 | 0 | 2082789234c7a12813fcd4386d2e574895051e298af551444d991db04997c86c |
+| logs/211-record-script-source.log | 12:38  1 user, load averages: 3.07 2.54 2.01 | 0 | 479e7bef6e502ca089711ca6ae8ebbb37940f5ba5bc2df5c08675aa449dca4ea |
+| logs/212-record-linux-host-rule.log | 12:39  1 user, load averages: 2.27 2.41 1.99 | 0 | ee9d7267fe6b3cc6fadc1c3d5edae25967c9d0c54ce19afbcbaa852e9a6b3ce4 |
+| logs/213-record-linux-fields.log | 12:39  1 user, load averages: 2.27 2.41 1.99 | 0 | ae02dbb0e9dd8f231f4b9ace58fed2c876b7696290cab2c7cd2581d0a0650368 |
+| logs/214-record-linux-host-definition.log | 12:39  1 user, load averages: 2.09 2.37 1.98 | 0 | bc4a93aa9378f261ea851d77979da493933b80bcd64b14c2f5df15f7e2e39397 |
+| logs/215-r6-runtime.log | 12:41  up 13:12, 1 user, load averages: 2.36 2.30 1.99 | 0 | 6a21b426c41a630ff63c2b06381eec10793a3d97940298c486a8b2a7028f9d59 |
+| logs/216-r6-make-synthetic-captures.log | 12:44  up 13:15, 1 user, load averages: 1.35 1.81 1.84 | 0 | 234d9cc179063db68e17e1f15bef844ebe465b3a492de9968c6e86430b28074c |
+| logs/217-r6-madv-pass-wait.log | 12:45  1 user, load averages: 1.16 1.74 1.81 | 0 | 22bfd04e0814aea13aacca736c544750ad74535e40a8ee4699d6a24158202907 |
+| logs/218-r6-madv-pass.log | 12:47  up 13:18, 1 user, load averages: 1.41 1.68 1.78 | 0 | 1b488f7eb826fba7747352f81240a405824b47145203e476af7c4a18ba79556b |
+| logs/219-r6-madv-echo-wait.log | 12:47  1 user, load averages: 1.24 1.63 1.76 | 0 | 322aca90b0f354b792038a691f55215324ebdd85612101a67c4fb17b675cc7cc |
+| logs/220-r6-madv-echo.log | 12:48  up 13:18, 1 user, load averages: 1.26 1.60 1.75 | 0 | 6555fccd64369fd3dd34ba7f384dc043313f16dae93453ed4723c70617ab6bcd |
+| logs/221-r6-claude-pass-wait.log | 12:48  1 user, load averages: 1.24 1.59 1.74 | 0 | be8406297313409b8da7a8ea45ca7e2666542533c56f501ec2ca137de0a96e8a |
+| logs/222-r6-claude-pass.log | 12:48  up 13:19, 1 user, load averages: 1.24 1.59 1.74 | 0 | 86979ad16e927995a6f92fff3b4378eb504f0f1e8eb35307b9d177bc833189c1 |
+| logs/223-r6-claude-wrong-model-wait.log | 12:48  1 user, load averages: 1.46 1.63 1.75 | 0 | 629d9dbea76959559c3d1bbfacdf2e081d2c6be49f072c8fe33182e66ff785f9 |
+| logs/224-r6-claude-wrong-model.log | 14:10  up 14:41, 1 user, load averages: 1.77 1.60 1.57 | 0 | 13e9df088bc1083d2f653e27b3f08d989dcdbd500e6376b210a46c7697726434 |
+| logs/225-r6-key-set-wait.log | 14:10  1 user, load averages: 2.43 1.76 1.63 | 0 | f426946582efafe8920dfb4150fdf8c6f0a4e20e1bbde304290dc65580e0db60 |
+| logs/226-head-preservation-and-redaction.log | 14:14  1 user, load averages: 1.99 2.01 1.77 | 0 | a05d0ea31af1decc2ff0b3464f7698e29d1ab4eba70a95bde915e13f12e94f4a |
+| logs/227-r6-key-set.log | 14:34  up 15:05, 1 user, load averages: 2.24 1.77 1.60 | 1 | f80696ca28780d12babbe4e6d9b0399bf35e30a0156f8d47c0c05fb91def6076 |
+| logs/228-r6-storage-set-wait.log | 14:34  1 user, load averages: 2.27 1.79 1.61 | 0 | db523f84861ec26503cfc1a45801669640465b405f803ef79d50bf1982b6d871 |
+| logs/229-existing-test-final-diffs.log | 14:35  1 user, load averages: 2.04 1.81 1.63 | 0 | 593de0b5b8efa97541039f39c7ca5d3c19f9d0ccff989358719b23d9ceb82414 |
+| logs/230-complete-phase1-code-diff.log | 14:36  1 user, load averages: 2.34 1.94 1.68 | 0 | 1b6823c2ebfc89e7197595223d8f137b9f936339279260b52250cb34d721a262 |
+| logs/231-r6-storage-set.log | 14:38  up 15:09, 1 user, load averages: 1.75 1.84 1.67 | 1 | 952500574e8d61e96bcdac04d911f421cb94588b8f6ebf0730955146ab90c4ca |
+| logs/232-r6-missing-file-wait.log | 14:38  1 user, load averages: 1.72 1.83 1.67 | 0 | 511e54d6b4d2065a8d0f424a3949164853a148d830fdc7050d1bbbf8e9871097 |
+| logs/233-r6-missing-file.log | 14:39  up 15:09, 1 user, load averages: 3.11 2.13 1.78 | 1 | 84ab06d7ff474bd4628ddbea0850c1b59489bf6612771974bd3d8ed371d11bd5 |
+| logs/234-r6-uncovered-file-wait.log | 14:39  1 user, load averages: 3.08 2.19 1.81 | 0 | 79c51440b5ad23d881a9c14c8bd2c7c921e31c70a4b1aa2e9dada5690da09e1a |
+| logs/235-r6-uncovered-file.log | 14:40  up 15:11, 1 user, load averages: 1.69 1.98 1.76 | 1 | 68fd21abdc6d503d4efccd7e48587628edb780d3fda451e4d46570d58b3a274c |
+| logs/236-r6-changed-file-wait.log | 14:40  1 user, load averages: 1.71 1.98 1.76 | 0 | f33505b0e80737c2adf191689b45314e6f6ae2ff649d2790e8b56f81df95e2ae |
+| logs/237-r6-changed-file.log | 14:52  up 15:22, 1 user, load averages: 1.13 1.33 1.48 | 1 | 35eeff90822091aa9fb78039bb3912d97e57c38e4333b0f54f76dfbd4835072e |
+| logs/238-r6-marker-file-wait.log | 14:52  1 user, load averages: 1.18 1.33 1.48 | 0 | c30f51e3f260d7bc1adbcd8ef70fc2b98019b3e9087f3d7f3ed6e46a156b9da8 |
+| logs/239-r6-marker-file.log | 14:52  up 15:23, 1 user, load averages: 1.09 1.31 1.47 | 1 | f2bea18d6a0d919af4888d860bee83840ba6b11628fdfdc0079f2781e1e26b0e |
+| logs/240-r6-non-work-tree-wait.log | 14:52  1 user, load averages: 1.08 1.31 1.46 | 0 | aebdeb0a14cdc5a0f00fe69f485a278d41e27564a62a3b2b33824cfce6dcccf7 |
+| logs/241-r6-non-work-tree.log | 14:56  up 15:26, 1 user, load averages: 1.28 1.14 1.34 | 1 | b26fb669a2005eb9cd4229daca472e8cd0c79c1b7ad18cc3b4495f6668fa1234 |
+| logs/242-r6-missing-manifest-wait.log | 14:56  1 user, load averages: 1.18 1.12 1.33 | 0 | 240497e018141598d1929582391c1177ff67767d9340bcd5d1e2a6ae3412fdab |
+| logs/243-r6-missing-manifest.log | 15:14  up 15:45, 1 user, load averages: 0.93 1.08 1.16 | 1 | 74f15bee521491c76fc5826790fefad27d869c8b6af35b951e986292993e46de |
+| logs/244-record-script-final-source.log | 15:15  1 user, load averages: 0.85 1.04 1.14 | 0 | e2717fc9c0841dfd9d573393e7138fdf4fa8aefac6d6e88b938b1e44728d70c3 |
+| logs/245-closure-evidence-index.log | 15:17  1 user, load averages: 0.60 0.92 1.07 | 0 | 93134cb60958ffaefe28f0066809277b0be21f41562e58bb8a966ffe86aedf45 |
+| logs/246-opening-limitations-review.log | 15:17  1 user, load averages: 0.47 0.87 1.05 | 0 | c7644ac48faff3988282dad0c8a3ac63e3fd3b0643af67e2d12c45bfd6feacb1 |
+
+
+### Declarations, limits and deviations
+
+
+No live call was made. No surface was run. No real key was used. No capability record was written to storage; synthetic records were printed into command logs only. No request left the host other than the package downloads of bun install. No MCP server, agent, memory lookup, GitHub call, push or other network call was used.
+
+The first halt before baseline was upheld by the Founder and resolved by Addendum 2 and the signed first resume. Halt report SHA-256 4fef47b6a4f9c26e142347967f4e01b80758162e4fd0f6e6f2e3f79a36f44be4; it remains pr/m0-phase1-halt-1-report.md.
+
+Initial logs-directory emptiness was not independently measured before creating the first required command log; the opening records this limitation.
+
+Incidental read/formatting errors were corrected: a wrong relative adapter path in log 057, wc given a directory in log 070, and the first head-list filename in log 196. Some read-only shell invocations group checks, so their final footer is the aggregate shell exit status; earlier component errors remain visible. No required test failure was hidden.
+
+One orchestration evaluation had a syntax error before executing a command. It changed no file and was corrected before continuing.
+
+The first opening whitespace check found trailing tabs on quoted blank source lines. They were removed before commit 1; log 093's compound invocation ended zero, but no commit followed that failed internal check.
+
+R3's first RED also exposed an own synthetic envelope error: repository and worktree were equal. The new helper was corrected to use a separate worktree before the green run. No base assertion changed.
+
+R5's first targeted run failed one own clock assertion because its Claude identity fixture woke at init. The new test was corrected to compare the clean-exit auth budget at 4,999 and 6,000 ms. Production Claude semantics were preserved.
+
+Approval delays sometimes raised actual run load above the preceding successful wait. Both readings are retained. Every such non-deliberate run passed except the already described own uncommitted failures; all other tests in deliberate-break files passed.
+
+Known frozen/non-frozen install executable-bit changes on founder-act main.ts were restored and logged each time, as expressly authorized.
+
+All break restores were compared with saved pre-break bytes first; empty Git status and equality with committed bytes were then shown after the corresponding implementation commit, following the commissioned break-before-commit order.
+
+This appendix's command ledger closes at log 246. Documentation packaging, commit 5 and final attribution/report checks occur afterward and are indexed in the saved final report.
+
+Phase 1 did not perform the investigations or create live records under B8, B10 and B15 items 2-3; add Phase 2 recorded fixtures or packet; run the B12 gates at a Phase 2 head; perform the Founder's fresh-clone runs on both hosts; obtain independent review; push; or perform the Founder's session-record check. The final attribution-shape check follows commit 5 and is reported in pr/m0-phase1-report.md.
+
+Packaging format correction before commit 5: the first appendix draft had
+blank lines between table rows. Review caught this and joined those rows.
+The opening remains byte-for-byte unchanged; no code or test changed.
