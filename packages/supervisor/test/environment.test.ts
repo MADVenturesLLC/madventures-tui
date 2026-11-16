@@ -21,7 +21,8 @@ const excluded = [
 ];
 function requiredNames(registration: AdapterRegistrationV1): string[] {
   return registration.environment_allowlist_ref === "claude-code-v1"
-    ? [...commonRequired, "CLAUDE_CONFIG_DIR"] : [...commonRequired];
+    ? [...commonRequired, "CLAUDE_CONFIG_DIR"] : registration.environment_allowlist_ref === "madv-surface-v1"
+      ? [...commonRequired, "MINIMAX_API_KEY"] : [...commonRequired];
 }
 function ambientFor(registration: AdapterRegistrationV1): Record<string, string> {
   return Object.fromEntries(requiredNames(registration).map(name => [name, `fixture:${name}`]));
@@ -43,7 +44,7 @@ const secretEnvironment = {
 };
 
 test("no ambient variable outside the allowlist survives", () => {
-  expect(registrations).toHaveLength(2);
+  expect(registrations).toHaveLength(3);
   for (const registration of registrations) {
     const ambient = ambientFor(registration);
     for (const name of [...excluded, "MADV_SECRET_LEAK"]) ambient[name] = "1";
@@ -135,7 +136,7 @@ test("redaction reports which rules ran", () => {
   expect(redactWithAllowlist("prefix-abc-suffix abc", secretEnvironment, secretFixture).rulesApplied).toEqual(expected);
   expect(redactWithAllowlist("no match here", secretEnvironment, secretFixture)).toEqual({ text: "no match here", rulesApplied: expected });
   for (const registration of registrations) {
-    expect(redact("fixture:HOME", ambientFor(registration), registration)).toEqual({ text: "fixture:HOME", rulesApplied: [] });
+    expect(redact("fixture:HOME", ambientFor(registration), registration)).toEqual({ text: "fixture:HOME", rulesApplied: registration.environment_allowlist_ref === "madv-surface-v1" ? ["secret-value:MINIMAX_API_KEY"] : [] });
   }
 });
 

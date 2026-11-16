@@ -10,7 +10,7 @@ import {
 import { evaluatePairEligibilityWithDependencies } from "../../protocol/src/pair-constraints";
 import { latestFreshRecord, proposeStorageRoot, validateStorageRoot } from "@madventures/storage";
 import { buildAllowlistedEnvironment, MissingRequiredVariableError } from "./environment";
-import { IDENTITY_PROBE_INPUT, runBoundedProbe } from "./attestation";
+import { IDENTITY_PROBE_INPUT, MADV_IDENTITY_PROBE_INPUT, runBoundedProbe } from "./attestation";
 
 export type PreflightFailure =
   | "envelope_invalid" | "cardinality" | "repository_fingerprint" | "executable_unresolved"
@@ -149,6 +149,9 @@ export async function runPurePreflightWithDependencies(input: PreflightInput, ov
   // Unknown registrations cannot supply an approved executable or environment.
   if (registrations.some(r => r === undefined)) return fail("executable_unresolved");
   const admitted = registrations as AdapterRegistrationV1[];
+  for (const [index, execution] of envelope.executions.entries()) {
+    if (admitted[index]!.surface === "madv-surface" && execution.role !== "independent-reviewer") return fail("pair_ineligible");
+  }
   try { if (!validateEnvironment(input, admitted, d)) return fail("auth_not_ready"); }
   catch { return fail("auth_not_ready"); }
   const resolved: { path: string; sha256: string }[] = [];
@@ -178,9 +181,9 @@ export async function runPurePreflightWithDependencies(input: PreflightInput, ov
       return fail("auth_not_ready");
     }
     const executable = resolved[index]!;
-    const request = { executablePath: executable.path, environment, model: execution.model, supportedVersions: registration.supported_versions, signal: input.signal };
+    const request = { executablePath: executable.path, environment, model: execution.model, supportedVersions: registration.supported_versions, signal: input.signal, registration };
     try {
-      if (!(await d.probe({ ...request, arguments: [...registration.identity_probe.argv, "--model", execution.model], stdin: IDENTITY_PROBE_INPUT, kind: "identity" })).ok) return fail("identity_mismatch");
+      if (!(await d.probe({ ...request, arguments: [...registration.identity_probe.argv, "--model", execution.model], stdin: registration.surface === "madv-surface" ? MADV_IDENTITY_PROBE_INPUT : IDENTITY_PROBE_INPUT, kind: "identity" })).ok) return fail("identity_mismatch");
     } catch { return fail("identity_mismatch"); }
     try {
       if (!(await d.probe({ ...request, arguments: registration.auth_readiness_probe.argv, stdin: "", kind: "auth" })).ok) return fail("auth_not_ready");

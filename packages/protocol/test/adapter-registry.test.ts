@@ -15,7 +15,7 @@ const CLAUDE_CODE_REGISTRATION: AdapterRegistrationV1 = {
   surface: parseSurfaceId("claude-code"),
   executable_name: "madbridge-claude-v5",
   provider: "anthropic",
-  supported_versions: ["2.1.296"],
+  supported_versions: ["2.1.325"],
   identity_probe: {
     argv: ["--print", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--no-session-persistence"],
     parse: "json",
@@ -61,10 +61,10 @@ test("registry values are stored already normalized", () => {
   }
 });
 
-test("the registry contains exactly the two Founder-ratified surfaces", () => {
-  expect(ADAPTER_REGISTRY.size).toBe(2);
+test("the registry contains exactly the three Founder-ratified surfaces", () => {
+  expect(ADAPTER_REGISTRY.size).toBe(3);
   expect(new Set(ADAPTER_REGISTRY.keys())).toEqual(
-    new Set([parseSurfaceId("claude-code"), parseSurfaceId("antigravity")]),
+    new Set([parseSurfaceId("claude-code"), parseSurfaceId("antigravity"), parseSurfaceId("madv-surface")]),
   );
 });
 
@@ -121,7 +121,27 @@ test("registry membership cannot be mutated at runtime", () => {
     expect((map as unknown as Record<string, unknown>).set).toBeUndefined();
   });
 
-  expect(ADAPTER_REGISTRY.size).toBe(2);
+  expect(ADAPTER_REGISTRY.size).toBe(3);
   const sortedKeys: string[] = [...ADAPTER_REGISTRY.keys()].map(String).sort();
-  expect(sortedKeys).toEqual(["antigravity", "claude-code"]);
+  expect(sortedKeys).toEqual(["antigravity", "claude-code", "madv-surface"]);
+});
+
+test("madv-surface registration matches DEC-20261115-02 field for field", () => {
+  expect(ADAPTER_REGISTRY.get(parseSurfaceId("madv-surface"))).toEqual({
+    surface: parseSurfaceId("madv-surface"), executable_name: "madv-surface",
+    provider: "minimax", supported_versions: ["0.1.1"],
+    identity_probe: {
+      argv: ["--print", "--input-format", "stream-json", "--output-format", "stream-json", "--profile", "minimax", "--require-model", "--role", "reviewer", "--no-session-persistence", "--max-turns", "1"],
+      parse: "json",
+    },
+    auth_readiness_probe: { argv: ["auth", "status", "--profile", "minimax"], parse: "json" },
+    non_interactive_flags: ["--print", "--input-format", "stream-json", "--output-format", "stream-json", "--profile", "minimax", "--require-model", "--role", "reviewer", "--no-session-persistence"],
+    environment_allowlist_ref: "madv-surface-v1", independence_domain: "minimax", organization_id: "minimax",
+    auth_failure_detection: ["auth_status_exit_code:1", "auth_status.verified:false", "system/auth_failed", "exit_code:5"],
+    limitations: [
+      "A provider that misreports its own model remains a limitation.",
+      "What the provider retains is the provider's.",
+      "Both probes are live calls on the M Plan at every start.",
+    ],
+  });
 });
