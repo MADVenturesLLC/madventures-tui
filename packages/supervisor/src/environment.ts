@@ -12,6 +12,21 @@ export interface EnvironmentAllowlistV1 {
 // PLAN-OPEN-2, as bound by DEC-20261010-03 B1. No installation validation
 // occurs here; the caller supplies an already eligible ambient environment.
 const allowlists: Readonly<Record<string, EnvironmentAllowlistV1>> = Object.freeze({
+  "madv-surface-v1": Object.freeze({
+    ref: "madv-surface-v1",
+    variables: Object.freeze([
+      { name: "HOME", required: true, secret: false },
+      { name: "PATH", required: true, secret: false },
+      { name: "SHELL", required: true, secret: false },
+      { name: "TERM", required: true, secret: false },
+      { name: "TMPDIR", required: true, secret: false },
+      { name: "MINIMAX_API_KEY", required: true, secret: true },
+      { name: "LANG", required: false, secret: false },
+      { name: "LC_ALL", required: false, secret: false },
+      { name: "LC_CTYPE", required: false, secret: false },
+      { name: "USER", required: false, secret: false },
+    ].map(variable => Object.freeze(variable))),
+  }),
   "claude-code-v1": Object.freeze({
     ref: "claude-code-v1",
     variables: Object.freeze([
