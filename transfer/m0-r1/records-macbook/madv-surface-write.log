@@ -1,0 +1,42 @@
+{"check":"captured environment equals ROOT allowlist selection","pass":true}
+{"check":"captured TERM and SHELL are present","pass":true}
+{"check":"captured HOME equals passwd home","pass":true}
+{"check":"host operating system and architecture","pass":true}
+{"check":"host runtime matches DEC-20261114-01 A4","pass":true}
+{"check":"capture 1 command","pass":true}
+{"check":"capture 1 binary path and SHA-256 pin","pass":true}
+{"check":"capture 8 command","pass":true}
+{"check":"capture 8 binary path and SHA-256 pin","pass":true}
+{"check":"capture 2 argv","pass":true}
+{"check":"capture 2 version pin","pass":true}
+{"check":"capture 9 argv","pass":true}
+{"check":"capture 9 version pin","pass":true}
+{"check":"capture 3 argv","pass":true}
+{"check":"capture 03 auth parser","pass":true}
+{"check":"capture 4 argv","pass":true}
+{"check":"capture 4 identity stdin","pass":true}
+{"check":"capture 4 identity parser","pass":true}
+{"check":"capture 5 argv","pass":true}
+{"check":"capture 5 identity stdin","pass":true}
+{"check":"capture 5 identity parser","pass":true}
+{"check":"capture 6 argv","pass":true}
+{"check":"capture 6 identity stdin","pass":true}
+{"check":"capture 6 identity parser","pass":true}
+{"check":"capture 7 argv","pass":true}
+{"check":"capture 07 identity stdin","pass":true}
+{"check":"capture 07 retired id resolves to current served model","pass":true}
+{"check":"capture 1 empty stdin","pass":true}
+{"check":"capture 1 successful local primitive","pass":true}
+{"check":"capture 2 empty stdin","pass":true}
+{"check":"capture 2 successful local primitive","pass":true}
+{"check":"capture 3 empty stdin","pass":true}
+{"check":"capture 8 empty stdin","pass":true}
+{"check":"capture 8 successful local primitive","pass":true}
+{"check":"capture 9 empty stdin","pass":true}
+{"check":"capture 9 successful local primitive","pass":true}
+{"check":"registered version pin","pass":true}
+record {"surface":"madv-surface","provider":"minimax","requested_model":"MiniMax-M3.1-Flash","role_eligibility":["independent-reviewer"],"independence_domain":"minimax","organization_id":"minimax","cli_version":"0.1.1","binary_path":"/Users/michaeldaley/builds/madv-surface-0.1.1/dist/madv-surface","binary_sha256":"daf7ffe5922a3b538d69e6408d4c14c96978b17d16aca2cdeb57e7b6f1852024","evaluated_at":"2026-11-17T03:29:14.440Z","expires_at":"2026-12-17T03:29:14.440Z","host":{"arch":"arm64","macos_version":"27.0.1","macos_build":"26A434","bun_version":"1.4.2","bun_path":"/Users/michaeldaley/.bun/bin/bun","bun_sha256":"35d20dd0263e5c950194434b925454fdfa9ba6e4467da960410fa05b08a7a5b5","term":"xterm-256color","shell":"/bin/zsh"},"identity_attestation":{"result":"pass","primitive":"/Users/michaeldaley/builds/madv-surface-0.1.1/dist/madv-surface --print --input-format stream-json --output-format stream-json --profile minimax --require-model --role reviewer --no-session-persistence --max-turns 1 --model MiniMax-M3.1-Flash","sanitized_facts":"Phase 3A design 2.2 clause 1, a documented CLI or API primitive returning the resolved provider and exact model for the actual session: not established. The probe is a process apart from the governed session. The result rests on clause 2, structured per-response metadata naming the provider and exact model actually used: met. Captures 04-07: model_response.response_model, provider, profile, endpoint_host, response_independence_domain and tls_verified_host. Captures 04-06 also satisfy the B3 init predicates and clean exit. Capture 07 compares actual response_model with MiniMax-M3.1-Flash to distinguish resolution from a retired-id echo; this condition is met. Configuration, requested intent, auth and banners are not passing identity evidence."},"auth_readiness":{"result":"pass","primitive":"/Users/michaeldaley/builds/madv-surface-0.1.1/dist/madv-surface auth status --profile minimax"},"pty":{"result":"fail","observed_ms":{}},"independent_review_eligible":true,"limitations":["No governed session of the real binary ran because production start remains closed; PTY, process-group, termination and timing results are not established.","Capture 07 ended at the one-turn limit after read-only tool calls; its model_response is the resolution evidence.","A provider that misreports its own model remains a limitation.","What the provider retains is the provider's.","Both probes are live calls on the M Plan at every start."],"overall":"pass","redaction_rules_applied":["email-addresses","json-account-identifiers","token-patterns"]}
+default storage root /Users/michaeldaley/Library/Application Support/MADVentures/madventures-tui
+record filename 2026-11-17T03:29:14.440Z-daf7ffe5922a.json
+stored path /Users/michaeldaley/Library/Application Support/MADVentures/madventures-tui/capability/madv-surface/2026-11-17T03:29:14.440Z-daf7ffe5922a.json
+stored SHA-256 63463700ab6e500123fc64411a24b7bd8b8a92e395796544b0a8cbcab6f97792
