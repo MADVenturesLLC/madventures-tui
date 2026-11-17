@@ -1,0 +1,12 @@
+=== M0 Claude Code record run on the Ubuntu PC (B15 item 3), version 1 (bash 5.3.9(1)-release)
+investigation folder e0b4fdef6cb93f682fa7f6431352c642beae1b4bf7a29cc8419bd3d0b1c408fd: OK
+=== a fresh clone at the Phase 1 head, and the accepted record script
+clone 7f94c272a4fd7fc3b4ab1d18920b80ac95c677d3, record script b9ba9bdadf0ca0b5e792ad78fc46f9212d763ad7455fb122343756be2e6fb593, frozen install OK; file-mode changes from linking (content unchanged): 1
+=== dry run (nothing is written)
+checks: 75 pass, 0 fail
+overall pass, identity pass, auth pass, roles builder,independent-reviewer, host {"os_name":"Ubuntu","os_version":"26.04","kernel_release":"7.0.0-43-generic","reported_model":"claude-fable-5-2","adapter_registration":"claude-code"}
+=== the record, written once
+checks: 75 pass, 0 fail
+overall pass, identity pass, auth pass, roles builder,independent-reviewer, host {"os_name":"Ubuntu","os_version":"26.04","kernel_release":"7.0.0-43-generic","reported_model":"claude-fable-5-2","adapter_registration":"claude-code"}
+stored /home/michaeldaley/Library/Application Support/MADVentures/madventures-tui/capability/claude-code/2026-11-17T11:53:33.949Z-bd6c236585c5ba7eb7c3ee5a59a1e134ce4fc676374d97d89ff11c8de103c363-linux-69b54422f72370c4f161f20fc6c7f4b4bf4129486b1ec38ea5085b07bc6bc653.json SHA-256 eecac7b942288ecec1ebb6069a76f62e66ad726940615d0da9638f5a75112207
+CLAUDE CODE RECORD WRITTEN on the Ubuntu PC; logs /home/michaeldaley/builds/m0-records-ubuntu/logs, index LOGS.sha256 19c1d3ffdf8ca5a1996a20469c45f6a800ac22aaf842c42248ff694a72a28c15; paste this whole output to the drafting assistant
