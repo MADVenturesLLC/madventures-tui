@@ -1,0 +1,18 @@
+records whose starting folder is /Users/michaeldaley/builds/m0-r1: 1
+rollout-2026-11-15T23-45-25-01a1e2ac-9dcc-7432-a9bb-30415a36c620.jsonl: started 2026-11-16T04:45:25.847Z, cli_version 0.167.0, folder /Users/michaeldaley/builds/m0-r1
+  user messages: 0
+  event types: 1 turn_aborted; 1083 item_completed; 408 token_count; 6 task_complete; 7 task_started; 9 thread_settings_applied
+  turn 2026-11-16T04:45:43.654Z | model gpt-6.1-sol | effort xhigh | approval on-request | approvals reviewer user | sandbox workspace-write | network access false | folder /Users/michaeldaley/builds/m0-r1
+  turn 2026-11-16T05:25:49.106Z | model gpt-6.1-sol | effort xhigh | approval on-request | approvals reviewer user | sandbox workspace-write | network access false | folder /Users/michaeldaley/builds/m0-r1
+  turn 2026-11-16T13:45:08.857Z | model gpt-6.1-sol | effort xhigh | approval on-request | approvals reviewer user | sandbox workspace-write | network access false | folder /Users/michaeldaley/builds/m0-r1
+  turn 2026-11-16T22:56:56.642Z | model gpt-6.1-sol | effort xhigh | approval on-request | approvals reviewer user | sandbox workspace-write | network access false | folder /Users/michaeldaley/builds/m0-r1
+  turn 2026-11-17T01:32:32.994Z | model gpt-6.1-sol | effort xhigh | approval on-request | approvals reviewer user | sandbox workspace-write | network access false | folder /Users/michaeldaley/builds/m0-r1
+  turn 2026-11-17T15:12:44.856Z | model gpt-6.1-sol | effort xhigh | approval on-request | approvals reviewer user | sandbox workspace-write | network access false | folder /Users/michaeldaley/builds/m0-r1
+  turn 2026-11-17T15:35:25.401Z | model gpt-6.1-sol | effort xhigh | approval on-request | approvals reviewer user | sandbox workspace-write | network access false | folder /Users/michaeldaley/builds/m0-r1
+  turn 2026-11-17T16:28:11.042Z | model gpt-6.1-sol | effort xhigh | approval on-request | approvals reviewer user | sandbox workspace-write | network access false | folder /Users/michaeldaley/builds/m0-r1
+  turn 2026-11-17T20:26:47.072Z | model gpt-6.1-sol | effort xhigh | approval on-request | approvals reviewer user | sandbox workspace-write | network access false | folder /Users/michaeldaley/builds/m0-r1
+  top-level calls: 349 custom_tool_call exec; 40 function_call wait; 8 function_call clock.sleep
+  exec calls: 349; names of Addendum 2 B4 placed as text inside exec: 0
+  calls inside exec, by called name: 1 find; 1 join; 1 q; 1 slice; 1 split; 1 startsWith; 1 stringify; 10 allSettled; 112 write_stdin; 114 run; 119 (computed); 14 store; 15 String; 186 eval; 2 yield_control; 273 text; 277 load; 4 padStart; 47 apply_patch; 6 map; 94 exec_command; 95 replace
+STOP REASON: rollout-2026-11-15T23-45-25-01a1e2ac-9dcc-7432-a9bb-30415a36c620.jsonl 2026-11-16T05:47:20.985Z: an exec input that does not parse
+CHECK_STOP
