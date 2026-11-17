@@ -2868,3 +2868,393 @@ Phase 1 did not perform the investigations or create live records under B8, B10 
 Packaging format correction before commit 5: the first appendix draft had
 blank lines between table rows. Review caught this and joined those rows.
 The opening remains byte-for-byte unchanged; no code or test changed.
+
+## Phase 2: recorded evidence, rulings and deferred admission
+
+The first 2870 lines above are unchanged from Phase 1 head 7f94c272a4fd7fc3b4ab1d18920b80ac95c677d3, SHA-256 5a3d38c0df555f26f969f79b8029b9750af5449ea9163be7ec8486d793f460b3. Phase 2 follows the signed corrected fourth resume, DEC-20261115-02 B7 item 2 and Addendum 7 B5: madv-surface is registered and unadmitted; all Phase 1 code remains unchanged.
+
+### Resume bindings and checks
+
+- prompt/resume-m0-1-test-lines.md: 41ea2ae2e3d45842c77d8594040d866050ddd2334f1f9a38c47ff7a74bd11536.
+
+- prompt/resume-m0-2-record-script.md: b110bb1d5e00680befe239a24b21cd96f3a1948f7f9a4477f55f9057f4f77fb2.
+
+- prompt/resume-m0-3-record-script-addendum-5.md: 9bcbf64fda0bfa4956d1dc5f10cff94a39b5c9e0a1995387a1254abc3002b21c.
+
+- prompt/resume-m0-4-phase-2.md: cb86844f8850efce9da4f17f4623fb9eac8a897d9c4caf442bc198f96339dfac.
+
+At each resume the harness showed workspace-write and on-request. No new MCP server loaded, barred tool was called or command contained the six names of Addendum 2 B4. Addendum 3's historical session check supplies the exact model and effort there; no new identifier is inferred from that history. Governed version checks in logs 267, 319 and 391 end with codex-cli 0.167.0. The known PATH-alias warning is recorded, without changing any settings.
+
+Second, third and corrected fourth resume preconditions passed: prompt manifests and exact file sets; clean branch build/3b-m0-r1 at the Phase 1 head, no stash; exact report and script sets and hashes. Logs 385-406 bind the corrected fourth resume and all evidence checks. The final accepted record script remains record/m0-record.ts, SHA-256 b9ba9bdadf0ca0b5e792ad78fc46f9212d763ad7455fb122343756be2e6fb593. It is outside the clone and unchanged in Phase 2.
+
+Runtime checks 276, 328, 400, 412 and 415 passed: Bun and bunx from /Users/michaeldaley/.bun/bin; Bun 1.4.2, revision 744846f844374847c902b5e7fd59b4342a51ef99, executable SHA-256 35d20dd0263e5c950194434b925454fdfa9ba6e4467da960410fa05b08a7a5b5. Log 400's tool display was partial; log 401 read its completed log, which contains the full passing output. It was not rerun. Every Bun invocation was escalated for the Founder's command-specific approval.
+
+### Addenda and changes since Phase 1
+
+Addendum 1 SHA-256 31576960c18a4c9607fca2785e54146df5f740af45b4437dc7f13890abaeca42 and Addendum 2 SHA-256 a6512b4ad4cadb10f014256922bd09efd4d1eb9d65d0a8e4c91102f4f4ca60a0 remain as recorded above. Their existing-test permissions and the upheld pre-baseline halt, report SHA-256 4fef47b6a4f9c26e142347967f4e01b80758162e4fd0f6e6f2e3f79a36f44be4, are unchanged. The existing-test table above gives every file, test name and binding-base line: environment helper 23-24/count 46 and redaction 138; registry size/membership 64-67 and 124-126; harness-separation 24; evidence-pipeline 840/842; preflight shared version pins 32/67/85/327. No existing test changes in Phase 2.
+
+Addendum 3 SHA-256 24f76dbb631d6058e81ccff93d3c9fecb11521b5a876c687ec0da1ee0f9e0a23, B5: the Founder's check found one cli_version 0.167.0 record with three turns, model gpt-6.1-sol, effort xhigh, approval on-request, reviewer user, sandbox workspace-write, network false and this folder. Calls were 228 exec, 26 wait and eight clock.sleep, no others, no barred event and no occurrence of the six names of Addendum 2 B4 in any input, including the one unparseable input. That input at 2026-11-16T05:47:20.985Z was 10,298 characters/158 lines: nested test template literals ended the outer template early; SyntaxError: missing ) after argument list, wall time 0.0, so it did not run. The next 10,308-character input parsed. Stored helper strings had previously been dynamically evaluated 79 and 40 times, permitted by the original prompt; the check could only treat their string content as text, but no barred name occurred at all. B1/B2 accepted that one stop, with no verdict or extra round. The Founder pushed Phase 1 as decivantiq without a PR under B3. From the second resume onward every nested tool call is written explicitly, with no evaluation of code strings or code store.
+
+Addendum 4 SHA-256 45131b839e0365a83462b3ee297007789ffe11cefc1a545a96784b85a1012bf4, B5: the release's billing_guard sentence contains a bare prefix, not a key. The original bare-prefix check would reject every identity stream. Its first-clause claim was also wrong: a separate probe does not establish the resolved identity of the actual governed session; the record rests on Phase 3A design 2.2 clause 2's model_response fields 04-07. Under the signed second resume only these two record-script changes were made: a word boundary followed by the release's key-shaped pattern, and the corrected clause statement. Accepted first-fix script SHA-256 07e578dc1e416269854f4199b6dc6a445e4b941be3a39157fd364f1d0fedac56; full diff/source and 14 synthetic dry runs are in logs 279-310, report SHA-256 3cbc5e41d6252da93dd4cb20dab3a199bd32cb83b00d1b6a7d26c6a0a6666e51. The synthetic pattern is refused and the embedded word is not; no real key or stored record was used.
+
+Addendum 5 SHA-256 666a82b2229272111f4d01b79c6ffba401a53f5236ae50f7f7c6a4b3651cd9ac, B8: the first MacBook investigation's final summary was wrong because bash brace-expanded jq filters. Its two read-only follow-up outputs, rather than that original summary, are quoted completely in the packet. MiniMax 04-06 pass; 07 resolves the retired id to Flash but calls read-only search/list_dir in an empty directory and reaches error_max_turns, exit 1. B1 accepts the response as B9 item 3 evidence with a limitation. Original Claude 09-13 load cc-plugin-privacy, a correct safety halt even though exact/alias response evidence is present; 12/13 are JSON arrays. The Founder disables that plugin after a backup under B2, makes the one passing check, then repeats exactly the 18 Claude primitives/five live calls under B3. Original Claude captures remain halt evidence only. The signed third resume changes only the scratch script's alternate capture-07 form and JSON-array decoding; 20 synthetic dry runs, diff/source in logs 330-373; report SHA-256 b6799b4017362c30bd41ef59e25b2fc675edccbc00a66e582fc03f7d1be39102. The final script has SHA-256 b9ba9bdadf0ca0b5e792ad78fc46f9212d763ad7455fb122343756be2e6fb593 and was accepted under B6 before the Founder's record runs. Wrong tools, other system events and wrong result subtypes fail identity; a listed Claude plugin is still refused. No clone file changed in either script-fix resume.
+
+Addendum 6 SHA-256 2dac9e9acdcc4da16e80a60aff90d0b3079ee2558c29433cfafe7dcc9f0f8b26, B6: Ubuntu launcher, governed executable, release and custodied Bun 1.4.1 match their pins. Its original settings set only a theme, SHA-256 27dafb2742d0da69a49cc8d206fc9cc429feff09cc3738addcf590d9c4358f97. After a backup the Founder copied the MacBook settings whole, SHA-256 0539ac87bae10e0207c884e0cae368f61b754ff7ea4a2ef5c269a0c58b808f76; beyond permission/tool/plugin settings this disables connectors, hooks, memory and updates. The first check shows dontAsk and no tools/MCP but cc-plugin-easel, default claude-opus-5-5 and unfinished thinking; no result by 120 seconds, exit 143, timeout yes, empty stderr. The halt was correct. After a backup B2/B3 disable easel and set default claude-fable-5-2, no other changes. B4's one further check passes, then B5 permits the Ubuntu investigation. The builder read no governed settings file and made no host setting change.
+
+Addendum 7 SHA-256 f6ed06f7d4f98e8155dfedbcf190eff938caddfabd848c2ecb489f595c7591fb, B6: Ubuntu investigation matches all guarded pins; MiniMax 03/04/06 pass, 05 names Flash then calls list_dir/search in the empty directory and reaches error_max_turns/exit 1. B9 item 2 is not met; its halt stands and the captures are evidence only. Across both hosts two of eight model calls turned to tools first. Raising max turns would break the standing budget of at most two round-trips/zero tool calls and the one-request identity probe. Both Claude records pass and version 2.1.325 stands. MacBook madv-surface stored file SHA-256 63463700ab6e500123fc64411a24b7bd8b8a92e395796544b0a8cbcab6f97792 is withdrawn unchanged; neither host has an admitted madv-surface record. Admission waits for a separately released tool-free probe, later registration act and fresh investigations/records. Phase 1 code merges as built with madv-surface unadmitted. The drafting assistant wrote the Founder's commands and addenda: Addenda 5 A6, 6 A5 and 7 A6 say that is not independent review.
+
+### Evidence, fixtures and recorded tests
+
+Evidence index SHA-256 061fd5f51c2ab97f5f57d32cc91bd9fc78cf3bdbe8ff8a8f7f64a1d523ed37fa binds 425 files; all passed. SANITIZE.txt SHA-256 00638f4053e1e035878b0c1d15e442d6a375b7a43c7ca89e4666e74988afa0e5 was read in full. Its four rules processed 407 files, changed 29, with 26 JSON account replacements, zero email replacements, zero token replacements and 246 UUID replacements. records/ is byte for byte. Six raw-manifest hashes and both record-log indexes passed in logs 404-405; their complete bindings and the raw-folder provenance appear in the packet. Only evidence/ was read as live evidence; no raw folder or transfer branch was read and no replaced value recovered.
+
+The thirty fixture files exactly copy both hosts' madv-surface captures 03-07 stdout/stderr/status. Only UUID replacements affect selected stdout, in session_id fields: MacBook 04/05/06/07 has 4/4/4/7; Ubuntu has 4/7/4/4. Capture 03 and every stderr/status have zero. response_id and tool_use_id are unchanged. The new test file states these fields and counts; manifest.tsv gives each fixture hash, source path and four rule counts:
+
+```text
+fixture	sha256	evidence_path	json-account-identifiers	email-addresses	token-patterns	uuid
+macbook/03.stdout	c5a7e49ce80585fcae2eb4830947a32b66d8f7978262dec40e01828b1478b16d	evidence/macbook/m0-investigation-macbook/madv-surface/03.stdout	0	0	0	0
+macbook/03.stderr	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855	evidence/macbook/m0-investigation-macbook/madv-surface/03.stderr	0	0	0	0
+macbook/03.status	e6b633ea47b72a16622692968c502208028c4fc182799e9b33a1a3afe64714a7	evidence/macbook/m0-investigation-macbook/madv-surface/03.status	0	0	0	0
+macbook/04.stdout	6ebba2dc9feb665ec1c673e9a22bc15a78f139dcb39c4e04d2d29c08883781e2	evidence/macbook/m0-investigation-macbook/madv-surface/04.stdout	0	0	0	4
+macbook/04.stderr	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855	evidence/macbook/m0-investigation-macbook/madv-surface/04.stderr	0	0	0	0
+macbook/04.status	e6b633ea47b72a16622692968c502208028c4fc182799e9b33a1a3afe64714a7	evidence/macbook/m0-investigation-macbook/madv-surface/04.status	0	0	0	0
+macbook/05.stdout	dace308c5b36fe11cfb07114a87841d997795611679ccff906c6efcb27f425ee	evidence/macbook/m0-investigation-macbook/madv-surface/05.stdout	0	0	0	4
+macbook/05.stderr	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855	evidence/macbook/m0-investigation-macbook/madv-surface/05.stderr	0	0	0	0
+macbook/05.status	e6b633ea47b72a16622692968c502208028c4fc182799e9b33a1a3afe64714a7	evidence/macbook/m0-investigation-macbook/madv-surface/05.status	0	0	0	0
+macbook/06.stdout	bbd19e47ad6b589065a7841f3bacf9b8c8370e8ef071f5bdde8ba44cdba72a8d	evidence/macbook/m0-investigation-macbook/madv-surface/06.stdout	0	0	0	4
+macbook/06.stderr	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855	evidence/macbook/m0-investigation-macbook/madv-surface/06.stderr	0	0	0	0
+macbook/06.status	e6b633ea47b72a16622692968c502208028c4fc182799e9b33a1a3afe64714a7	evidence/macbook/m0-investigation-macbook/madv-surface/06.status	0	0	0	0
+macbook/07.stdout	53380310e4013d3aa8977ac469a5ac1567d7d34fdd77525d9d5454a0ee0aeab1	evidence/macbook/m0-investigation-macbook/madv-surface/07.stdout	0	0	0	7
+macbook/07.stderr	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855	evidence/macbook/m0-investigation-macbook/madv-surface/07.stderr	0	0	0	0
+macbook/07.status	7eb7518924b7d3191c1000f8475f7f49162aa5e4fd9ebb68c070f2d0dfc443fc	evidence/macbook/m0-investigation-macbook/madv-surface/07.status	0	0	0	0
+ubuntu/03.stdout	c5a7e49ce80585fcae2eb4830947a32b66d8f7978262dec40e01828b1478b16d	evidence/ubuntu/m0-investigation-ubuntu/madv-surface/03.stdout	0	0	0	0
+ubuntu/03.stderr	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855	evidence/ubuntu/m0-investigation-ubuntu/madv-surface/03.stderr	0	0	0	0
+ubuntu/03.status	e6b633ea47b72a16622692968c502208028c4fc182799e9b33a1a3afe64714a7	evidence/ubuntu/m0-investigation-ubuntu/madv-surface/03.status	0	0	0	0
+ubuntu/04.stdout	a3b32b50329dca257fefa02ef345faa1606cd0d4f2d4b1e0579862469e0a73e9	evidence/ubuntu/m0-investigation-ubuntu/madv-surface/04.stdout	0	0	0	4
+ubuntu/04.stderr	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855	evidence/ubuntu/m0-investigation-ubuntu/madv-surface/04.stderr	0	0	0	0
+ubuntu/04.status	e6b633ea47b72a16622692968c502208028c4fc182799e9b33a1a3afe64714a7	evidence/ubuntu/m0-investigation-ubuntu/madv-surface/04.status	0	0	0	0
+ubuntu/05.stdout	f8129a3da70fa998401624a3e33b446ce2d2d7e3dc6391f95fc4afb393a13d91	evidence/ubuntu/m0-investigation-ubuntu/madv-surface/05.stdout	0	0	0	7
+ubuntu/05.stderr	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855	evidence/ubuntu/m0-investigation-ubuntu/madv-surface/05.stderr	0	0	0	0
+ubuntu/05.status	7eb7518924b7d3191c1000f8475f7f49162aa5e4fd9ebb68c070f2d0dfc443fc	evidence/ubuntu/m0-investigation-ubuntu/madv-surface/05.status	0	0	0	0
+ubuntu/06.stdout	405b2b382c34876e944738c09e2653f995e14db6af117bdd7a0017a1d56c59c3	evidence/ubuntu/m0-investigation-ubuntu/madv-surface/06.stdout	0	0	0	4
+ubuntu/06.stderr	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855	evidence/ubuntu/m0-investigation-ubuntu/madv-surface/06.stderr	0	0	0	0
+ubuntu/06.status	e6b633ea47b72a16622692968c502208028c4fc182799e9b33a1a3afe64714a7	evidence/ubuntu/m0-investigation-ubuntu/madv-surface/06.status	0	0	0	0
+ubuntu/07.stdout	7aff5d54be66e31c88108d2bf8d7a87527ed227284afdd65fc8d0fcc6042bc98	evidence/ubuntu/m0-investigation-ubuntu/madv-surface/07.stdout	0	0	0	4
+ubuntu/07.stderr	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855	evidence/ubuntu/m0-investigation-ubuntu/madv-surface/07.stderr	0	0	0	0
+ubuntu/07.status	e6b633ea47b72a16622692968c502208028c4fc182799e9b33a1a3afe64714a7	evidence/ubuntu/m0-investigation-ubuntu/madv-surface/07.status	0	0	0	0
+```
+
+New file: packages/adapter-madv-surface/test/recorded.test.ts. Twelve tests, all under signed fourth resume 7 and B7 item 2/Addendum 7 B5:
+
+- macbook 03 recorded auth-readiness passes
+
+- ubuntu 03 recorded auth-readiness passes
+
+- macbook 04 recorded identity passes for MiniMax-M3.1-Flash
+
+- macbook 05 recorded identity passes for MiniMax-M3.1-Flash
+
+- macbook 06 recorded identity passes for MiniMax-M3.1-Flash
+
+- ubuntu 04 recorded identity passes for MiniMax-M3.1-Flash
+
+- ubuntu 06 recorded identity passes for MiniMax-M3.1-Flash
+
+- ubuntu 05 recorded identity fails closed with provider_error
+
+- macbook 07 fails closed with provider_error for MiniMax-M3.1-Flash-Preview while reporting MiniMax-M3.1-Flash
+
+- macbook 07 fails closed with provider_error for MiniMax-M3.1-Flash while reporting MiniMax-M3.1-Flash
+
+- ubuntu 07 fails closed with identity_mismatch for MiniMax-M3.1-Flash-Preview while reporting MiniMax-M3.1-Flash
+
+- ubuntu 07 fails closed with identity_mismatch for MiniMax-M3.1-Flash while reporting MiniMax-M3.1-Flash
+
+The typed refusals are provider_error for Ubuntu 05 and MacBook 07, and identity_mismatch for Ubuntu 07. Every refusal asks for whole-session interruption with retry false. Both 07 streams fail for both ids while the model_response decoded by the adapter names Flash. Failed results intentionally omit event payloads, so a transparent JSON decoding observer in the new test collects that field during the unchanged adapter call and restores itself in finally. It neither changes fixtures nor accepts a failed result. No process, real surface or provider call occurs in this test.
+
+Run logs/414-phase2-focused-tests.log, SHA-256 74e965dd2dddaa0f6353082993d7cdd42c85fb47b49fdb33ddf1d7ac27f6b4cd; 13:58  up 1 day, 14:29, 4 users, load averages: 2.10 1.76 1.86; exit 0. Wait logs/413-phase2-wait-focused.log, SHA-256 b8b0707406bb9ff439bc1ae89b65d385081598236f85cf9f1e25bbea8516eb10, exit 0.
+
+```text
+ 12 pass
+ 0 fail
+ 55 expect() calls
+Ran 12 tests across 1 file. [87.00ms]
+```
+
+Run logs/422-phase2-precommit-suite.log, SHA-256 8cd7fa4772572f16a662e9f6bf03854ae573390a3cbb9bfa060047a05092bf3c; 14:35  up 1 day, 15:05, 4 users, load averages: 3.99 2.70 2.31; exit 0. Wait logs/416-phase2-wait-suite.log, SHA-256 72be8d086b647426b6c0e22d69e1af927e66bcdf5c6f78dce3a1cec39ee4b094, exit 0.
+
+```text
+ 2027 pass
+ 0 fail
+ 27337 expect() calls
+Ran 2027 tests across 147 files. [183.46s]
+```
+
+The focused wait cleared at 1.85; its approval delay left the test's first load at 2.10. The full wait cleared at 1.99; its approval delay left the full run's first load at 3.99. Both completed with zero failures, so no high-load failure was rerun. Arithmetic before final gates: 1945 baseline + 70 Phase 1 + 12 Phase 2 = 2027 tests; 142 + 4 + 1 = 147 files. Final exact-head gates and base-name comparison follow commit eight and are recorded outside the immutable committed log, in the Phase 2 final report and PR description.
+
+### Commits and packet
+
+Commit six 5d36256ccca60f7e527ce83feaf2a0555f3dbce1, parent 7f94c272a4fd7fc3b4ab1d18920b80ac95c677d3: fixtures, provenance and new test only. Message width/trailer checks in 425 pass. Commit seven 76c8c75baf69b9dbfeb4da3193b6cddab52a3686, parent 5d36256ccca60f7e527ce83feaf2a0555f3dbce1: docs/verification/phase-3b-m0-investigation.md only. Message checks in 429 pass. Packet SHA-256 26c8b7735c411135cb99f05888fc5705cd04dbcb0fd14705852da283ac20e8ef; every primitive has full arguments/status/stdout/stderr and its evidence hash. Source-line boundary bars preserve trailing spaces without creating document trailing whitespace. No source lines are elided. Its live-call ledger counts 16 MacBook, 12 Ubuntu, total 28, including authorized additional checks and the second MacBook Claude run. The packet marks the madv record withdrawn and quotes stored sanitized_facts and limitations. The eighth commit changes this log alone.
+
+### Synthetic script-run results since the second resume
+
+All script runs were dry only. Each has its preceding own wait log, full output, exit and SHA-256 in the command ledger. A constructed record with identity fail is distinct from a refused input; expected nonzero refusals are not test regressions. No synthetic run wrote a capability record, and none ran on Linux in this session.
+
+- logs/284-resume-2-madv-pass.log: record overall=pass; exit 0; wait log 283.
+
+- logs/286-resume-2-madv-echo.log: record overall=fail; exit 0; wait log 285.
+
+- logs/288-resume-2-claude-pass.log: record overall=pass; exit 0; wait log 287.
+
+- logs/290-resume-2-claude-wrong-model.log: record overall=fail; exit 0; wait log 289.
+
+- logs/292-resume-2-key-set.log: REFUSED MINIMAX_API_KEY is set; exit 1; wait log 291.
+
+- logs/294-resume-2-storage-set.log: REFUSED MADV_STORAGE_DIR is set; exit 1; wait log 293.
+
+- logs/296-resume-2-missing-file.log: REFUSED missing or unsafe file: madv-surface/04.stdout; exit 1; wait log 295.
+
+- logs/298-resume-2-uncovered-file.log: REFUSED file not covered by manifest: madv-surface/04.stdout; exit 1; wait log 297.
+
+- logs/300-resume-2-changed-file.log: REFUSED manifest hash mismatch: madv-surface/04.stdout; exit 1; wait log 299.
+
+- logs/302-resume-2-marker-file.log: record overall=pass; exit 0; wait log 301.
+
+- logs/304-resume-2-non-work-tree.log: REFUSED ROOT is not a git work tree; exit 1; wait log 303.
+
+- logs/306-resume-2-missing-manifest.log: REFUSED missing MANIFEST.sha256; exit 1; wait log 305.
+
+- logs/308-resume-2-synthetic-key-pattern.log: REFUSED forbidden marker: madv-surface/03.stderr; exit 1; wait log 307.
+
+- logs/310-resume-2-embedded-sk-word.log: record overall=pass; exit 0; wait log 309.
+
+- logs/335-resume-3-madv-pass.log: record overall=pass; exit 0; wait log 334.
+
+- logs/337-resume-3-madv-echo.log: record overall=fail; exit 0; wait log 336.
+
+- logs/339-resume-3-claude-pass.log: record overall=pass; exit 0; wait log 338.
+
+- logs/341-resume-3-claude-wrong-model.log: record overall=fail; exit 0; wait log 340.
+
+- logs/343-resume-3-key-set.log: REFUSED MINIMAX_API_KEY is set; exit 1; wait log 342.
+
+- logs/345-resume-3-storage-set.log: REFUSED MADV_STORAGE_DIR is set; exit 1; wait log 344.
+
+- logs/347-resume-3-missing-file.log: REFUSED missing or unsafe file: madv-surface/04.stdout; exit 1; wait log 346.
+
+- logs/349-resume-3-uncovered-file.log: REFUSED file not covered by manifest: madv-surface/04.stdout; exit 1; wait log 348.
+
+- logs/351-resume-3-changed-file.log: REFUSED manifest hash mismatch: madv-surface/04.stdout; exit 1; wait log 350.
+
+- logs/353-resume-3-marker-file.log: record overall=pass; exit 0; wait log 352.
+
+- logs/355-resume-3-non-work-tree.log: REFUSED ROOT is not a git work tree; exit 1; wait log 354.
+
+- logs/357-resume-3-missing-manifest.log: REFUSED missing MANIFEST.sha256; exit 1; wait log 356.
+
+- logs/359-resume-3-synthetic-key-pattern.log: REFUSED forbidden marker: madv-surface/03.stderr; exit 1; wait log 358.
+
+- logs/361-resume-3-embedded-word.log: record overall=pass; exit 0; wait log 360.
+
+- logs/363-resume-3-turn-limit.log: record overall=pass; exit 0; wait log 362.
+
+- logs/365-resume-3-turn-other-tool.log: record overall=fail; exit 0; wait log 364.
+
+- logs/367-resume-3-turn-other-event.log: record overall=fail; exit 0; wait log 366.
+
+- logs/369-resume-3-turn-other-result.log: record overall=fail; exit 0; wait log 368.
+
+- logs/371-resume-3-claude-array.log: record overall=pass; exit 0; wait log 370.
+
+- logs/373-resume-3-claude-plugin.log: REFUSED Claude investigation safety conditions; exit 1; wait log 372.
+
+### Declarations, self-fixes and deviations
+
+No live call was made by this builder, no surface was run, no real key was used, no capability record was written, Phase 1 code did not change and no live evidence outside evidence/ was read. No request left the host other than any downloads of bun install. No MCP, collaboration or barred tool was called. No code string was evaluated or stored after the second resume.
+
+The withdrawn unsigned fourth-resume draft had three unfilled bindings. The builder halted correctly, without starting Phase 2; its unchanged report pr/m0-phase2-report.md SHA-256 adf9cf6814b690fa992277039c624da48d59be7475ebbe340c4a3fdff1a23a03 and logs 378-384 stand. The signed corrected fourth resume withdrew that draft and resumed work. This halt is recorded as a deviation, not a verdict.
+
+The Founder accidentally interrupted work after log 433 had completed, then stated that nothing in the folder changed and asked for continuation. No test or item 10 gate was running. Log 434 confirms log 433 ended at exit 0, HEAD remained 76c8c75baf69b9dbfeb4da3193b6cddab52a3686 and the clone was clean. No test or gate was rerun because of the interruption. This interruption is a deviation, as the Founder directed.
+
+Log 424 used a descriptive command header for the successful message-six checks. Log 425 repeats those read-only message checks with the full literal command header before commit six. Both logs are retained. This logging self-fix is a deviation; no failed code, test or assertion was rerun unchanged. No Phase 2 code/test self-fix was needed.
+
+### Command ledger from the second resume through pre-commit closure
+
+Every log from 262 through 436 is listed below with its complete command/output retained in that file, its pre-command uptime, exit and SHA-256. Hashes through 432 were gathered by macOS shasum in log 433, 433-434 by shasum in 435, and 435-436 by shasum in 437. Each wait has its own row; synthetic runs use the immediately preceding numbered wait. Actual focused/full wait mappings are stated above. No log was truncated, compressed, encoded or overwritten; tool-display limits do not alter log bytes. Log 437 and this appendix's creation/review/commit commands, followed by the exact-head gates and packaging, are accounted for in the final report to avoid a self-hash cycle in this committed artifact.
+
+| Complete command/output log | Uptime before invocation | Exit | SHA-256 |
+| :-- | :-- | --: | :-- |
+| logs/262-resume-2-prompt-manifest.log | 17:57  2 users, load averages: 1.64 1.38 1.34 | 0 | aebc9e6604b2ac0d055bd198fc545c0a5f41426ae55f4a843db31cbc7571f593 |
+| logs/263-resume-2-prompt-files.log | 17:57  2 users, load averages: 1.57 1.37 1.34 | 0 | 9ec5f6b229fd04193ef71901c9ac24102d4423e1f72c0e1133f58de65e3c23cb |
+| logs/264-resume-2-addendum-3.log | 17:57  2 users, load averages: 1.57 1.37 1.34 | 0 | a996891e54946e59018e0c774410330d2857d022f9c075fdcd2ebb4aafe3e6b2 |
+| logs/265-resume-2-addendum-4.log | 17:57  2 users, load averages: 1.57 1.37 1.34 | 0 | 0aa5b6c6344536c49a50210521bcb351bf7520297ab6070fbbe6c8477e765dd7 |
+| logs/266-resume-2-authority-hashes.log | 17:58  2 users, load averages: 1.37 1.34 1.33 | 0 | e1f93103b528577af2215c0ba12e1c014a81bd395d72e136f17c2b8691e0ea4e |
+| logs/267-resume-2-governed-version.log | 17:58  2 users, load averages: 1.37 1.34 1.33 | 0 | 3cdc3c172db84d1f1348a7f5fbf687c1bb202fab3e48faad38787ab1c905492b |
+| logs/268-resume-2-head.log | 17:58  2 users, load averages: 1.37 1.34 1.33 | 0 | 974b500e43b0c1f2002a63d2fd46f216fce97f62e32a9f49a64f77985e35ad7b |
+| logs/269-resume-2-branch.log | 17:58  2 users, load averages: 1.37 1.34 1.33 | 0 | 59784e0e9dccd423394e9625e7099f2483e7e3788c6f143b496e5618eab0038d |
+| logs/270-resume-2-status.log | 17:58  2 users, load averages: 1.37 1.34 1.33 | 0 | 269a6cd8f1ccc51e4122838f0858f2e1dba4eb1d15895f2c0c1956e983b493e2 |
+| logs/271-resume-2-stash.log | 17:58  2 users, load averages: 1.37 1.34 1.33 | 0 | f6d193235606118796e7fe8b1db6813139fe0a4d4e90f41c946cdd03dc12db4a |
+| logs/272-resume-2-pr-files.log | 17:58  2 users, load averages: 1.66 1.40 1.35 | 0 | a732506c3b8936447093cd345d413861081909c0bb6c036218ef1d0daf48d2c3 |
+| logs/273-resume-2-pr-hashes.log | 17:58  2 users, load averages: 1.66 1.40 1.35 | 0 | 1393c0328d1da1edc9b261d3d83905f3d4b3d9f9e2b7ee1281783e258d021e6d |
+| logs/274-resume-2-record-files.log | 17:58  2 users, load averages: 1.66 1.40 1.35 | 0 | c2c5481960047e84cf6191fbbb6d327be34100ba5ec21dccf96496bba468bcc4 |
+| logs/275-resume-2-record-hash.log | 17:58  2 users, load averages: 1.66 1.40 1.35 | 0 | 2a65eeceec94db9c355abf3aeb92bc326938e82c6a1585523a1bd5af1bf08ee7 |
+| logs/276-resume-2-runtime.log | 17:58  up 18:29, 2 users, load averages: 1.26 1.33 1.32 | 0 | 84293c28e2842fd803ea357b5f29f81f9588e0425446c8bd00c01781cdf5c993 |
+| logs/277-resume-2-save-original.log | 17:59  2 users, load averages: 0.96 1.23 1.28 | 0 | 5e9fd58cdabc5fc9b093c36664e649e8fdeca041a887de05d9dbca8dd754149a |
+| logs/278-resume-2-script-and-pattern.log | 17:59  2 users, load averages: 0.96 1.23 1.28 | 0 | cd247306a0f09e67e80d4a63a972cf8d47ab6bf6ec70009c29ee7b8c1e23cc52 |
+| logs/279-resume-2-script-diff.log | 18:00  2 users, load averages: 0.90 1.19 1.27 | 1 | 99edd889cde661e5ccf6e6aa0490bda0777fb5f4733e7d9dc0e0cfe63fc2d769 |
+| logs/280-resume-2-changed-script.log | 18:00  2 users, load averages: 0.90 1.19 1.27 | 0 | 7e8bdb18448a1fea300fe83d38947f9a86cd46d505df1f8d8a624e34eff0d31c |
+| logs/281-resume-2-changed-script-hash.log | 18:00  2 users, load averages: 0.90 1.19 1.27 | 0 | c62a48a4146b703e5f9392c75fd79ecc7add2d7c5617dd6d48f056acff2db4d7 |
+| logs/282-resume-2-prepare-fixtures.log | 18:02  up 18:33, 2 users, load averages: 1.28 1.23 1.26 | 0 | fb50659d12b32e73fbc12d0e22378fab3e1ebd091794d4e15932962406ba7c77 |
+| logs/283-resume-2-madv-pass-wait.log | 18:04  2 users, load averages: 0.84 1.08 1.20 | 0 | 0ec2f51a9040b2d62ec5ae74a47a3cda1dad34bd42bf8e298417c4acb47d0e07 |
+| logs/284-resume-2-madv-pass.log | 18:05  up 18:36, 2 users, load averages: 0.52 0.90 1.11 | 0 | c81e3b79d0c5e720bcb899641f97d2804f6abb6b0447d0291a5688ad58ae60d7 |
+| logs/285-resume-2-madv-echo-wait.log | 18:05  2 users, load averages: 0.52 0.90 1.11 | 0 | b2c66b03624dccffe29401fd28d9430415028f29ca7f0394ef47e62b9f95dcb7 |
+| logs/286-resume-2-madv-echo.log | 18:05  up 18:36, 2 users, load averages: 0.52 0.90 1.11 | 0 | f080c71cbab4b054435a252911c69936e1134b974ab6478146a85c687f6cdbaa |
+| logs/287-resume-2-claude-pass-wait.log | 18:05  2 users, load averages: 0.52 0.90 1.11 | 0 | b2c66b03624dccffe29401fd28d9430415028f29ca7f0394ef47e62b9f95dcb7 |
+| logs/288-resume-2-claude-pass.log | 18:05  up 18:36, 2 users, load averages: 0.52 0.90 1.11 | 0 | 30d4568a12742f56d0de0b0d5315bc0fd616c3e4387abf9731b4b883cecf1c05 |
+| logs/289-resume-2-claude-wrong-model-wait.log | 18:05  2 users, load averages: 0.52 0.90 1.11 | 0 | b2c66b03624dccffe29401fd28d9430415028f29ca7f0394ef47e62b9f95dcb7 |
+| logs/290-resume-2-claude-wrong-model.log | 18:05  up 18:36, 2 users, load averages: 0.52 0.90 1.11 | 0 | 83faeb5cfb884beae96d34d236c89a030fdf674d1199f9ac4e23355e3fccb2e8 |
+| logs/291-resume-2-key-set-wait.log | 18:05  2 users, load averages: 0.52 0.90 1.11 | 0 | b2c66b03624dccffe29401fd28d9430415028f29ca7f0394ef47e62b9f95dcb7 |
+| logs/292-resume-2-key-set.log | 18:05  up 18:36, 2 users, load averages: 0.47 0.88 1.11 | 1 | 34432494ecfbde1ef19f34216b089fc11739c383ef84469257da3a7d3fb8134e |
+| logs/293-resume-2-storage-set-wait.log | 18:05  2 users, load averages: 0.47 0.88 1.11 | 0 | a8d96da99cc17397fee08c0380680f102526c14769c3f79c4067a2951c155808 |
+| logs/294-resume-2-storage-set.log | 18:05  up 18:36, 2 users, load averages: 0.47 0.88 1.11 | 1 | d93ae3353418f59a090e4a40b401471eb4b6ed2128c7bdd0aaffc5b13f835926 |
+| logs/295-resume-2-missing-file-wait.log | 18:05  2 users, load averages: 0.47 0.88 1.11 | 0 | a8d96da99cc17397fee08c0380680f102526c14769c3f79c4067a2951c155808 |
+| logs/296-resume-2-missing-file.log | 18:05  up 18:36, 2 users, load averages: 0.47 0.88 1.11 | 1 | 3f1a7aa54ea45b98956d78944dd471d20aa89f89d516d9e56e481bd4b3059bab |
+| logs/297-resume-2-uncovered-file-wait.log | 18:05  2 users, load averages: 0.47 0.88 1.11 | 0 | a8d96da99cc17397fee08c0380680f102526c14769c3f79c4067a2951c155808 |
+| logs/298-resume-2-uncovered-file.log | 18:05  up 18:36, 2 users, load averages: 0.47 0.88 1.11 | 1 | 2cc470802a3b11be450b8879f041988cf80f715d268fb1056441010acf2c511d |
+| logs/299-resume-2-changed-file-wait.log | 18:05  2 users, load averages: 0.47 0.88 1.11 | 0 | a8d96da99cc17397fee08c0380680f102526c14769c3f79c4067a2951c155808 |
+| logs/300-resume-2-changed-file.log | 18:05  up 18:36, 2 users, load averages: 0.47 0.88 1.11 | 1 | a26aed0ccdcd80c0e3a60863bbad5e4c1936e1d8b845947ca9bc36e03589b53f |
+| logs/301-resume-2-marker-file-wait.log | 18:05  2 users, load averages: 0.47 0.88 1.11 | 0 | a8d96da99cc17397fee08c0380680f102526c14769c3f79c4067a2951c155808 |
+| logs/302-resume-2-marker-file.log | 18:05  up 18:36, 2 users, load averages: 0.47 0.88 1.11 | 0 | 5c3bce12599ee30059b12fa2d34a4c5368c9bd7f664295fac3f6d8559d88ea86 |
+| logs/303-resume-2-non-work-tree-wait.log | 18:05  2 users, load averages: 0.47 0.88 1.11 | 0 | a8d96da99cc17397fee08c0380680f102526c14769c3f79c4067a2951c155808 |
+| logs/304-resume-2-non-work-tree.log | 18:05  up 18:36, 2 users, load averages: 0.44 0.87 1.10 | 1 | c18ad07b0a187ef97040b5ed279d6ff45ae31c7d6bf36efc1370c808c33b58a3 |
+| logs/305-resume-2-missing-manifest-wait.log | 18:05  2 users, load averages: 0.44 0.87 1.10 | 0 | 9efa1ee71605ef6dcee8deb501758ef30ea59a9431bd3a09d8aa31f98795f17d |
+| logs/306-resume-2-missing-manifest.log | 18:05  up 18:36, 2 users, load averages: 0.44 0.87 1.10 | 1 | 9294dfd6a939a4e22485a0bcfa699fc2baadefb9d55454237759c3540f625edc |
+| logs/307-resume-2-synthetic-key-pattern-wait.log | 18:05  2 users, load averages: 0.44 0.87 1.10 | 0 | 9efa1ee71605ef6dcee8deb501758ef30ea59a9431bd3a09d8aa31f98795f17d |
+| logs/308-resume-2-synthetic-key-pattern.log | 18:06  up 18:37, 2 users, load averages: 0.72 0.90 1.10 | 1 | 254f58b854c3abda173c98ece9fa0c77e16b0bcd3829edd1d3dca8f905d46352 |
+| logs/309-resume-2-embedded-sk-word-wait.log | 18:06  2 users, load averages: 0.72 0.90 1.10 | 0 | 87af6760f9a1a05933b53c1ad18356f5f7e84f8b39fb9fac27d0a7e45c0e9705 |
+| logs/310-resume-2-embedded-sk-word.log | 18:06  up 18:37, 2 users, load averages: 0.72 0.90 1.10 | 0 | 7713f81a3f13bd0255df070d14a80502bd279504530d831da03023e4c5611d20 |
+| logs/311-resume-2-unchanged-clone-proof.log | 18:07  2 users, load averages: 1.29 1.03 1.13 | 0 | 32a75bcd2b2898b7feab6858f36105ba52f092c362e1b12befcc3c2231d31bf4 |
+| logs/312-resume-2-log-hashes.log | 18:07  2 users, load averages: 1.29 1.03 1.13 | 0 | 7094341b3b26a588f00a1e3cd4e596bd457f5b12e9c14911d6da883212a1d5ec |
+| logs/313-resume-2-write-report.log | 18:09  up 18:40, 2 users, load averages: 1.96 1.39 1.26 | 0 | 07aa6f6abfab3e692af1ac3dface066d930682231c71855e2b73dd7750a6eee2 |
+| logs/314-resume-2-final-verification.log | 18:10  2 users, load averages: 1.26 1.29 1.23 | 0 | 9dfcf5c346cbda777ed5f234c71a829c24e4d2a61b0e022dac95dc9b25cd1073 |
+| logs/315-resume-3-prompt-manifest.log | 20:37  2 users, load averages: 2.44 3.15 3.12 | 0 | 0312b8524d9d3a666c757b4bd21bafe124fb955b99ab5b9f2cbce0116489ab81 |
+| logs/316-resume-3-prompt-files.log | 20:37  2 users, load averages: 2.44 3.15 3.12 | 0 | 1f35e5c70c08ae0465d586d8c44060036f6354215c4fd92f92dde819184ff4ae |
+| logs/317-resume-3-addendum-5.log | 20:37  2 users, load averages: 2.44 3.15 3.12 | 0 | 2d1b5ec8d4cf0f5bb9326937772d6a1ac7d37838266c5a4a20c976ba73a0aa08 |
+| logs/318-resume-3-authority-hashes.log | 20:37  2 users, load averages: 2.44 3.15 3.12 | 0 | 4367e9cdb7ba56c030979d925572f7d0872470e0f9bda08213eadad6e8fa5d31 |
+| logs/319-resume-3-governed-version.log | 20:38  2 users, load averages: 2.12 2.99 3.06 | 0 | d931c32f1fa854587a6ea20f4ed8300cd6494bea7114852c80f379a912eae250 |
+| logs/320-resume-3-head.log | 20:38  2 users, load averages: 2.12 2.99 3.06 | 0 | 81cb17e4d79ee52b8c9f39a1b9291fc41fc1214a6034ffb496e1f4bfb018a8ee |
+| logs/321-resume-3-branch.log | 20:38  2 users, load averages: 2.12 2.99 3.06 | 0 | bc82a8c83fca789f7552b77d603c41618e1c2860f1a4377233e90f0230786f5b |
+| logs/322-resume-3-status.log | 20:38  2 users, load averages: 2.12 2.99 3.06 | 0 | 7763c65e9edf9f991934e30bd12bc308ee9552bc0f479b5ce3187c8f9b799e61 |
+| logs/323-resume-3-stash.log | 20:38  2 users, load averages: 2.03 2.96 3.05 | 0 | bb72454ffc8ba92a6ae0f11158c09819734244723340008e19f9a2792b343dca |
+| logs/324-resume-3-pr-files.log | 20:38  2 users, load averages: 2.03 2.96 3.05 | 0 | 813aff1bc41dc4659fb1b44ab00bea185856724be363757f49727f684bbfb3c8 |
+| logs/325-resume-3-pr-hashes.log | 20:38  2 users, load averages: 2.03 2.96 3.05 | 0 | c903868738e84d606704e1d829696f1796d4ed77e61cee46c39523806f230aba |
+| logs/326-resume-3-record-files.log | 20:38  2 users, load averages: 2.03 2.96 3.05 | 0 | 07d00615b3546469009eec6de07063ebe36349c75e038e593020074596ea0a7c |
+| logs/327-resume-3-record-hash.log | 20:38  2 users, load averages: 2.03 2.96 3.05 | 0 | f39929de1265296a223e0a0ff850a818fb89262e9e7c39792896143e0985b733 |
+| logs/328-resume-3-runtime.log | 21:08  up 21:38, 2 users, load averages: 1.58 1.83 1.90 | 0 | 2d8af790f84007c15f50d326d00ff7bd8e699e4b0c7a7d437e09f18d3ffd1a7f |
+| logs/329-resume-3-save-original.log | 21:09  2 users, load averages: 1.85 1.87 1.91 | 0 | 8913fc7364b39dc878d5656860fb837f118071420a5cb45dfd3ae39ab71b11c1 |
+| logs/330-resume-3-script-diff.log | 21:09  2 users, load averages: 1.85 1.87 1.91 | 1 | 2fddc6e6c1b70ae53bf984500019a8257d0102873d93931d992a25f38f221c6d |
+| logs/331-resume-3-changed-script.log | 21:09  2 users, load averages: 1.85 1.87 1.91 | 0 | 8c8629ae625990bc15630125e2915fc34dd19c63f7afa8d1137ae6efe888cbe7 |
+| logs/332-resume-3-changed-script-hash.log | 21:09  2 users, load averages: 1.85 1.87 1.91 | 0 | 19ba9308c838346f2e870f52ea6046c918199c831fbfc3f95e83e51622153cab |
+| logs/333-resume-3-prepare-fixtures.log | 21:11  up 21:42, 2 users, load averages: 2.31 2.12 2.00 | 0 | 2b8b4c9f94b9c05e89c425e0379ace2416511b27909034a6de7609249adf2f38 |
+| logs/334-resume-3-madv-pass-wait.log | 21:13  2 users, load averages: 1.41 1.88 1.92 | 0 | 030de6211d062e92a25920b07480979b11bd7cdca0425d61a4a9ff19b536f0e2 |
+| logs/335-resume-3-madv-pass.log | 21:13  up 21:44, 2 users, load averages: 1.57 1.90 1.93 | 0 | ffb7d58ba9146e8a87f92632de4a9019927863799721e0cef4d582a2b44432ac |
+| logs/336-resume-3-madv-echo-wait.log | 21:13  2 users, load averages: 1.57 1.90 1.93 | 0 | c386ae396542bb3bb6218de3bb2ac43aee0ed5af91c01aa5f5f82d9a851a6b15 |
+| logs/337-resume-3-madv-echo.log | 21:13  up 21:44, 2 users, load averages: 1.85 1.95 1.94 | 0 | 19725095888872607ff7a0f45b96a2b8eaf968b7f6156f9ea374b469d495f4a0 |
+| logs/338-resume-3-claude-pass-wait.log | 21:13  2 users, load averages: 1.85 1.95 1.94 | 0 | ba00436792738082f038b5811b7f89d2245d8a6d224cff9a468fa6b819f1ea3e |
+| logs/339-resume-3-claude-pass.log | 21:13  up 21:44, 2 users, load averages: 1.85 1.95 1.94 | 0 | a84c926df87e0158615dc388cc329d7542d53e44a5bcfbfa5d667fdb9a0119ac |
+| logs/340-resume-3-claude-wrong-model-wait.log | 21:13  2 users, load averages: 1.85 1.95 1.94 | 0 | ba00436792738082f038b5811b7f89d2245d8a6d224cff9a468fa6b819f1ea3e |
+| logs/341-resume-3-claude-wrong-model.log | 21:13  up 21:44, 2 users, load averages: 1.85 1.95 1.94 | 0 | 90b5370bb2c40ba413c3da5c4ff7f8b9388380d4100cdca0b7eab01766979785 |
+| logs/342-resume-3-key-set-wait.log | 21:13  2 users, load averages: 1.85 1.95 1.94 | 0 | ba00436792738082f038b5811b7f89d2245d8a6d224cff9a468fa6b819f1ea3e |
+| logs/343-resume-3-key-set.log | 21:13  up 21:44, 2 users, load averages: 1.86 1.95 1.94 | 1 | c63c1f07efd58d243da8e9986acfc2eeee0a026a21ce64ab4087ac6d5ba13a87 |
+| logs/344-resume-3-storage-set-wait.log | 21:13  2 users, load averages: 1.86 1.95 1.94 | 0 | 624392bbf69f3a1352b5f3b438e487258ca9678eaacbb66b7143524fa1bc95b9 |
+| logs/345-resume-3-storage-set.log | 21:13  up 21:44, 2 users, load averages: 1.86 1.95 1.94 | 1 | 561222dea314582bf795f47a42e71af581dc5ef9103d143f9f1355ad38cf8840 |
+| logs/346-resume-3-missing-file-wait.log | 21:13  2 users, load averages: 1.86 1.95 1.94 | 0 | 624392bbf69f3a1352b5f3b438e487258ca9678eaacbb66b7143524fa1bc95b9 |
+| logs/347-resume-3-missing-file.log | 21:13  up 21:44, 2 users, load averages: 1.86 1.95 1.94 | 1 | 843a76040b2be91747249bda66c387c9175a3b762ff675743f31d92e6750297a |
+| logs/348-resume-3-uncovered-file-wait.log | 21:13  2 users, load averages: 1.86 1.95 1.94 | 0 | 624392bbf69f3a1352b5f3b438e487258ca9678eaacbb66b7143524fa1bc95b9 |
+| logs/349-resume-3-uncovered-file.log | 21:13  up 21:44, 2 users, load averages: 1.86 1.95 1.94 | 1 | 1e4ad2a0009c8ceccbe73184ce07df89fa603d2b6042e32e99a8387ec2e64490 |
+| logs/350-resume-3-changed-file-wait.log | 21:13  2 users, load averages: 1.86 1.95 1.94 | 0 | 624392bbf69f3a1352b5f3b438e487258ca9678eaacbb66b7143524fa1bc95b9 |
+| logs/351-resume-3-changed-file.log | 21:13  up 21:44, 2 users, load averages: 1.86 1.95 1.94 | 1 | 3e01e653fb9b74564c6e9b79783d988bd028433ffadcd6eb94ee06bfa5afc6c9 |
+| logs/352-resume-3-marker-file-wait.log | 21:13  2 users, load averages: 1.86 1.95 1.94 | 0 | 624392bbf69f3a1352b5f3b438e487258ca9678eaacbb66b7143524fa1bc95b9 |
+| logs/353-resume-3-marker-file.log | 21:13  up 21:44, 2 users, load averages: 1.86 1.95 1.94 | 0 | e1ff64298c15c4cb2b5893662d23b161c796fe8456eaf99d4a092d24a0f7cabb |
+| logs/354-resume-3-non-work-tree-wait.log | 21:13  2 users, load averages: 1.86 1.95 1.94 | 0 | 624392bbf69f3a1352b5f3b438e487258ca9678eaacbb66b7143524fa1bc95b9 |
+| logs/355-resume-3-non-work-tree.log | 21:13  up 21:44, 2 users, load averages: 1.79 1.94 1.94 | 1 | 396e56f8c1cc5dea01337b7fd0dd564ec8157f6687841ad081501de02ece085b |
+| logs/356-resume-3-missing-manifest-wait.log | 21:13  2 users, load averages: 1.79 1.94 1.94 | 0 | c0b5b5ef5cf57ba5e83b03065b09ee21510976666db0ea2ae55f07fefd585ac1 |
+| logs/357-resume-3-missing-manifest.log | 21:13  up 21:44, 2 users, load averages: 1.79 1.94 1.94 | 1 | b3f57b0d01bb846384d2075acdd717c4b7f4f8046bda5d21a2cafedcfde5484a |
+| logs/358-resume-3-synthetic-key-pattern-wait.log | 21:13  2 users, load averages: 1.79 1.94 1.94 | 0 | c0b5b5ef5cf57ba5e83b03065b09ee21510976666db0ea2ae55f07fefd585ac1 |
+| logs/359-resume-3-synthetic-key-pattern.log | 21:13  up 21:44, 2 users, load averages: 1.73 1.92 1.93 | 1 | 0c20fe51cb7dacbc5b3aac92c1e2b98edb856e655abe142dfedabb92967e4908 |
+| logs/360-resume-3-embedded-word-wait.log | 21:13  2 users, load averages: 1.73 1.92 1.93 | 0 | f4134efb3bdb95e620ebc50c159cc29e7d8b2b2c05a4aa467b6af7fab46a6ad9 |
+| logs/361-resume-3-embedded-word.log | 21:13  up 21:44, 2 users, load averages: 1.73 1.92 1.93 | 0 | 7fa4bfa1e9fd32723da62c057ef874aad95f1184d1de4e6935dc3f4e119cbdfa |
+| logs/362-resume-3-turn-limit-wait.log | 21:13  2 users, load averages: 1.73 1.92 1.93 | 0 | f4134efb3bdb95e620ebc50c159cc29e7d8b2b2c05a4aa467b6af7fab46a6ad9 |
+| logs/363-resume-3-turn-limit.log | 21:13  up 21:44, 2 users, load averages: 1.73 1.92 1.93 | 0 | 3ab682f6595daf1751ece9a818af386bd38b89c11974ac2ab5b6cd0217a8a164 |
+| logs/364-resume-3-turn-other-tool-wait.log | 21:13  2 users, load averages: 1.73 1.92 1.93 | 0 | f4134efb3bdb95e620ebc50c159cc29e7d8b2b2c05a4aa467b6af7fab46a6ad9 |
+| logs/365-resume-3-turn-other-tool.log | 21:13  up 21:44, 2 users, load averages: 1.73 1.92 1.93 | 0 | a83e931706bbc89bb3a4487f4ccc1b4c8f358481988cb6ae818de9439716ecab |
+| logs/366-resume-3-turn-other-event-wait.log | 21:13  2 users, load averages: 1.73 1.92 1.93 | 0 | f4134efb3bdb95e620ebc50c159cc29e7d8b2b2c05a4aa467b6af7fab46a6ad9 |
+| logs/367-resume-3-turn-other-event.log | 21:13  up 21:44, 2 users, load averages: 1.73 1.92 1.93 | 0 | a3bcaacb3321e5f9e37fc9e9abdf5f8706545e9c40bd476c2eac443c6a93c295 |
+| logs/368-resume-3-turn-other-result-wait.log | 21:13  2 users, load averages: 1.73 1.92 1.93 | 0 | f4134efb3bdb95e620ebc50c159cc29e7d8b2b2c05a4aa467b6af7fab46a6ad9 |
+| logs/369-resume-3-turn-other-result.log | 21:13  up 21:44, 2 users, load averages: 1.73 1.92 1.93 | 0 | f7444004c5f2ebe9db690e1200a2dacdaa4fc856dd702d893ddb966ef9405ab2 |
+| logs/370-resume-3-claude-array-wait.log | 21:13  2 users, load averages: 1.73 1.92 1.93 | 0 | f4134efb3bdb95e620ebc50c159cc29e7d8b2b2c05a4aa467b6af7fab46a6ad9 |
+| logs/371-resume-3-claude-array.log | 21:13  up 21:44, 2 users, load averages: 1.99 1.97 1.95 | 0 | 1c94cc96afc32177739df6dfed502e66246bbb1ab02f170337db2ba156b5d184 |
+| logs/372-resume-3-claude-plugin-wait.log | 21:13  2 users, load averages: 1.99 1.97 1.95 | 0 | 7f6370b4974f845fe6a818be55fc7b6c92488e034aa0ab1043bc0e778997ef59 |
+| logs/373-resume-3-claude-plugin.log | 21:13  up 21:44, 2 users, load averages: 1.99 1.97 1.95 | 1 | 52f8c9b7ef38ef5db9b67e2d57891c9ae663e205c9f3f1ef4d79f425d5767ad6 |
+| logs/374-resume-3-unchanged-clone-proof.log | 21:14  2 users, load averages: 1.33 1.79 1.88 | 0 | f245f6d0b2cc59ed98bfc60b738b7a7abb5abd6c50310c577e5c218efa55f78c |
+| logs/375-resume-3-log-hashes.log | 21:14  2 users, load averages: 1.38 1.80 1.88 | 0 | c99d6e9d164fec4d48661a8a620bc1d6ac8a4114de9562723addbafabdafb8a2 |
+| logs/376-resume-3-write-report.log | 21:58  up 22:29, 2 users, load averages: 1.50 1.45 1.52 | 0 | 3e75c2e1b59a655fa18487bbb8551a5a779d418e127b63a775f755306044ea70 |
+| logs/377-resume-3-final-verification.log | 21:59  2 users, load averages: 1.04 1.33 1.47 | 0 | e795d76e46c9f5e3376d4fa79f263dc8dbe1918c80ee63f09ad981123eb86800 |
+| logs/378-resume-4-prompt-manifest.log | 10:13  4 users, load averages: 1.84 1.70 1.65 | 0 | 3b6e588d868e1fb7c5d0fc0d1a6ce6a93ac18f0478cb7470c19bc558a9f7acba |
+| logs/379-resume-4-prompt-files.log | 10:13  4 users, load averages: 1.84 1.70 1.65 | 0 | c3f5bef626f52ccb230aae280ff4d7b5c0758a7ff099a37df6012983dae5eb3d |
+| logs/380-resume-4-addendum-5.log | 10:13  4 users, load averages: 1.84 1.70 1.65 | 0 | a0a7b1388a8369565a20257cd9b17a34f86a8eed9d819d368b7342ad58b76512 |
+| logs/381-resume-4-addendum-6.log | 10:13  4 users, load averages: 1.84 1.70 1.65 | 1 | 405898e6bca0cb9da0f9697756774e535bc7cec3b09e09f4b506dd0ede9f7705 |
+| logs/382-resume-4-halt-log-hashes.log | 10:13  4 users, load averages: 3.68 2.33 1.89 | 0 | a8b430fce359647ccdcd7537ec5e6636bbe991bda76bc436bd11763b7c9e6c96 |
+| logs/383-resume-4-halt-report-path.log | 10:13  4 users, load averages: 3.68 2.33 1.89 | 0 | 120d7e5205ddb0520a76e8d607fc5720385b98e76f29e0c4c233a9bc16a4dcaa |
+| logs/384-resume-4-halt-report-verification.log | 10:14  4 users, load averages: 2.65 2.32 1.92 | 0 | c3edfceaf8da4b5dc34dac930e8e7f4f1b61a50fba12deac9e394cf88e2e5a84 |
+| logs/385-phase2-prompt-manifest.log | 10:35  4 users, load averages: 1.72 1.59 1.72 | 0 | 37f3937fe509378c4d09922925a934d21bcc4fcef405d2f8390b86e71b48a65c |
+| logs/386-phase2-prompt-files.log | 10:35  4 users, load averages: 1.72 1.59 1.72 | 0 | 21e408835325a06cef65820ea23e2c6b6b8e6e3931683e9a05a4a7503d0f893c |
+| logs/387-phase2-addendum-5.log | 10:35  4 users, load averages: 1.72 1.59 1.72 | 0 | f3f238c78a313e92a1030a2815b81174911a3a1d69faa3ccf29ec746076768a0 |
+| logs/388-phase2-addendum-6.log | 10:35  4 users, load averages: 1.72 1.59 1.72 | 0 | 4b72778a757622addf16a59ed1d5722e4dbc84ad0cd24c40df3c16902e716e1e |
+| logs/389-phase2-addendum-7.log | 10:35  4 users, load averages: 1.72 1.59 1.72 | 0 | ea6b7790168e6e4ca28b810bb3f3fec289a8d1d62668dee44692c3b5c0c60cb6 |
+| logs/390-phase2-authority-hashes.log | 10:35  4 users, load averages: 1.72 1.59 1.72 | 0 | bf257222997de23903895c50f89e30e9658deb2b2eb73563ea6c41fba7cb1054 |
+| logs/391-phase2-governed-version.log | 10:37  4 users, load averages: 1.69 1.66 1.73 | 0 | 4ee7aa9209c190b27fb53d8e1ddb4ec743128501e20f45354f4ee2109ab7056c |
+| logs/392-phase2-head.log | 10:37  4 users, load averages: 1.69 1.66 1.73 | 0 | 02072247048dab4b710fd730eb5e1eaf3e228eba8d9fdeaa51c52113b16b5b6d |
+| logs/393-phase2-branch.log | 10:37  4 users, load averages: 1.71 1.67 1.73 | 0 | b58ac2c5c7d2858bfaad9ff3075c02c6eadc35d0c213cc277970d358e95b8be4 |
+| logs/394-phase2-status.log | 10:37  4 users, load averages: 1.71 1.67 1.73 | 0 | 49ea07c9d2c395a3df5c62d02eec76cdc1ccbaa937d10528c7c789a957f4ed3d |
+| logs/395-phase2-stash.log | 10:37  4 users, load averages: 1.71 1.67 1.73 | 0 | 697b12e4760bd1a7c0a537bf0666bcae5c9e14f214f47b8a16caf742411c5d0e |
+| logs/396-phase2-pr-files.log | 10:37  4 users, load averages: 1.71 1.67 1.73 | 0 | 837efdf4c8570cb6dcc4896ebf5fff9b09fe58879ea1d3b75f49a061677af1a1 |
+| logs/397-phase2-pr-hashes.log | 10:37  4 users, load averages: 1.71 1.67 1.73 | 0 | 56557da3f78fee88629e9b39a736b80f4e00aae8dec12c18403b2baec7288193 |
+| logs/398-phase2-record-files.log | 10:37  4 users, load averages: 1.71 1.67 1.73 | 0 | a7814164fc2302bfe9b2c05e96f0d2d55379ef73be848a9b1f552c78a60ffc8b |
+| logs/399-phase2-record-hash.log | 10:37  4 users, load averages: 1.71 1.67 1.73 | 0 | 2af7c6e173931aa2144dfd131b423daad6d5528514b73b93e742fe7bac16ff51 |
+| logs/400-phase2-runtime.log | 10:38  up 1 day, 11:09, 4 users, load averages: 1.31 1.58 1.70 | 0 | a23a9a7a11e462dc727200a7a0e787a86258f72327f124dc7345c9e24746978e |
+| logs/401-phase2-runtime-log-review.log | 10:38  4 users, load averages: 1.43 1.59 1.70 | 0 | a589408ca8f9b556c53d4eff43c66534deaafe60cbc739645f69d03203bd5008 |
+| logs/402-phase2-evidence-manifest.log | 10:38  4 users, load averages: 1.39 1.56 1.69 | 0 | 9b6f3b5f6721c8aecb8864e1e7c2dcad0523cc0b6a620b75e2c2074d85d87efd |
+| logs/403-phase2-evidence-bindings.log | 10:38  4 users, load averages: 1.39 1.56 1.69 | 0 | bd243b3deba20b48d68d401c71657c568021371489bd50690b520e4f6abf1af0 |
+| logs/404-phase2-raw-manifest-bindings.log | 10:39  4 users, load averages: 1.48 1.58 1.69 | 0 | 0d9de0e198bda9006beb552e5510b620d75688516483dc5a8ed7d4013d244795 |
+| logs/405-phase2-record-bindings.log | 10:39  4 users, load averages: 1.48 1.58 1.69 | 0 | 864a032bcbd23443b56302106e44c02ee1e548bcb6dcd36fa64502d0a5ab6f5c |
+| logs/406-phase2-sanitize-record.log | 10:39  4 users, load averages: 1.48 1.58 1.69 | 0 | 6b498dd4c096760e1a80e9e64f327f5adf8f9b21ac7827313d088b9ea613e9d7 |
+| logs/407-phase2-recorded-stream-review.log | 10:40  4 users, load averages: 2.05 1.72 1.73 | 0 | 1a905b21aed9a6a2c9d25755fdf25ff4960c860d6388f0e324f8d6a1f6e4e8bd |
+| logs/408-phase2-parser-and-evidence-layout.log | 10:40  4 users, load averages: 2.05 1.72 1.73 | 0 | c1824ebc8a88d80a6b44c10715b99a07aab5d81b6469a2dcd9a9dba3cce76210 |
+| logs/409-phase2-copy-fixtures.log | 11:24  up 1 day, 11:55, 4 users, load averages: 1.05 1.73 1.65 | 0 | 99b2e946bb0605f783716db77d2569063069d48f5d699fdd685792d38526c59d |
+| logs/410-phase2-copy-result.log | 11:28  4 users, load averages: 1.65 1.67 1.63 | 0 | 022b8ff2163dbe28cf9ca9a3b9dbaa1edc03c8295fdec839c326f7d5d1dc4cf0 |
+| logs/411-phase2-test-review.log | 11:28  4 users, load averages: 1.94 1.73 1.65 | 0 | 27f5b6af6f9005a7961f9d60e8d9a0055940e5b1c95e804c7fc7295b2f323e9a |
+| logs/412-phase2-runtime-focused.log | 13:33  up 1 day, 14:04, 4 users, load averages: 1.66 2.31 2.04 | 0 | 93ed36aba7e2f22939cc6409110b63f9eff4e1a8a8ace3977f79a450930d46b3 |
+| logs/413-phase2-wait-focused.log | 13:33  4 users, load averages: 1.85 2.33 2.05 | 0 | b8b0707406bb9ff439bc1ae89b65d385081598236f85cf9f1e25bbea8516eb10 |
+| logs/414-phase2-focused-tests.log | 13:58  up 1 day, 14:29, 4 users, load averages: 2.10 1.76 1.86 | 0 | 74e965dd2dddaa0f6353082993d7cdd42c85fb47b49fdb33ddf1d7ac27f6b4cd |
+| logs/415-phase2-runtime-suite.log | 14:13  up 1 day, 14:43, 4 users, load averages: 2.80 2.13 1.99 | 0 | 3739b1ef29473d3d228372ce9f0eb7688428cf4bc1ff14fb5afbd9802a62b8b9 |
+| logs/416-phase2-wait-suite.log | 14:13  4 users, load averages: 2.73 2.13 1.99 | 0 | 72be8d086b647426b6c0e22d69e1af927e66bcdf5c6f78dce3a1cec39ee4b094 |
+| logs/417-phase2-packet-rulings.log | 14:13  4 users, load averages: 2.98 2.20 2.02 | 0 | eeb35e7419ea79896f7fb421ff9bffd8f64571bc404a15aa9c95cbea4f669900 |
+| logs/418-phase2-packet-context.log | 14:13  4 users, load averages: 2.52 2.14 2.00 | 0 | 6f5533b1217e3fb660a66c98715bb7a6e4fcbb16cc68853ed9bf66fa20f2c5a7 |
+| logs/419-phase2-packet-primitives.log | 14:14  4 users, load averages: 3.25 2.35 2.08 | 0 | a6340c674fbe20ab598d37f4687d2528a0429dcbc0302dfb7336eac142df90cb |
+| logs/420-phase2-packet-records.log | 14:15  4 users, load averages: 3.05 2.44 2.13 | 0 | edd9087e1f80cda8053d57bff52d07977ae3ddbe2e758f6be1deca158f7c8384 |
+| logs/421-phase2-record-rulings.log | 14:15  4 users, load averages: 2.91 2.44 2.14 | 0 | 307c96de3f44ce95d96b675e56ba1aaa061409c7d9f71b98a3d7918c7f5f9d9a |
+| logs/422-phase2-precommit-suite.log | 14:35  up 1 day, 15:05, 4 users, load averages: 3.99 2.70 2.31 | 0 | 8cd7fa4772572f16a662e9f6bf03854ae573390a3cbb9bfa060047a05092bf3c |
+| logs/423-phase2-stored-record-paths.log | 14:36  4 users, load averages: 2.08 2.43 2.25 | 0 | 5701985ec1ced4bf995dc0fa1aaa555cf5598c8de9dcc615c1b0b38101b2c825 |
+| logs/424-phase2-message-six.log | 14:37  4 users, load averages: 1.52 2.21 2.17 | 0 | f2aaedc2e0b7570dca2645de6e45b09c6b089288a6b7f292bfe44f52db9556ea |
+| logs/425-phase2-message-six-exact.log | 14:38  4 users, load averages: 2.04 2.28 2.20 | 0 | c1a627f2ea7e407027d424d35200d98b2c9e1c0d5802c8008c54f8cfb4cf8f95 |
+| logs/426-phase2-commit-six.log | 14:38  4 users, load averages: 2.06 2.27 2.20 | 0 | 275461c433cfb08e59342a5b31dc9d5bdb258470490142abff266ea5bf06b738 |
+| logs/427-phase2-build-packet.log | 14:56  up 1 day, 15:27, 4 users, load averages: 2.84 2.55 2.22 | 0 | 1f5db714f309ab3a99427a52b942da1e73bbb6a75b8e9aff3a8cc1dc11f5075a |
+| logs/428-phase2-packet-review.log | 14:57  4 users, load averages: 3.07 2.62 2.25 | 0 | 8ebeb854b8fc259a304c8b6e99df27b59f8177c9cbee3da2ea8d8f904378a7f5 |
+| logs/429-phase2-message-seven.log | 14:57  4 users, load averages: 3.06 2.65 2.27 | 0 | 6a62e5280696c354ecd458816bc85128ceaeec4ecaadb55a23f9bd6f86e94d1a |
+| logs/430-phase2-commit-seven.log | 14:57  4 users, load averages: 4.17 2.89 2.36 | 0 | 2786db69a742a9f29101aa17af372fcb05399d3f55d12cfff36074a5f157457e |
+| logs/431-phase2-ledger-sources.log | 14:57  4 users, load averages: 7.49 3.78 2.69 | 0 | a7c6f208d0f1349144a8f1d97a71c78892e2b9ba8547cdf714cb74eb89e0305a |
+| logs/432-phase2-appendix-context.log | 14:58  4 users, load averages: 5.72 4.28 2.98 | 0 | 80da65347cb5b5e6c781fdc4934151cd646966a6b506e50d66aba4faf7a55f6e |
+| logs/433-phase2-ledger-hashes.log | 14:59  4 users, load averages: 4.30 4.05 2.93 | 0 | 3456f3c91cace153bc097f6894f8698468ee0b2f5db672ababcb624627f463e2 |
+| logs/434-phase2-interruption-state.log | 15:27  4 users, load averages: 3.14 3.63 2.94 | 0 | ef1acb867d1b6c3dc2acbc9e993bed3c167654767d910dc8ccbdc522fb71a70e |
+| logs/435-phase2-interruption-hashes.log | 15:27  4 users, load averages: 4.03 3.87 3.06 | 0 | aad55dc62499c1cf5be2e1b5ce0307c9d59ff3f301eb75e35de8642d043e2cfc |
+| logs/436-phase2-message-eight.log | 15:30  5 users, load averages: 2.16 3.24 2.96 | 0 | e1a8fbd3884b28ed70b8715e22d5ac00c6aef864401c818a37ef12577ec962b3 |
