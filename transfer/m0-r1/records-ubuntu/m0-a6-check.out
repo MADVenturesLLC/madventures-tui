@@ -1,0 +1,11 @@
+=== M0 Addendum 6 B2 to B4 on the Ubuntu PC: cc-plugin-easel off, default model claude-fable-5-2, one check run, version 1 (bash 5.3.9(1)-release)
+=== the launcher, the governed copy and the first check folder
+launcher bd6c236585c5ba7eb7c3ee5a59a1e134ce4fc676374d97d89ff11c8de103c363 and governed copy 0dc4f4a9a165fc60746d7ae8489712e5fc352f1e7ad4eb22e7141bd0812eb0cf: OK; first check folder of Addendum 6 A3, MANIFEST.sha256 4fd50535402b890fe4f900f8173e18b68c2fa3214d78249d0328c8df94018e5e
+=== settings.json (Addendum 6 B2 and B3)
+backup /home/michaeldaley/.claude-madventures-v5/settings.json.bak-20261117-m0-a6 (0539ac87bae10e0207c884e0cae368f61b754ff7ea4a2ef5c269a0c58b808f76); settings.json now d9e21d82b50fd170d5c1c48e5996745670f2ad6e4f128c1c227d07abd7c91170: cc-plugin-easel off under 8 names, model claude-fable-5-2
+=== one more check run (Addendum 6 B4), in the environment of B15 item 2
+the check request is running; it may take up to two minutes
+check: exit=0 signal=none timed_out=no
+init, answer and result: [{"claude_code_version":"2.1.325","model":"claude-fable-5-2","permissionMode":"dontAsk","apiKeySource":"none","mcp_servers":[],"plugins":[],"tools":0},{"assistant_model":"claude-fable-5-2"},{"assistant_model":"claude-fable-5-2"},{"result":"success","is_error":false},{"tool_uses":0}]
+check folder /home/michaeldaley/builds/m0-a5-b7-check-r2, MANIFEST.sha256 dcc740c8875dc573c157171a65e70a93440a4848777bb17123b1553e4dce25b7
+CHECK PASSED on the Ubuntu PC (Addendum 6 B4): dontAsk, claude-fable-5-2, no MCP server, plugin or tool, exit 0 with a result; settings.json d9e21d82b50fd170d5c1c48e5996745670f2ad6e4f128c1c227d07abd7c91170; paste this whole output to the drafting assistant
