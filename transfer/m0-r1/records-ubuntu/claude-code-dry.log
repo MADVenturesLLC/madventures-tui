@@ -1,0 +1,86 @@
+{"check":"captured environment equals ROOT allowlist selection","pass":true}
+{"check":"captured TERM and SHELL are present","pass":true}
+{"check":"captured HOME equals passwd home","pass":true}
+{"check":"host operating system and architecture","pass":true}
+{"check":"host runtime matches DEC-20261114-01 A4","pass":true}
+{"check":"capture 1 command","pass":true}
+{"check":"capture 14 command","pass":true}
+{"check":"capture 2 command","pass":true}
+{"check":"capture 2 launcher realpath pin","pass":true}
+{"check":"capture 15 command","pass":true}
+{"check":"capture 15 launcher realpath pin","pass":true}
+{"check":"capture 3 command","pass":true}
+{"check":"capture 16 command","pass":true}
+{"check":"capture 4 command","pass":true}
+{"check":"capture 4 binary path and SHA-256 pin","pass":true}
+{"check":"capture 17 command","pass":true}
+{"check":"capture 17 binary path and SHA-256 pin","pass":true}
+{"check":"capture 5 argv","pass":true}
+{"check":"capture 5 version pin","pass":true}
+{"check":"capture 18 argv","pass":true}
+{"check":"capture 18 version pin","pass":true}
+{"check":"capture 6 argv","pass":true}
+{"check":"capture 7 argv","pass":true}
+{"check":"capture 8 argv","pass":true}
+{"check":"capture 08 auth parser","pass":true}
+{"check":"capture 9 argv","pass":true}
+{"check":"capture 10 argv","pass":true}
+{"check":"capture 11 argv","pass":true}
+{"check":"capture 12 argv","pass":true}
+{"check":"capture 13 argv","pass":true}
+{"check":"capture 9 no tool call","pass":true}
+{"check":"capture 9 fixed identity stdin","pass":true}
+{"check":"capture 9 init version pin","pass":true}
+{"check":"capture 9 init safety fields","pass":true}
+{"check":"capture 10 no tool call","pass":true}
+{"check":"capture 10 fixed identity stdin","pass":true}
+{"check":"capture 10 init version pin","pass":true}
+{"check":"capture 10 init safety fields","pass":true}
+{"check":"capture 11 no tool call","pass":true}
+{"check":"capture 11 fixed identity stdin","pass":true}
+{"check":"capture 11 init version pin","pass":true}
+{"check":"capture 11 init safety fields","pass":true}
+{"check":"capture 12 no tool call","pass":true}
+{"check":"capture 13 no tool call","pass":true}
+{"check":"Claude investigation safety conditions","pass":true}
+{"check":"capture 10 actual canonical response model","pass":true}
+{"check":"capture 11 actual canonical response model","pass":true}
+{"check":"capture 1 empty stdin","pass":true}
+{"check":"capture 1 successful local primitive","pass":true}
+{"check":"capture 2 empty stdin","pass":true}
+{"check":"capture 2 successful local primitive","pass":true}
+{"check":"capture 3 empty stdin","pass":true}
+{"check":"capture 3 successful local primitive","pass":true}
+{"check":"capture 4 empty stdin","pass":true}
+{"check":"capture 4 successful local primitive","pass":true}
+{"check":"capture 5 empty stdin","pass":true}
+{"check":"capture 5 successful local primitive","pass":true}
+{"check":"capture 6 empty stdin","pass":true}
+{"check":"capture 6 successful local primitive","pass":true}
+{"check":"capture 7 empty stdin","pass":true}
+{"check":"capture 7 successful local primitive","pass":true}
+{"check":"capture 8 empty stdin","pass":true}
+{"check":"capture 12 empty stdin","pass":true}
+{"check":"capture 13 empty stdin","pass":true}
+{"check":"capture 14 empty stdin","pass":true}
+{"check":"capture 14 successful local primitive","pass":true}
+{"check":"capture 15 empty stdin","pass":true}
+{"check":"capture 15 successful local primitive","pass":true}
+{"check":"capture 16 empty stdin","pass":true}
+{"check":"capture 16 successful local primitive","pass":true}
+{"check":"capture 17 empty stdin","pass":true}
+{"check":"capture 17 successful local primitive","pass":true}
+{"check":"capture 18 empty stdin","pass":true}
+{"check":"capture 18 successful local primitive","pass":true}
+{"check":"registered version pin","pass":true}
+system/init {"capture":9,"permissionMode":"dontAsk","mcp_servers":[],"plugins":[],"tools":[]}
+system/init {"capture":10,"permissionMode":"dontAsk","mcp_servers":[],"plugins":[],"tools":[]}
+system/init {"capture":11,"permissionMode":"dontAsk","mcp_servers":[],"plugins":[],"tools":[]}
+tool calls {"capture":9,"tool_calls":0}
+tool calls {"capture":10,"tool_calls":0}
+tool calls {"capture":11,"tool_calls":0}
+tool calls {"capture":12,"tool_calls":0}
+tool calls {"capture":13,"tool_calls":0}
+record {"surface":"claude-code","provider":"anthropic","requested_model":"claude-fable-5-2","role_eligibility":["builder","independent-reviewer"],"independence_domain":"anthropic","organization_id":"anthropic","cli_version":"2.1.325","binary_path":"/home/michaeldaley/.local/bin/madbridge-claude-v5","binary_sha256":"bd6c236585c5ba7eb7c3ee5a59a1e134ce4fc676374d97d89ff11c8de103c363","evaluated_at":"2026-11-17T11:53:33.879Z","expires_at":"2026-12-17T11:53:33.879Z","host":{"os_name":"Ubuntu","os_version":"26.04","kernel_release":"7.0.0-43-generic","reported_model":"claude-fable-5-2","adapter_registration":"claude-code"},"identity_attestation":{"result":"pass","primitive":"/home/michaeldaley/.local/bin/madbridge-claude-v5 --print --input-format stream-json --output-format stream-json --verbose --no-session-persistence --model claude-fable-5-2","sanitized_facts":"Phase 3A design 2.2 clause 1, a documented CLI or API primitive returning the resolved provider and exact model for the actual session: not established. Captures 06-07 document formats and auth, not a same-session resolved-identity query. Clause 2, structured per-session or per-response metadata naming the provider and exact model actually used: met. Captures 10 and 11: assistant.message.model; result.modelUsage for claude-fable-5-2, canonicalModel, provider firstParty and positive outputTokens. Capture 11 requests alias fable while those response fields must name claude-fable-5-2. Captures 09-11 init permissionMode, mcp_servers, plugins and tools and captures 09-13 structured tool-call counts must satisfy the safety conditions. No init.model, configured model, registration, flag echo, auth field or prose supplies passing identity evidence."},"auth_readiness":{"result":"pass","primitive":"/home/michaeldaley/.local/bin/madbridge-claude-v5 auth status"},"pty":{"result":"fail","observed_ms":{}},"independent_review_eligible":true,"limitations":["No governed session of the real binary ran because production start remains closed; PTY, process-group, termination and timing results are not established.","binary_sha256 pins the shell launcher, not the program it starts; capture 03 does not identify R as a Mach-O executable.","DEC-20261115-02 A8 item 4 pins the governed copy /home/michaeldaley/builds/claude-code-governed-2.1.325/claude with SHA-256 0dc4f4a9a165fc60746d7ae8489712e5fc352f1e7ad4eb22e7141bd0812eb0cf, checked there against A8 item 2. Captures pin the launcher; this script does not read or execute either binary.","Emitted provider firstParty is response evidence; registration metadata anthropic is separately copied and supplies no identity proof. This dated record authorizes no live execution and does not replace M1 re-attestation."],"overall":"pass","redaction_rules_applied":["email-addresses","json-account-identifiers","token-patterns"]}
+default storage root /home/michaeldaley/Library/Application Support/MADVentures/madventures-tui
+record filename 2026-11-17T11:53:33.879Z-bd6c236585c5ba7eb7c3ee5a59a1e134ce4fc676374d97d89ff11c8de103c363-linux-69b54422f72370c4f161f20fc6c7f4b4bf4129486b1ec38ea5085b07bc6bc653.json
