@@ -7,7 +7,7 @@ hash-chained evidence.
 ## Package Structure
 
 ```
-packages/
+packages/                  # 18 packages
 ├── protocol/              # Wire protocol, bridge events, task envelopes, canonical JSON
 ├── policy/                # Policy engine: scope, path, model, review-independence checks
 ├── ledger/                # SQLite append-only hash-chained ledger + state rebuild
@@ -17,19 +17,33 @@ packages/
 │                          # protocol, bounded termination ladder (not yet wired into the
 │                          # broker session lifecycle — see Task 46/47 in the Phase 3A plan)
 ├── adapter-claude-code/   # Claude Code adapter: attestation, config preview, lifecycle
-└── adapter-antigravity/   # Antigravity (agy) adapter: attestation, config preview, lifecycle
+├── adapter-antigravity/   # Antigravity (agy) adapter: attestation, config preview, lifecycle
+├── preflight/             # `mad preflight` local fail-closed machine check (v0, off-roadmap)
+├── founder-act/           # Sealed, content-addressed FounderAct objects (v0, off-roadmap)
+├── claim-boundary/        # Pure honesty library: every receipt declares what it is NOT evidence of
+├── honesty-compiler/      # Honesty IR + compiler gate (v0, off-roadmap)
+├── build-memory/          # Verified Build Memory v0: SHA-hard verified/stale memory
+├── single-verdict/        # One closed-enum ship/hold verdict per subject
+├── room-runtime-worker/   # Room Runtime worker (Phase 1)
+├── storage/               # Storage root, home and session-storage primitives
+├── supervisor/            # Supervisor: environment allowlist, attestation, build
+└── tui-chaos/             # TUI chaos and evidence harness
 
-apps/
-└── madbridge/             # CLI + TUI application
-    └── src/
-        ├── cli.ts         # madv-tui CLI entry — nine approved commands
-        ├── commands/      # init, doctor, start, status, pause, resume, verify-ledger, export-evidence, close
-        └── tui/           # @opentui/react presentation only (no policy/ledger imports)
-            ├── App.tsx, main.tsx, keyboard-router.ts, keybindings.ts, types.ts
-            ├── components/  # ApprovalDialog, StatusBar, EventLog, DockStrip, DecisionStrip,
-            │                # IncidentBand, FixtureBanner, PaneTabs, agent-identity
-            ├── hooks/       # useBrokerState, useKeyboard
-            └── panes/       # ClaudePane, AntigravityPane, GovernancePane
+apps/                      # 4 apps
+├── madbridge/             # CLI (`madv-tui`) + TUI application
+│   └── src/
+│       ├── cli.ts         # madv-tui CLI entry — fourteen commands
+│       ├── commands/      # init, doctor, start, status, pause, resume, verify-ledger,
+│       │                  # export-evidence, close, join, leave, follow, rooms, room
+│       └── tui/           # @opentui/react presentation only (no policy/ledger imports)
+│           ├── App.tsx, main.tsx, keyboard-router.ts, keybindings.ts, types.ts
+│           ├── components/  # ApprovalDialog, StatusBar, EventLog, DockStrip, DecisionStrip,
+│           │                # IncidentBand, FixtureBanner, PaneTabs, agent-identity
+│           ├── hooks/       # useBrokerState, useKeyboard
+│           └── panes/       # ClaudePane, AntigravityPane, GovernancePane
+├── madv-agent/            # Agent CLI
+├── projector-mc/          # Founder Mission Control — thin-client projector UI (fixture-first)
+└── seal-studio/           # Seal Studio v0 — compose/seal a FounderAct (dev server only)
 ```
 
 ## Architecture Boundary
@@ -127,7 +141,7 @@ bun run apps/madbridge/src/cli.ts verify-ledger --json
 
 `docs/verification/madventures-tui-v1-evidence.md` is the V1 baseline record
 (2026-08-08/09) — historical, not current. The `docs/verification/` directory
-is a running log; as of this writing, `phase-3a-correction-rounds.md` is the
-most recently updated record (round 12, 2026-08-29). Check the directory
+is a running log; as of this writing, the newest record is
+`2026-11-15-madv-surface-0.1.1-release.md` (2026-11-15). Check the directory
 listing rather than trusting any single "latest" pointer, since it will drift
-again with the next round.
+again with the next record.
