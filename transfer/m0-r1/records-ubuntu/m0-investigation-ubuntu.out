@@ -1,0 +1,58 @@
+=== M0 investigation on the Ubuntu PC (B8, B15 item 2, Addenda 5 and 6), version 1 (bash 5.3.9(1)-release)
+Not inside tmux: a dropped SSH connection would stop the run, and B8 repeats no call. Type yes to go on without tmux: Addendum 6 B4 check folder dcc740c8875dc573c157171a65e70a93440a4848777bb17123b1553e4dce25b7 and settings.json d9e21d82b50fd170d5c1c48e5996745670f2ad6e4f128c1c227d07abd7c91170: OK
+=== the host is quiet (counts only)
+madv-harness programs 0; launcher processes 0; processes naming hermes: 18; load: 0.21 0.12 0.12
+=== Claude Code against DEC-20261115-02 A8 (B15 item 1)
+launcher bd6c236585c5ba7eb7c3ee5a59a1e134ce4fc676374d97d89ff11c8de103c363 and governed copy 0dc4f4a9a165fc60746d7ae8489712e5fc352f1e7ad4eb22e7141bd0812eb0cf: OK
+=== your M Plan key file (DEC-20261115-02 B8 item 1; Addendum 4 B1)
+Path to your M Plan key file (nothing of it is printed): key file: one line, an M Plan key, mode 600, owned by you, outside any repository
+=== the investigation folder
+=== B8: madv-surface, the primitives of item 3, each once and in order
+madv-surface/01: exit=0 signal=none timed_out=no
+madv-surface/02: exit=0 signal=none timed_out=no
+madv-surface/03: exit=0 signal=none timed_out=no
+madv-surface/04: exit=0 signal=none timed_out=no
+madv-surface/05: exit=1 signal=none timed_out=no
+madv-surface/06: exit=0 signal=none timed_out=no
+madv-surface/07: exit=0 signal=none timed_out=no
+madv-surface/08: exit=0 signal=none timed_out=no
+madv-surface/09: exit=0 signal=none timed_out=no
+=== B15 item 2: Claude Code, the primitives of DEC-20261103-02 B4, each once and in order
+claude-code/01: exit=0 signal=none timed_out=no
+claude-code/02: exit=0 signal=none timed_out=no
+claude-code/03: exit=0 signal=none timed_out=no
+claude-code/04: exit=0 signal=none timed_out=no
+claude-code/05: exit=0 signal=none timed_out=no
+claude-code/06: exit=0 signal=none timed_out=no
+claude-code/07: exit=0 signal=none timed_out=no
+claude-code/08: exit=0 signal=none timed_out=no
+claude-code/09: exit=0 signal=none timed_out=no
+claude-code/10: exit=0 signal=none timed_out=no
+claude-code/11: exit=0 signal=none timed_out=no
+claude-code/12: exit=0 signal=none timed_out=no
+claude-code/13: exit=0 signal=none timed_out=no
+claude-code/14: exit=0 signal=none timed_out=no
+claude-code/15: exit=0 signal=none timed_out=no
+claude-code/16: exit=0 signal=none timed_out=no
+claude-code/17: exit=0 signal=none timed_out=no
+claude-code/18: exit=0 signal=none timed_out=no
+=== the key check over every file kept (Addendum 4 B1)
+142 files: no key and no key-shaped string
+=== madv-surface: what B9 rests on
+01 exit=0 signal=none timed_out=no  | 02 exit=0 signal=none timed_out=no  | 03 exit=0 signal=none timed_out=no  | 04 exit=0 signal=none timed_out=no  | 05 exit=1 signal=none timed_out=no  | 06 exit=0 signal=none timed_out=no  | 07 exit=0 signal=none timed_out=no  | 08 exit=0 signal=none timed_out=no  | 09 exit=0 signal=none timed_out=no  | 
+02: madv-surface 0.1.1   09: madv-surface 0.1.1
+03 auth status: {"loggedIn":true,"authMethod":"plan_key","profile":"minimax","provider":"minimax","endpointHost":"api.minimax.io","verified":true,"verifyMethod":"read_only_endpoint"}
+04: [{"requested_model":"MiniMax-M3.1-Flash","surface_version":"0.1.1","profile":"minimax","provider":"minimax","endpoint_host":"api.minimax.io"},{"response_model":"MiniMax-M3.1-Flash","response_independence_domain":"minimax","tls_verified_host":"api.minimax.io","matches_requested":true},{"result":"success","is_error":false}]
+05: [{"requested_model":"MiniMax-M3.1-Flash","surface_version":"0.1.1","profile":"minimax","provider":"minimax","endpoint_host":"api.minimax.io"},{"response_model":"MiniMax-M3.1-Flash","response_independence_domain":"minimax","tls_verified_host":"api.minimax.io","matches_requested":true},{"result":"error_max_turns","is_error":true}]
+06: [{"requested_model":"MiniMax-M3.1-Flash","surface_version":"0.1.1","profile":"minimax","provider":"minimax","endpoint_host":"api.minimax.io"},{"response_model":"MiniMax-M3.1-Flash","response_independence_domain":"minimax","tls_verified_host":"api.minimax.io","matches_requested":true},{"result":"success","is_error":false}]
+07: [{"requested_model":"MiniMax-M3.1-Flash-Preview","surface_version":"0.1.1","profile":"minimax","provider":"minimax","endpoint_host":"api.minimax.io"},{"response_model":"MiniMax-M3.1-Flash","response_independence_domain":"minimax","tls_verified_host":"api.minimax.io","matches_requested":false},{"result":"success","is_error":false}]
+=== Claude Code: what DEC-20261103-02 B3 rests on
+01 exit=0 signal=none timed_out=no  | 02 exit=0 signal=none timed_out=no  | 03 exit=0 signal=none timed_out=no  | 04 exit=0 signal=none timed_out=no  | 05 exit=0 signal=none timed_out=no  | 06 exit=0 signal=none timed_out=no  | 07 exit=0 signal=none timed_out=no  | 08 exit=0 signal=none timed_out=no  | 09 exit=0 signal=none timed_out=no  | 10 exit=0 signal=none timed_out=no  | 11 exit=0 signal=none timed_out=no  | 12 exit=0 signal=none timed_out=no  | 13 exit=0 signal=none timed_out=no  | 14 exit=0 signal=none timed_out=no  | 15 exit=0 signal=none timed_out=no  | 16 exit=0 signal=none timed_out=no  | 17 exit=0 signal=none timed_out=no  | 18 exit=0 signal=none timed_out=no  | 
+05: 2.1.325 (Claude Code)   18: 2.1.325 (Claude Code)
+08 auth status: {"loggedIn":true,"authMethod":"claude.ai","apiProvider":"firstParty","subscriptionType":"max"}
+09: [{"model":"claude-fable-5-2","claude_code_version":"2.1.325","permissionMode":"dontAsk","mcp_servers":0,"plugins":0,"tools":0},{"assistant_model":"claude-fable-5-2"},{"assistant_model":"claude-fable-5-2"},{"system":"thinking_tokens"},{"system":"thinking_tokens"},{"is_error":false,"usage":[{"model":"claude-fable-5-2","canonical":"claude-fable-5-2","provider":"firstParty","output":278}]},{"tool_uses":0}]
+10: [{"model":"claude-fable-5-2","claude_code_version":"2.1.325","permissionMode":"dontAsk","mcp_servers":0,"plugins":0,"tools":0},{"assistant_model":"claude-fable-5-2"},{"assistant_model":"claude-fable-5-2"},{"system":"thinking_tokens"},{"system":"thinking_tokens"},{"is_error":false,"usage":[{"model":"claude-fable-5-2","canonical":"claude-fable-5-2","provider":"firstParty","output":253}]},{"tool_uses":0}]
+11: [{"model":"claude-fable-5-2","claude_code_version":"2.1.325","permissionMode":"dontAsk","mcp_servers":0,"plugins":0,"tools":0},{"assistant_model":"claude-fable-5-2"},{"assistant_model":"claude-fable-5-2"},{"system":"thinking_tokens"},{"system":"thinking_tokens"},{"is_error":false,"usage":[{"model":"claude-fable-5-2","canonical":"claude-fable-5-2","provider":"firstParty","output":221}]},{"tool_uses":0}]
+12: [{"model":"claude-fable-5-2","claude_code_version":"2.1.325","permissionMode":"dontAsk","mcp_servers":0,"plugins":0,"tools":0},{"assistant_model":"claude-fable-5-2"},{"is_error":false,"usage":[{"model":"claude-fable-5-2","canonical":"claude-fable-5-2","provider":"firstParty","output":4}]},{"tool_uses":0}]
+13: [{"model":"claude-fable-5-2","claude_code_version":"2.1.325","permissionMode":"dontAsk","mcp_servers":0,"plugins":0,"tools":0},{"assistant_model":"claude-fable-5-2"},{"is_error":false,"usage":[{"model":"claude-fable-5-2","canonical":"claude-fable-5-2","provider":"firstParty","output":4}]},{"tool_uses":0}]
+INVESTIGATION DONE on the Ubuntu PC: /home/michaeldaley/builds/m0-investigation-ubuntu, MANIFEST.sha256 e0b4fdef6cb93f682fa7f6431352c642beae1b4bf7a29cc8419bd3d0b1c408fd; paste this whole output to the drafting assistant
