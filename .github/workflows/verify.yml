@@ -24,7 +24,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup Bun
-        uses: MADVenturesLLC/madventures-tui/.github/actions/setup-qualified-bun@d057994a6663a7b56f5603f109b33d79bef333ef
+        uses: MADVenturesLLC/madventures-tui/.github/actions/setup-qualified-bun@07f9620159b44a62669aa191d572adc21501672b
         with:
           custody-token: ${{ secrets.ARTIFACTS_READ_TOKEN }}
 
@@ -76,7 +76,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup Bun
-        uses: MADVenturesLLC/madventures-tui/.github/actions/setup-qualified-bun@d057994a6663a7b56f5603f109b33d79bef333ef
+        uses: MADVenturesLLC/madventures-tui/.github/actions/setup-qualified-bun@07f9620159b44a62669aa191d572adc21501672b
         with:
           custody-token: ${{ secrets.ARTIFACTS_READ_TOKEN }}
 
