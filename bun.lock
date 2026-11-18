@@ -102,6 +102,10 @@
         "@madventures/protocol": "workspace:*",
       },
     },
+    "packages/adapter-madv-surface": {
+      "name": "@madventures/adapter-madv-surface",
+      "version": "0.1.0",
+    },
     "packages/artifact-store": {
       "name": "@madventures/artifact-store",
       "version": "0.1.0",
@@ -200,6 +204,7 @@
       "name": "@madventures/supervisor",
       "version": "0.1.0",
       "dependencies": {
+        "@madventures/adapter-madv-surface": "workspace:*",
         "@madventures/protocol": "workspace:*",
         "@madventures/storage": "workspace:*",
       },
@@ -291,6 +296,8 @@
     "@madventures/adapter-antigravity": ["@madventures/adapter-antigravity@workspace:packages/adapter-antigravity"],
 
     "@madventures/adapter-claude-code": ["@madventures/adapter-claude-code@workspace:packages/adapter-claude-code"],
+
+    "@madventures/adapter-madv-surface": ["@madventures/adapter-madv-surface@workspace:packages/adapter-madv-surface"],
 
     "@madventures/artifact-store": ["@madventures/artifact-store@workspace:packages/artifact-store"],
 

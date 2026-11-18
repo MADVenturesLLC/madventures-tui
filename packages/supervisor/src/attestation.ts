@@ -1,6 +1,10 @@
+import type { AdapterRegistrationV1 } from "@madventures/protocol";
+import { encodeUserInput, parseMadvIdentity, parseMadvAuthReadiness } from "@madventures/adapter-madv-surface";
+
 // DEC-20261013-01 B3 and DEC-20261014-02 B2. Probe output is local to
 // this invocation and never leaves the metadata-only result boundary.
 export const IDENTITY_PROBE_INPUT = '{"type":"user","message":{"role":"user","content":"Report session initialization."}}\n';
+export const MADV_IDENTITY_PROBE_INPUT = encodeUserInput("Reply with your model identifier and nothing else.");
 
 export interface ProbeRequest {
   executablePath: string;
@@ -11,6 +15,7 @@ export interface ProbeRequest {
   kind: "identity" | "auth";
   model: string;
   supportedVersions: readonly string[];
+  registration?: AdapterRegistrationV1;
 }
 
 export interface ProbeProcess {
@@ -31,7 +36,7 @@ export interface ProbeRuntime {
 
 export interface ProbeDiagnostic {
   readonly result: "pass" | "auth_not_ready" | "identity_mismatch";
-  readonly primitive: "auth status" | "system/init";
+  readonly primitive: "auth status" | "system/init" | "model_response";
   readonly exitCode: number | null;
   readonly signal: string | number | null;
   readonly stdoutBytes: number;
@@ -82,6 +87,8 @@ const runtime: ProbeRuntime = {
 
 export async function runBoundedProbe(request: ProbeRequest, overrides: Partial<ProbeRuntime> = {}): Promise<ProbeResult> {
   const rt = { ...runtime, ...overrides };
+  const madv = request.registration?.surface === "madv-surface";
+  const executionMs = madv ? 30_000 : EXECUTION_MS;
   const started = rt.now();
   let stdoutBytes = 0, stderrBytes = 0;
   let exitCode: number | null = null;
@@ -99,7 +106,7 @@ export async function runBoundedProbe(request: ProbeRequest, overrides: Partial<
   function result(ok: boolean): ProbeResult {
     return Object.freeze({ ok, diagnostic: Object.freeze({
       result: ok ? "pass" : request.kind === "identity" ? "identity_mismatch" : "auth_not_ready",
-      primitive: request.kind === "identity" ? "system/init" : "auth status",
+      primitive: request.kind === "identity" ? madv ? "model_response" : "system/init" : "auth status",
       exitCode, signal, stdoutBytes, stderrBytes,
     }) });
   }
@@ -126,7 +133,7 @@ export async function runBoundedProbe(request: ProbeRequest, overrides: Partial<
           output += decoder.decode(value, { stream: true });
           // Detect only the event boundary while streaming. Identity field
           // validation, like auth parsing, happens after exit and reaping.
-          if (request.kind === "identity" && firstInit(output) !== undefined) wake("identity");
+          if (request.kind === "identity" && !madv && firstInit(output) !== undefined) wake("identity");
         }
       }
       if (name === "stdout") output += decoder.decode();
@@ -142,11 +149,11 @@ export async function runBoundedProbe(request: ProbeRequest, overrides: Partial<
       exitObserved = true; exitCode = code; signal = process?.signalCode ?? null;
     });
     const reaped = Promise.all([observedExit, consume(process.stdout, "stdout"), consume(process.stderr, "stderr")]).then(() => "reaped" as const);
-    const reason = await deadline(Promise.race([reaped, interrupted]), started + EXECUTION_MS);
-    let clean = reason === "reaped" && rt.now() - started <= EXECUTION_MS;
+    const reason = await deadline(Promise.race([reaped, interrupted]), started + executionMs);
+    let clean = reason === "reaped" && rt.now() - started <= executionMs;
     if (reason !== "reaped") {
       const cleanupStart = rt.now();
-      const end = Math.min(cleanupStart + CLEANUP_MS, started + EXECUTION_MS + CLEANUP_MS);
+      const end = Math.min(cleanupStart + CLEANUP_MS, started + executionMs + CLEANUP_MS);
       if (!exitObserved) { try { process.kill("SIGTERM"); } catch { streamFailure = true; } }
       let completion = await deadline(reaped, Math.min(cleanupStart + GRACE_MS, end));
       if (completion !== "reaped") {
@@ -158,9 +165,13 @@ export async function runBoundedProbe(request: ProbeRequest, overrides: Partial<
     if (!clean || request.signal.aborted || streamFailure || oversized || !exitObserved || exitCode !== 0 || signal !== null) return result(false);
     // No output parser is reached before the subprocess's exit promise and
     // both stream drains have settled inside the relevant monotonic budget.
-    const accepted = request.kind === "identity"
-      ? parseIdentity(output, request.model, request.supportedVersions)
-      : rt.parseAuth(output);
+    const accepted = madv
+      ? request.kind === "identity"
+        ? parseMadvIdentity(output, request.model, request.supportedVersions).ok
+        : parseMadvAuthReadiness(output).ok
+      : request.kind === "identity"
+        ? parseIdentity(output, request.model, request.supportedVersions)
+        : rt.parseAuth(output);
     return result(accepted);
   } catch { return result(false); }
   finally {

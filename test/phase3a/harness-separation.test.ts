@@ -21,7 +21,7 @@ const ROUTER_TARGET = "../../../test/phase3a/fixture-adapters";
 const EXCEPTIONS: Readonly<Record<string, { sha256: string; call?: string }>> = {
   [ROUTER_IMPORTER]: { sha256: "2faefe54d7c9be2051bce621629203072515263d58bc69b31bd2fe927faedb01" },
   "packages/protocol/src/adapter-registry.ts": {
-    sha256: "3129d3cead6312e4cb90eb6832e6a46597f3d352254021d5929b82ec651f4566", call: "source[Symbol.iterator]()",
+    sha256: "fe5fd51a559890adf9e1d87a7d0c73d62e9500dbc0cfcda0f1da9ac9aa938453", call: "source[Symbol.iterator]()",
   },
   "packages/protocol/src/lifecycle-events.ts": {
     sha256: "9210012a505848a7379ab7b9cf9d840f33197de58f85b23c359653760479c603", call: "PAYLOAD_SHAPE[knownType](payload)",

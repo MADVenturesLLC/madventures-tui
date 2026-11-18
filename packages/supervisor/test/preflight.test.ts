@@ -29,7 +29,7 @@ function fixture() {
   const temp = join(root, "private-temp"); mkdirSync(temp, { mode: 0o700 });
   const settings = join(root, "settings.json"); writeFileSync(settings, "{}");
   const model = "fixture-exact-model";
-  const source = `#!${process.execPath}\nprocess.on('SIGTERM',()=>process.exit(0));if (process.argv.includes('auth')) console.log(JSON.stringify({loggedIn:true,authMethod:'claude.ai',apiProvider:'firstParty',subscriptionType:'max',email:'PRIVATE-PROBE-CANARY'})); else console.log(JSON.stringify({type:'system',subtype:'init',model:${JSON.stringify(model)},claude_code_version:'2.1.296'}));\n`;
+  const source = `#!${process.execPath}\nprocess.on('SIGTERM',()=>process.exit(0));if (process.argv.includes('auth')) console.log(JSON.stringify({loggedIn:true,authMethod:'claude.ai',apiProvider:'firstParty',subscriptionType:'max',email:'PRIVATE-PROBE-CANARY'})); else console.log(JSON.stringify({type:'system',subtype:'init',model:${JSON.stringify(model)},claude_code_version:'2.1.325'}));\n`;
   for (const name of ["madbridge-claude-v5", "agy"]) writeFileSync(join(bin, name), source, { mode: 0o700 });
   const u = userInfo();
   const envelope: Record<string, unknown> = {
@@ -64,7 +64,7 @@ function fixture() {
     stat: path => statSync(path === privateName ? temp : path),
     registration: surface => {
       const r = ADAPTER_REGISTRY.get(surface)!;
-      return { ...r, identity_probe: { argv: [], parse: "json" }, auth_readiness_probe: { argv: ["auth", "status"], parse: "json" }, non_interactive_flags: [], supported_versions: ["2.1.296"] } as AdapterRegistrationV1;
+      return { ...r, identity_probe: { argv: [], parse: "json" }, auth_readiness_probe: { argv: ["auth", "status"], parse: "json" }, non_interactive_flags: [], supported_versions: ["2.1.325"] } as AdapterRegistrationV1;
     },
     freshRecord: () => ({ overall: "pass", requested_model: model, role_eligibility: ["builder", "independent-reviewer"], independent_review_eligible: true }) as any,
   };
@@ -82,7 +82,7 @@ function fixtureWithUnregisteredSurfaces() {
   const registrations = new Map<SurfaceId, AdapterRegistrationV1>(executions.map(execution => [execution.surface, {
     surface: execution.surface, executable_name: execution.surface,
     provider: execution.provider, independence_domain: execution.independence_domain,
-    organization_id: execution.provider, supported_versions: ["2.1.296"],
+    organization_id: execution.provider, supported_versions: ["2.1.325"],
     identity_probe: { argv: [], parse: "json" }, auth_readiness_probe: { argv: ["auth", "status"], parse: "json" },
     non_interactive_flags: [], environment_allowlist_ref: "antigravity-v1",
     auth_failure_detection: [], limitations: ["Controlled pair-admission regression."],
@@ -324,7 +324,7 @@ test("missing TERM fails preflight as auth_not_ready", async () => {const f=fixt
 test("missing TMPDIR fails preflight as auth_not_ready", async () => {const f=fixture();delete f.input.ambient.TMPDIR;await failure(f,"auth_not_ready");});
 test("a caught MissingRequiredVariableError maps to auth_not_ready", async () => {const f=fixture();await failure(f,"auth_not_ready",{buildEnvironment:()=>{throw new MissingRequiredVariableError("TERM","claude-code-v1");}});});
 
-function hang(f: ReturnType<typeof fixture>) { writeFileSync(join(f.bin,"madbridge-claude-v5"), `#!${process.execPath}\nif(process.argv.includes('auth')){process.on('SIGTERM',()=>{});setInterval(()=>{},100);}else {process.on('SIGTERM',()=>process.exit(0));console.log(JSON.stringify({type:'system',subtype:'init',model:${JSON.stringify(f.model)},claude_code_version:'2.1.296'}));}\n`); }
+function hang(f: ReturnType<typeof fixture>) { writeFileSync(join(f.bin,"madbridge-claude-v5"), `#!${process.execPath}\nif(process.argv.includes('auth')){process.on('SIGTERM',()=>{});setInterval(()=>{},100);}else {process.on('SIGTERM',()=>process.exit(0));console.log(JSON.stringify({type:'system',subtype:'init',model:${JSON.stringify(f.model)},claude_code_version:'2.1.325'}));}\n`); }
 test("the auth probe enforces the 5,000 ms execution deadline", async () => { const f=fixture();hang(f);const start=performance.now();await failure(f,"auth_not_ready");const elapsed=performance.now()-start;expect(elapsed).toBeGreaterThanOrEqual(5000);expect(elapsed).toBeLessThan(6500); },10000);
 test("the auth probe escalates SIGTERM to SIGKILL within the forced-cleanup budget", async () => {const f=fixture();hang(f);const signals:string[]=[];await failure(f,"auth_not_ready",{probe:req=>runBoundedProbe(req,{spawn:request=>{const p=Bun.spawn([request.executablePath,...request.arguments],{env:request.environment,stdin:new Blob([request.stdin]),stdout:"pipe",stderr:"pipe"});children.push(p as any);return {...p,stdout:p.stdout,stderr:p.stderr,exited:p.exited,kill:s=>{if(request.kind==="auth")signals.push(s);p.kill(s as any);}};}})});expect(signals).toEqual(["SIGTERM","SIGKILL"]);},10000);
 test("the auth probe reaps the child successfully", async () => {const f=fixture();let reaped=0;const r=await f.run({probe:req=>runBoundedProbe(req,{spawn:request=>{const p=Bun.spawn([request.executablePath,...request.arguments],{env:request.environment,stdin:new Blob([request.stdin]),stdout:"pipe",stderr:"pipe"});children.push(p as any);return {stdout:p.stdout,stderr:p.stderr,exited:p.exited.then(code=>{reaped++;return code;}),kill:s=>p.kill(s as any)};}})});expect(r.ok).toBe(true);expect(reaped).toBe(4);});

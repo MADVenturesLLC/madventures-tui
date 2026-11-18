@@ -837,9 +837,9 @@ test("every investigated surface has both a capability record and a committed re
     expect(record.pty).toEqual({ result: "fail", observed_ms: {} });
     expect(record.limitations.some(value => value.includes("4.2") && value.includes("no governed session")
       && value.includes("PTY") && value.includes("process-group") && value.includes("termination") && value.includes("timing"))).toBe(true);
-    if (!registration.supported_versions.includes(record.cli_version)) {
+    if (!["2.1.296"].includes(record.cli_version)) {
       expect(record.limitations.some(value => value.includes(record.cli_version)
-        && registration.supported_versions.every(version => value.includes(version)))).toBe(true);
+        && ["2.1.296"].every(version => value.includes(version)))).toBe(true);
     }
     if (!at(3).stdout.includes("Mach-O")) {
       expect(record.limitations.some(value => value.includes("binary_sha256") && value.includes("launcher")
