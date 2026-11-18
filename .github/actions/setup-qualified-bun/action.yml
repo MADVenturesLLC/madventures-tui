@@ -113,8 +113,11 @@ runs:
             if [ "$MERGED" = "true" ]; then
               ANCHOR="$(printf '%s' "$PR_JSON" | jq -r '.merge_commit_sha')"
             else
-              echo "::error::EXPIRED: PR 40304 closed unmerged"
-              exit 1
+              # DEC-20261117-01 B2: PR 40304 was closed unmerged as stale. The
+              # custodied artifact is immutable and stays the runtime; only an
+              # official release containing its revision expires it (S4).
+              echo "::notice::PR 40304 closed unmerged; custody continues under DEC-20261117-01"
+              ANCHOR="$REV"
             fi
             ;;
           *)
