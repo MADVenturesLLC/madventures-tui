@@ -1861,3 +1861,64 @@ Round 2's resolution, recorded above as pending, is now closed:
   80,573,976 bytes. Evidence: `docs/verification/2026-11-15-madv-surface-0.1.1-release.md`.
 - **Harness:** one builder session under Codex 0.167.0, the governed build of `DEC-20261108-03` Addendum
   11. Both turns of its one session record name the model `gpt-6.1-sol` and the effort `xhigh`.
+
+## M0 review verdict PASS and M0 merged (rubric milestones 1 and 3, no round, count 0)
+
+- **Recorded:** 2026-11-19, under `DEC-20261119-01` B1 to B9 and C1.
+- **Plan milestone:** Phase 3B slice M0, madv-surface admission and the Claude Code version (plan §3 M0,
+  `DEC-20261115-02`). **Rubric milestones:** 1 and 3 (`DEC-20261108-01` B9 item 2, as `DEC-20261115-02`
+  B1 item 4 places it).
+- **Head reviewed:** `6da70bc5892f6d2ab27475afdc348b32835b3f7e` on PR #245 (`build/3b-m0-r1`), built by
+  `session:codex/3b-m0-r1` from binding base `0825a1e349ca5ea6427eea5f2de79dff234dc8f7` under
+  `DEC-20261115-02` and its Addenda 1 to 7, the builder prompt with SHA-256
+  `286664ccb06fc164d7c939dba2f3fa3498793bdb84e0ee9ea51f986855f88824` and four resume messages, the last
+  with SHA-256 `cb86844f8850efce9da4f17f4623fb9eac8a897d9c4caf442bc198f96339dfac`. Phase 1 ends at
+  `7f94c272a4fd7fc3b4ab1d18920b80ac95c677d3`. Before Phase 2 the session halted five times, each with a
+  report (`DEC-20261119-01` A3).
+- **Reviewer:** `antigravity`, a fresh session in Antigravity on the Founder's MacBook, with a Gemini
+  model the report shows as Gemini 4 Hydrogen (XHigh). Review prompt SHA-256
+  `07a6f5061bbf780d76dae08ad739841c1471ae4201ae50b052db4be59ae4bbd4`. The report records two errors in
+  the prompt's wording; the reviewer applied the acts, and neither changes the verdict (`DEC-20261119-01`
+  B5).
+- **Verdict text SHA-256:** `a7dbbd08556349339acecf4e01d6870c2b2f0a6d05d2c3bccfcb9120d26ef169`, 58,789
+  bytes, 578 lines, saved at `/Users/michaeldaley/builds/review-m0-r1.md`, posted on PR #245 as comments
+  6989765680 and 6989766234 by `decivantiq`.
+- **Result:** PASS, items 1 to 13, no SUBSTANTIVE finding, and three findings the reviewer classifies
+  ADVISORY, each from an attempt that broke what an item checks while every test of that item still
+  passed: shorter cleanup and grace intervals for madv-surface's probes (item 3); a variable outside
+  `DEC-20261115-02` B6 added to `madv-surface-v1` (item 4); and the status file of capture 05 of the
+  Ubuntu PC changed from exit 1 to exit 0 (item 6). The Founder rules all three limits of the tests, not
+  defects (`DEC-20261119-01` B3). **Counted:** no round. The builder's halts and the stops of the
+  Founder's record checks add no round. M0's count closes at **0**. No verdict of M0 is a
+  disqualifier.
+- **Checks at the head:** the runs of 2026-11-17 and of the first reopen on 2026-11-18 failed in the
+  expiry guard of the CI action and count for nothing (`DEC-20261115-02` Addendum 8 and its authorization
+  1). After the second reopen, on the test merge of the head into
+  `be78eea1db2d2f103ba70627298a1be94fd9f758`, Verify and Verify (macOS) passed with 2027 pass, 0 fail,
+  across 147 files, and tui-chaos on both hosts, attribution-shape, validate-code-review and code-review
+  succeeded; CodeQL and every Analyze job had succeeded on the first run. The Founder's runs of
+  `DEC-20261115-02` B12 passed on the MacBook under Bun 1.4.2 and on the Ubuntu PC under the custodied
+  build: 2027 pass, 0 fail, across 147 files on each, log manifests SHA-256
+  `e450855bb70c40d2bb64ac1c2b672ef66af5fcc10a694f4a5809dce856576a19` and
+  `0222c9c07c40e2b7736d63e03a2c234869ef708479dc5966e90e2400438dc1a3`.
+- **Merged:** PR #245 was marked ready at that head on 2026-11-18, after the PASS was posted. Copilot's
+  review 5964503161 there opened one thread, comment 4620336234: the identity parser does not require a
+  non-empty `response_id`. Item 4 d of the Founder's merge authorization answered it with no change. The
+  Founder's merge command resolved the thread and re-ran the held code-review runs 44391417116 and
+  44391418123, each of which succeeded. Under the merge authorization in comment 6994037612, SHA-256
+  `80fbf22aaa17b5167307803166365b7028013d522f3a3fc0069c9abffdcc823a`, it merged at
+  `453229b168ef60735973074aaadd100e435455df`, with parents `be78eea1db2d2f103ba70627298a1be94fd9f758`
+  and `6da70bc5892f6d2ab27475afdc348b32835b3f7e`, changing exactly 53 paths, 41 added and 12 modified,
+  all within `DEC-20261115-02` B7 item 3 and Addendum 1 B1. Every run on the merge commit succeeded.
+- **Harness:** one builder session under Codex 0.167.0, the governed build of `DEC-20261108-03` Addendum
+  11. Every turn of its one session record, nine in all, names the model `gpt-6.1-sol` and the effort
+  `xhigh`.
+- **Carried to the act that admits madv-surface under Addendum 7 B4 (`DEC-20261119-01` B3 and B4):**
+  tests for the three ADVISORY findings, or a ruling that closes each; and whether the identity parser
+  of madv-surface requires a non-empty `response_id` (Copilot's comment 4620336234).
+- **M1 (`DEC-20261119-01` B8 and B9):** `DEC-20261119-01` is M1's act of record, and its A9 records
+  the preflight lines at M0's merge. `DEC-20261108-04` B4 item 3 is not met: madv-surface is
+  registered and not admitted, and no madv-surface record is stored or filed; the Claude Code records
+  for `2.1.325` pass on both hosts. M1 to M6 do not start until the act of Addendum 7 B4 has admitted
+  madv-surface and its records are filed, or a later act of the Founder changes that item. B4 item 2
+  also stands.
