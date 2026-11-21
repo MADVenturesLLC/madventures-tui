@@ -1922,3 +1922,61 @@ Round 2's resolution, recorded above as pending, is now closed:
   for `2.1.325` pass on both hosts. M1 to M6 do not start until the act of Addendum 7 B4 has admitted
   madv-surface and its records are filed, or a later act of the Founder changes that item. B4 item 2
   also stands.
+
+## madv-surface 0.1.2 review verdict PASS and release (no rubric milestone, no round)
+
+- **Recorded:** 2026-11-21, under `DEC-20261121-01` B1 to B9 and C1.
+- **What it reviews:** the madv-surface 0.1.2 build of `DEC-20261119-03`, in
+  `MADVenturesLLC/madventures-surface`; not a Phase 3B slice. **Rubric milestone:** none
+  (`DEC-20261119-03` B5).
+- **Head reviewed:** `341eb058f537c887aa599f5051e0437f57bcc6bf` on pull request 3 of
+  `MADVenturesLLC/madventures-surface` (`build/v0.1.2`), built by `session:codex/surface-0.1.2-r1` from
+  `91bfb38549bcab37740d2c4564c371ee390a63e7` under builder prompt SHA-256
+  `d8dfe09baa4b51f189d519a0e2814413e6693c84a603f300ef39859c8b90ad0a`, five resume messages, the last
+  with SHA-256 `ef566fa3b5a5d87df80702984e75a11908c2702eb2bba65db2c97016c16f6d99`, and Addenda 1 and 2
+  of `DEC-20261119-03`, SHA-256 `82340832ae8b482000536a40549f9ba84cc13e9b4434798188590092faaaf962` and
+  `32b83de9c7bc3a8a515b3fc4b22082ff8f042937a13e9ce404500d7027d07bbe`. The session halted four times
+  and twice asked the Founder to quiet the MacBook (`DEC-20261121-01` A3).
+- **Reviewer:** `antigravity`, a fresh session in Antigravity on the Founder's MacBook; the report
+  records the model as not shown. Review prompt SHA-256
+  `cae856afcfb294f2dcde2b257fe5105054a2f7e810349d369bdec3532ca54315`.
+- **Verdict text SHA-256:** `0c24ddd8ff4f072b7e07430b5de31fba5b3b6f907b7d749d1da5b4c3c37c5f72`, 59,073
+  bytes, 614 lines, saved at `/Users/michaeldaley/builds/review-surface-0.1.2-r1.md`, posted on pull
+  request 3 of `MADVenturesLLC/madventures-surface` as comments 7056131487 and 7056131738 by
+  `decivantiq`.
+- **Result:** PASS, items 1 to 13, no SUBSTANTIVE and no ADVISORY finding, and two findings the reviewer
+  classes NOT COUNTING: `README.md` lines 114 to 116 and 216 still state the 0.1.1 rule and omit
+  `unexpected_tool_call`, and no test sends a later `no_tools` `true` after a first message without it.
+  Both are carried to the act of any later build of madv-surface (`DEC-20261121-01` B5). Of the five
+  attempts that keep every test passing, the Founder closes the cut at the cap plus 280 characters, the
+  rule written to the tested prefixes and the unreachable second turn, and carries the two fixed host
+  names with the IPv6 endpoint (`DEC-20261121-01` B6). The review prompt set a load wait where
+  `DEC-20261115-01` B9 sets the rule of `DEC-20261102-02` B4; that drafting error does not change any
+  item (`DEC-20261121-01` B4). **Counted:** no round, under no rubric milestone. The builder's halts add
+  no round.
+- **Checks at the head:** the repository has no CI. Every gate of `DEC-20261119-03` B3 passed in the
+  build: 142 pass, 0 fail, across 25 files. The breaks the builder declined, 1, 2, 7 and 8, the Founder
+  made before the push, each failing its target test and restored (comment 7054067610). The Founder's
+  runs of `DEC-20261119-03` B4 passed on the MacBook under Bun 1.4.2 and on the Ubuntu PC under the
+  custodied Bun 1.4.1: 142 pass, 0 fail, across 25 files on each, with the TLS test's assertion on a
+  reused connection run on both.
+- **Merged and tagged:** pull request 3 was marked ready at that head on 2026-11-21, after the PASS was
+  posted. Copilot's review 6002455016 came before the merge, with one comment, 4650214135: an IPv6
+  address keeps its brackets in `URL.hostname`, so `::1` in brackets is still sent as a TLS server
+  name. A release build refuses test endpoints and every profile host is a DNS name, so it touches no
+  release binary; it is carried with the IPv6 endpoint (`DEC-20261121-01` A9 and B7). Under the
+  Founder's merge authorization in comment 7056702446, SHA-256
+  `bf3b457187cfc11abfa8218ed83d4dc1d289f11f5aed06eaab7ef68a478e8546`, it merged at
+  `05f2b35b813a322e60f4a5154cc5671e8319aada`, with parents `91bfb38549bcab37740d2c4564c371ee390a63e7`
+  and `341eb058f537c887aa599f5051e0437f57bcc6bf` and the head's tree, changing exactly the sixteen
+  paths of `DEC-20261119-03` B1 with its item 9, and was tagged `v0.1.2`, the release commit.
+- **Release builds (`DEC-20261119-03` B7):** MacBook, Bun 1.4.2, SHA-256
+  `c9a9d800386a7c418f90d3597701c903914b93d152e9a09bae6f640e993f6725`, 62,292,978 bytes; Ubuntu PC, the
+  custodied Bun 1.4.1, SHA-256 `94537feb12c0d3918d25297ea34f6a55dc58e11ccfd7857856770b751bf263b7`,
+  80,573,976 bytes. Evidence: `docs/verification/2026-11-21-madv-surface-0.1.2-release.md`.
+- **Harness:** one builder session under Codex 0.167.0, the governed build of `DEC-20261108-03` Addendum
+  11. All seven turns of its one session record name the model `gpt-6.2-astra` and the effort `xhigh`.
+- **Carried:** to the act of any later build of madv-surface, the two findings, the IPv6 endpoint with
+  Copilot's comment and the two fixed host names (`DEC-20261121-01` B5 to B7); to the act of
+  `DEC-20261115-02` Addendum 7 B4, the NUL bytes at the start of the Ubuntu run's help log
+  (`DEC-20261121-01` B3).
