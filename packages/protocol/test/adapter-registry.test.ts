@@ -129,9 +129,9 @@ test("registry membership cannot be mutated at runtime", () => {
 test("madv-surface registration matches DEC-20261115-02 field for field", () => {
   expect(ADAPTER_REGISTRY.get(parseSurfaceId("madv-surface"))).toEqual({
     surface: parseSurfaceId("madv-surface"), executable_name: "madv-surface",
-    provider: "minimax", supported_versions: ["0.1.1"],
+    provider: "minimax", supported_versions: ["0.1.2"],
     identity_probe: {
-      argv: ["--print", "--input-format", "stream-json", "--output-format", "stream-json", "--profile", "minimax", "--require-model", "--role", "reviewer", "--no-session-persistence", "--max-turns", "1"],
+      argv: ["--print", "--input-format", "stream-json", "--output-format", "stream-json", "--profile", "minimax", "--require-model", "--role", "reviewer", "--no-session-persistence", "--no-tools", "--max-turns", "1"],
       parse: "json",
     },
     auth_readiness_probe: { argv: ["auth", "status", "--profile", "minimax"], parse: "json" },
@@ -144,4 +144,16 @@ test("madv-surface registration matches DEC-20261115-02 field for field", () => 
       "Both probes are live calls on the M Plan at every start.",
     ],
   });
+});
+
+test("madv-surface 0.1.2 reserves --no-tools for the identity probe", () => {
+  const entry = ADAPTER_REGISTRY.get(parseSurfaceId("madv-surface"))!;
+  const launch = [
+    "--print", "--input-format", "stream-json", "--output-format", "stream-json",
+    "--profile", "minimax", "--require-model", "--role", "reviewer", "--no-session-persistence",
+  ];
+  expect(entry.supported_versions).toEqual(["0.1.2"]);
+  expect(entry.non_interactive_flags).toEqual(launch);
+  expect(entry.non_interactive_flags).not.toContain("--no-tools");
+  expect(entry.identity_probe.argv).toEqual([...launch, "--no-tools", "--max-turns", "1"]);
 });

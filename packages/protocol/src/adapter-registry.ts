@@ -79,9 +79,9 @@ const MADV_SURFACE_REGISTRATION: AdapterRegistrationV1 = deepFreeze({
   surface: parseSurfaceId("madv-surface"),
   executable_name: "madv-surface",
   provider: "minimax",
-  supported_versions: ["0.1.1"],
+  supported_versions: ["0.1.2"],
   identity_probe: {
-    argv: ["--print", "--input-format", "stream-json", "--output-format", "stream-json", "--profile", "minimax", "--require-model", "--role", "reviewer", "--no-session-persistence", "--max-turns", "1"],
+    argv: ["--print", "--input-format", "stream-json", "--output-format", "stream-json", "--profile", "minimax", "--require-model", "--role", "reviewer", "--no-session-persistence", "--no-tools", "--max-turns", "1"],
     parse: "json",
   },
   auth_readiness_probe: { argv: ["auth", "status", "--profile", "minimax"], parse: "json" },

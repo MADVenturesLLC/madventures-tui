@@ -6,7 +6,7 @@ import { IDENTITY_PROBE_INPUT, runBoundedProbe, type ProbeRequest, type ProbeRun
 const model = "MiniMax-M3.1-Flash";
 const auth = { loggedIn: true, authMethod: "plan_key", profile: "minimax", provider: "minimax", endpointHost: "api.minimax.io", verified: true, verifyMethod: "read_only_endpoint" };
 const stamp = { session_id: "wire", ts: "2026-11-15T00:00:00.000Z" };
-const init = { ...stamp, type: "system", subtype: "init", surface: "madv-surface", surface_version: "0.1.1", binary_sha256: "a".repeat(64), role: "reviewer", tools: [], profile: "minimax", provider: "minimax", endpoint_host: "api.minimax.io", requested_model: model };
+const init = { ...stamp, type: "system", subtype: "init", surface: "madv-surface", surface_version: "0.1.2", binary_sha256: "a".repeat(64), role: "reviewer", tools: [], profile: "minimax", provider: "minimax", endpoint_host: "api.minimax.io", requested_model: model };
 const response = { ...stamp, type: "model_response", response_model: model, response_id: "synthetic-response", response_independence_domain: "minimax", tls_verified_host: "api.minimax.io", profile: "minimax", provider: "minimax", endpoint_host: "api.minimax.io" };
 const wire = (...values: unknown[]) => values.map(value => JSON.stringify(value)).join("\n") + "\n";
 function request(kind: "identity" | "auth" = "identity", surface = "madv-surface"): ProbeRequest {
