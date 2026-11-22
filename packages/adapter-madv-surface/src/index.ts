@@ -3,7 +3,9 @@
 export type MadvFailureCause =
   | "auth_failed" | "endpoint_refused" | "provider_error"
   | "identity_unavailable" | "model_refused" | "domain_unresolved" | "identity_mismatch";
+const identityProbe = Symbol("identity probe");
 export interface MadvContext {
+  readonly [identityProbe]?: boolean;
   readonly executionId: string;
   readonly sessionId: string;
   readonly model: string;
@@ -143,13 +145,17 @@ export class MadvSurfaceParser {
         || value.endpoint_host !== "api.minimax.io" || value.requested_model !== this.context.model) {
         this.fail("identity_mismatch", "init_predicate"); return;
       }
+      if (this.context[identityProbe] && (!Array.isArray(value.tools) || value.tools.length !== 0)) {
+        this.fail("identity_mismatch", "init_tools"); return;
+      }
       this.wireSession = value.session_id; this.state = "waiting";
     } else if (value.type === "model_response") {
       if (this.state !== "waiting" && !(this.state === "tools" && this.tools.size === 0)) { this.fail("identity_mismatch", "event_order"); return; }
       if (typeof value.response_model !== "string" || value.response_model.length === 0) { this.fail("identity_unavailable", "model_field_absent"); return; }
-      if (/(?:^|[/:.])claude|anthropic/i.test(value.response_model)) { this.fail("model_refused", "anthropic_model"); return; }
+      if (/claude|anthropic/i.test(value.response_model)) { this.fail("model_refused", "anthropic_model"); return; }
       if (!/^minimax[-_]/i.test(value.response_model)) { this.fail("domain_unresolved", "unknown_family"); return; }
       if (value.response_model !== this.context.model
+        || typeof value.response_id !== "string" || value.response_id.length === 0
         || value.response_independence_domain !== this.context.independenceDomain
         || value.provider !== this.context.provider || value.profile !== "minimax"
         || value.endpoint_host !== "api.minimax.io" || value.tls_verified_host !== "api.minimax.io") {
@@ -199,7 +205,7 @@ export class MadvSurfaceParser {
   }
 }
 export function parseMadvIdentity(output: string, model: string, supportedVersions: readonly string[], exitCode = 0, signal: string | number | null = null): MadvResult {
-  const parser = new MadvSurfaceParser({ executionId: "identity-probe", sessionId: "preflight", model, supportedVersions, provider: "minimax", independenceDomain: "minimax" });
+  const parser = new MadvSurfaceParser({ [identityProbe]: true, executionId: "identity-probe", sessionId: "preflight", model, supportedVersions, provider: "minimax", independenceDomain: "minimax" });
   parser.push(output);
   return parser.finish(exitCode, signal);
 }

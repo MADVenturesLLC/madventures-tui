@@ -1,6 +1,6 @@
 import { expect, spyOn, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { parseMadvAuthReadiness, parseMadvIdentity } from "../src/index";
+import { MadvSurfaceParser, parseMadvAuthReadiness, parseMadvIdentity } from "../src/index";
 
 // These are the Founder's sanitized recorded bytes, not synthetic streams.
 // SANITIZE.txt replaced UUID-shaped session_id values only: MacBook stdout
@@ -33,9 +33,17 @@ for (const [host, capture] of [
   ["macbook", "04"], ["macbook", "05"], ["macbook", "06"],
   ["ubuntu", "04"], ["ubuntu", "06"],
 ]) {
-  test(host + " " + capture + " recorded identity passes for MiniMax-M3.1-Flash", () => {
+  test(host + " " + capture + " recorded tools fail probe identity and pass a governed launch", () => {
     const f = fixture(host!, capture!);
-    expect(parseMadvIdentity(f.output, model, ["0.1.1"], f.exit, f.signal).ok).toBe(true);
+    expect(parseMadvIdentity(f.output, model, ["0.1.1"], f.exit, f.signal)).toMatchObject({
+      ok: false, cause: "identity_mismatch", reason: "init_tools",
+    });
+    const launch = new MadvSurfaceParser({
+      executionId: "recorded-launch", sessionId: "recorded-session", model,
+      supportedVersions: ["0.1.1"], provider: "minimax", independenceDomain: "minimax",
+    });
+    launch.push(f.output);
+    expect(launch.finish(f.exit, f.signal).ok).toBe(true);
   });
 }
 test("ubuntu 05 recorded identity fails closed with provider_error", () => {
