@@ -1,0 +1,29 @@
+Founder check of the admission builder session record before the record runs, under DEC-20261108-03 Addendum 2 B4, as its Addenda 6 B1 and 10 B6 and DEC-20261112-02 B2 and B5 read it, with the count of code from a string of DEC-20261115-02 Addendum 3 B4.
+
+Check: h2-record-check.mjs, SHA-256 c1834dcc689e94cf57fb123a09a0600225d8e97b428c648f14276136e3dd383f, from transfer commit 730df3014bf31d2dc0770cb4d30a4a4a79e30afe, over /Users/michaeldaley/builds/m0-admission-r1. Evidence on the MacBook: /Users/michaeldaley/builds/m0-admission-record-check/phase1-20261122T050129Z, MANIFEST.sha256 2f1e0e5d63597e93f87cb35cd7a55c68241c4e61c94de14a76f5b833d2b6193e.
+
+Self-test:
+    self-test cases: 66; not as expected: 0
+    SELFTEST_OK
+
+Check:
+    records whose starting folder is /Users/michaeldaley/builds/m0-admission-r1: 1
+    rollout-2026-11-21T14-31-05-01a1ff97-430e-7133-8eef-23460e95d28d.jsonl: started 2026-11-21T19:31:05.617Z, cli_version 0.167.0, folder /Users/michaeldaley/builds/m0-admission-r1
+      user messages: 0
+      event types: 215 token_count; 3 task_complete; 3 task_started; 4 thread_settings_applied; 479 item_completed
+      turn 2026-11-21T19:31:14.953Z | model gpt-6.2-astra | effort xhigh | approval on-request | approvals reviewer user | sandbox workspace-write | network access false | folder /Users/michaeldaley/builds/m0-admission-r1
+      turn 2026-11-22T03:07:46.599Z | model gpt-6.2-astra | effort xhigh | approval on-request | approvals reviewer user | sandbox workspace-write | network access false | folder /Users/michaeldaley/builds/m0-admission-r1
+      turn 2026-11-22T04:04:29.285Z | model gpt-6.2-astra | effort xhigh | approval on-request | approvals reviewer user | sandbox workspace-write | network access false | folder /Users/michaeldaley/builds/m0-admission-r1
+      turn 2026-11-22T04:09:36.645Z | model gpt-6.2-astra | effort xhigh | approval on-request | approvals reviewer user | sandbox workspace-write | network access false | folder /Users/michaeldaley/builds/m0-admission-r1
+      top-level calls: 172 custom_tool_call exec; 39 function_call wait
+      exec calls: 172; names of Addendum 2 B4 placed as text inside exec: 0
+      calls inside exec, by called name: 11 includes; 15 allSettled; 150 exec_command; 16 slice; 18 map; 2 find; 2 notify; 2 parse; 2 test; 206 text; 25 run; 3 join; 3 startsWith; 34 exit; 4 filter; 4 split; 49 write_stdin; 6 replaceAll
+    CHECK_OK
+
+Count, b4-count.mjs, SHA-256 2dcff5987b35e4a1e7c60e1b9229f32f7ebca58376ea0af0d39ba2b6ef647689:
+    records: 1
+    record: rollout-2026-11-21T14-31-05-01a1ff97-430e-7133-8eef-23460e95d28d.jsonl
+    exec inputs: 172; not parsed: 0; occurrences of the six names, as any substring, in all of them: 0; calls of eval 0, Function 0, load 0, store 0; calls through a computed callee 0
+    B4_OK
+
+Phase 1 head 664c5678e516197fa1a14da3487e27821753ff48, branch build/3b-m0-admission-r1; bundle /Users/michaeldaley/builds/m0-admission-phase1-head.bundle, SHA-256 b9233adf0aaef1025ae14353437515e71961a57ac991357d56bd83f875f39044.
