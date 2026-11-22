@@ -1,0 +1,17 @@
+Admission build sanitized evidence for Phase 2 (DEC-20261121-02 B5 item 2, B7 and B8; DEC-20261115-02 B11)
+Rules, in this order, on every file outside records/: json-account-identifiers, the value of every JSON key that names email, org, account or user, case-insensitively, becomes <redacted:json-account-identifiers>; email-addresses, every email address becomes <redacted:email-addresses>; token-patterns, every string of the forms sk-, ghp_, gho_ and github_pat_ becomes <redacted:token-patterns>; uuid, every UUID-shaped string becomes <redacted:uuid>. A JSON file a rule changes is rewritten one value per line; every other byte stays.
+records/ holds the stored records and the dry-run and write-run logs byte for byte; they are cited by SHA-256 and are not rewritten.
+raw macbook/m0-admission-investigation-macbook: MANIFEST.sha256 f8d0394f644d9358cc15389ea9194d8e16782594ce3219fe85aab9ff6c4d8a00, copied as raw-MANIFEST.sha256
+raw ubuntu/m0-admission-investigation-ubuntu: MANIFEST.sha256 47465b43809b15b8a84e934d8279974ab8d544d06b7540c2d4bfe6338e0651f1, copied as raw-MANIFEST.sha256
+records: MacBook 5c0fd4fc850366d2107555a73487c734f912fc333c1590e7ec39c6bc7a3f36ea, logs index f335b71497d57ae632382878cafaccc9e4293b91a1e761915fd2796b5f41ac78; Ubuntu 4482839a8aca025d9e2f545a309fea7ff57971684d5e18f1ebdde4eacf0148a3, logs index 861a93014ead9c4aeae987d022746cfd82e389d4b1f0ccfb14f1b170082fb389
+files copied through the rules: 112; files changed by a rule: 8
+replacements, by rule: json-account-identifiers 0, email-addresses 0, token-patterns 0, uuid 32
+each file a rule changed, with its counts:
+  macbook/m0-admission-investigation-macbook/madv-surface/04.stdout json-account-identifiers=0 email-addresses=0 token-patterns=0 uuid=4
+  macbook/m0-admission-investigation-macbook/madv-surface/05.stdout json-account-identifiers=0 email-addresses=0 token-patterns=0 uuid=4
+  macbook/m0-admission-investigation-macbook/madv-surface/06.stdout json-account-identifiers=0 email-addresses=0 token-patterns=0 uuid=4
+  macbook/m0-admission-investigation-macbook/madv-surface/07.stdout json-account-identifiers=0 email-addresses=0 token-patterns=0 uuid=4
+  ubuntu/m0-admission-investigation-ubuntu/madv-surface/04.stdout json-account-identifiers=0 email-addresses=0 token-patterns=0 uuid=4
+  ubuntu/m0-admission-investigation-ubuntu/madv-surface/05.stdout json-account-identifiers=0 email-addresses=0 token-patterns=0 uuid=4
+  ubuntu/m0-admission-investigation-ubuntu/madv-surface/06.stdout json-account-identifiers=0 email-addresses=0 token-patterns=0 uuid=4
+  ubuntu/m0-admission-investigation-ubuntu/madv-surface/07.stdout json-account-identifiers=0 email-addresses=0 token-patterns=0 uuid=4
