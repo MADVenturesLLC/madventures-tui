@@ -3950,3 +3950,343 @@ Loads, exit statuses and SHA-256 values follow for logs through the preparation 
 | 474-check-message-5.log · check_closing_message | 23:16  2 users, load averages: 1.09 1.62 2.18 | 127 | b4c2dbcd5f178300795febf1328c8e96eeba5f884f377d651824914ab5634c3c |
 | 475-closing-message-verified.log · check_message /private/tmp/m0-admission-r1.Eo5Hwr47/commit-close.txt | 23:16  2 users, load averages: 1.08 1.61 2.18 | 0 | 58c4ad13844745ce3e923ef72178a40e5746830af030fbc71df9625fdea2fcc7 |
 | 476-record-command-correction.log · python3 - /private/tmp/m0-admission-r1.Eo5Hwr47 | 23:16  2 users, load averages: 1.08 1.61 2.18 | 0 | cbce14a57f84751cd45762ebe0b5735780282448c530cd7c506617c4caf3d5b3 |
+
+
+## Phase 2 · recorded evidence and admission
+
+The Founder signed the third resume after checking the Phase 1 session and reader and running the B7 investigation and B8 record commands on both hosts. Both records passed. Phase 1 head 664c5678e516197fa1a14da3487e27821753ff48.
+
+### Authority and input verification
+
+````text
+abf0766764f3587d9dd3de096749c2aa6249fc55cd455c3563e22c4744f300d2  builder-prompt-m0-admission-codex-macbook.md
+b6b9563ed1a2e154b4ef3b4d9ffe7666e6fd9870d82b87486f772d65f7f167aa  DEC-20261121-02-addendum-1-recorded-captures-and-anthropic.md
+b9ba9bdadf0ca0b5e792ad78fc46f9212d763ad7455fb122343756be2e6fb593  m0-record-r3.ts
+be1771c3d03b5dfa225b808c21591d0bac519d08073cdc80b5d0dbe41ffd41e5  resume-m0-admission-1-runtime.md
+5dc0fddf411f8abce1e20df834ce21d0676b1fcd538fe12ad3d49a34ffa8be81  DEC-20261121-02-addendum-2-registry-digest.md
+eab2fbf86a415032716dd0cf56f01c9179994756f67f8b8bb8e21612e21534d7  resume-m0-admission-2-registry-digest.md
+0e54e70e354dd478ad43f40e47136cab7d6b6a136c990759831fbbc909d2a1a4  resume-m0-admission-3-phase-2.md
+````
+
+logs/505-phase2-evidence-manifest.log · SHA-256 59991ad35ff69bd164128d765b61f5d41795e6bea9c17ef43f4f6c4eb238cfeb
+
+All seven prompt entries and all 123 evidence files verified against their manifests. Both raw manifests, both stored records and both log indexes matched their supplied pins. The two supplied reader logs on each host also matched their index entries.
+
+logs/507-phase2-raw-manifests.log · SHA-256 a3e1236ba3ccea6fc5993d6cc1bb893ee5d63c3225a6cb3135e22419d8e97b56
+shasum -a 256 evidence/macbook/m0-admission-investigation-macbook/raw-MANIFEST.sha256 evidence/ubuntu/m0-admission-investigation-ubuntu/raw-MANIFEST.sha256
+13:52  3 users, load averages: 2.44 1.90 1.85
+exit=0
+````text
+f8d0394f644d9358cc15389ea9194d8e16782594ce3219fe85aab9ff6c4d8a00  evidence/macbook/m0-admission-investigation-macbook/raw-MANIFEST.sha256
+47465b43809b15b8a84e934d8279974ab8d544d06b7540c2d4bfe6338e0651f1  evidence/ubuntu/m0-admission-investigation-ubuntu/raw-MANIFEST.sha256
+````
+
+logs/508-phase2-record-pins.log · SHA-256 614510339a25e7d57f0a3f662ebea044186409dc3032bba4a71ec58c12388fe2
+shasum -a 256 evidence/records/macbook/madv-surface-record.json evidence/records/macbook/LOGS.sha256 evidence/records/ubuntu/madv-surface-record.json evidence/records/ubuntu/LOGS.sha256
+13:52  3 users, load averages: 2.44 1.90 1.85
+exit=0
+````text
+5c0fd4fc850366d2107555a73487c734f912fc333c1590e7ec39c6bc7a3f36ea  evidence/records/macbook/madv-surface-record.json
+f335b71497d57ae632382878cafaccc9e4293b91a1e761915fd2796b5f41ac78  evidence/records/macbook/LOGS.sha256
+4482839a8aca025d9e2f545a309fea7ff57971684d5e18f1ebdde4eacf0148a3  evidence/records/ubuntu/madv-surface-record.json
+861a93014ead9c4aeae987d022746cfd82e389d4b1f0ccfb14f1b170082fb389  evidence/records/ubuntu/LOGS.sha256
+````
+
+logs/511-phase2-evidence-coverage.log · SHA-256 9f036ced109817f16c8143d42eab064da6ffcfe0ed2b0395e826353d0ad64158
+python3 -
+13:52  3 users, load averages: 2.44 1.92 1.86
+exit=0
+````text
+macbook madv-surface-dry.log 8f69e9f3f6a107f9e487c569bea5acf185205aabc9160b8e403bca6864e69dab OK
+macbook madv-surface-write.log 9e0e702f1ed31a4252beb2ac5282d70eed292075d78d5475787455573b68d6e4 OK
+ubuntu madv-surface-dry.log 9a94ac815f9b6658df488d6fcb16bc1c036fec4a55d4ac48f33512b093483933 OK
+ubuntu madv-surface-write.log be9e50dbec9482ae15c8407536843eef481f9140abe5838b1d99732bd8475355 OK
+123 listed files cover the export.
+````
+
+### Fixtures and tests
+
+The adapter fixtures are in packages/adapter-madv-surface/test/fixtures/recorded-0.1.2/. Each host contributes stdout, stderr and status for captures 03 through 07. Each manifest row identifies the copied bytes and the four rule counts. The uuid rule replaced only the session_id of each event, four in each stdout of 04–07 on each host. Capture 03 is unchanged by all four rules. The billing_guard sentence is preserved verbatim.
+
+````text
+fixture	sha256	evidence_path	json-account-identifiers	email-addresses	token-patterns	uuid
+macbook/03.stdout	c5a7e49ce80585fcae2eb4830947a32b66d8f7978262dec40e01828b1478b16d	evidence/macbook/m0-admission-investigation-macbook/madv-surface/03.stdout	0	0	0	0
+macbook/03.stderr	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855	evidence/macbook/m0-admission-investigation-macbook/madv-surface/03.stderr	0	0	0	0
+macbook/03.status	e6b633ea47b72a16622692968c502208028c4fc182799e9b33a1a3afe64714a7	evidence/macbook/m0-admission-investigation-macbook/madv-surface/03.status	0	0	0	0
+macbook/04.stdout	a1bd136b54ac7ad22e6af6f5083672c4f9ce4e979822b31e8a47e712c85b7d61	evidence/macbook/m0-admission-investigation-macbook/madv-surface/04.stdout	0	0	0	4
+macbook/04.stderr	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855	evidence/macbook/m0-admission-investigation-macbook/madv-surface/04.stderr	0	0	0	0
+macbook/04.status	e6b633ea47b72a16622692968c502208028c4fc182799e9b33a1a3afe64714a7	evidence/macbook/m0-admission-investigation-macbook/madv-surface/04.status	0	0	0	0
+macbook/05.stdout	af3af6866bcb2278b66cc8cf5c1ea80e03eb78992697898dc27d6fc04f54b565	evidence/macbook/m0-admission-investigation-macbook/madv-surface/05.stdout	0	0	0	4
+macbook/05.stderr	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855	evidence/macbook/m0-admission-investigation-macbook/madv-surface/05.stderr	0	0	0	0
+macbook/05.status	e6b633ea47b72a16622692968c502208028c4fc182799e9b33a1a3afe64714a7	evidence/macbook/m0-admission-investigation-macbook/madv-surface/05.status	0	0	0	0
+macbook/06.stdout	1328fb55ed00713a4dbc3ff5a1306e6f2d175da32f59e36550a2ba5fa5bf30b5	evidence/macbook/m0-admission-investigation-macbook/madv-surface/06.stdout	0	0	0	4
+macbook/06.stderr	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855	evidence/macbook/m0-admission-investigation-macbook/madv-surface/06.stderr	0	0	0	0
+macbook/06.status	e6b633ea47b72a16622692968c502208028c4fc182799e9b33a1a3afe64714a7	evidence/macbook/m0-admission-investigation-macbook/madv-surface/06.status	0	0	0	0
+macbook/07.stdout	ab06e05401e0949a728002fe037103a2f783e5f34d444e3524f832afcabf1646	evidence/macbook/m0-admission-investigation-macbook/madv-surface/07.stdout	0	0	0	4
+macbook/07.stderr	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855	evidence/macbook/m0-admission-investigation-macbook/madv-surface/07.stderr	0	0	0	0
+macbook/07.status	e6b633ea47b72a16622692968c502208028c4fc182799e9b33a1a3afe64714a7	evidence/macbook/m0-admission-investigation-macbook/madv-surface/07.status	0	0	0	0
+ubuntu/03.stdout	c5a7e49ce80585fcae2eb4830947a32b66d8f7978262dec40e01828b1478b16d	evidence/ubuntu/m0-admission-investigation-ubuntu/madv-surface/03.stdout	0	0	0	0
+ubuntu/03.stderr	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855	evidence/ubuntu/m0-admission-investigation-ubuntu/madv-surface/03.stderr	0	0	0	0
+ubuntu/03.status	e6b633ea47b72a16622692968c502208028c4fc182799e9b33a1a3afe64714a7	evidence/ubuntu/m0-admission-investigation-ubuntu/madv-surface/03.status	0	0	0	0
+ubuntu/04.stdout	5724ab7b14b6148b6d68ba75b5e48c75056e2ad1bb11ae63a84524b7ea1d0a9f	evidence/ubuntu/m0-admission-investigation-ubuntu/madv-surface/04.stdout	0	0	0	4
+ubuntu/04.stderr	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855	evidence/ubuntu/m0-admission-investigation-ubuntu/madv-surface/04.stderr	0	0	0	0
+ubuntu/04.status	e6b633ea47b72a16622692968c502208028c4fc182799e9b33a1a3afe64714a7	evidence/ubuntu/m0-admission-investigation-ubuntu/madv-surface/04.status	0	0	0	0
+ubuntu/05.stdout	e996ff495545895b55033b147aeafd963c5ed46ddad10ef6cbcefe59f6011828	evidence/ubuntu/m0-admission-investigation-ubuntu/madv-surface/05.stdout	0	0	0	4
+ubuntu/05.stderr	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855	evidence/ubuntu/m0-admission-investigation-ubuntu/madv-surface/05.stderr	0	0	0	0
+ubuntu/05.status	e6b633ea47b72a16622692968c502208028c4fc182799e9b33a1a3afe64714a7	evidence/ubuntu/m0-admission-investigation-ubuntu/madv-surface/05.status	0	0	0	0
+ubuntu/06.stdout	91b2f9be88f1afcd12be37dc17c6d8c58b24c8331404a6f23acb44c343c3b4c7	evidence/ubuntu/m0-admission-investigation-ubuntu/madv-surface/06.stdout	0	0	0	4
+ubuntu/06.stderr	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855	evidence/ubuntu/m0-admission-investigation-ubuntu/madv-surface/06.stderr	0	0	0	0
+ubuntu/06.status	e6b633ea47b72a16622692968c502208028c4fc182799e9b33a1a3afe64714a7	evidence/ubuntu/m0-admission-investigation-ubuntu/madv-surface/06.status	0	0	0	0
+ubuntu/07.stdout	6fdf51d40651ef9a41718ca018231aba9485e29df012d28d1680758d2549a897	evidence/ubuntu/m0-admission-investigation-ubuntu/madv-surface/07.stdout	0	0	0	4
+ubuntu/07.stderr	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855	evidence/ubuntu/m0-admission-investigation-ubuntu/madv-surface/07.stderr	0	0	0	0
+ubuntu/07.status	e6b633ea47b72a16622692968c502208028c4fc182799e9b33a1a3afe64714a7	evidence/ubuntu/m0-admission-investigation-ubuntu/madv-surface/07.status	0	0	0	0
+````
+
+Manifest SHA-256 c6716bc30c5d0297ecea4c1aefdd43a48ce3a0f0e59c2723e9a52cb31324678c.
+
+The new tests read status and both streams, use the madv-surface registry entry and call the production parsers. The JSON observer returns every decoded event untouched and is restored in a finally block. Both hosts’ retired-id captures report the canonical model and return identity_mismatch. With the retired request the reason is response_predicate, and with the canonical request the reason is init_predicate.
+
+````text
+packages/adapter-madv-surface/test/recorded-0.1.2.test.ts	macbook 0.1.2 capture 03 passes auth readiness	pass
+packages/adapter-madv-surface/test/recorded-0.1.2.test.ts	macbook 0.1.2 capture 04 passes tool-free identity with response IDs for MiniMax-M3.1-Flash	pass
+packages/adapter-madv-surface/test/recorded-0.1.2.test.ts	macbook 0.1.2 capture 05 passes tool-free identity with response IDs for MiniMax-M3.1-Flash	pass
+packages/adapter-madv-surface/test/recorded-0.1.2.test.ts	macbook 0.1.2 capture 06 passes tool-free identity with response IDs for MiniMax-M3.1-Flash	pass
+packages/adapter-madv-surface/test/recorded-0.1.2.test.ts	macbook 0.1.2 capture 07 returns identity_mismatch (response_predicate) for MiniMax-M3.1-Flash-Preview while reporting MiniMax-M3.1-Flash	pass
+packages/adapter-madv-surface/test/recorded-0.1.2.test.ts	macbook 0.1.2 capture 07 returns identity_mismatch (init_predicate) for MiniMax-M3.1-Flash while reporting MiniMax-M3.1-Flash	pass
+packages/adapter-madv-surface/test/recorded-0.1.2.test.ts	ubuntu 0.1.2 capture 03 passes auth readiness	pass
+packages/adapter-madv-surface/test/recorded-0.1.2.test.ts	ubuntu 0.1.2 capture 04 passes tool-free identity with response IDs for MiniMax-M3.1-Flash	pass
+packages/adapter-madv-surface/test/recorded-0.1.2.test.ts	ubuntu 0.1.2 capture 05 passes tool-free identity with response IDs for MiniMax-M3.1-Flash	pass
+packages/adapter-madv-surface/test/recorded-0.1.2.test.ts	ubuntu 0.1.2 capture 06 passes tool-free identity with response IDs for MiniMax-M3.1-Flash	pass
+packages/adapter-madv-surface/test/recorded-0.1.2.test.ts	ubuntu 0.1.2 capture 07 returns identity_mismatch (response_predicate) for MiniMax-M3.1-Flash-Preview while reporting MiniMax-M3.1-Flash	pass
+packages/adapter-madv-surface/test/recorded-0.1.2.test.ts	ubuntu 0.1.2 capture 07 returns identity_mismatch (init_predicate) for MiniMax-M3.1-Flash while reporting MiniMax-M3.1-Flash	pass
+````
+
+````text
+packages/adapter-madv-surface/test/fixture-integrity.test.ts	recorded manifest covers every fixture and matches its SHA-256	pass
+packages/adapter-madv-surface/test/fixture-integrity.test.ts	recorded-0.1.2 manifest covers every fixture and matches its SHA-256	pass
+````
+
+The integrity file adds only recorded-0.1.2 to its folder list. The existing manifest guard now executes for both folders.
+
+logs/522-phase2-recorded-tests.log · SHA-256 96ee21c21941c179ab365427c5100fdad39c1a24b9622fde0716ca70105adf67
+bun test packages/adapter-madv-surface/test/recorded-0.1.2.test.ts
+13:54  up 1 day,  5:22, 3 users, load averages: 1.68 1.89 1.86
+exit=0
+````text
+bun test v1.4.2 (744846f84)
+
+packages/adapter-madv-surface/test/recorded-0.1.2.test.ts:
+(pass) macbook 0.1.2 capture 03 passes auth readiness [1.53ms]
+(pass) macbook 0.1.2 capture 04 passes tool-free identity with response IDs for MiniMax-M3.1-Flash [1.95ms]
+(pass) macbook 0.1.2 capture 05 passes tool-free identity with response IDs for MiniMax-M3.1-Flash [0.28ms]
+(pass) macbook 0.1.2 capture 06 passes tool-free identity with response IDs for MiniMax-M3.1-Flash [0.16ms]
+(pass) macbook 0.1.2 capture 07 returns identity_mismatch (response_predicate) for MiniMax-M3.1-Flash-Preview while reporting MiniMax-M3.1-Flash [0.19ms]
+(pass) macbook 0.1.2 capture 07 returns identity_mismatch (init_predicate) for MiniMax-M3.1-Flash while reporting MiniMax-M3.1-Flash [0.09ms]
+(pass) ubuntu 0.1.2 capture 03 passes auth readiness [0.12ms]
+(pass) ubuntu 0.1.2 capture 04 passes tool-free identity with response IDs for MiniMax-M3.1-Flash [0.13ms]
+(pass) ubuntu 0.1.2 capture 05 passes tool-free identity with response IDs for MiniMax-M3.1-Flash [0.13ms]
+(pass) ubuntu 0.1.2 capture 06 passes tool-free identity with response IDs for MiniMax-M3.1-Flash [0.13ms]
+(pass) ubuntu 0.1.2 capture 07 returns identity_mismatch (response_predicate) for MiniMax-M3.1-Flash-Preview while reporting MiniMax-M3.1-Flash [0.15ms]
+(pass) ubuntu 0.1.2 capture 07 returns identity_mismatch (init_predicate) for MiniMax-M3.1-Flash while reporting MiniMax-M3.1-Flash [0.09ms]
+
+ 12 pass
+ 0 fail
+ 78 expect() calls
+Ran 12 tests across 1 file. [29.00ms]
+````
+
+logs/525-phase2-integrity-tests.log · SHA-256 2073a9cbba189722d3ceddacaf074d6348f128b9a1169fd50bd4573f867f977d
+bun test packages/adapter-madv-surface/test/fixture-integrity.test.ts
+13:55  up 1 day,  5:23, 3 users, load averages: 1.70 1.85 1.84
+exit=0
+````text
+bun test v1.4.2 (744846f84)
+
+packages/adapter-madv-surface/test/fixture-integrity.test.ts:
+(pass) recorded manifest covers every fixture and matches its SHA-256 [4.72ms]
+(pass) recorded-0.1.2 manifest covers every fixture and matches its SHA-256 [1.27ms]
+
+ 2 pass
+ 0 fail
+ 126 expect() calls
+Ran 2 tests across 1 file. [18.00ms]
+````
+
+logs/528-phase2-precommit-tests.log · SHA-256 31888dc2888997b52d1888495117d43047c9f197e9d8b5ba03f3fad6361c80a1
+bun test
+13:56  up 1 day,  5:23, 3 users, load averages: 1.72 1.85 1.84
+exit=0
+````text
+ 2048 pass
+ 0 fail
+ 27582 expect() calls
+Ran 2048 tests across 151 files. [183.78s]
+````
+
+### Deliberate one-byte break
+
+The only worktree mutation changed the exit digit of the new Ubuntu capture 05 status. Diff lines below omit trailing whitespace. The original recorded guard passed and the new guard identified the changed status hash. Restoring the byte returned the file to the manifest SHA-256.
+
+logs/548-phase2-break-diff.log · SHA-256 fc87609b241d0b814167f79a2fd3071ae35b9e16e570e5c6d905e6627db15e10
+git -C tui diff -- packages/adapter-madv-surface/test/fixtures/recorded-0.1.2/ubuntu/05.status
+13:59  3 users, load averages: 2.07 2.02 1.92
+exit=0
+````text
+diff --git a/packages/adapter-madv-surface/test/fixtures/recorded-0.1.2/ubuntu/05.status b/packages/adapter-madv-surface/test/fixtures/recorded-0.1.2/ubuntu/05.status
+index 9294713..5e7da5a 100644
+--- a/packages/adapter-madv-surface/test/fixtures/recorded-0.1.2/ubuntu/05.status
++++ b/packages/adapter-madv-surface/test/fixtures/recorded-0.1.2/ubuntu/05.status
+@@ -1,3 +1,3 @@
+-exit=0
++exit=1
+ signal=none
+ timed_out=no
+````
+
+logs/551-phase2-break-tests.log · SHA-256 9a24e333244e79558e43a74e1e9f027c53e73b1e0543a56dc76b5da7024d2380
+bun test packages/adapter-madv-surface/test/fixture-integrity.test.ts
+14:01  up 1 day,  5:29, 3 users, load averages: 1.60 1.88 1.88
+exit=1
+````text
+bun test v1.4.2 (744846f84)
+
+packages/adapter-madv-surface/test/fixture-integrity.test.ts:
+(pass) recorded manifest covers every fixture and matches its SHA-256 [1.79ms]
+29 |     // Comparing the sorted arrays detects duplicates as well as omissions.
+30 |     const files = filesUnder(root).filter(file => file !== "manifest.tsv").sort();
+31 |     expect(entries.map(entry => entry.file).sort()).toEqual(files);
+32 |     for (const { file, digest } of entries) {
+33 |       const bytes = readFileSync(join(root, file));
+34 |       expect({ file, digest: new Bun.CryptoHasher("sha256").update(bytes).digest("hex") }).toEqual({ file, digest });
+                                                                                                ^
+error: expect(received).toEqual(expected)
+
+  {
+-   "digest": "e6b633ea47b72a16622692968c502208028c4fc182799e9b33a1a3afe64714a7",
++   "digest": "7eb7518924b7d3191c1000f8475f7f49162aa5e4fd9ebb68c070f2d0dfc443fc",
+    "file": "ubuntu/05.status",
+  }
+
+- Expected  - 1
++ Received  + 1
+
+      at <anonymous> (/Users/michaeldaley/builds/m0-admission-r1/tui/packages/adapter-madv-surface/test/fixture-integrity.test.ts:34:92)
+(fail) recorded-0.1.2 manifest covers every fixture and matches its SHA-256 [1.12ms]
+
+ 1 pass
+ 1 fail
+ 120 expect() calls
+Ran 2 tests across 1 file. [13.00ms]
+````
+
+logs/553-phase2-break-proof.log · SHA-256 a7b0351b11ce56177e79cd51597aab0a009a2b2c72aa30d8fb03de278dba4278
+python3 - /private/tmp/m0-admission-r1.Eo5Hwr47
+14:01  3 users, load averages: 1.59 1.87 1.87
+exit=0
+````text
+Manifest e6b633ea47b72a16622692968c502208028c4fc182799e9b33a1a3afe64714a7
+Restored e6b633ea47b72a16622692968c502208028c4fc182799e9b33a1a3afe64714a7 packages/adapter-madv-surface/test/fixtures/recorded-0.1.2/ubuntu/05.status
+Working tree matches the staged originals.
+````
+
+### Investigation packet
+
+docs/verification/phase-3b-m0-admission-investigation.md · SHA-256 3e8b7547fafd5e83acc84166f61cff12115f829c9dfd5bbf1b5c5effc7bfc563. The packet gives the sanitized primitives, host verdicts, stored records, checks, provenance and limitations. Its source citations identify the input files by their full SHA-256 values.
+
+### Declarations
+
+The builder made no live call, ran no surface, used no real key and wrote no capability record. The Phase 1 production code is unchanged. The only investigation evidence read by the builder was evidence/.
+
+### Self-fixes and deviations
+
+Log 566 stopped before writing the build log because the scratch report helper matched both the test source-write log and the focused test-run log. Log 567 selected the numbered test-run evidence explicitly. No implementation or test changed. There were no scope, test or gate deviations.
+
+### Command and load record
+
+The following ledger covers completed Phase 2 commands through preparation of this append. The closing commit, subsequent B10 gates and delivery commands are identified by the Phase 2 report. Every SHA-256 identifies the complete log.
+
+````text
+521-phase2-recorded-wait.log → 522-phase2-recorded-tests.log
+524-phase2-integrity-wait.log → 525-phase2-integrity-tests.log
+527-phase2-precommit-wait.log → 528-phase2-precommit-tests.log
+550-phase2-break-wait.log → 551-phase2-break-tests.log
+````
+
+
+| Log and command | Load reading | Exit | SHA-256 |
+| --- | --- | --- | --- |
+| 492-phase2-prompt-manifest.log · shasum -a 256 -c SHA256.txt | 10:50  2 users, load averages: 6.79 5.42 3.44 | 0 | aecfe56d5ef938b3912e5dbebdce1d9e75662d41d3f6709ed407cc2180ffc06e |
+| 493-phase2-prompt-files.log · ls prompt | 10:50  2 users, load averages: 6.79 5.42 3.44 | 0 | de4c8cec4c8e16d318c0fda80140ebadd6fd28490df7ecdb998df8004a924f90 |
+| 494-phase2-prompt-pins.log · check_bundle | 10:50  2 users, load averages: 5.99 5.31 3.43 | 0 | 10e3813f7d8120f149db37e21d9bfedba200a2c42b7499d502c80e5e601fdee2 |
+| 495-phase2-governed-version.log · /Users/michaeldaley/builds/codex-governed-0.167.0/node_modules/.bin/codex --version | 10:51  2 users, load averages: 5.67 5.26 3.43 | 0 | 84f6a6db4f5b21bc0841b63f07ba686ffdcd1cbb85cb76ca629f5a0ea63a2cc7 |
+| 496-phase2-head.log · git -C tui rev-parse HEAD | 10:51  2 users, load averages: 5.62 5.25 3.43 | 0 | 03f2f4f2636c28cf223121d13e4c1385b92ab0c89858fdb8fc16186406732fe6 |
+| 497-phase2-branch.log · git -C tui branch --show-current | 10:51  2 users, load averages: 5.62 5.25 3.43 | 0 | 7d255ec2e177be3855ee76dee81e12f7eae241f5a418697be9d5a1d3f6304bd4 |
+| 498-phase2-status.log · git -C tui status --porcelain --untracked-files=all | 10:51  2 users, load averages: 5.62 5.25 3.43 | 0 | 0e4d19f182efa234185f723b290e934655e6ef8257480d4ee66b97fbf9cef45e |
+| 499-phase2-stash.log · git -C tui stash list | 10:51  2 users, load averages: 5.62 5.25 3.43 | 0 | 84dd64206aa5f2fcc5e4a28e56e69dbc31f490d0270da9b6c60ad3915cd5d8d0 |
+| 500-phase2-report-files.log · ls -A pr | 10:51  2 users, load averages: 5.62 5.25 3.43 | 0 | 4ff14725f7ecb9567811f4ab8bdf43bfe9d02b78ecfcc534781f8579f825e93b |
+| 501-phase2-report-hashes.log · shasum -a 256 pr/m0-admission-phase1-halt-1-report.md pr/m0-admission-phase1-halt-2-report.md pr/m0-admission-phase1-report.md | 10:51  2 users, load averages: 5.62 5.25 3.43 | 0 | ab8bbb834a73ae65ec01b11a5572f2788696e79ba6bb0567fa855da286d065c2 |
+| 502-phase2-record-files.log · ls -A record | 10:51  2 users, load averages: 5.62 5.25 3.43 | 0 | c33032031c93cb03be3ff52a0de0313f749c52e9f1c6d80ec343ffa0fbb05eb3 |
+| 503-phase2-reader-hash.log · shasum -a 256 record/m0-admission-record.ts | 10:51  2 users, load averages: 5.62 5.25 3.43 | 0 | 1a705b14881794ef833a8c92a17f7f3a3f80af4ca7835434a6dd0ab8c5cf5009 |
+| 504-phase2-runtime.log · runtime_check | 13:52  up 1 day,  5:19, 3 users, load averages: 2.38 1.86 1.84 | 0 | 1329e8bc1ece48dfc3f17768dff06088b63921f982125ab3c89c7fe1e877c91a |
+| 505-phase2-evidence-manifest.log · shasum -a 256 -c SHA256.txt | 13:52  3 users, load averages: 2.44 1.90 1.85 | 0 | 59991ad35ff69bd164128d765b61f5d41795e6bea9c17ef43f4f6c4eb238cfeb |
+| 506-phase2-evidence-hashes.log · shasum -a 256 evidence/SHA256.txt evidence/SANITIZE.txt | 13:52  3 users, load averages: 2.44 1.90 1.85 | 0 | 75ca9dff221ac6f1051b9fdf4323e6e110f345379eadaf9ff68d07cdbc4cdcb7 |
+| 507-phase2-raw-manifests.log · shasum -a 256 evidence/macbook/m0-admission-investigation-macbook/raw-MANIFEST.sha256 evidence/ubuntu/m0-admission-investigation-ubuntu/raw-MANIFEST.sha256 | 13:52  3 users, load averages: 2.44 1.90 1.85 | 0 | a3e1236ba3ccea6fc5993d6cc1bb893ee5d63c3225a6cb3135e22419d8e97b56 |
+| 508-phase2-record-pins.log · shasum -a 256 evidence/records/macbook/madv-surface-record.json evidence/records/macbook/LOGS.sha256 evidence/records/ubuntu/madv-surface-record.json evidence/records/ubuntu/LOGS.sha256 | 13:52  3 users, load averages: 2.44 1.90 1.85 | 0 | 614510339a25e7d57f0a3f662ebea044186409dc3032bba4a71ec58c12388fe2 |
+| 509-phase2-record-indexes.log · cat evidence/records/macbook/LOGS.sha256 evidence/records/ubuntu/LOGS.sha256 | 13:52  3 users, load averages: 2.44 1.90 1.85 | 0 | eebea5651d476937f940148ddbfca72e7bbc72fcb392c309e5a7d9d8bd24e6b5 |
+| 510-phase2-sanitize.log · cat evidence/SANITIZE.txt | 13:52  3 users, load averages: 2.44 1.90 1.85 | 0 | 018121687d60e34e50f030bb3a8e6da487f48517161f4ddf985fb5c95092a2c6 |
+| 511-phase2-evidence-coverage.log · python3 - | 13:52  3 users, load averages: 2.44 1.92 1.86 | 0 | 9f036ced109817f16c8143d42eab064da6ffcfe0ed2b0395e826353d0ad64158 |
+| 512-phase2-fixture-contract.log · cat tui/packages/adapter-madv-surface/test/recorded.test.ts tui/packages/adapter-madv-surface/test/fixture-integrity.test.ts tui/packages/adapter-madv-surface/src/index.ts | 13:52  3 users, load averages: 2.44 1.92 1.86 | 0 | acf7c4430523be90226f6477dec31ca9311e6411f6c73a7d33d5ed6558a95e43 |
+| 513-phase2-act-sections.log · rg -n -A 9 ^B(5\|7\|8\|9\|10\|11)\. tui/docs/decisions/DEC-20261121-02-madv-surface-admission.md tui/docs/decisions/DEC-20261115-02-phase-3b-m0.md | 13:52  3 users, load averages: 2.44 1.92 1.86 | 0 | 57faf117f475effcc04d226bed1309a94e5e63d7e4ad0664752a578f6054a3d6 |
+| 514-phase2-fixture-header.log · head -2 tui/packages/adapter-madv-surface/test/fixtures/recorded/manifest.tsv | 13:52  3 users, load averages: 2.44 1.92 1.86 | 0 | 7dc3a639e547f8cd5e3d9a1c4ad6cad944c54a5da1cc5b3f1252e4017ef6824d |
+| 515-phase2-input-layout.log · python3 - | 13:53  3 users, load averages: 2.27 1.90 1.86 | 0 | b8d8e04d97191b215a7f9061c204449df32de568e3f9d944cfeb466df594ce4a |
+| 517-phase2-copy-fixtures.log · python3 - | 13:53  3 users, load averages: 2.44 1.97 1.88 | 0 | c22f33b0cc28e15eeec62140558a65345f555d4958015ab06d0298385620b516 |
+| 518-phase2-recorded-tests.log · tee tui/packages/adapter-madv-surface/test/recorded-0.1.2.test.ts | 13:53  3 users, load averages: 2.35 1.99 1.89 | 0 | 1847f47dbe0b1b7ab4b2815f4539493f9fb1f1c9f3ce385164ecf5c9e565f659 |
+| 519-phase2-integrity-folder.log · python3 - | 13:53  3 users, load averages: 2.35 1.99 1.89 | 0 | 3f724a85f33c18d630f9eaaabe29e3f57b855e2cddc9b1e471c8361fdf923f3a |
+| 520-phase2-recorded-runtime.log · runtime_check | 13:54  up 1 day,  5:21, 3 users, load averages: 2.28 2.00 1.90 | 0 | 7a229e6c2438be93a6a2be2a45a7e07f16ea278f9a681f436fe2b9018007bc64 |
+| 521-phase2-recorded-wait.log · load_wait | 13:54  up 1 day,  5:21, 3 users, load averages: 2.28 2.00 1.90 | 0 | f0b12d12e52172851473ca3ea2ad6ff462aab0b1ecb8c632266c116930463052 |
+| 522-phase2-recorded-tests.log · bun test packages/adapter-madv-surface/test/recorded-0.1.2.test.ts | 13:54  up 1 day,  5:22, 3 users, load averages: 1.68 1.89 1.86 | 0 | 96ee21c21941c179ab365427c5100fdad39c1a24b9622fde0716ca70105adf67 |
+| 523-phase2-integrity-runtime.log · runtime_check | 13:55  up 1 day,  5:22, 3 users, load averages: 1.65 1.88 1.86 | 0 | a9bf9f53d91697596692e0f0b91f29b8bbb3dd05e12704ca4acf088337810c43 |
+| 524-phase2-integrity-wait.log · load_wait | 13:55  up 1 day,  5:23, 3 users, load averages: 1.70 1.85 1.84 | 0 | 17c7cb393ad9d73fc905f6d4f213c6d5ad730a7be4f37fa56918b65b618a43ec |
+| 525-phase2-integrity-tests.log · bun test packages/adapter-madv-surface/test/fixture-integrity.test.ts | 13:55  up 1 day,  5:23, 3 users, load averages: 1.70 1.85 1.84 | 0 | 2073a9cbba189722d3ceddacaf074d6348f128b9a1169fd50bd4573f867f977d |
+| 526-phase2-precommit-runtime.log · runtime_check | 13:55  up 1 day,  5:23, 3 users, load averages: 1.72 1.85 1.84 | 0 | d49d34c3a2c6b0e0d451176f83a1f33695b479044bf8ccbb58819947095659d8 |
+| 527-phase2-precommit-wait.log · load_wait | 13:56  up 1 day,  5:23, 3 users, load averages: 1.72 1.85 1.84 | 0 | 1855e1f03fb51d933f6539558dc759c462ffc24db8ae33578befd73133f7dacc |
+| 528-phase2-precommit-tests.log · bun test | 13:56  up 1 day,  5:23, 3 users, load averages: 1.72 1.85 1.84 | 0 | 31888dc2888997b52d1888495117d43047c9f197e9d8b5ba03f3fad6361c80a1 |
+| 529-phase2-packet-inputs.log · python3 - | 13:54  3 users, load averages: 2.16 1.99 1.89 | 0 | 44d3b95700a7532b3bac7f2db259325c046e87b7d404dad610437b6d67c259a2 |
+| 530-phase2-list-tool.log · cat /private/tmp/m0-admission-r1.Eo5Hwr47/tests.py /private/tmp/m0-admission-r1.Eo5Hwr47/compare.py | 13:54  3 users, load averages: 2.16 1.99 1.89 | 0 | 6a4f01935199d70178d6f15fae64b7a30b09e953f8250903827c842d2e249647 |
+| 531-phase2-prepare-packet.log · cp /dev/stdin /private/tmp/m0-admission-r1.Eo5Hwr47/phase2_packet.py | 13:55  3 users, load averages: 1.43 1.82 1.83 | 0 | 7d68bda87e2aea22671d4fbdc610cbb8d23528aec77bc8f1575f12e242d8b6d7 |
+| 532-phase2-prepare-checks.log · cp /dev/stdin /private/tmp/m0-admission-r1.Eo5Hwr47/phase2_verify.py | 13:56  3 users, load averages: 2.69 2.06 1.92 | 0 | 4a4dd5cee28678979b49c35324705b8c73ec2a5e58cb947b8c134b81c605e66a |
+| 533-phase2-prepare-messages.log · python3 - /private/tmp/m0-admission-r1.Eo5Hwr47 | 13:56  3 users, load averages: 2.69 2.06 1.92 | 0 | d35b0d6b8ce6833d3d6076671c504f759fc62982455d322c92dd5adb5e22db7d |
+| 534-phase2-check-fixture-message.log · check_message /private/tmp/m0-admission-r1.Eo5Hwr47/phase2-fixtures.msg | 13:56  3 users, load averages: 2.65 2.08 1.92 | 0 | 3b31f66251a543c17cae447ca9c8c91db833c5f5dce9f381a540d601ea5c8012 |
+| 535-phase2-check-packet-message.log · check_message /private/tmp/m0-admission-r1.Eo5Hwr47/phase2-packet.msg | 13:56  3 users, load averages: 2.65 2.08 1.92 | 0 | bc543351d81e48057f2c4339517dca957508662d286b0dbadb3a8310c77ee707 |
+| 536-phase2-check-log-message.log · check_message /private/tmp/m0-admission-r1.Eo5Hwr47/phase2-log.msg | 13:56  3 users, load averages: 2.65 2.08 1.92 | 0 | a5a4cef17258fa06f0e60fcef4c4d01c2495ad9a226b738a19717125b5d7f18f |
+| 537-phase2-fixture-compare.log · python3 /private/tmp/m0-admission-r1.Eo5Hwr47/phase2_verify.py fixtures | 13:56  3 users, load averages: 2.65 2.08 1.92 | 0 | 0aa171c5f0d382595b9c727ec26f5558120d30f008f7740b37d6384e06270c9b |
+| 538-phase2-prepare-delivery.log · cp /dev/stdin /private/tmp/m0-admission-r1.Eo5Hwr47/phase2_docs.py | 13:58  3 users, load averages: 1.77 1.94 1.88 | 0 | 0c9fd74e82f19de48542bed91164635c701bec3d7c0a5f9ae63641d35d9ddede |
+| 539-phase2-precommit-progress.log · ls -l logs/526-phase2-precommit-runtime.log logs/527-phase2-precommit-wait.log logs/528-phase2-precommit-tests.log | 13:58  3 users, load averages: 1.79 1.94 1.88 | 0 | 4b001c3627be1425947662d6cbb887f244accb6f7c095daacde32d11ed0acf0d |
+| 540-phase2-wait-evidence.log · cat logs/527-phase2-precommit-wait.log | 13:58  3 users, load averages: 1.79 1.94 1.88 | 0 | 31bdd2aa1ce7eac4ba2164219f9074eac41fb2f6fe14f52b662a8862e1d1396c |
+| 541-phase2-help-lines.log · rg -n -C 2 -- --no-tools evidence/macbook/m0-admission-investigation-macbook/madv-surface/10.stdout | 13:58  3 users, load averages: 1.88 1.95 1.89 | 0 | 6e42dc6f3e75569315a64a7bc79856992266e31d061071bd8f1d20bd7c686d41 |
+| 542-phase2-current-constraints.log · cat tui/AGENTS.md | 13:58  3 users, load averages: 1.88 1.95 1.89 | 0 | 71625aed97b4e3895a42ffa33ed45f4136ea5c224083edd7c2fb102d20c42e61 |
+| 543-phase2-prepare-packet-check.log · cp /dev/stdin /private/tmp/m0-admission-r1.Eo5Hwr47/phase2_packet_check.py | 13:59  3 users, load averages: 2.45 2.09 1.94 | 0 | d30fe6afd98396faad1702f356c295e978b8a3476242b4fc7282e7700502bc9d |
+| 544-phase2-stage-fixtures.log · git -C tui add -- packages/adapter-madv-surface/test/fixtures/recorded-0.1.2 packages/adapter-madv-surface/test/recorded-0.1.2.test.ts packages/adapter-madv-surface/test/fixture-integrity.test.ts | 13:59  3 users, load averages: 2.07 2.02 1.92 | 0 | 60a82a080cfaedd823ef7f722315f2c152d0408a53cbed2a3aa401297d442eab |
+| 545-phase2-staged-fixtures.log · python3 /private/tmp/m0-admission-r1.Eo5Hwr47/phase2_verify.py staged | 13:59  3 users, load averages: 2.07 2.02 1.92 | 0 | 07d46f157bbe39250c1ee53e7c079a78c45a03b51bb4fbae610ea3f272fd43d3 |
+| 546-phase2-fixture-diff-check.log · git -C tui diff --cached --check | 13:59  3 users, load averages: 2.07 2.02 1.92 | 0 | 2405de3c504c0d637245ebd7ef1b399e4a14ba1c042e5a3cb1c10d751036caf4 |
+| 547-phase2-break-byte.log · python3 - tui/packages/adapter-madv-surface/test/fixtures/recorded-0.1.2/ubuntu/05.status | 13:59  3 users, load averages: 2.07 2.02 1.92 | 0 | 34571dfdc03326a1cc8808f4d3e1ec36dcec5f018c266bf97a2572e37fd90651 |
+| 548-phase2-break-diff.log · git -C tui diff -- packages/adapter-madv-surface/test/fixtures/recorded-0.1.2/ubuntu/05.status | 13:59  3 users, load averages: 2.07 2.02 1.92 | 0 | fc87609b241d0b814167f79a2fd3071ae35b9e16e570e5c6d905e6627db15e10 |
+| 549-phase2-break-runtime.log · runtime_check | 14:01  up 1 day,  5:29, 3 users, load averages: 1.60 1.88 1.88 | 0 | 688d0149a434e4dbe146d858916bd1a6f52d7b50b942b4596547284aa4fb70ea |
+| 550-phase2-break-wait.log · load_wait | 14:01  up 1 day,  5:29, 3 users, load averages: 1.60 1.88 1.88 | 0 | a334c958d7734bc465e49d77953425950b4183b3d215b020e8be84a27acf0ddc |
+| 551-phase2-break-tests.log · bun test packages/adapter-madv-surface/test/fixture-integrity.test.ts | 14:01  up 1 day,  5:29, 3 users, load averages: 1.60 1.88 1.88 | 1 | 9a24e333244e79558e43a74e1e9f027c53e73b1e0543a56dc76b5da7024d2380 |
+| 552-phase2-restore-break.log · git -C tui restore --worktree -- packages/adapter-madv-surface/test/fixtures/recorded-0.1.2/ubuntu/05.status | 14:01  3 users, load averages: 1.59 1.87 1.87 | 0 | c99e157367bbc2ee30467e22082469bc7f716ae86d9c7fc246a2e5590a012621 |
+| 553-phase2-break-proof.log · python3 - /private/tmp/m0-admission-r1.Eo5Hwr47 | 14:01  3 users, load averages: 1.59 1.87 1.87 | 0 | a7b0351b11ce56177e79cd51597aab0a009a2b2c72aa30d8fb03de278dba4278 |
+| 554-phase2-final-fixture-check.log · python3 /private/tmp/m0-admission-r1.Eo5Hwr47/phase2_verify.py staged | 14:01  3 users, load averages: 1.59 1.87 1.87 | 0 | 3c9625131ee9bbcf6c04ce56f96c713f01f2cebe45b0b77a6a053d0860330469 |
+| 555-phase2-commit-fixtures.log · git commit -F /private/tmp/m0-admission-r1.Eo5Hwr47/phase2-fixtures.msg | 14:01  3 users, load averages: 1.46 1.83 1.86 | 0 | a5306caf94dce19bf9ed99b4d2537529b813e238edf829653321d0c2b23544a4 |
+| 556-phase2-fixture-head.log · git log -1 --format=%H %P %s | 14:01  3 users, load averages: 1.46 1.83 1.86 | 0 | 31efd43780c04896b4bc020705ff5071fd75975c16038b06ab15d2a38828c9d8 |
+| 557-phase2-write-packet.log · python3 /private/tmp/m0-admission-r1.Eo5Hwr47/phase2_packet.py | 14:01  3 users, load averages: 1.66 1.87 1.87 | 0 | 5988ea6c9db561d9985d9a0577502a8b0f13e6ad2c3ded14b801f1c38f9b24c0 |
+| 558-phase2-verify-packet.log · python3 /private/tmp/m0-admission-r1.Eo5Hwr47/phase2_packet_check.py | 14:01  3 users, load averages: 1.66 1.87 1.87 | 0 | 57efdbab23dc074b554815579c7d1abd6463c98e46af2a363e294373d7d18c8a |
+| 559-phase2-packet-inspection.log · rg -n ^## \|^### Counts\|^### Stored\|^Stored filename\|^The Ubuntu investigation\|^The first event\|^Ubuntu PC made\|^MacBook made tui/docs/verification/phase-3b-m0-admission-investigation.md | 14:02  3 users, load averages: 1.61 1.86 1.87 | 0 | c1ce381d8abc7dee79810bef9e9b9a512d0eb2baf7672deb3189830c35d83474 |
+| 560-phase2-packet-sha.log · shasum -a 256 tui/docs/verification/phase-3b-m0-admission-investigation.md | 14:02  3 users, load averages: 1.61 1.86 1.87 | 0 | a3e6e2c29879e3652e42176359beb9f17b2b3e5e4d18c197650f7798363ca186 |
+| 561-phase2-stage-packet.log · git -C tui add -- docs/verification/phase-3b-m0-admission-investigation.md | 14:02  3 users, load averages: 1.61 1.86 1.87 | 0 | 37a7303d01b9771398b942ce962bf7a5c55ae1ee231d1df97323517f0bb41878 |
+| 562-phase2-packet-diff-check.log · git -C tui diff --cached --check | 14:02  3 users, load averages: 1.61 1.86 1.87 | 0 | 09bb7327ee112285ded5a1434be30eaf32a97ac6179fe1c94f169b1ac63041d6 |
+| 563-phase2-staged-packet.log · git -C tui diff --cached --name-only | 14:02  3 users, load averages: 1.61 1.86 1.87 | 0 | d8ce70ce86f99226636a70152d8a8cc5b7d24b044b41cead41f37fb901a8c1d3 |
+| 564-phase2-commit-packet.log · git commit -F /private/tmp/m0-admission-r1.Eo5Hwr47/phase2-packet.msg | 14:02  3 users, load averages: 1.56 1.84 1.86 | 0 | 9426be82b574dc0722aa631c1fe55404ce96ad464446f7543b3a21ee4784c1fd |
+| 565-phase2-packet-head.log · git log -1 --format=%H %P %s | 14:02  3 users, load averages: 1.56 1.84 1.86 | 0 | e8e568f8911a783eadfe69c9a22113315a5833f093f1f3517f45f0d68be27103 |
+| 566-phase2-write-log.log · python3 /private/tmp/m0-admission-r1.Eo5Hwr47/phase2_docs.py log | 14:02  3 users, load averages: 1.52 1.83 1.85 | 1 | 70a003cfb4cd29b628b75e97b6fb67f849adace7e370f96fcd45890180ef0549 |
+| 567-phase2-align-evidence-lookup.log · python3 - /private/tmp/m0-admission-r1.Eo5Hwr47 | 14:02  3 users, load averages: 1.43 1.80 1.84 | 0 | 6c6886e5e8bd4bc500b95d2ce2150052fc409b5862c1145397aba0e67c232ae1 |
