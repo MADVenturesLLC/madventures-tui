@@ -23,7 +23,8 @@ for (const folder of ["recorded"]) {
     expect(header!.split("\t").slice(0, 2)).toEqual(["fixture", "sha256"]);
     const entries = rows.map(row => {
       const [file, digest] = row.split("\t");
-      return { file: file!, digest };
+      if (!file || !digest || !/^[a-f0-9]{64}$/.test(digest)) throw new Error("Invalid fixture manifest row: " + row);
+      return { file, digest };
     });
     // Comparing the sorted arrays detects duplicates as well as omissions.
     const files = filesUnder(root).filter(file => file !== "manifest.tsv").sort();
