@@ -16,7 +16,7 @@ function filesUnder(root: string, prefix = ""): string[] {
   return paths;
 }
 
-for (const folder of ["recorded"]) {
+for (const folder of ["recorded", "recorded-0.1.2"]) {
   test(folder + " manifest covers every fixture and matches its SHA-256", () => {
     const root = fileURLToPath(new URL("./fixtures/" + folder + "/", import.meta.url));
     const [header, ...rows] = readFileSync(join(root, "manifest.tsv"), "utf8").trimEnd().split("\n");
