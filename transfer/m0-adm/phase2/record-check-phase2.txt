@@ -1,0 +1,30 @@
+Founder check of the admission builder session record after Phase 2, under DEC-20261108-03 Addendum 2 B4, as its Addenda 6 B1 and 10 B6 and DEC-20261112-02 B2 and B5 read it, with the count of code from a string of DEC-20261115-02 Addendum 3 B4.
+
+Check: h2-record-check.mjs, SHA-256 c1834dcc689e94cf57fb123a09a0600225d8e97b428c648f14276136e3dd383f, from transfer commit 730df3014bf31d2dc0770cb4d30a4a4a79e30afe, over /Users/michaeldaley/builds/m0-admission-r1. Evidence on the MacBook: /Users/michaeldaley/builds/m0-admission-record-check/phase2-20261122T200929Z, MANIFEST.sha256 d4abd9059e3f5e263565d44684e08fcb3935af2f8e9d37af550bc2fce71fc4d2.
+
+Self-test:
+    self-test cases: 66; not as expected: 0
+    SELFTEST_OK
+
+Check:
+    records whose starting folder is /Users/michaeldaley/builds/m0-admission-r1: 1
+    rollout-2026-11-21T14-31-05-01a1ff97-430e-7133-8eef-23460e95d28d.jsonl: started 2026-11-21T19:31:05.617Z, cli_version 0.167.0, folder /Users/michaeldaley/builds/m0-admission-r1
+      user messages: 0
+      event types: 281 token_count; 4 task_complete; 4 task_started; 5 thread_settings_applied; 602 item_completed
+      turn 2026-11-21T19:31:14.953Z | model gpt-6.2-astra | effort xhigh | approval on-request | approvals reviewer user | sandbox workspace-write | network access false | folder /Users/michaeldaley/builds/m0-admission-r1
+      turn 2026-11-22T03:07:46.599Z | model gpt-6.2-astra | effort xhigh | approval on-request | approvals reviewer user | sandbox workspace-write | network access false | folder /Users/michaeldaley/builds/m0-admission-r1
+      turn 2026-11-22T04:04:29.285Z | model gpt-6.2-astra | effort xhigh | approval on-request | approvals reviewer user | sandbox workspace-write | network access false | folder /Users/michaeldaley/builds/m0-admission-r1
+      turn 2026-11-22T04:09:36.645Z | model gpt-6.2-astra | effort xhigh | approval on-request | approvals reviewer user | sandbox workspace-write | network access false | folder /Users/michaeldaley/builds/m0-admission-r1
+      turn 2026-11-22T15:50:30.340Z | model gpt-6.2-astra | effort xhigh | approval on-request | approvals reviewer user | sandbox workspace-write | network access false | folder /Users/michaeldaley/builds/m0-admission-r1
+      top-level calls: 215 custom_tool_call exec; 61 function_call wait
+      exec calls: 215; names of Addendum 2 B4 placed as text inside exec: 0
+      calls inside exec, by called name: 1 trimEnd; 12 includes; 16 slice; 18 allSettled; 197 exec_command; 2 find; 2 parse; 2 test; 21 map; 25 run; 255 text; 3 join; 3 startsWith; 38 exit; 4 filter; 4 notify; 5 split; 56 write_stdin; 6 replaceAll
+    CHECK_OK
+
+Count, b4-count.mjs, SHA-256 2dcff5987b35e4a1e7c60e1b9229f32f7ebca58376ea0af0d39ba2b6ef647689:
+    records: 1
+    record: rollout-2026-11-21T14-31-05-01a1ff97-430e-7133-8eef-23460e95d28d.jsonl
+    exec inputs: 215; not parsed: 0; occurrences of the six names, as any substring, in all of them: 0; calls of eval 0, Function 0, load 0, store 0; calls through a computed callee 0
+    B4_OK
+
+Phase 2 head 68d78a60338d9ff27ffab7b275aa3395e2a1c9bd, branch build/3b-m0-admission-r1; Phase 1 head 664c5678e516197fa1a14da3487e27821753ff48.
