@@ -329,3 +329,75 @@ test("the auth probe enforces the 5,000 ms execution deadline", async () => { co
 test("the auth probe escalates SIGTERM to SIGKILL within the forced-cleanup budget", async () => {const f=fixture();hang(f);const signals:string[]=[];await failure(f,"auth_not_ready",{probe:req=>runBoundedProbe(req,{spawn:request=>{const p=Bun.spawn([request.executablePath,...request.arguments],{env:request.environment,stdin:new Blob([request.stdin]),stdout:"pipe",stderr:"pipe"});children.push(p as any);return {...p,stdout:p.stdout,stderr:p.stderr,exited:p.exited,kill:s=>{if(request.kind==="auth")signals.push(s);p.kill(s as any);}};}})});expect(signals).toEqual(["SIGTERM","SIGKILL"]);},10000);
 test("the auth probe reaps the child successfully", async () => {const f=fixture();let reaped=0;const r=await f.run({probe:req=>runBoundedProbe(req,{spawn:request=>{const p=Bun.spawn([request.executablePath,...request.arguments],{env:request.environment,stdin:new Blob([request.stdin]),stdout:"pipe",stderr:"pipe"});children.push(p as any);return {stdout:p.stdout,stderr:p.stderr,exited:p.exited.then(code=>{reaped++;return code;}),kill:s=>p.kill(s as any)};}})});expect(r.ok).toBe(true);expect(reaped).toBe(4);});
 test("cleanup-budget exhaustion fails closed as auth_not_ready", async () => {const f=fixture();hang(f);await failure(f,"auth_not_ready",{probe:req=>runBoundedProbe(req,{spawn:request=>{const p=Bun.spawn([request.executablePath,...request.arguments],{env:request.environment,stdin:new Blob([request.stdin]),stdout:"pipe",stderr:"pipe"});children.push(p as any);return {stdout:p.stdout,stderr:p.stderr,exited:request.arguments.includes("auth")?p.exited.then(async code=>{await Bun.sleep(700);return code;}):p.exited,kill:s=>p.kill(s as any)};}})});},10000);
+
+import { offlineStart } from "../../../test/phase3b/offline";
+import { offlinePreflight } from "../../../test/phase3b/preflight-input";
+
+function governedSettingsFixture() {
+  const f = offlineStart();
+  try {
+    const input = offlinePreflight(f);
+    const path = join(f.config, "settings.json");
+    input.settingsSources = [path];
+    const run = async (settings: unknown) => {
+      writeFileSync(path, JSON.stringify(settings));
+      return runPurePreflightWithDependencies(input, { probe: async request => ({
+        ok: true, diagnostic: { result: "pass", primitive: request.kind === "auth" ? "auth status" : "system/init",
+          exitCode: 0, signal: null, stdoutBytes: 0, stderrBytes: 0 },
+      }) });
+    };
+    return { run, dispose: f.dispose };
+  } catch (error) { f.dispose(); throw error; }
+}
+
+test("preflight accepts the governed settings and each allowed setting value", async () => {
+  const f = governedSettingsFixture();
+  const entries = (n: number, value: (i: number) => unknown) =>
+    Object.fromEntries(Array.from({ length: n }, (_, i) => ["synthetic-" + i, value(i)]));
+  try {
+    for (const host of ["darwin", "linux"]) {
+      const result = await f.run({
+        env: { DISABLE_AUTOUPDATER: "1" }, permissions: { defaultMode: "dontAsk", deny: Array.from({ length: 27 }, (_, i) => "deny-" + i) },
+        enabledPlugins: entries(host === "darwin" ? 134 : 142, () => false), skillOverrides: entries(17, () => "off"),
+        autoMemoryEnabled: false, disableAllHooks: true, disableClaudeAiConnectors: true, effortLevel: "high",
+        modelSettings: entries(7, i => ({ effortLevel: i % 2 ? "xhigh" : "high" })), agentPushNotifEnabled: true,
+        inputNeededNotifEnabled: true, autoCompactEnabled: true, verbose: true, editorMode: "normal", theme: "light-daltonized",
+        ...(host === "linux" ? { model: "claude-fable-5-2" } : {}),
+      });
+      expect(result.ok ? "pass" : result.failure).toBe("pass");
+      if (result.ok) expect(result.plan.executions.some(e => "DISABLE_AUTOUPDATER" in e.environment)).toBe(false);
+    }
+    for (const effortLevel of ["low", "medium", "high", "xhigh", "max"]) {
+      expect((await f.run({ effortLevel, modelSettings: { example: { effortLevel } } })).ok).toBe(true);
+    }
+    for (const settings of [
+      { agentPushNotifEnabled: false, inputNeededNotifEnabled: false, autoCompactEnabled: false, verbose: false },
+      { theme: "", editorMode: "vim" }, { theme: "Az-9".repeat(16) },
+      { enabledPlugins: {}, skillOverrides: {}, modelSettings: {}, permissions: { defaultMode: "dontAsk", deny: [] } },
+      { env: { TERM: "xterm-256color" } },
+    ]) expect((await f.run(settings)).ok).toBe(true);
+  } finally { f.dispose(); }
+}, 30_000);
+
+test("preflight rejects every unlisted settings control and invalid value shape", async () => {
+  const f = governedSettingsFixture();
+  try {
+    const cases: unknown[] = [
+      { unlisted: true }, { env: { DISABLE_AUTOUPDATER: 1 } }, { env: { DISABLE_AUTOUPDATER: "0" } },
+      { env: { UNLISTED: "synthetic" } }, { env: [] }, { permissions: [] }, { permissions: { defaultMode: "dontAsk" } },
+      { permissions: { deny: [] } }, { permissions: { defaultMode: "ask", deny: [] } },
+      { permissions: { defaultMode: "dontAsk", deny: [false] } }, { permissions: { defaultMode: "dontAsk", deny: "all" } },
+      { permissions: { defaultMode: "dontAsk", deny: [], allow: [] } }, { enabledPlugins: [] }, { enabledPlugins: { a: true } },
+      { skillOverrides: null }, { skillOverrides: { a: false } }, { autoMemoryEnabled: true }, { disableAllHooks: false },
+      { disableClaudeAiConnectors: false }, { model: "other" }, { model: null }, { effortLevel: "other" },
+      { modelSettings: [] }, { modelSettings: { a: { effortLevel: "other" } } }, { modelSettings: { a: {} } },
+      { modelSettings: { a: { effortLevel: "low", model: "other" } } }, { modelSettings: { a: "high" } }, { verbose: 1 },
+      { agentPushNotifEnabled: "true" }, { inputNeededNotifEnabled: 0 }, { autoCompactEnabled: null },
+      { editorMode: "emacs" }, { theme: "a".repeat(65) }, { theme: "abc_def" }, { theme: 1 }, { theme: "abc\n" },
+    ];
+    for (const setting of cases) {
+      const value = await f.run(setting);
+      expect(value.ok ? "unexpected success" : value.failure).toBe("auth_not_ready");
+    }
+  } finally { f.dispose(); }
+}, 30_000);
