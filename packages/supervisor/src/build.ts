@@ -102,6 +102,9 @@ export interface BuildChildResource {
 }
 
 export interface LiveReattestationInput {
+  readonly sessionId: string;
+  readonly signal: AbortSignal;
+  readonly reportFailure: (reason: string) => void;
   readonly executionId: string;
   readonly model: string;
   readonly provider: string;
@@ -133,6 +136,22 @@ export type LiveSurfaceAttester = (
 
 export interface BuildSurfaceRegistration extends AdapterRegistrationV1 {
   readonly live_attester?: LiveSurfaceAttester | null;
+}
+
+export interface LiveBuildInput extends BuildInput {
+  readonly signal: AbortSignal;
+  readonly attesterFor: (surface: SurfaceId) => LiveSurfaceAttester | undefined;
+}
+
+// Use only build-owned literals in ledger and caller-visible detail.
+function liveFailureCause(surface: SurfaceId, reported: unknown): string {
+  const shared = ["auth_failed", "identity_mismatch", "attestation_deadline", "attestation_cancelled",
+    "attestation_tool_call", "attestation_round_trips", "attestation_budget_exhausted"];
+  const specific = surface === "madv-surface"
+    ? ["endpoint_refused", "provider_error", "identity_unavailable", "model_refused", "domain_unresolved"]
+    : ["attestation_missing", "attestation_malformed", "attestation_duplicate"];
+  return shared.find(item => item === reported) ?? specific.find(item => item === reported)
+    ?? (surface === "madv-surface" ? "identity_mismatch" : "attestation_malformed");
 }
 
 export interface LiveReattestationRecord {
@@ -532,8 +551,15 @@ function formatFailureDetail(
  * uses ADAPTER_REGISTRY, spawnPtyHost, and default sources.
  */
 export async function runTransactionalBuild(input: BuildInput): Promise<BuildResult> {
-  const safeInput: BuildInput =
-    input !== null && typeof input === "object"
+  return executeBuild(publicBuildInput(input), {});
+}
+
+export function runLiveTransactionalBuild(input: LiveBuildInput): Promise<BuildResult> {
+  return executeBuild(publicBuildInput(input), {}, { signal: input.signal, attesterFor: input.attesterFor });
+}
+
+function publicBuildInput(input: BuildInput): BuildInput {
+  return input !== null && typeof input === "object"
       ? {
           sessionId: input.sessionId,
           envelope: input.envelope,
@@ -541,7 +567,6 @@ export async function runTransactionalBuild(input: BuildInput): Promise<BuildRes
           ...(input.injectFailureAt !== undefined ? { injectFailureAt: input.injectFailureAt } : {}),
         }
       : ({} as BuildInput);
-  return runTransactionalBuildWithDependencies(safeInput);
 }
 
 /**
@@ -553,6 +578,14 @@ export async function runTransactionalBuild(input: BuildInput): Promise<BuildRes
 export async function runTransactionalBuildWithDependencies(
   input: BuildWithDependenciesInput,
   overrides: BuildDependencies = {},
+): Promise<BuildResult> {
+  return executeBuild(input, overrides);
+}
+
+async function executeBuild(
+  input: BuildWithDependenciesInput,
+  overrides: BuildDependencies,
+  live?: Pick<LiveBuildInput, "signal" | "attesterFor">,
 ): Promise<BuildResult> {
   const rawInput = (input !== null && typeof input === "object" ? input : {}) as Partial<BuildWithDependenciesInput>;
   const sessionId = typeof rawInput.sessionId === "string" ? rawInput.sessionId : "";
@@ -596,6 +629,33 @@ export async function runTransactionalBuildWithDependencies(
   let fencingTokenIssued = false;
   let sessionActivatedRow: LedgerRow | null = null;
   let localObservationSeq = 0;
+
+  const stopAttesters = new AbortController();
+  const signal = live ? AbortSignal.any([live.signal, stopAttesters.signal]) : stopAttesters.signal;
+  let firstFailure: { executionId: string; surface: SurfaceId; cause: string } | undefined;
+  let attesting = false;
+  let unwindState: PartialBuildState | undefined;
+  const reportFailure = (executionId: string, surface: SurfaceId, reported: unknown) => {
+    if (!live || firstFailure) return;
+    const cause = liveFailureCause(surface, reported);
+    firstFailure = { executionId, surface, cause };
+    if (sessionActivatedRow !== null && currentBroker !== null) {
+      const reason = cause === "auth_failed" ? "authentication_expired"
+        : cause === "provider_error" || cause === "endpoint_refused" ? "adapter_failure" : "identity_mismatch";
+      const phase = currentBroker.snapshotProjectionInput().lifecycle.phase;
+      if (phase === "active" || phase === "paused") {
+        void currentBroker.interrupt(reason, surface + ": " + cause, "high", sources.nextEventId(), null, executionId)
+          .catch(() => { for (const host of hosts) host.handle.closeStdin(); });
+      }
+    }
+    if (attesting && sessionActivatedRow === null) {
+      // A silent host's fact reader can be parked in next(). Start the normal
+      // rollback now so it can settle while the attester closes its reader.
+      unwindState = snapshotPartialState();
+      void rollbackBuild(unwindState).catch(() => { /* The caller joins this same rollback. */ });
+    }
+    stopAttesters.abort();
+  };
 
   const snapshotPartialState = (): PartialBuildState =>
     Object.freeze({
@@ -647,14 +707,19 @@ export async function runTransactionalBuildWithDependencies(
     step: BuildStep,
     failure: BuildFailureCode,
     executionIds: readonly string[] = [],
-  ): BuildResult =>
-    Object.freeze({
-      ok: false as const,
-      failedStep: step,
-      failure,
-      detail: formatFailureDetail(step, failure, executionIds),
-      partialState: snapshotPartialState(),
+  ): BuildResult => {
+    // Freeze the primary failure before cancelling any other observer.
+    const first = firstFailure;
+    const detail = first
+      ? formatFailureDetail("reattest", "reattestation_failed", [first.executionId]) +
+        " surface=" + first.surface + " cause=" + first.cause
+      : formatFailureDetail(step, failure, executionIds);
+    if (live) stopAttesters.abort();
+    return Object.freeze({
+      ok: false as const, failedStep: first ? "reattest" : step,
+      failure: first ? "reattestation_failed" : failure, detail, partialState: unwindState ?? snapshotPartialState(),
     });
+  };
 
   let activeSnapshot: StampedBrokerSnapshot | null = null;
 
@@ -662,6 +727,7 @@ export async function runTransactionalBuildWithDependencies(
     const step = BUILD_STEPS[index]!;
     let currentExecutionIds: readonly string[] = [];
 
+    if (firstFailure) return failAt("reattest", "reattestation_failed");
     if (injectFailureAt === step) {
       return failAt(step, "injected_failure");
     }
@@ -938,30 +1004,36 @@ export async function runTransactionalBuildWithDependencies(
               return failAt(step, "reattestation_failed", currentExecutionIds);
             }
             const reg = resolveRegistration(execution.surface);
-            if (reg === undefined || typeof reg.live_attester !== "function") {
+            const attester = live ? live.attesterFor(execution.surface) : reg?.live_attester;
+            const refuse = (reason: string) => {
+              reportFailure(host.executionId, execution.surface, reason);
               return failAt(step, "reattestation_failed", currentExecutionIds);
+            };
+            if (reg === undefined || typeof attester !== "function") {
+              return refuse(execution.surface === "madv-surface" ? "identity_unavailable" : "attestation_missing");
             }
-            const verdict = await reg.live_attester({
-              executionId: envelopeExecution.execution_id,
-              model: envelopeExecution.model,
-              provider: envelopeExecution.provider,
-              execution,
-              registration: reg,
-              host,
-              child,
-            });
-            if (!verdict.ok) {
-              return failAt(step, "reattestation_failed", currentExecutionIds);
+            const notifyFailure = (reason: string) => reportFailure(host.executionId, execution.surface, reason);
+            let verdict: LiveReattestationResult;
+            try {
+              if (signal.aborted) return refuse("attestation_cancelled");
+              attesting = true;
+              verdict = await attester({
+                sessionId, signal, reportFailure: notifyFailure,
+                executionId: envelopeExecution.execution_id,
+                model: envelopeExecution.model,
+                provider: envelopeExecution.provider,
+                execution, registration: reg, host, child,
+              });
+            } catch {
+              return refuse(execution.surface === "madv-surface" ? "identity_mismatch" : "attestation_malformed");
+            } finally {
+              attesting = false;
             }
-            if (verdict.evidenceKind !== "actual_session") {
-              return failAt(step, "reattestation_failed", currentExecutionIds);
-            }
-            if (verdict.provider !== envelopeExecution.provider || verdict.provider !== reg.provider) {
-              return failAt(step, "reattestation_failed", currentExecutionIds);
-            }
-            if (verdict.model !== envelopeExecution.model) {
-              return failAt(step, "reattestation_failed", currentExecutionIds);
-            }
+            if (firstFailure) return failAt(step, "reattestation_failed", currentExecutionIds);
+            if (!verdict.ok) return refuse(verdict.reason);
+            if (verdict.evidenceKind !== "actual_session" ||
+              verdict.provider !== envelopeExecution.provider || verdict.provider !== reg.provider ||
+              verdict.model !== envelopeExecution.model) return refuse("identity_mismatch");
             const record: LiveReattestationRecord = Object.freeze({
               executionId: envelopeExecution.execution_id,
               surface: execution.surface,
@@ -1049,6 +1121,13 @@ export async function runTransactionalBuildWithDependencies(
           }
           const { state: beforeState, head: beforeHead } = replayLedgerState(ledger);
           const beforeSnapshot = await client.getSnapshot();
+          // No await separates this last monitor check from durable activation.
+          if (firstFailure) return failAt("reattest", "reattestation_failed");
+          if (live && signal.aborted) {
+            const first = envelope.executions[0]!;
+            reportFailure(first.execution_id, first.surface, "attestation_cancelled");
+            return failAt("reattest", "reattestation_failed");
+          }
           const readyIds = children.map((child) => child.executionId);
           const executions: readonly ExecutionSnapshot[] = envelope.executions.map((identity, index) => {
             const child = children[index]!;
