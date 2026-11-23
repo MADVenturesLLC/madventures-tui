@@ -135,3 +135,43 @@ test("exit precedence fails closed without relying on an emitted event", () => {
     expect(result.ok).toBe(false); if (!result.ok) expect(result.cause).toBe(cause);
   }
 });
+
+test("identity requires an empty tool array while a governed launch accepts tools", () => {
+  for (const tools of [["read_file"], undefined, null, "", {}]) {
+    const output = wire(init({ tools }), response());
+    expect(parseMadvIdentity(output, model, context.supportedVersions)).toMatchObject({
+      ok: false, cause: "identity_mismatch", reason: "init_tools",
+    });
+  }
+  expect(parseMadvIdentity(wire(init({ tools: [] }), response()), model, context.supportedVersions).ok).toBe(true);
+  const launch = new MadvSurfaceParser(context);
+  launch.push(wire(init({ tools: ["read_file"] }), response()));
+  expect(launch.finish(0).ok).toBe(true);
+});
+
+test("probe and launch require a non-empty string response_id on every response", () => {
+  for (const response_id of [undefined, "", null, 42]) {
+    const invalid = response({ response_id });
+    const output = wire(init(), invalid);
+    const mismatch = { ok: false, cause: "identity_mismatch", reason: "response_predicate" };
+    expect(parseMadvIdentity(output, model, context.supportedVersions)).toMatchObject(mismatch);
+    const launch = new MadvSurfaceParser(context);
+    launch.push(output);
+    expect(launch.finish(0)).toMatchObject(mismatch);
+
+    const continued = new MadvSurfaceParser(context);
+    continued.push(wire(init(), response(), event("result", { subtype: "success", is_error: false })));
+    expect(continued.beginRequest().ok).toBe(true);
+    continued.push(wire(invalid));
+    expect(continued.finish(0)).toMatchObject(mismatch);
+  }
+});
+
+test("Claude and Anthropic ids are refused before family resolution", () => {
+  const ids = ["minimax-claude-x", "qwen-claude", "vendor_CLAUDE", "vendor+ClAuDe", "preclaudepost", "minimax-anthropic-x"];
+  const causes = ids.map(id => {
+    const result = parseMadvIdentity(wire(init(), response({ response_model: id })), model, context.supportedVersions);
+    return { id, cause: result.ok ? "accepted" : result.cause };
+  });
+  expect(causes).toEqual(ids.map(id => ({ id, cause: "model_refused" })));
+});
