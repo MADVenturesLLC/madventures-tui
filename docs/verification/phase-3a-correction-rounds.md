@@ -1980,3 +1980,75 @@ Round 2's resolution, recorded above as pending, is now closed:
   Copilot's comment and the two fixed host names (`DEC-20261121-01` B5 to B7); to the act of
   `DEC-20261115-02` Addendum 7 B4, the NUL bytes at the start of the Ubuntu run's help log
   (`DEC-20261121-01` B3).
+
+## madv-surface admission review verdict PASS and admission build merged (rubric milestones 1 and 3, no round, count 0)
+
+- **Recorded:** 2026-11-23, under `DEC-20261123-01` B1 to B15 and C1.
+- **Plan milestone:** the admission build of Phase 3B slice M0, which admits madv-surface on its 0.1.2
+  release (`DEC-20261121-02`). **Rubric milestones:** 1 and 3 (`DEC-20261108-01` B9 item 2, as
+  `DEC-20261121-02` B1 item 4 places it).
+- **Head reviewed:** `68d78a60338d9ff27ffab7b275aa3395e2a1c9bd` on PR #252 (`build/3b-m0-admission-r1`),
+  built by `session:codex/3b-m0-admission-r1` from `0678bd4412d5aaed963ae20f101959bd92f79811` under
+  `DEC-20261121-02` and its Addenda 1 and 2, SHA-256
+  `b6b9563ed1a2e154b4ef3b4d9ffe7666e6fd9870d82b87486f772d65f7f167aa` and
+  `5dc0fddf411f8abce1e20df834ce21d0676b1fcd538fe12ad3d49a34ffa8be81`, the builder prompt with SHA-256
+  `abf0766764f3587d9dd3de096749c2aa6249fc55cd455c3563e22c4744f300d2` and three resume messages, the last
+  with SHA-256 `0e54e70e354dd478ad43f40e47136cab7d6b6a136c990759831fbbc909d2a1a4`. Phase 1 ends at
+  `664c5678e516197fa1a14da3487e27821753ff48`. In Phase 1 the session halted twice, each with a report:
+  when the Founder's installation of other tools replaced the runtime during the session, and when its
+  full run failed three tests of `test/phase3a/harness-separation.test.ts`, whose line 24 pins the
+  registry digest, which Addendum 2 then let change (`DEC-20261123-01` A3 and B1).
+- **Reviewer:** `antigravity`, a fresh session in Antigravity on the Founder's MacBook, with a Gemini
+  model the report shows as Gemini 4 Hydrogen (Medium). Review prompt SHA-256
+  `b5ae6dffc2459bfa03c45a622eccb7fd325aa4c729cf7429ade27105b874e30c`. The Founder's check of Phase 3B
+  plan section 2C failed on the first report, SHA-256
+  `17287543e21c8e51e48bce7cd298548a6cc0c7998a8442606be35016dbcb9073`, which was not posted and is not a
+  verdict. Founder message 1, SHA-256
+  `086fa7a7cbdd4bfab99c38020e4ca647221d41504090e64efe3edcc6a319e5c3`, named the three points that failed
+  without stating any value, and the corrected report passed the check (`DEC-20261123-01` A8 and B5).
+- **Verdict text SHA-256:** `c58d5779ee3251e0c2efd745dfe47adccf94628f069d0efdd9cbe8b32075fee4`, 40,965
+  bytes, 440 lines, saved at `/Users/michaeldaley/builds/review-m0-admission-r1.md`, posted on PR #252
+  as comment 7089533924 by `decivantiq`.
+- **Result:** PASS, items 1 to 13, no SUBSTANTIVE or NOT COUNTING finding, and three findings the
+  reviewer classifies ADVISORY, each from an attempt that kept every test it ran passing: no test pins
+  that `model_refused` and `domain_unresolved` come before the `response_id` check (item 3);
+  `packages/supervisor/test/madv-allowlist.test.ts` holds the names of `madv-surface-v1` but not their
+  `required` and `secret` attributes (item 4); and `recorded-0.1.2.test.ts` leaves to
+  `fixture-integrity.test.ts` the bytes it does not assert (item 5). The Founder rules all three limits
+  of the tests, not defects: M1 answers the first two with tests, and the third is closed with no change
+  (`DEC-20261123-01` B12). The reviewer started its four Bun check scripts while its own foreground
+  `bun test` ran, and ran its mutations and attempts through one script under one load reading; no
+  result turned on either, and later Tier-2 review prompts ask for each gate run's start and end times
+  and a load reading before each Bun test run (`DEC-20261123-01` A8 item 4 and B5). **Counted:** no
+  round. The builder's halts, the first report and Founder message 1 add no round. The admission build's
+  count closes at **0**.
+- **Checks at the head:** on the test merge of the head into `main`,
+  `74a6c57481737317eba75d5eb1b3b31be9e0c023`, Verify and Verify (macOS) passed with 2048 pass, 0 fail,
+  across 151 files, and tui-chaos on both hosts, validate-code-review, code-review, CodeQL and every
+  Analyze job succeeded. The first attribution-shape run, check run 137339434137, failed in its PR-body
+  mode because the description did not end with a trailer block; after the Founder's command appended
+  the builder's three trailers, check run 137340096594 succeeded. The Founder's runs of
+  `DEC-20261121-02` B10 passed on the MacBook under Bun 1.4.2 and on the Ubuntu PC under the custodied
+  Bun 1.4.1: 2048 pass, 0 fail, across 151 files on each, log manifests SHA-256
+  `c79d39a2577c54f2d8e5653bfe41660eeb2175c693d494548ad766a39df59235` and
+  `7ebd2f8688666deb059e6314cd9dae2055f76cd9af7ba26315c1dc8aec0d2514`.
+- **Merged:** PR #252 was marked ready at that head on 2026-11-23, after the PASS was posted, and GitHub
+  then requested reviews from the owners team and from Copilot. Copilot's review 6015855571, state
+  COMMENTED, opened no thread; the owners team did not review. Under the Founder's merge authorization
+  in comment 7090138257, SHA-256 `f32875a17fcaee142966da5dd870ed00de9e8c1f5c09b951a82c89625aa1b2ee`, it
+  merged at `60faaf8e35cf7f85078bccad73d563262736117b`, with parents
+  `0678bd4412d5aaed963ae20f101959bd92f79811` and `68d78a60338d9ff27ffab7b275aa3395e2a1c9bd`, changing
+  exactly 44 paths, 37 added and 7 modified. Every run on the merge commit succeeded.
+- **Records (`DEC-20261121-02` B8):** the Founder's commands made the build's ten live calls, five on
+  each host, and stored one madv-surface capability record on each certification host, SHA-256
+  `5c0fd4fc850366d2107555a73487c734f912fc333c1590e7ec39c6bc7a3f36ea` on the MacBook and
+  `4482839a8aca025d9e2f545a309fea7ff57971684d5e18f1ebdde4eacf0148a3` on the Ubuntu PC, each passing
+  identity, auth readiness and overall for the role `independent-reviewer` and expiring on 2026-12-22.
+  Evidence: `docs/verification/phase-3b-m0-admission-investigation.md`.
+- **Harness:** one builder session under Codex 0.167.0, the governed build of `DEC-20261108-03` Addendum
+  11. All five turns of its one session record name the model `gpt-6.2-astra` and the effort `xhigh`.
+- **M1 (`DEC-20261123-01` B8 to B15):** `DEC-20261108-04` B4 item 3 is met, and stays met. The items
+  carried to `DEC-20261121-02` B13 are closed. `DEC-20261123-01` is M1's act: M1's binding base is the
+  merge commit of the pull request that files it; its builder is `session:codex/3b-m1-r1` and its
+  reviewer `antigravity`; and its verdicts count under rubric milestone 6, in a count that starts at
+  zero.
