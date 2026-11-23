@@ -11,15 +11,18 @@ test("the live port passes the session and signal and rejects untrusted failure 
       ...fixture, sessionId: "offline-port", signal: controller.signal,
       attesterFor: () => input => {
         seen.push(input);
-        return { ok: false, reason: "untrusted child diagnostic" };
+        return { ok: false, reason: "M1 synthetic refusal" };
       },
     });
     try {
       expect(seen.length).toBe(1);
       expect(seen[0]!.sessionId).toBe("offline-port");
       expect(seen[0]!.signal).toBeInstanceOf(AbortSignal);
-      expect(result).toMatchObject({ ok: false, failedStep: "reattest", failure: "reattestation_failed",
-        detail: "step=reattest execution=builder failure=reattestation_failed surface=claude-code cause=attestation_malformed" });
+      expect(result.ok).toBe(false);
+      if (result.ok) throw new Error("expected a failed build");
+      expect(result.failedStep).toBe("reattest");
+      expect(result.failure).toBe("reattestation_failed");
+      expect(result.detail).toBe("step=reattest execution=builder failure=reattestation_failed surface=claude-code cause=attestation_malformed");
     } finally { await closeOfflineBuild(result); }
   } finally { fixture.dispose(); }
 });
@@ -37,9 +40,12 @@ test("a continuous failure before activation fails reattestation for its surface
       },
     });
     try {
-      expect(result).toMatchObject({ ok: false, failedStep: "reattest", failure: "reattestation_failed",
-        detail: "step=reattest execution=builder failure=reattestation_failed surface=claude-code cause=identity_mismatch" });
-      if (!result.ok) expect(result.partialState.sessionActivatedRow).toBeNull();
+      expect(result.ok).toBe(false);
+      if (result.ok) throw new Error("expected a failed build");
+      expect(result.failedStep).toBe("reattest");
+      expect(result.failure).toBe("reattestation_failed");
+      expect(result.detail).toBe("step=reattest execution=builder failure=reattestation_failed surface=claude-code cause=identity_mismatch");
+      expect(result.partialState.sessionActivatedRow === null).toBe(true);
     } finally { await closeOfflineBuild(result); }
   } finally { fixture.dispose(); }
 });
