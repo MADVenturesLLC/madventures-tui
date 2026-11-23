@@ -11,3 +11,4 @@ export { attestClaudeCode, ModelIdentityUnverifiable } from "./attestation";
 export { realShell, fakeShell, resolveExecutable } from "./shell";
 export type { Shell, ShellResult } from "./shell";
 export { attestClaudeSession, encodeUserInput } from "./live";
+export { detectClaudeFailure } from "./detectors";

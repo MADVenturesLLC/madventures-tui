@@ -1,3 +1,5 @@
+import { detectMadvFailure } from "./detectors";
+
 // DEC-20261115-02 B3-B5; Phase 3B design 2.6. Pure parsing only:
 // the PTY host owns launch, and M1 owns interruption and timer wiring.
 export type MadvFailureCause =
@@ -6,6 +8,7 @@ export type MadvFailureCause =
 const identityProbe = Symbol("identity probe");
 export interface MadvContext {
   readonly [identityProbe]?: boolean;
+  readonly authFailureDetection?: readonly string[];
   readonly onAttested?: (version: string) => void;
   readonly executionId: string;
   readonly sessionId: string;
@@ -144,7 +147,9 @@ export class MadvSurfaceParser {
       this.fail("identity_mismatch", "extra_model_response");
       return;
     }
-    const cause = value.type === "system" ? eventCause(value.subtype) : undefined;
+    const detected = this.context.authFailureDetection && detectMadvFailure(this.context.authFailureDetection,
+      { kind: "event", type: value.type, subtype: value.subtype });
+    const cause = detected?.cause ?? (value.type === "system" ? eventCause(value.subtype) : undefined);
     // A later explicit failure can outrank an earlier identity difference.
     // No further successful event or tool can escape a failed parser.
     if (cause !== undefined) {
@@ -250,3 +255,4 @@ export function parseMadvAuthReadiness(output: string, exitCode = 0, signal: str
 }
 
 export { attestMadvSession } from "./live";
+export { detectMadvFailure } from "./detectors";

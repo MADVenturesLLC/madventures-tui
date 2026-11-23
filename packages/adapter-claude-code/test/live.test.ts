@@ -17,7 +17,8 @@ function start() {
     registration: { supported_versions: ["supported"], auth_failure_detection: ["system/api_retry.error:authentication_failed"] } });
   return { wire, verdict };
 }
-async function rejects(events: unknown[], expected: string) {
+type ExpectedCause = Extract<Awaited<ReturnType<typeof attestClaudeSession>>, { ok: false }>["cause"];
+async function rejects(events: unknown[], expected: ExpectedCause) {
   const { wire, verdict } = start();
   wire.events(...events);
   wire.end();

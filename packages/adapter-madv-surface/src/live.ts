@@ -1,3 +1,4 @@
+import { detectMadvFailure } from "./detectors";
 import { EVIDENCE_DEADLINE_MS, MadvSurfaceParser, encodeAttestationInput, encodeUserInput,
   type MadvFailureCause, type MadvResult } from "./index";
 
@@ -10,7 +11,7 @@ interface Input {
   model: string;
   signal: AbortSignal;
   reportFailure(cause: string): void;
-  registration: { supported_versions: readonly string[]; provider: string; independence_domain: string };
+  registration: { auth_failure_detection: readonly string[]; supported_versions: readonly string[]; provider: string; independence_domain: string };
   host: { handle: {
     facts(): AsyncIterable<{ kind: string; bytes?: Uint8Array; code?: number | null; signal?: string | null }>;
     send(frame: { kind: "input"; bytes: Uint8Array }): void;
@@ -30,13 +31,14 @@ export function attestMadvSession(input: Input, reserveWrite: () => boolean = ()
 
   function stop(cause: Cause, parserReason?: string): void {
     if (failure) return;
-    failure = { ok: false, surface: "madv-surface", cause, reason: cause, parserReason };
+    failure = { ok: false, surface: "madv-surface", cause, reason: cause, ...(parserReason === undefined ? {} : { parserReason }) };
     clearTimeout(timer);
     input.reportFailure(cause);
   }
   const abort = () => stop("attestation_cancelled");
   const parser = new MadvSurfaceParser({
     executionId: input.executionId, sessionId: input.sessionId, model: input.model,
+    authFailureDetection: input.registration.auth_failure_detection,
     supportedVersions: input.registration.supported_versions, provider: input.registration.provider,
     independenceDomain: input.registration.independence_domain,
     onAttested(version) {
@@ -48,7 +50,8 @@ export function attestMadvSession(input: Input, reserveWrite: () => boolean = ()
     },
   });
   function inspect(result: MadvResult): void {
-    if (!result.ok) stop(parser.attestationFailure ?? result.cause, result.reason);
+    const detection = detectMadvFailure(input.registration.auth_failure_detection, { kind: "parsed", result });
+    if (detection) stop(parser.attestationFailure ?? detection.cause, detection.reason);
   }
   function write(frame: string): void {
     input.host.handle.send({ kind: "input", bytes: new TextEncoder().encode(frame) });
@@ -69,7 +72,11 @@ export function attestMadvSession(input: Input, reserveWrite: () => boolean = ()
         if (!ready && performance.now() >= deadline) { stop("attestation_deadline"); break; }
         if (fact.kind === "output" && fact.bytes) inspect(parser.push(fact.bytes));
         if (fact.kind === "exited") {
-          inspect(parser.finish(fact.code ?? 1, fact.signal ?? null));
+          const exitCode = fact.code ?? 1;
+          const result = parser.finish(exitCode, fact.signal ?? null);
+          const detection = detectMadvFailure(input.registration.auth_failure_detection, { kind: "child_exit", exitCode });
+          if (detection && !parser.attestationFailure) stop(detection.cause, detection.reason);
+          else inspect(result);
           break;
         }
         if (failure) break;

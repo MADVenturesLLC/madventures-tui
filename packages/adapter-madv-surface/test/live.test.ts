@@ -3,7 +3,7 @@ import { attestMadvSession, encodeAttestationInput, encodeUserInput } from "../s
 import { wireFacts } from "../../../test/phase3b/wire-facts";
 
 const model = "MiniMax-M3.1-Flash";
-const registration = { supported_versions: ["0.1.2"], provider: "minimax", independence_domain: "minimax" };
+const registration = { auth_failure_detection: ["system/auth_failed", "exit_code:5"], supported_versions: ["0.1.2"], provider: "minimax", independence_domain: "minimax" };
 const stamp = { session_id: "synthetic-wire", ts: "2026-11-15T00:00:00Z" };
 const init = { ...stamp, type: "system", subtype: "init", surface: "madv-surface", surface_version: "0.1.2",
   requested_model: model, provider: "minimax", profile: "minimax", endpoint_host: "api.minimax.io" };
@@ -19,7 +19,8 @@ function start() {
     sessionId: "synthetic-session" });
   return { wire, verdict };
 }
-async function rejects(events: readonly unknown[], cause: string, reason?: string) {
+type ExpectedCause = Extract<Awaited<ReturnType<typeof attestMadvSession>>, { ok: false }>["cause"];
+async function rejects(events: readonly unknown[], cause: ExpectedCause, reason?: string) {
   const { wire, verdict } = start();
   wire.events(...events);
   wire.end();

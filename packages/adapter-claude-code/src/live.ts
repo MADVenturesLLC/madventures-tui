@@ -1,3 +1,5 @@
+import { detectClaudeFailure } from "./detectors";
+
 const PROMPT = "Reply with your model identifier and nothing else.";
 const DEADLINE_MS = 30_000;
 
@@ -73,9 +75,8 @@ class ClaudeReader {
       !(event.type === "system" && (event.subtype === "model_refusal_fallback" || event.subtype === "api_retry"))) return;
     if (!nonempty(event.session_id)) return "attestation_malformed";
     if (this.session !== undefined && event.session_id !== this.session) return "attestation_duplicate";
-    if (event.type === "system" && event.subtype === "model_refusal_fallback") return "identity_mismatch";
-    if (event.type === "system" && event.subtype === "api_retry" && typeof event.error === "string" &&
-      this.input.registration.auth_failure_detection.includes("system/api_retry.error:" + event.error)) return "auth_failed";
+    const detection = detectClaudeFailure(this.input.registration.auth_failure_detection, { kind: "event", event });
+    if (detection) return detection.cause;
     if (!this.complete && event.parent_tool_use_id != null) return "attestation_tool_call";
 
     if (event.type === "system" && event.subtype === "init") {
