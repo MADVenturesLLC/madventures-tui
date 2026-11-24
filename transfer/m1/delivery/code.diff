@@ -1,0 +1,2187 @@
+diff --git a/apps/madbridge/src/tui/live/composition.ts b/apps/madbridge/src/tui/live/composition.ts
+new file mode 100644
+index 0000000..49a5092
+--- /dev/null
++++ b/apps/madbridge/src/tui/live/composition.ts
+@@ -0,0 +1,92 @@
++import type { BrokerClient } from "@madventures/broker";
++import { parseTaskEnvelope, type TaskEnvelopeV1 } from "@madventures/protocol";
++import { attestClaudeSession } from "@madventures/adapter-claude-code";
++import { attestMadvSession } from "../../../../../packages/adapter-madv-surface/src/index";
++import { rollbackBuild, runLiveTransactionalBuild, runPurePreflight, type LiveBuildInput,
++  type PartialBuildState, type PreflightInput } from "../../../../../packages/supervisor/src/index";
++import { settingsSources } from "./settings-sources";
++
++interface Start {
++  envelope: TaskEnvelopeV1;
++  preflight: Omit<PreflightInput, "envelope" | "settingsSources">;
++  workingDirectory: string;
++  configFolder: string;
++  managedFolder?: string;
++  present(client: BrokerClient): void | Promise<void>;
++}
++type Result = { exitCode: 0; close(): Promise<void> } | { exitCode: 1; component: string; detail: string };
++
++function failed(component: string, detail: string = component): Result {
++  return { exitCode: 1, component, detail };
++}
++
++// The registered identity and auth probes have both passed when the build
++// asks for an attester. Count each subsequent write before sending its frame.
++function writeBudget(): () => boolean {
++  let calls = 2;
++  return () => {
++    if (calls >= 3) return false;
++    calls++;
++    return true;
++  };
++}
++
++export function createStartAttesters(): LiveBuildInput["attesterFor"] {
++  const claudeBudget = writeBudget(), madvBudget = writeBudget();
++  return surface => {
++    if (surface === "claude-code") return input => attestClaudeSession(input, claudeBudget);
++    if (surface === "madv-surface") return input => attestMadvSession(input, madvBudget);
++    return undefined;
++  };
++}
++
++async function closeActive(state: PartialBuildState): Promise<void> {
++  const phase = (await state.client!.getSnapshot()).phase;
++  if (phase === "active" || phase === "paused") await state.broker!.founderClose(crypto.randomUUID());
++  for (const host of state.hosts) {
++    for await (const _ of host.handle.facts()) { /* Wait for host exit before releasing the ledger. */ }
++  }
++  for (const adapter of state.adapters) await adapter.disconnect();
++  await state.client!.close();
++  state.ledger!.close();
++}
++
++export async function composeLiveSession(start: Start): Promise<Result> {
++  const sources = settingsSources(start.workingDirectory, start.configFolder, start.managedFolder, process.platform);
++  if (!sources.ok) return failed(sources.cause);
++  let envelope: TaskEnvelopeV1;
++  try { envelope = parseTaskEnvelope(structuredClone({ ...start.envelope })); }
++  catch { return failed("preflight", "envelope_invalid"); }
++  const controller = new AbortController();
++  const abort = () => controller.abort();
++  const caller = start.preflight.signal;
++  caller.addEventListener("abort", abort, { once: true });
++  process.once("SIGINT", abort);
++  process.once("SIGTERM", abort);
++  if (caller.aborted) abort();
++
++  try {
++    const preflight = await runPurePreflight({ ...start.preflight, envelope: { ...envelope },
++      settingsSources: sources.paths, signal: controller.signal });
++    if (!preflight.ok) return failed("preflight", preflight.failure);
++    const built = await runLiveTransactionalBuild({ sessionId: crypto.randomUUID(), envelope, plan: preflight.plan,
++      signal: controller.signal, attesterFor: createStartAttesters() });
++    if (!built.ok) {
++      await rollbackBuild(built.partialState);
++      return failed(built.failedStep, built.detail);
++    }
++    let closing: Promise<void> | undefined;
++    const close = () => closing ??= closeActive(built.state);
++    if (!built.state.client || built.snapshot.phase !== "active") {
++      await close();
++      return failed("activate");
++    }
++    try { await start.present(built.state.client); }
++    catch { await close(); return failed("present"); }
++    return { exitCode: 0, close };
++  } finally {
++    caller.removeEventListener("abort", abort);
++    process.removeListener("SIGINT", abort);
++    process.removeListener("SIGTERM", abort);
++  }
++}
+diff --git a/apps/madbridge/src/tui/live/managed-settings.ts b/apps/madbridge/src/tui/live/managed-settings.ts
+new file mode 100644
+index 0000000..7719ff6
+--- /dev/null
++++ b/apps/madbridge/src/tui/live/managed-settings.ts
+@@ -0,0 +1,4 @@
++export function managedSettingsDirectory(platform: string): string | undefined {
++  if (platform === "darwin") return "/Library/Application Support/ClaudeCode";
++  if (platform === "linux") return "/etc/claude-code";
++}
+diff --git a/apps/madbridge/src/tui/live/settings-sources.ts b/apps/madbridge/src/tui/live/settings-sources.ts
+new file mode 100644
+index 0000000..d29737c
+--- /dev/null
++++ b/apps/madbridge/src/tui/live/settings-sources.ts
+@@ -0,0 +1,37 @@
++import { lstatSync, readdirSync } from "node:fs";
++import { isAbsolute, join } from "node:path";
++import { managedSettingsDirectory } from "./managed-settings";
++
++type Cause = "managed_settings_platform_unsupported" | "managed_settings_unvalidated_source" | "managed_settings_remote_copy";
++type Sources = { ok: true; paths: readonly string[] } | { ok: false; cause: Cause };
++
++function present(path: string): boolean {
++  return lstatSync(path, { throwIfNoEntry: false }) !== undefined;
++}
++
++function unvalidated(folder: string): boolean {
++  if (present(join(folder, "managed-mcp.json"))) return true;
++  const fragments = join(folder, "managed-settings.d");
++  if (!present(fragments)) return false;
++  return readdirSync(fragments, { withFileTypes: true }).some(entry =>
++    !entry.isDirectory() && entry.name.endsWith(".json") && !entry.name.startsWith("."));
++}
++
++export function settingsSources(workingDirectory: string, configFolder: string, managedFolder: string | undefined,
++  platform: string = process.platform): Sources {
++  const platformFolder = managedSettingsDirectory(platform);
++  if (!platformFolder) return { ok: false, cause: "managed_settings_platform_unsupported" };
++  const folder = managedFolder ?? platformFolder;
++  try {
++    if (!isAbsolute(folder) || !isAbsolute(configFolder) || !isAbsolute(workingDirectory) || unvalidated(folder)) {
++      return { ok: false, cause: "managed_settings_unvalidated_source" };
++    }
++  } catch { return { ok: false, cause: "managed_settings_unvalidated_source" }; }
++  try {
++    if (present(join(configFolder, "remote-settings.json"))) return { ok: false, cause: "managed_settings_remote_copy" };
++  } catch { return { ok: false, cause: "managed_settings_unvalidated_source" }; }
++  return { ok: true, paths: [
++    join(configFolder, "settings.json"), join(folder, "managed-settings.json"),
++    join(workingDirectory, ".claude", "settings.json"), join(workingDirectory, ".claude", "settings.local.json"),
++  ] };
++}
+diff --git a/packages/adapter-claude-code/src/detectors.ts b/packages/adapter-claude-code/src/detectors.ts
+new file mode 100644
+index 0000000..040efda
+--- /dev/null
++++ b/packages/adapter-claude-code/src/detectors.ts
+@@ -0,0 +1,17 @@
++type Observation =
++  | { kind: "auth_status"; exitCode: number }
++  | { kind: "event"; event: Readonly<Record<string, unknown>> };
++
++export function detectClaudeFailure(rules: readonly string[], observation: Observation):
++  { surface: "claude-code"; cause: "auth_failed" | "identity_mismatch" } | undefined {
++  if (observation.kind === "auth_status") {
++    if (rules.includes("auth_status_exit_code:" + observation.exitCode)) return { surface: "claude-code", cause: "auth_failed" };
++  } else {
++    const event = observation.event;
++    if (event.type === "system" && event.subtype === "model_refusal_fallback") {
++      return { surface: "claude-code", cause: "identity_mismatch" };
++    }
++    if (event.type === "system" && event.subtype === "api_retry" && typeof event.error === "string" &&
++      rules.includes("system/api_retry.error:" + event.error)) return { surface: "claude-code", cause: "auth_failed" };
++  }
++}
+diff --git a/packages/adapter-claude-code/src/index.ts b/packages/adapter-claude-code/src/index.ts
+index de71769..bcd55c7 100644
+--- a/packages/adapter-claude-code/src/index.ts
++++ b/packages/adapter-claude-code/src/index.ts
+@@ -10,3 +10,5 @@ export type {
+ export { attestClaudeCode, ModelIdentityUnverifiable } from "./attestation";
+ export { realShell, fakeShell, resolveExecutable } from "./shell";
+ export type { Shell, ShellResult } from "./shell";
++export { attestClaudeSession, encodeUserInput } from "./live";
++export { detectClaudeFailure } from "./detectors";
+diff --git a/packages/adapter-claude-code/src/live.ts b/packages/adapter-claude-code/src/live.ts
+new file mode 100644
+index 0000000..84782f6
+--- /dev/null
++++ b/packages/adapter-claude-code/src/live.ts
+@@ -0,0 +1,187 @@
++import { detectClaudeFailure } from "./detectors";
++
++const PROMPT = "Reply with your model identifier and nothing else.";
++const DEADLINE_MS = 30_000;
++
++export function encodeUserInput(text: string): string {
++  return JSON.stringify({ type: "user", message: { role: "user", content: text } }) + "\n";
++}
++
++type Cause = "attestation_missing" | "attestation_malformed" | "attestation_duplicate" |
++  "identity_mismatch" | "auth_failed" | "attestation_deadline" | "attestation_cancelled" |
++  "attestation_tool_call" | "attestation_round_trips" | "attestation_budget_exhausted";
++type Verdict =
++  | { ok: true; evidenceKind: "actual_session"; provider: "anthropic"; model: string; cliVersion: string }
++  | { ok: false; surface: "claude-code"; cause: Cause; reason: Cause };
++
++interface Fact { kind: string; bytes?: Uint8Array }
++interface Input {
++  model: string;
++  signal: AbortSignal;
++  reportFailure(reason: string): void;
++  registration: { supported_versions: readonly string[]; auth_failure_detection: readonly string[] };
++  host: { handle: {
++    send(frame: { kind: "input"; bytes: Uint8Array }): void;
++    facts(): AsyncIterable<Fact>;
++  } };
++}
++
++const object = (value: unknown): value is Record<string, unknown> =>
++  value !== null && typeof value === "object" && !Array.isArray(value);
++const nonempty = (value: unknown): value is string => typeof value === "string" && value.length > 0;
++
++function matchesUsage(value: unknown, model: string, requireEvidence: boolean): boolean {
++  if (!object(value)) return false;
++  const entries = Object.entries(value);
++  return (!requireEvidence || entries.length > 0) && entries.every(([key, usage]) =>
++    key === model && object(usage) && usage.canonicalModel === model && usage.provider === "firstParty");
++}
++
++class ClaudeReader {
++  private readonly decoder = new TextDecoder("utf-8", { fatal: true });
++  private tail = "";
++  private session: string | undefined;
++  version = "";
++  complete = false;
++  private assistantSeen = false;
++  private readonly models = new Map<string, string>();
++  private retries = 0;
++
++  constructor(private readonly input: Input, private readonly passed: () => void) {}
++
++  push(bytes: Uint8Array): Cause | undefined {
++    try {
++      this.tail += this.decoder.decode(bytes, { stream: true });
++      let newline: number;
++      while ((newline = this.tail.indexOf("\n")) >= 0) {
++        const line = this.tail.slice(0, newline);
++        this.tail = this.tail.slice(newline + 1);
++        const failure = this.event(JSON.parse(line));
++        if (failure) return failure;
++      }
++    } catch { return "attestation_malformed"; }
++  }
++
++  finish(): Cause | undefined {
++    try {
++      this.tail += this.decoder.decode();
++      if (this.tail.length) return this.event(JSON.parse(this.tail));
++    } catch { return "attestation_malformed"; }
++  }
++
++  private event(event: unknown): Cause | undefined {
++    if (!object(event) || !nonempty(event.type)) return "attestation_malformed";
++    if (this.complete && event.type !== "assistant" && event.type !== "result" &&
++      !(event.type === "system" && (event.subtype === "model_refusal_fallback" || event.subtype === "api_retry"))) return;
++    if (!nonempty(event.session_id)) return "attestation_malformed";
++    if (this.session !== undefined && event.session_id !== this.session) return "attestation_duplicate";
++    const detection = detectClaudeFailure(this.input.registration.auth_failure_detection, { kind: "event", event });
++    if (detection) return detection.cause;
++    if (!this.complete && event.parent_tool_use_id != null) return "attestation_tool_call";
++
++    if (event.type === "system" && event.subtype === "init") {
++      if (this.session !== undefined) return this.complete ? undefined : "attestation_duplicate";
++      if (event.model !== this.input.model || !nonempty(event.claude_code_version) ||
++        !this.input.registration.supported_versions.includes(event.claude_code_version)) return "identity_mismatch";
++      this.session = event.session_id;
++      this.version = event.claude_code_version;
++      return;
++    }
++    if (this.session === undefined) return "attestation_malformed";
++    if (event.type === "assistant") {
++      const msg = event.message;
++      if (!object(msg) || !nonempty(msg.id) || !nonempty(msg.model)) return "attestation_malformed";
++      const previous = this.models.get(msg.id);
++      if (previous !== undefined && previous !== msg.model) return "attestation_duplicate";
++      if (msg.model !== this.input.model) return "identity_mismatch";
++      if (!this.complete) {
++        if (!Array.isArray(msg.content)) return "attestation_malformed";
++        if (msg.content.some(item => !object(item) || (item.type !== "text" && item.type !== "thinking"))) return "attestation_tool_call";
++      }
++      this.models.set(msg.id, msg.model);
++      this.assistantSeen = true;
++      return;
++    }
++    if (event.type === "result") {
++      if (!this.assistantSeen) return this.complete ? "attestation_duplicate" : "attestation_missing";
++      if (!this.complete) {
++        if (event.permission_denials !== undefined) {
++          if (!Array.isArray(event.permission_denials)) return "attestation_malformed";
++          if (event.permission_denials.length > 0) return "attestation_tool_call";
++        }
++        if (typeof event.num_turns !== "number" || !Number.isSafeInteger(event.num_turns) || event.num_turns < 1) {
++          return "attestation_malformed";
++        }
++        if (event.num_turns + this.retries > 2) return "attestation_round_trips";
++      }
++      if (event.subtype !== "success" || event.is_error !== false ||
++        !matchesUsage(event.modelUsage, this.input.model, true) ||
++        (event.model_usage_since_last_result !== undefined &&
++          !matchesUsage(event.model_usage_since_last_result, this.input.model, false))) return "identity_mismatch";
++      this.assistantSeen = false;
++      if (!this.complete) {
++        this.complete = true;
++        this.passed();
++      }
++      return;
++    }
++    if (this.complete || event.type === "rate_limit_event") return;
++    if (event.type === "system") {
++      if (event.subtype === "api_retry") { this.retries++; return; }
++      if (event.subtype === "thinking_tokens" || event.subtype === "informational" || event.subtype === "commands_changed") return;
++    }
++    return "attestation_malformed";
++  }
++}
++
++export function attestClaudeSession(input: Input, reserveWrite: () => boolean = () => true): Promise<Verdict> {
++  const { promise, resolve } = Promise.withResolvers<Verdict>();
++  let deadline = Infinity;
++  let timer: ReturnType<typeof setTimeout> | undefined;
++  let failed: Cause | undefined;
++  function stop(cause: Cause): void {
++    if (failed) return;
++    failed = cause;
++    clearTimeout(timer);
++    input.reportFailure(cause);
++  }
++  const abort = () => stop("attestation_cancelled");
++  const reader = new ClaudeReader(input, () => {
++    if (performance.now() >= deadline) { stop("attestation_deadline"); return; }
++    clearTimeout(timer);
++    resolve({ ok: true, evidenceKind: "actual_session", provider: "anthropic", model: input.model, cliVersion: reader.version });
++  });
++  async function consume(): Promise<void> {
++    try {
++      for await (const fact of input.host.handle.facts()) {
++        if (failed) break;
++        if (!reader.complete && performance.now() >= deadline) { stop("attestation_deadline"); break; }
++        if (fact.kind === "output" && fact.bytes) {
++          const cause = reader.push(fact.bytes);
++          if (cause) stop(cause);
++        } else if (fact.kind === "exited" || fact.kind === "drained") {
++          stop(reader.finish() ?? "attestation_missing");
++        }
++        if (failed) break;
++      }
++      if (!failed) stop(reader.finish() ?? "attestation_missing");
++    } catch { stop("attestation_malformed"); }
++    finally {
++      clearTimeout(timer);
++      input.signal.removeEventListener("abort", abort);
++      const cause = failed ?? "attestation_missing";
++      resolve({ ok: false, surface: "claude-code", cause, reason: cause });
++    }
++  }
++  input.signal.addEventListener("abort", abort, { once: true });
++  void consume();
++  if (input.signal.aborted) abort();
++  else if (!reserveWrite()) stop("attestation_budget_exhausted");
++  else {
++    deadline = performance.now() + DEADLINE_MS;
++    timer = setTimeout(() => stop("attestation_deadline"), DEADLINE_MS);
++    try { input.host.handle.send({ kind: "input", bytes: new TextEncoder().encode(encodeUserInput(PROMPT)) }); }
++    catch { stop("attestation_missing"); }
++  }
++  return promise;
++}
+diff --git a/packages/adapter-claude-code/test/live.test.ts b/packages/adapter-claude-code/test/live.test.ts
+new file mode 100644
+index 0000000..bceb820
+--- /dev/null
++++ b/packages/adapter-claude-code/test/live.test.ts
+@@ -0,0 +1,119 @@
++import { expect, test } from "bun:test";
++import { attestClaudeSession, encodeUserInput } from "../src/live";
++import { wireFacts } from "../../../test/phase3b/wire-facts";
++
++const model = "offline-model";
++const id = "offline-session";
++const init = { type: "system", subtype: "init", session_id: id, model, claude_code_version: "supported" };
++const assistant = { type: "assistant", session_id: id, parent_tool_use_id: null,
++  message: { id: "offline-message", model, content: [{ type: "text", text: "offline" }] } };
++const usage = { [model]: { canonicalModel: model, provider: "firstParty" } };
++const result = { type: "result", session_id: id, subtype: "success", is_error: false, num_turns: 1,
++  modelUsage: usage, model_usage_since_last_result: usage, permission_denials: [] };
++const fallback = { type: "system", subtype: "model_refusal_fallback", session_id: id };
++function start() {
++  const wire = wireFacts();
++  const verdict = attestClaudeSession({ ...wire, model,
++    registration: { supported_versions: ["supported"], auth_failure_detection: ["system/api_retry.error:authentication_failed"] } });
++  return { wire, verdict };
++}
++type ExpectedCause = Extract<Awaited<ReturnType<typeof attestClaudeSession>>, { ok: false }>["cause"];
++async function rejects(events: unknown[], expected: ExpectedCause) {
++  const { wire, verdict } = start();
++  wire.events(...events);
++  wire.end();
++  const value = await verdict;
++  if (!value.ok) {
++    expect(value.surface).toBe("claude-code");
++    expect(value.cause).toBe(expected);
++  } else throw new Error("unexpected successful attestation");
++  expect(wire.closed).toBe(1);
++}
++
++test("Claude encodes one stream-json user line", () => {
++  expect(encodeUserInput('say "hi"\n')).toBe('{"type":"user","message":{"role":"user","content":"say \\"hi\\"\\n"}}\n');
++});
++
++test("Claude subscribes first and accepts only complete firstParty identity evidence", async () => {
++  const { wire, verdict } = start();
++  expect(wire.opened).toBe(1);
++  expect(wire.writes).toEqual([encodeUserInput("Reply with your model identifier and nothing else.")]);
++  wire.events(init, ...["thinking_tokens", "informational", "commands_changed", "api_retry"].map(subtype =>
++    ({ type: "system", subtype, session_id: id })), { type: "rate_limit_event", session_id: id }, assistant, assistant, result);
++  expect(await verdict).toEqual({ ok: true, provider: "anthropic", model, evidenceKind: "actual_session", cliVersion: "supported" });
++  expect(wire.closed).toBe(0);
++  wire.end();
++  await rejects([{ ...init, model: "other" }], "identity_mismatch");
++  await rejects([{ ...init, claude_code_version: "other" }], "identity_mismatch");
++  await rejects([init, { ...assistant, message: { ...assistant.message, model: "other" } }], "identity_mismatch");
++  for (const change of [
++    { modelUsage: { [model]: { canonicalModel: model, provider: "other" } } },
++    { modelUsage: { other: usage[model] } }, { modelUsage: { [model]: { canonicalModel: "other", provider: "firstParty" } } },
++    { model_usage_since_last_result: { other: usage[model] } }, { modelUsage: {} }, { subtype: "error" }, { is_error: true },
++  ]) await rejects([init, assistant, { ...result, ...change }], "identity_mismatch");
++});
++
++test("Claude rejects malformed, missing, duplicate and echoed events", async () => {
++  await rejects([init], "attestation_missing");
++  await rejects([init, assistant], "attestation_missing");
++  await rejects([init, result], "attestation_missing");
++  await rejects([JSON.parse(encodeUserInput("offline echo"))], "attestation_malformed");
++  for (const event of [null, [], {}, { type: "assistant" }, { session_id: id }, { type: "unknown", session_id: id }]) {
++    await rejects([init, event], "attestation_malformed");
++  }
++  for (const bytes of [new Uint8Array([255]), new TextEncoder().encode("not json\n")]) {
++    const { wire, verdict } = start();
++    wire.push({ kind: "output", bytes }); wire.end();
++    const value = await verdict;
++    expect(value.ok ? "success" : value.cause).toBe("attestation_malformed");
++  }
++  await rejects([init, { ...assistant, session_id: "other" }], "attestation_duplicate");
++  await rejects([init, assistant, { ...assistant, message: { ...assistant.message, model: "changed" } }], "attestation_duplicate");
++  await rejects([init, fallback], "identity_mismatch");
++  const { wire, verdict } = start();
++  wire.events(init, assistant, result, result);
++  await verdict;
++  expect(wire.failures).toEqual(["attestation_duplicate"]);
++});
++
++test("Claude rejects a tool call or a third round-trip", async () => {
++  await rejects([init, { ...assistant, message: { ...assistant.message, content: [{ type: "tool_use" }] } }], "attestation_tool_call");
++  await rejects([init, { ...assistant, parent_tool_use_id: "offline" }], "attestation_tool_call");
++  await rejects([init, assistant, { ...result, permission_denials: [{}] }], "attestation_tool_call");
++  await rejects([init, { type: "system", subtype: "api_retry", session_id: id }, assistant,
++    { ...result, num_turns: 2 }], "attestation_round_trips");
++});
++
++test("Claude keeps the result deadline and closes on cancellation", async () => {
++  const cancelled = start();
++  cancelled.wire.controller.abort();
++  const first = await cancelled.verdict;
++  expect(first.ok ? "success" : first.cause).toBe("attestation_cancelled");
++  expect(cancelled.wire.closed).toBe(1);
++  const late = start();
++  late.wire.events(init, assistant);
++  const timer = setTimeout(() => late.wire.events(result), 30_100);
++  try {
++    const second = await late.verdict;
++    expect(second.ok ? "success" : second.cause).toBe("attestation_deadline");
++    expect(late.wire.closed).toBe(1);
++    expect(cancelled.wire.failures).toEqual(["attestation_cancelled"]);
++  } finally { clearTimeout(timer); late.wire.end(); }
++}, 40_000);
++
++test("Claude hands a partial line to its monitor and interrupts on fallback or model drift", async () => {
++  for (const event of [fallback, { ...assistant, message: { ...assistant.message, id: "next", model: "other" } },
++    { ...result, modelUsage: { [model]: { canonicalModel: model, provider: "other" } } }]) {
++    const { wire, verdict } = start();
++    const later = JSON.stringify(event);
++    wire.events(init, assistant);
++    const nextAssistant = event.type === "result" ? JSON.stringify(assistant) + "\n" : "";
++    wire.text(JSON.stringify(result) + "\r\n" + nextAssistant + later.slice(0, 7));
++    expect((await verdict).ok).toBe(true);
++    wire.text(later.slice(7) + "\n");
++    wire.end();
++    while (!wire.closed) await Bun.sleep(1);
++    expect(wire.failures).toEqual(["identity_mismatch"]);
++    expect(wire.opened).toBe(1);
++  }
++});
+diff --git a/packages/adapter-madv-surface/src/detectors.ts b/packages/adapter-madv-surface/src/detectors.ts
+new file mode 100644
+index 0000000..1703113
+--- /dev/null
++++ b/packages/adapter-madv-surface/src/detectors.ts
+@@ -0,0 +1,29 @@
++import type { MadvResult, MadvFailureCause } from "./index";
++
++type Observation =
++  | { kind: "auth_status"; exitCode: number; verified?: unknown }
++  | { kind: "event"; type: unknown; subtype: unknown }
++  | { kind: "child_exit"; exitCode: number }
++  | { kind: "parsed"; result: MadvResult };
++
++export function detectMadvFailure(rules: readonly string[], observation: Observation):
++  { surface: "madv-surface"; cause: MadvFailureCause; reason: string } | undefined {
++  switch (observation.kind) {
++    case "auth_status":
++      if (rules.includes("auth_status_exit_code:" + observation.exitCode) ||
++        (observation.verified === false && rules.includes("auth_status.verified:false"))) {
++        return { surface: "madv-surface", cause: "auth_failed", reason: "auth_predicate" };
++      }
++      break;
++    case "event":
++      if (observation.type === "system" && observation.subtype === "auth_failed" && rules.includes("system/auth_failed")) {
++        return { surface: "madv-surface", cause: "auth_failed", reason: "surface_fail_closed" };
++      }
++      break;
++    case "child_exit":
++      if (rules.includes("exit_code:" + observation.exitCode)) return { surface: "madv-surface", cause: "auth_failed", reason: "exit" };
++      break;
++    case "parsed":
++      if (!observation.result.ok) return { surface: "madv-surface", cause: observation.result.cause, reason: observation.result.reason };
++  }
++}
+diff --git a/packages/adapter-madv-surface/src/index.ts b/packages/adapter-madv-surface/src/index.ts
+index b825596..c75e0db 100644
+--- a/packages/adapter-madv-surface/src/index.ts
++++ b/packages/adapter-madv-surface/src/index.ts
+@@ -1,3 +1,5 @@
++import { detectMadvFailure } from "./detectors";
++
+ // DEC-20261115-02 B3-B5; Phase 3B design 2.6. Pure parsing only:
+ // the PTY host owns launch, and M1 owns interruption and timer wiring.
+ export type MadvFailureCause =
+@@ -6,6 +8,8 @@ export type MadvFailureCause =
+ const identityProbe = Symbol("identity probe");
+ export interface MadvContext {
+   readonly [identityProbe]?: boolean;
++  readonly authFailureDetection?: readonly string[];
++  readonly onAttested?: (version: string) => void;
+   readonly executionId: string;
+   readonly sessionId: string;
+   readonly model: string;
+@@ -51,6 +55,9 @@ function failure(context: Pick<MadvContext, "executionId" | "sessionId">, cause:
+ export function encodeUserInput(text: string): string {
+   return JSON.stringify({ type: "user", message: { role: "user", content: text } }) + "\n";
+ }
++export function encodeAttestationInput(text: string): string {
++  return JSON.stringify({ type: "user", message: { role: "user", content: text }, no_tools: true }) + "\n";
++}
+ function eventCause(subtype: unknown): MadvFailureCause | undefined {
+   switch (subtype) {
+     case "auth_failed": return "auth_failed";
+@@ -73,6 +80,10 @@ export class MadvSurfaceParser {
+   private readonly events: BoundMadvEvent[] = [];
+   private readonly decoder = new TextDecoder("utf-8", { fatal: true });
+   private buffer = "";
++  private version = "";
++  private attested = false;
++  private policyFailure?: "attestation_tool_call" | "attestation_round_trips";
++  get attestationFailure() { return this.policyFailure; }
+   private wireSession: string | undefined;
+   private state: "init" | "waiting" | "response" | "tools" | "between" = "init";
+   private readonly tools = new Map<string, string>();
+@@ -124,7 +135,21 @@ export class MadvSurfaceParser {
+     let value: unknown;
+     try { value = JSON.parse(line); } catch { this.fail("identity_mismatch", "malformed_stream"); return; }
+     if (!object(value)) { this.fail("identity_mismatch", "malformed_event"); return; }
+-    const cause = value.type === "system" ? eventCause(value.subtype) : undefined;
++    const attesting = this.context.onAttested !== undefined && !this.attested;
++    if (attesting && (value.type === "tool_use" || value.type === "tool_result" ||
++      (value.type === "system" && value.subtype === "provider_error" && value.code === "unexpected_tool_call"))) {
++      this.policyFailure ??= "attestation_tool_call";
++      this.fail("provider_error", "unexpected_tool_call");
++      return;
++    }
++    if (attesting && value.type === "model_response" && this.responses > 0) {
++      this.policyFailure ??= "attestation_round_trips";
++      this.fail("identity_mismatch", "extra_model_response");
++      return;
++    }
++    const detected = this.context.authFailureDetection && detectMadvFailure(this.context.authFailureDetection,
++      { kind: "event", type: value.type, subtype: value.subtype });
++    const cause = detected?.cause ?? (value.type === "system" ? eventCause(value.subtype) : undefined);
+     // A later explicit failure can outrank an earlier identity difference.
+     // No further successful event or tool can escape a failed parser.
+     if (cause !== undefined) {
+@@ -148,6 +173,7 @@ export class MadvSurfaceParser {
+       if (this.context[identityProbe] && (!Array.isArray(value.tools) || value.tools.length !== 0)) {
+         this.fail("identity_mismatch", "init_tools"); return;
+       }
++      this.version = value.surface_version;
+       this.wireSession = value.session_id; this.state = "waiting";
+     } else if (value.type === "model_response") {
+       if (this.state !== "waiting" && !(this.state === "tools" && this.tools.size === 0)) { this.fail("identity_mismatch", "event_order"); return; }
+@@ -178,9 +204,15 @@ export class MadvSurfaceParser {
+     } else if (value.type === "result") {
+       if ((this.state !== "response" && this.state !== "tools") || this.tools.size !== 0) { this.fail("identity_mismatch", "event_order"); return; }
+       if (value.is_error !== false || value.subtype !== "success") { this.fail("provider_error", "result_error"); return; }
++      if (attesting && !this.assistantSeen) { this.fail("identity_mismatch", "assistant_missing"); return; }
+       this.state = "between";
++      if (attesting) {
++        this.attested = true;
++        this.context.onAttested?.(this.version);
++      }
+     } else { this.fail("identity_mismatch", "event_order"); return; }
+-    this.events.push(Object.freeze({ executionId: this.context.executionId, sessionId: this.context.sessionId, event: freezeEvent(value) }));
++    // A live monitor consumes events in place and needs no session-long replay.
++    if (!this.context.onAttested) this.events.push(Object.freeze({ executionId: this.context.executionId, sessionId: this.context.sessionId, event: freezeEvent(value) }));
+   }
+   finish(exitCode: number, signal: string | number | null = null): MadvResult {
+     if (!this.finished) {
+@@ -199,6 +231,7 @@ export class MadvSurfaceParser {
+         default: this.fail("provider_error", "unknown_exit");
+       }
+       if (!this.failed && (this.responses === 0 || this.waitingForEvidence)) this.fail("identity_unavailable", "model_response_missing");
++      if (!this.failed && this.context.onAttested && !this.attested) this.fail("identity_unavailable", "result_missing");
+       if (!this.failed && this.tools.size !== 0) this.fail("identity_mismatch", "event_order");
+     }
+     return this.snapshot();
+@@ -220,3 +253,6 @@ export function parseMadvAuthReadiness(output: string, exitCode = 0, signal: str
+     return Object.freeze({ ok: true, events: Object.freeze([]), modelResponses: 0 });
+   } catch { return failure(context, "auth_failed", "auth_predicate"); }
+ }
++
++export { attestMadvSession } from "./live";
++export { detectMadvFailure } from "./detectors";
+diff --git a/packages/adapter-madv-surface/src/live.ts b/packages/adapter-madv-surface/src/live.ts
+new file mode 100644
+index 0000000..4e5fc69
+--- /dev/null
++++ b/packages/adapter-madv-surface/src/live.ts
+@@ -0,0 +1,105 @@
++import { detectMadvFailure } from "./detectors";
++import { EVIDENCE_DEADLINE_MS, MadvSurfaceParser, encodeAttestationInput, encodeUserInput,
++  type MadvFailureCause, type MadvResult } from "./index";
++
++const PROMPT = "Reply with your model identifier and nothing else.";
++type Cause = MadvFailureCause | "attestation_deadline" | "attestation_cancelled" |
++  "attestation_tool_call" | "attestation_round_trips" | "attestation_budget_exhausted";
++interface Input {
++  executionId: string;
++  sessionId: string;
++  model: string;
++  signal: AbortSignal;
++  reportFailure(cause: string): void;
++  registration: { auth_failure_detection: readonly string[]; supported_versions: readonly string[]; provider: string; independence_domain: string };
++  host: { handle: {
++    facts(): AsyncIterable<{ kind: string; bytes?: Uint8Array; code?: number | null; signal?: string | null }>;
++    send(frame: { kind: "input"; bytes: Uint8Array }): void;
++  } };
++}
++type Failure = { ok: false; surface: "madv-surface"; cause: Cause; reason: Cause; parserReason?: string };
++type Verdict = Failure | { ok: true; evidenceKind: "actual_session"; provider: string;
++  model: string; cliVersion: string; sendUserInput(text: string): boolean };
++
++export function attestMadvSession(input: Input, reserveWrite: () => boolean = () => true): Promise<Verdict> {
++  const { promise, resolve } = Promise.withResolvers<Verdict>();
++  let deadline = Infinity;
++  let timer: ReturnType<typeof setTimeout> | undefined;
++  let failure: Failure | undefined;
++  let ready = false;
++  let closed = false;
++
++  function stop(cause: Cause, parserReason?: string): void {
++    if (failure) return;
++    failure = { ok: false, surface: "madv-surface", cause, reason: cause, ...(parserReason === undefined ? {} : { parserReason }) };
++    clearTimeout(timer);
++    input.reportFailure(cause);
++  }
++  const abort = () => stop("attestation_cancelled");
++  const parser = new MadvSurfaceParser({
++    executionId: input.executionId, sessionId: input.sessionId, model: input.model,
++    authFailureDetection: input.registration.auth_failure_detection,
++    supportedVersions: input.registration.supported_versions, provider: input.registration.provider,
++    independenceDomain: input.registration.independence_domain,
++    onAttested(version) {
++      if (performance.now() >= deadline) { stop("attestation_deadline"); return; }
++      clearTimeout(timer);
++      ready = true;
++      resolve({ ok: true, evidenceKind: "actual_session", provider: input.registration.provider,
++        model: input.model, cliVersion: version, sendUserInput });
++    },
++  });
++  function inspect(result: MadvResult): void {
++    const detection = detectMadvFailure(input.registration.auth_failure_detection, { kind: "parsed", result });
++    if (detection) stop(parser.attestationFailure ?? detection.cause, detection.reason);
++  }
++  function write(frame: string): void {
++    input.host.handle.send({ kind: "input", bytes: new TextEncoder().encode(frame) });
++  }
++  function sendUserInput(text: string): boolean {
++    if (closed || !ready || failure) return false;
++    inspect(parser.beginRequest());
++    if (failure) return false;
++    clearTimeout(timer);
++    timer = setTimeout(() => inspect(parser.checkDeadline()), EVIDENCE_DEADLINE_MS);
++    try { write(encodeUserInput(text)); } catch { stop("provider_error"); }
++    return !failure;
++  }
++  async function consume(): Promise<void> {
++    try {
++      for await (const fact of input.host.handle.facts()) {
++        if (failure) break;
++        if (!ready && performance.now() >= deadline) { stop("attestation_deadline"); break; }
++        if (fact.kind === "output" && fact.bytes) inspect(parser.push(fact.bytes));
++        if (fact.kind === "exited") {
++          const exitCode = fact.code ?? 1;
++          const result = parser.finish(exitCode, fact.signal ?? null);
++          const detection = detectMadvFailure(input.registration.auth_failure_detection, { kind: "child_exit", exitCode });
++          if (detection && !parser.attestationFailure) stop(detection.cause, detection.reason);
++          else inspect(result);
++          break;
++        }
++        if (failure) break;
++      }
++      if (!failure) inspect(parser.finish(0));
++    } catch { stop("identity_mismatch", "malformed_stream"); }
++    finally {
++      closed = true;
++      clearTimeout(timer);
++      input.signal.removeEventListener("abort", abort);
++      if (failure) resolve(failure);
++      else if (!ready) resolve({ ok: false, surface: "madv-surface", cause: "identity_unavailable",
++        reason: "identity_unavailable", parserReason: "result_missing" });
++    }
++  }
++  input.signal.addEventListener("abort", abort, { once: true });
++  void consume();
++  if (input.signal.aborted) abort();
++  else if (!reserveWrite()) stop("attestation_budget_exhausted");
++  else {
++    deadline = performance.now() + EVIDENCE_DEADLINE_MS;
++    timer = setTimeout(() => stop("attestation_deadline"), EVIDENCE_DEADLINE_MS);
++    try { write(encodeAttestationInput(PROMPT)); } catch { stop("provider_error"); }
++  }
++  return promise;
++}
+diff --git a/packages/adapter-madv-surface/test/live.test.ts b/packages/adapter-madv-surface/test/live.test.ts
+new file mode 100644
+index 0000000..7230fa7
+--- /dev/null
++++ b/packages/adapter-madv-surface/test/live.test.ts
+@@ -0,0 +1,106 @@
++import { expect, test } from "bun:test";
++import { attestMadvSession, encodeAttestationInput, encodeUserInput } from "../src";
++import { wireFacts } from "../../../test/phase3b/wire-facts";
++
++const model = "MiniMax-M3.1-Flash";
++const registration = { auth_failure_detection: ["system/auth_failed", "exit_code:5"], supported_versions: ["0.1.2"], provider: "minimax", independence_domain: "minimax" };
++const stamp = { session_id: "synthetic-wire", ts: "2026-11-15T00:00:00Z" };
++const init = { ...stamp, type: "system", subtype: "init", surface: "madv-surface", surface_version: "0.1.2",
++  requested_model: model, provider: "minimax", profile: "minimax", endpoint_host: "api.minimax.io" };
++const response = { ...stamp, type: "model_response", response_model: model, response_id: "synthetic-response",
++  provider: "minimax", profile: "minimax", response_independence_domain: "minimax",
++  endpoint_host: "api.minimax.io", tls_verified_host: "api.minimax.io" };
++const assistant = { ...stamp, type: "assistant", response_model: model };
++const result = { ...stamp, type: "result", subtype: "success", is_error: false };
++const approved = [init, response, assistant, result];
++function start() {
++  const wire = wireFacts();
++  const verdict = attestMadvSession({ ...wire, model, registration, executionId: "synthetic-execution",
++    sessionId: "synthetic-session" });
++  return { wire, verdict };
++}
++type ExpectedCause = Extract<Awaited<ReturnType<typeof attestMadvSession>>, { ok: false }>["cause"];
++async function rejects(events: readonly unknown[], cause: ExpectedCause, reason?: string) {
++  const { wire, verdict } = start();
++  wire.events(...events);
++  wire.end();
++  const answer = await verdict;
++  expect(answer.ok).toBe(false);
++  if (!answer.ok) {
++    expect(answer.surface).toBe("madv-surface");
++    expect(answer.cause).toBe(cause);
++    if (reason) expect(answer.parserReason).toBe(reason);
++  }
++  expect(wire.closed).toBe(1);
++}
++
++test("madv encodes no_tools only on the attestation message", async () => {
++  const message = "synthetic";
++  expect(encodeUserInput(message)).toBe('{"type":"user","message":{"role":"user","content":"synthetic"}}\n');
++  expect(encodeAttestationInput(message)).toBe('{"type":"user","message":{"role":"user","content":"synthetic"},"no_tools":true}\n');
++  const { wire, verdict } = start();
++  expect(wire.opened).toBe(1);
++  expect(wire.writes).toEqual(['{"type":"user","message":{"role":"user","content":"Reply with your model identifier and nothing else."},"no_tools":true}\n']);
++  wire.events(...approved);
++  const answer = await verdict;
++  expect(answer.ok).toBe(true);
++  if (answer.ok) expect(answer.sendUserInput(message)).toBe(true);
++  expect(wire.writes[1]).toBe(encodeUserInput(message));
++  wire.events(response, assistant, result);
++  wire.end();
++  while (!wire.closed) await Bun.sleep(1);
++  expect(wire.failures).toEqual([]);
++});
++
++test("madv requires init, model response, assistant and success in order", async () => {
++  await rejects([init], "identity_unavailable", "model_response_missing");
++  await rejects([init, response, result], "identity_mismatch", "assistant_missing");
++  await rejects([init, response, assistant], "identity_unavailable", "result_missing");
++  await rejects([init, response, assistant, assistant], "identity_mismatch", "event_order");
++  await rejects([init, response, assistant, { ...result, is_error: true }], "provider_error", "result_error");
++  await rejects([init, { ...response, response_model: "MiniMax-other" }], "identity_mismatch", "response_predicate");
++  await rejects([init, { ...response, response_model: "claude-other" }], "model_refused", "anthropic_model");
++  await rejects([init, { ...response, response_model: "other-family" }], "domain_unresolved", "unknown_family");
++  await rejects([init, { ...assistant, session_id: "duplicate" }], "identity_mismatch", "event_binding");
++  await rejects([JSON.parse(encodeAttestationInput("synthetic"))], "identity_mismatch", "event_binding");
++  await rejects([{ ...stamp, type: "system", subtype: "endpoint_refused" }], "endpoint_refused", "surface_fail_closed");
++  const { wire, verdict } = start();
++  wire.text("{broken}\n"); wire.end();
++  const malformed = await verdict;
++  expect(malformed.ok ? "unexpected success" : malformed.parserReason).toBe("malformed_stream");
++});
++
++test("madv rejects attestation tools and extra round-trips by their typed cause", async () => {
++  for (const type of ["tool_use", "tool_result"]) await rejects([init, response, { ...stamp, type }], "attestation_tool_call");
++  await rejects([init, { ...stamp, type: "system", subtype: "provider_error", code: "unexpected_tool_call" }], "attestation_tool_call");
++  await rejects([init, response, response], "attestation_round_trips");
++});
++
++test("madv waits for result through its deadline and closes on cancellation", async () => {
++  const cancelled = start(); cancelled.wire.controller.abort();
++  const abort = await cancelled.verdict;
++  expect(abort.ok ? "unexpected success" : abort.cause).toBe("attestation_cancelled");
++  expect(cancelled.wire.closed).toBe(1);
++  const late = start(); late.wire.events(init, response, assistant);
++  const cleanup = setTimeout(late.wire.end, 31_000);
++  try {
++    const timeout = await late.verdict;
++    expect(timeout.ok ? "unexpected success" : timeout.cause).toBe("attestation_deadline");
++    expect(late.wire.closed).toBe(1);
++  } finally { clearTimeout(cleanup); }
++}, 34_000);
++
++test("madv preserves a later partial event and checks later responses", async () => {
++  const { wire, verdict } = start();
++  wire.events(init, response, assistant);
++  const later = JSON.stringify({ ...response, response_model: "claude-synthetic" });
++  wire.text(JSON.stringify(result) + "\r\n" + later.slice(0, 7));
++  const answer = await verdict;
++  expect(answer.ok).toBe(true);
++  if (answer.ok) expect(answer.sendUserInput("another synthetic request")).toBe(true);
++  wire.text(later.slice(7) + "\n");
++  wire.end();
++  while (!wire.closed) await Bun.sleep(1);
++  expect(wire.opened).toBe(1);
++  expect(wire.failures).toEqual(["model_refused"]);
++});
+diff --git a/packages/adapter-madv-surface/test/response-precedence.test.ts b/packages/adapter-madv-surface/test/response-precedence.test.ts
+new file mode 100644
+index 0000000..88439d3
+--- /dev/null
++++ b/packages/adapter-madv-surface/test/response-precedence.test.ts
+@@ -0,0 +1,18 @@
++import { expect, test } from "bun:test";
++import { parseMadvIdentity } from "../src/index";
++
++test("refused and unknown model families precede a missing response id", () => {
++  const model = "MiniMax-M3.1-Flash";
++  const stamp = { session_id: "offline-precedence", ts: "2026-11-23T00:00:00Z" };
++  const identity = { provider: "minimax", profile: "minimax", endpoint_host: "api.minimax.io" };
++  const init = { ...stamp, ...identity, type: "system", subtype: "init", surface: "madv-surface",
++    surface_version: "0.1.2", requested_model: model, tools: [] };
++  const outcomes = ["claude-synthetic", "unknown-family"].map(response_model => {
++    const response = { ...stamp, ...identity, type: "model_response", response_model,
++      response_independence_domain: "minimax", tls_verified_host: "api.minimax.io" };
++    const stream = JSON.stringify(init) + "\n" + JSON.stringify(response) + "\n";
++    const result = parseMadvIdentity(stream, model, ["0.1.2"]);
++    return result.ok ? "accepted" : result.cause;
++  });
++  expect(outcomes).toEqual(["model_refused", "domain_unresolved"]);
++});
+diff --git a/packages/pty-host/src/terminal.ts b/packages/pty-host/src/terminal.ts
+index 786b29f..9009665 100644
+--- a/packages/pty-host/src/terminal.ts
++++ b/packages/pty-host/src/terminal.ts
+@@ -76,6 +76,7 @@ export function spawnGoverned(
+       }
+     },
+   });
++  terminal.localFlags &= ~8; // ECHO on macOS and Linux.
+   const child = Bun.spawn([path, ...argv], {
+     terminal,
+     detached: true,
+diff --git a/packages/pty-host/test/main-guard.test.ts b/packages/pty-host/test/main-guard.test.ts
+index 8e888bf..87f1dd5 100644
+--- a/packages/pty-host/test/main-guard.test.ts
++++ b/packages/pty-host/test/main-guard.test.ts
+@@ -306,7 +306,7 @@ test("a valid session lifecycle emits every fact in order exactly once, with no
+ 
+   host.write(encodeCommand({ kind: "input", bytes: new TextEncoder().encode("ping\n") }));
+   await host.waitForFact((f) => f.kind === "ack" && f.ofKind === "input");
+-  await host.waitForOutputContaining("ping\r\nping\r\n"); // local echo + /bin/cat's own echo
++  await host.waitForOutputContaining("ping\r\n"); // Output of /bin/cat.
+ 
+   host.write(encodeCommand({ kind: "resize", cols: 90, rows: 30 }));
+   await host.waitForFact((f) => f.kind === "ack" && f.ofKind === "resize");
+@@ -332,7 +332,7 @@ test("a valid session lifecycle emits every fact in order exactly once, with no
+ 
+   const acks = facts.filter((f) => f.kind === "ack");
+   expect(acks.map((f) => f.ofKind).sort()).toEqual(["input", "resize", "terminate"]);
+-  expect(outputText(facts)).toBe("ping\r\nping\r\n");
++  expect(outputText(facts)).toBe("ping\r\n");
+ 
+   const termStartedIdx = kinds.indexOf("termination_started");
+   const terminateAckIdx = facts.findIndex((f) => f.kind === "ack" && f.ofKind === "terminate");
+diff --git a/packages/supervisor/src/build.ts b/packages/supervisor/src/build.ts
+index 7e6c46d..94f7887 100644
+--- a/packages/supervisor/src/build.ts
++++ b/packages/supervisor/src/build.ts
+@@ -102,6 +102,9 @@ export interface BuildChildResource {
+ }
+ 
+ export interface LiveReattestationInput {
++  readonly sessionId: string;
++  readonly signal: AbortSignal;
++  readonly reportFailure: (reason: string) => void;
+   readonly executionId: string;
+   readonly model: string;
+   readonly provider: string;
+@@ -135,6 +138,22 @@ export interface BuildSurfaceRegistration extends AdapterRegistrationV1 {
+   readonly live_attester?: LiveSurfaceAttester | null;
+ }
+ 
++export interface LiveBuildInput extends BuildInput {
++  readonly signal: AbortSignal;
++  readonly attesterFor: (surface: SurfaceId) => LiveSurfaceAttester | undefined;
++}
++
++// Use only build-owned literals in ledger and caller-visible detail.
++function liveFailureCause(surface: SurfaceId, reported: unknown): string {
++  const shared = ["auth_failed", "identity_mismatch", "attestation_deadline", "attestation_cancelled",
++    "attestation_tool_call", "attestation_round_trips", "attestation_budget_exhausted"];
++  const specific = surface === "madv-surface"
++    ? ["endpoint_refused", "provider_error", "identity_unavailable", "model_refused", "domain_unresolved"]
++    : ["attestation_missing", "attestation_malformed", "attestation_duplicate"];
++  return shared.find(item => item === reported) ?? specific.find(item => item === reported)
++    ?? (surface === "madv-surface" ? "identity_mismatch" : "attestation_malformed");
++}
++
+ export interface LiveReattestationRecord {
+   readonly executionId: string;
+   readonly surface: SurfaceId;
+@@ -532,8 +551,15 @@ function formatFailureDetail(
+  * uses ADAPTER_REGISTRY, spawnPtyHost, and default sources.
+  */
+ export async function runTransactionalBuild(input: BuildInput): Promise<BuildResult> {
+-  const safeInput: BuildInput =
+-    input !== null && typeof input === "object"
++  return executeBuild(publicBuildInput(input), {});
++}
++
++export function runLiveTransactionalBuild(input: LiveBuildInput): Promise<BuildResult> {
++  return executeBuild(publicBuildInput(input), {}, { signal: input.signal, attesterFor: input.attesterFor });
++}
++
++function publicBuildInput(input: BuildInput): BuildInput {
++  return input !== null && typeof input === "object"
+       ? {
+           sessionId: input.sessionId,
+           envelope: input.envelope,
+@@ -541,7 +567,6 @@ export async function runTransactionalBuild(input: BuildInput): Promise<BuildRes
+           ...(input.injectFailureAt !== undefined ? { injectFailureAt: input.injectFailureAt } : {}),
+         }
+       : ({} as BuildInput);
+-  return runTransactionalBuildWithDependencies(safeInput);
+ }
+ 
+ /**
+@@ -553,6 +578,14 @@ export async function runTransactionalBuild(input: BuildInput): Promise<BuildRes
+ export async function runTransactionalBuildWithDependencies(
+   input: BuildWithDependenciesInput,
+   overrides: BuildDependencies = {},
++): Promise<BuildResult> {
++  return executeBuild(input, overrides);
++}
++
++async function executeBuild(
++  input: BuildWithDependenciesInput,
++  overrides: BuildDependencies,
++  live?: Pick<LiveBuildInput, "signal" | "attesterFor">,
+ ): Promise<BuildResult> {
+   const rawInput = (input !== null && typeof input === "object" ? input : {}) as Partial<BuildWithDependenciesInput>;
+   const sessionId = typeof rawInput.sessionId === "string" ? rawInput.sessionId : "";
+@@ -597,6 +630,33 @@ export async function runTransactionalBuildWithDependencies(
+   let sessionActivatedRow: LedgerRow | null = null;
+   let localObservationSeq = 0;
+ 
++  const stopAttesters = new AbortController();
++  const signal = live ? AbortSignal.any([live.signal, stopAttesters.signal]) : stopAttesters.signal;
++  let firstFailure: { executionId: string; surface: SurfaceId; cause: string } | undefined;
++  let attesting = false;
++  let unwindState: PartialBuildState | undefined;
++  const reportFailure = (executionId: string, surface: SurfaceId, reported: unknown) => {
++    if (!live || firstFailure) return;
++    const cause = liveFailureCause(surface, reported);
++    firstFailure = { executionId, surface, cause };
++    if (sessionActivatedRow !== null && currentBroker !== null) {
++      const reason = cause === "auth_failed" ? "authentication_expired"
++        : cause === "provider_error" || cause === "endpoint_refused" ? "adapter_failure" : "identity_mismatch";
++      const phase = currentBroker.snapshotProjectionInput().lifecycle.phase;
++      if (phase === "active" || phase === "paused") {
++        void currentBroker.interrupt(reason, surface + ": " + cause, "high", sources.nextEventId(), null, executionId)
++          .catch(() => { for (const host of hosts) host.handle.closeStdin(); });
++      }
++    }
++    if (attesting && sessionActivatedRow === null) {
++      // A silent host's fact reader can be parked in next(). Start the normal
++      // rollback now so it can settle while the attester closes its reader.
++      unwindState = snapshotPartialState();
++      void rollbackBuild(unwindState).catch(() => { /* The caller joins this same rollback. */ });
++    }
++    stopAttesters.abort();
++  };
++
+   const snapshotPartialState = (): PartialBuildState =>
+     Object.freeze({
+       sessionId,
+@@ -647,14 +707,19 @@ export async function runTransactionalBuildWithDependencies(
+     step: BuildStep,
+     failure: BuildFailureCode,
+     executionIds: readonly string[] = [],
+-  ): BuildResult =>
+-    Object.freeze({
+-      ok: false as const,
+-      failedStep: step,
+-      failure,
+-      detail: formatFailureDetail(step, failure, executionIds),
+-      partialState: snapshotPartialState(),
++  ): BuildResult => {
++    // Freeze the primary failure before cancelling any other observer.
++    const first = firstFailure;
++    const detail = first
++      ? formatFailureDetail("reattest", "reattestation_failed", [first.executionId]) +
++        " surface=" + first.surface + " cause=" + first.cause
++      : formatFailureDetail(step, failure, executionIds);
++    if (live) stopAttesters.abort();
++    return Object.freeze({
++      ok: false as const, failedStep: first ? "reattest" : step,
++      failure: first ? "reattestation_failed" : failure, detail, partialState: unwindState ?? snapshotPartialState(),
+     });
++  };
+ 
+   let activeSnapshot: StampedBrokerSnapshot | null = null;
+ 
+@@ -662,6 +727,7 @@ export async function runTransactionalBuildWithDependencies(
+     const step = BUILD_STEPS[index]!;
+     let currentExecutionIds: readonly string[] = [];
+ 
++    if (firstFailure) return failAt("reattest", "reattestation_failed");
+     if (injectFailureAt === step) {
+       return failAt(step, "injected_failure");
+     }
+@@ -938,30 +1004,36 @@ export async function runTransactionalBuildWithDependencies(
+               return failAt(step, "reattestation_failed", currentExecutionIds);
+             }
+             const reg = resolveRegistration(execution.surface);
+-            if (reg === undefined || typeof reg.live_attester !== "function") {
+-              return failAt(step, "reattestation_failed", currentExecutionIds);
+-            }
+-            const verdict = await reg.live_attester({
+-              executionId: envelopeExecution.execution_id,
+-              model: envelopeExecution.model,
+-              provider: envelopeExecution.provider,
+-              execution,
+-              registration: reg,
+-              host,
+-              child,
+-            });
+-            if (!verdict.ok) {
+-              return failAt(step, "reattestation_failed", currentExecutionIds);
+-            }
+-            if (verdict.evidenceKind !== "actual_session") {
+-              return failAt(step, "reattestation_failed", currentExecutionIds);
+-            }
+-            if (verdict.provider !== envelopeExecution.provider || verdict.provider !== reg.provider) {
++            const attester = live ? live.attesterFor(execution.surface) : reg?.live_attester;
++            const refuse = (reason: string) => {
++              reportFailure(host.executionId, execution.surface, reason);
+               return failAt(step, "reattestation_failed", currentExecutionIds);
++            };
++            if (reg === undefined || typeof attester !== "function") {
++              return refuse(execution.surface === "madv-surface" ? "identity_unavailable" : "attestation_missing");
+             }
+-            if (verdict.model !== envelopeExecution.model) {
+-              return failAt(step, "reattestation_failed", currentExecutionIds);
++            const notifyFailure = (reason: string) => reportFailure(host.executionId, execution.surface, reason);
++            let verdict: LiveReattestationResult;
++            try {
++              if (signal.aborted) return refuse("attestation_cancelled");
++              attesting = true;
++              verdict = await attester({
++                sessionId, signal, reportFailure: notifyFailure,
++                executionId: envelopeExecution.execution_id,
++                model: envelopeExecution.model,
++                provider: envelopeExecution.provider,
++                execution, registration: reg, host, child,
++              });
++            } catch {
++              return refuse(execution.surface === "madv-surface" ? "identity_mismatch" : "attestation_malformed");
++            } finally {
++              attesting = false;
+             }
++            if (firstFailure) return failAt(step, "reattestation_failed", currentExecutionIds);
++            if (!verdict.ok) return refuse(verdict.reason);
++            if (verdict.evidenceKind !== "actual_session" ||
++              verdict.provider !== envelopeExecution.provider || verdict.provider !== reg.provider ||
++              verdict.model !== envelopeExecution.model) return refuse("identity_mismatch");
+             const record: LiveReattestationRecord = Object.freeze({
+               executionId: envelopeExecution.execution_id,
+               surface: execution.surface,
+@@ -1049,6 +1121,13 @@ export async function runTransactionalBuildWithDependencies(
+           }
+           const { state: beforeState, head: beforeHead } = replayLedgerState(ledger);
+           const beforeSnapshot = await client.getSnapshot();
++          // No await separates this last monitor check from durable activation.
++          if (firstFailure) return failAt("reattest", "reattestation_failed");
++          if (live && signal.aborted) {
++            const first = envelope.executions[0]!;
++            reportFailure(first.execution_id, first.surface, "attestation_cancelled");
++            return failAt("reattest", "reattestation_failed");
++          }
+           const readyIds = children.map((child) => child.executionId);
+           const executions: readonly ExecutionSnapshot[] = envelope.executions.map((identity, index) => {
+             const child = children[index]!;
+diff --git a/packages/supervisor/src/index.ts b/packages/supervisor/src/index.ts
+index 115fda0..1e7f27c 100644
+--- a/packages/supervisor/src/index.ts
++++ b/packages/supervisor/src/index.ts
+@@ -9,7 +9,7 @@ export {
+ export { runPurePreflight } from "./preflight";
+ export type { PreflightInput, PreflightFailure, PreflightOk, PreflightResult, LaunchPlan, LaunchExecution } from "./preflight";
+ 
+-export { BUILD_STEPS, runTransactionalBuild, rollbackBuild } from "./build";
++export { BUILD_STEPS, runTransactionalBuild, runLiveTransactionalBuild, rollbackBuild } from "./build";
+ export type {
+   BuildAdapterHandle,
+   BuildChildResource,
+@@ -20,6 +20,9 @@ export type {
+   BuildResult,
+   BuildStep,
+   CreatedBuildResource,
++  LiveBuildInput,
++  LiveReattestationInput,
++  LiveSurfaceAttester,
+   LiveReattestationRecord,
+   LiveReattestationResult,
+   PartialBuildState,
+diff --git a/packages/supervisor/src/preflight.ts b/packages/supervisor/src/preflight.ts
+index 4361919..2edb02c 100644
+--- a/packages/supervisor/src/preflight.ts
++++ b/packages/supervisor/src/preflight.ts
+@@ -80,7 +80,7 @@ function fingerprint(root: string, worktree: string, d: PreflightDependencies):
+   return Object.freeze({ root: canonicalRoot, worktree: canonicalWorktree, head, statusSha256: hash(git(["status", "--porcelain=v1", "-z"])) });
+ }
+ 
+-function validateEnvironment(input: PreflightInput, registrations: readonly AdapterRegistrationV1[], d: PreflightDependencies): boolean {
++function validateEnvironment(input: PreflightInput, registrations: readonly AdapterRegistrationV1[], d: PreflightDependencies, claudeModel: string | undefined): boolean {
+   const u = userInfo(); const p = input.installation; const env = input.ambient;
+   if (u.uid !== p.installation_uid || u.homedir !== p.passwd_home || env.SHELL !== u.shell || !env.TERM) return false;
+   if (env.PATH !== p.approved_path || !p.approved_path) return false;
+@@ -98,6 +98,33 @@ function validateEnvironment(input: PreflightInput, registrations: readonly Adap
+     if (p.claude_config_dir !== join(p.passwd_home, ".claude-madventures-v5") || env.CLAUDE_CONFIG_DIR !== p.claude_config_dir) return false;
+     if (input.invocationArguments.some(arg => arg === "--settings" || arg.startsWith("--settings="))) return false;
+     const allowed = new Set(["HOME", "PATH", "SHELL", "TERM", "TMPDIR", "CLAUDE_CONFIG_DIR", "LANG", "LC_ALL", "LC_CTYPE", "USER"]);
++    const object = (v: unknown): v is Record<string, unknown> =>
++      v !== null && typeof v === "object" && !Array.isArray(v);
++    const effort = (v: unknown): boolean => typeof v === "string" && ["low", "medium", "high", "xhigh", "max"].includes(v);
++    function allowedSetting(key: string, value: unknown): boolean {
++      switch (key) {
++        case "env":
++          return object(value) && Object.entries(value).every(([name, setting]) =>
++            name === "DISABLE_AUTOUPDATER" ? setting === "1" :
++              allowed.has(name) && typeof setting === "string" && env[name] === setting);
++        case "permissions":
++          return object(value) && Object.keys(value).length === 2 && value.defaultMode === "dontAsk" &&
++            Array.isArray(value.deny) && value.deny.every(item => typeof item === "string");
++        case "enabledPlugins": return object(value) && Object.values(value).every(v => v === false);
++        case "skillOverrides": return object(value) && Object.values(value).every(v => v === "off");
++        case "autoMemoryEnabled": return value === false;
++        case "disableAllHooks": case "disableClaudeAiConnectors": return value === true;
++        case "model": return typeof value === "string" && value === claudeModel;
++        case "effortLevel": return effort(value);
++        case "modelSettings": return object(value) && Object.values(value).every(setting =>
++          object(setting) && Object.keys(setting).length === 1 && effort(setting.effortLevel));
++        case "agentPushNotifEnabled": case "inputNeededNotifEnabled": case "autoCompactEnabled":
++        case "verbose": return typeof value === "boolean";
++        case "editorMode": return value === "normal" || value === "vim";
++        case "theme": return typeof value === "string" && value.length <= 64 && !/[^a-zA-Z0-9-]/.test(value);
++        default: return false;
++      }
++    }
+     for (const path of input.settingsSources) {
+       if (!isAbsolute(path) || !["settings.json", "settings.local.json", "managed-settings.json"].includes(basename(path))) return false;
+       let text: string;
+@@ -106,16 +133,7 @@ function validateEnvironment(input: PreflightInput, registrations: readonly Adap
+         return false;
+       }
+       const settings = JSON.parse(text);
+-      if (!settings || typeof settings !== "object" || Array.isArray(settings)) return false;
+-      // Fail closed on unknown settings controls: a future provider/endpoint
+-      // selector cannot silently become authorized by an old validator.
+-      for (const key of Object.keys(settings)) if (key !== "env") return false;
+-      if (settings.env !== undefined) {
+-        if (!settings.env || typeof settings.env !== "object" || Array.isArray(settings.env)) return false;
+-        for (const [key, value] of Object.entries(settings.env)) {
+-          if (!allowed.has(key) || typeof value !== "string" || env[key] !== value) return false;
+-        }
+-      }
++      if (!object(settings) || !Object.entries(settings).every(([key, value]) => allowedSetting(key, value))) return false;
+     }
+   }
+   return true;
+@@ -152,7 +170,7 @@ export async function runPurePreflightWithDependencies(input: PreflightInput, ov
+   for (const [index, execution] of envelope.executions.entries()) {
+     if (admitted[index]!.surface === "madv-surface" && execution.role !== "independent-reviewer") return fail("pair_ineligible");
+   }
+-  try { if (!validateEnvironment(input, admitted, d)) return fail("auth_not_ready"); }
++  try { if (!validateEnvironment(input, admitted, d, envelope.executions.find(e => e.surface === "claude-code")?.model)) return fail("auth_not_ready"); }
+   catch { return fail("auth_not_ready"); }
+   const resolved: { path: string; sha256: string }[] = [];
+   try {
+diff --git a/packages/supervisor/test/live-port.test.ts b/packages/supervisor/test/live-port.test.ts
+new file mode 100644
+index 0000000..ec8d554
+--- /dev/null
++++ b/packages/supervisor/test/live-port.test.ts
+@@ -0,0 +1,51 @@
++import { expect, test } from "bun:test";
++import { runLiveTransactionalBuild, type LiveReattestationInput } from "../src/index";
++import { closeOfflineBuild, offlineStart } from "../../../test/phase3b/offline";
++
++test("the live port passes the session and signal and rejects untrusted failure detail", async () => {
++  const fixture = offlineStart();
++  const controller = new AbortController();
++  const seen: LiveReattestationInput[] = [];
++  try {
++    const result = await runLiveTransactionalBuild({
++      ...fixture, sessionId: "offline-port", signal: controller.signal,
++      attesterFor: () => input => {
++        seen.push(input);
++        return { ok: false, reason: "M1 synthetic refusal" };
++      },
++    });
++    try {
++      expect(seen.length).toBe(1);
++      expect(seen[0]!.sessionId).toBe("offline-port");
++      expect(seen[0]!.signal).toBeInstanceOf(AbortSignal);
++      expect(result.ok).toBe(false);
++      if (result.ok) throw new Error("expected a failed build");
++      expect(result.failedStep).toBe("reattest");
++      expect(result.failure).toBe("reattestation_failed");
++      expect(result.detail).toBe("step=reattest execution=builder failure=reattestation_failed surface=claude-code cause=attestation_malformed");
++    } finally { await closeOfflineBuild(result); }
++  } finally { fixture.dispose(); }
++});
++
++test("a continuous failure before activation fails reattestation for its surface", async () => {
++  const fixture = offlineStart();
++  let monitorFailure: ((reason: string) => void) | undefined;
++  try {
++    const result = await runLiveTransactionalBuild({
++      ...fixture, sessionId: "offline-monitor", signal: new AbortController().signal,
++      attesterFor: surface => input => {
++        if (surface === "claude-code") monitorFailure = input.reportFailure;
++        else monitorFailure!("identity_mismatch");
++        return { ok: true, evidenceKind: "actual_session", model: input.model, provider: input.provider };
++      },
++    });
++    try {
++      expect(result.ok).toBe(false);
++      if (result.ok) throw new Error("expected a failed build");
++      expect(result.failedStep).toBe("reattest");
++      expect(result.failure).toBe("reattestation_failed");
++      expect(result.detail).toBe("step=reattest execution=builder failure=reattestation_failed surface=claude-code cause=identity_mismatch");
++      expect(result.partialState.sessionActivatedRow === null).toBe(true);
++    } finally { await closeOfflineBuild(result); }
++  } finally { fixture.dispose(); }
++});
+diff --git a/packages/supervisor/test/madv-allowlist.test.ts b/packages/supervisor/test/madv-allowlist.test.ts
+index b33990e..4e0f358 100644
+--- a/packages/supervisor/test/madv-allowlist.test.ts
++++ b/packages/supervisor/test/madv-allowlist.test.ts
+@@ -1,6 +1,6 @@
+ import { expect, test } from "bun:test";
+ import { ADAPTER_REGISTRY, parseSurfaceId } from "@madventures/protocol";
+-import { buildAllowlistedEnvironment } from "../src/environment";
++import { buildAllowlistedEnvironment, redact } from "../src/environment";
+ 
+ test("madv-surface-v1 selects exactly the B6 variable set", () => {
+   const registration = ADAPTER_REGISTRY.get(parseSurfaceId("madv-surface"))!;
+@@ -10,3 +10,26 @@ test("madv-surface-v1 selects exactly the B6 variable set", () => {
+   const approved = ["HOME", "PATH", "SHELL", "TERM", "TMPDIR", "MINIMAX_API_KEY", "LANG", "LC_ALL", "LC_CTYPE", "USER"];
+   expect(Object.keys(buildAllowlistedEnvironment(registration, ambient)).sort()).toEqual(approved.sort());
+ });
++
++test("madv allowlist pins the required and secret attribute of every variable", () => {
++  const registration = ADAPTER_REGISTRY.get(parseSurfaceId("madv-surface"))!;
++  const required = ["HOME", "PATH", "SHELL", "TERM", "TMPDIR", "MINIMAX_API_KEY"];
++  const optional = ["LANG", "LC_ALL", "LC_CTYPE", "USER"];
++  const names = [...required, ...optional];
++  const synthetic = Object.fromEntries(names.map(name => [name, "offline-value-" + name + "."]));
++
++  for (const name of names) {
++    const remaining = { ...synthetic };
++    delete remaining[name];
++    if (required.includes(name)) {
++      expect(() => buildAllowlistedEnvironment(registration, remaining))
++        .toThrow("Missing required environment variable " + name + " for madv-surface-v1");
++    } else {
++      expect(buildAllowlistedEnvironment(registration, remaining)).toEqual(remaining);
++    }
++  }
++  const redacted = redact(names.map(name => synthetic[name]).join(" "), synthetic, registration);
++  expect(redacted.rulesApplied).toEqual(["secret-value:MINIMAX_API_KEY"]);
++  expect(redacted.text).toBe(names.map(name =>
++    name === "MINIMAX_API_KEY" ? "<redacted:MINIMAX_API_KEY>" : synthetic[name]).join(" "));
++});
+diff --git a/packages/supervisor/test/preflight.test.ts b/packages/supervisor/test/preflight.test.ts
+index f8f117a..ba5d71e 100644
+--- a/packages/supervisor/test/preflight.test.ts
++++ b/packages/supervisor/test/preflight.test.ts
+@@ -329,3 +329,75 @@ test("the auth probe enforces the 5,000 ms execution deadline", async () => { co
+ test("the auth probe escalates SIGTERM to SIGKILL within the forced-cleanup budget", async () => {const f=fixture();hang(f);const signals:string[]=[];await failure(f,"auth_not_ready",{probe:req=>runBoundedProbe(req,{spawn:request=>{const p=Bun.spawn([request.executablePath,...request.arguments],{env:request.environment,stdin:new Blob([request.stdin]),stdout:"pipe",stderr:"pipe"});children.push(p as any);return {...p,stdout:p.stdout,stderr:p.stderr,exited:p.exited,kill:s=>{if(request.kind==="auth")signals.push(s);p.kill(s as any);}};}})});expect(signals).toEqual(["SIGTERM","SIGKILL"]);},10000);
+ test("the auth probe reaps the child successfully", async () => {const f=fixture();let reaped=0;const r=await f.run({probe:req=>runBoundedProbe(req,{spawn:request=>{const p=Bun.spawn([request.executablePath,...request.arguments],{env:request.environment,stdin:new Blob([request.stdin]),stdout:"pipe",stderr:"pipe"});children.push(p as any);return {stdout:p.stdout,stderr:p.stderr,exited:p.exited.then(code=>{reaped++;return code;}),kill:s=>p.kill(s as any)};}})});expect(r.ok).toBe(true);expect(reaped).toBe(4);});
+ test("cleanup-budget exhaustion fails closed as auth_not_ready", async () => {const f=fixture();hang(f);await failure(f,"auth_not_ready",{probe:req=>runBoundedProbe(req,{spawn:request=>{const p=Bun.spawn([request.executablePath,...request.arguments],{env:request.environment,stdin:new Blob([request.stdin]),stdout:"pipe",stderr:"pipe"});children.push(p as any);return {stdout:p.stdout,stderr:p.stderr,exited:request.arguments.includes("auth")?p.exited.then(async code=>{await Bun.sleep(700);return code;}):p.exited,kill:s=>p.kill(s as any)};}})});},10000);
++
++import { offlineStart } from "../../../test/phase3b/offline";
++import { offlinePreflight } from "../../../test/phase3b/preflight-input";
++
++function governedSettingsFixture() {
++  const f = offlineStart();
++  try {
++    const input = offlinePreflight(f);
++    const path = join(f.config, "settings.json");
++    input.settingsSources = [path];
++    const run = async (settings: unknown) => {
++      writeFileSync(path, JSON.stringify(settings));
++      return runPurePreflightWithDependencies(input, { probe: async request => ({
++        ok: true, diagnostic: { result: "pass", primitive: request.kind === "auth" ? "auth status" : "system/init",
++          exitCode: 0, signal: null, stdoutBytes: 0, stderrBytes: 0 },
++      }) });
++    };
++    return { run, dispose: f.dispose };
++  } catch (error) { f.dispose(); throw error; }
++}
++
++test("preflight accepts the governed settings and each allowed setting value", async () => {
++  const f = governedSettingsFixture();
++  const entries = (n: number, value: (i: number) => unknown) =>
++    Object.fromEntries(Array.from({ length: n }, (_, i) => ["synthetic-" + i, value(i)]));
++  try {
++    for (const host of ["darwin", "linux"]) {
++      const result = await f.run({
++        env: { DISABLE_AUTOUPDATER: "1" }, permissions: { defaultMode: "dontAsk", deny: Array.from({ length: 27 }, (_, i) => "deny-" + i) },
++        enabledPlugins: entries(host === "darwin" ? 134 : 142, () => false), skillOverrides: entries(17, () => "off"),
++        autoMemoryEnabled: false, disableAllHooks: true, disableClaudeAiConnectors: true, effortLevel: "high",
++        modelSettings: entries(7, i => ({ effortLevel: i % 2 ? "xhigh" : "high" })), agentPushNotifEnabled: true,
++        inputNeededNotifEnabled: true, autoCompactEnabled: true, verbose: true, editorMode: "normal", theme: "light-daltonized",
++        ...(host === "linux" ? { model: "claude-fable-5-2" } : {}),
++      });
++      expect(result.ok ? "pass" : result.failure).toBe("pass");
++      if (result.ok) expect(result.plan.executions.some(e => "DISABLE_AUTOUPDATER" in e.environment)).toBe(false);
++    }
++    for (const effortLevel of ["low", "medium", "high", "xhigh", "max"]) {
++      expect((await f.run({ effortLevel, modelSettings: { example: { effortLevel } } })).ok).toBe(true);
++    }
++    for (const settings of [
++      { agentPushNotifEnabled: false, inputNeededNotifEnabled: false, autoCompactEnabled: false, verbose: false },
++      { theme: "", editorMode: "vim" }, { theme: "Az-9".repeat(16) },
++      { enabledPlugins: {}, skillOverrides: {}, modelSettings: {}, permissions: { defaultMode: "dontAsk", deny: [] } },
++      { env: { TERM: "xterm-256color" } },
++    ]) expect((await f.run(settings)).ok).toBe(true);
++  } finally { f.dispose(); }
++}, 30_000);
++
++test("preflight rejects every unlisted settings control and invalid value shape", async () => {
++  const f = governedSettingsFixture();
++  try {
++    const cases: unknown[] = [
++      { unlisted: true }, { env: { DISABLE_AUTOUPDATER: 1 } }, { env: { DISABLE_AUTOUPDATER: "0" } },
++      { env: { UNLISTED: "synthetic" } }, { env: [] }, { permissions: [] }, { permissions: { defaultMode: "dontAsk" } },
++      { permissions: { deny: [] } }, { permissions: { defaultMode: "ask", deny: [] } },
++      { permissions: { defaultMode: "dontAsk", deny: [false] } }, { permissions: { defaultMode: "dontAsk", deny: "all" } },
++      { permissions: { defaultMode: "dontAsk", deny: [], allow: [] } }, { enabledPlugins: [] }, { enabledPlugins: { a: true } },
++      { skillOverrides: null }, { skillOverrides: { a: false } }, { autoMemoryEnabled: true }, { disableAllHooks: false },
++      { disableClaudeAiConnectors: false }, { model: "other" }, { model: null }, { effortLevel: "other" },
++      { modelSettings: [] }, { modelSettings: { a: { effortLevel: "other" } } }, { modelSettings: { a: {} } },
++      { modelSettings: { a: { effortLevel: "low", model: "other" } } }, { modelSettings: { a: "high" } }, { verbose: 1 },
++      { agentPushNotifEnabled: "true" }, { inputNeededNotifEnabled: 0 }, { autoCompactEnabled: null },
++      { editorMode: "emacs" }, { theme: "a".repeat(65) }, { theme: "abc_def" }, { theme: 1 }, { theme: "abc\n" },
++    ];
++    for (const setting of cases) {
++      const value = await f.run(setting);
++      expect(value.ok ? "unexpected success" : value.failure).toBe("auth_not_ready");
++    }
++  } finally { f.dispose(); }
++}, 30_000);
+diff --git a/scripts/phase3b/failures.ts b/scripts/phase3b/failures.ts
+new file mode 100644
+index 0000000..cdf868f
+--- /dev/null
++++ b/scripts/phase3b/failures.ts
+@@ -0,0 +1,26 @@
++import { runOfflineScenario } from "../../test/phase3b/scenarios";
++import { writeTranscript } from "./transcript";
++
++if (import.meta.main) {
++  const directory = process.argv[2];
++  if (!directory) throw new Error("An evidence output directory is required.");
++
++  const barrier = await runOfflineScenario("barrier");
++  if (barrier.code !== 1 || barrier.component !== "storage" || barrier.presented) {
++    throw new Error("Offline storage barrier failed to stop presentation.");
++  }
++  writeTranscript(directory, "barrier-failure.txt", barrier.trace);
++
++  const attestation = await runOfflineScenario("attestation");
++  if (attestation.code !== 1 || attestation.presented || attestation.component !== "reattest" ||
++      !attestation.detail.includes("surface=claude-code cause=identity_mismatch")) {
++    throw new Error("Offline wrong-model attestation failed to stop presentation.");
++  }
++  writeTranscript(directory, "attestation-failure.txt", attestation.trace);
++
++  const fallback = await runOfflineScenario("fallback");
++  if (!fallback.activated || fallback.code !== 0 || fallback.reason !== "identity_mismatch" || !fallback.groupsEnded) {
++    throw new Error("Offline fallback failed to interrupt the active session.");
++  }
++  writeTranscript(directory, "fallback.txt", fallback.trace);
++}
+diff --git a/scripts/phase3b/healthy-starts.ts b/scripts/phase3b/healthy-starts.ts
+new file mode 100644
+index 0000000..c50f640
+--- /dev/null
++++ b/scripts/phase3b/healthy-starts.ts
+@@ -0,0 +1,15 @@
++import { runOfflineScenario } from "../../test/phase3b/scenarios";
++import { writeTranscript } from "./transcript";
++
++if (import.meta.main) {
++  const directory = process.argv[2];
++  if (!directory) throw new Error("An evidence output directory is required.");
++  for (const surface of ["claude-code", "madv-surface"]) {
++    const result = await runOfflineScenario("healthy");
++    if (result.code !== 0 || !result.activated || !result.presented ||
++        !result.trace.includes(surface + " result success") || !result.groupsEnded) {
++      throw new Error("Offline healthy start failed for " + surface);
++    }
++    writeTranscript(directory, "healthy-" + surface + ".txt", result.trace);
++  }
++}
+diff --git a/scripts/phase3b/transcript.ts b/scripts/phase3b/transcript.ts
+new file mode 100644
+index 0000000..8aec73e
+--- /dev/null
++++ b/scripts/phase3b/transcript.ts
+@@ -0,0 +1,19 @@
++import { linkSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
++import { join } from "node:path";
++
++export function writeTranscript(directory: string, name: string, trace: string): void {
++  const output = realpathSync(directory);
++  const temporary = mkdtempSync(join(output, ".m1-transcript-"));
++  try {
++    const prepared = join(temporary, name);
++    writeFileSync(prepared, [
++      "Offline M1 | " + name,
++      "Stand-ins: madbridge-claude-v5 and madv-surface",
++      trace.trimEnd(), "",
++    ].join("\n"), { mode: 0o600 });
++    linkSync(prepared, join(output, name));
++    console.log(name);
++  } finally {
++    rmSync(temporary, { recursive: true, force: true });
++  }
++}
+diff --git a/test/phase3a/harness-separation.test.ts b/test/phase3a/harness-separation.test.ts
+index d3221df..326687a 100644
+--- a/test/phase3a/harness-separation.test.ts
++++ b/test/phase3a/harness-separation.test.ts
+@@ -27,7 +27,7 @@ const EXCEPTIONS: Readonly<Record<string, { sha256: string; call?: string }>> =
+     sha256: "9210012a505848a7379ab7b9cf9d840f33197de58f85b23c359653760479c603", call: "PAYLOAD_SHAPE[knownType](payload)",
+   },
+   "packages/supervisor/src/build.ts": {
+-    sha256: "6008c0bab23f1bde66af3744c4731203f509f2890015b853ea6e50d6c4f4c44a", call: "host.handle.facts()[Symbol.asyncIterator]()",
++    sha256: "50074c2fc50b12cf2083a87c5d71bf665d3241ba1c2f5f37d5e922dfaa67db8d", call: "host.handle.facts()[Symbol.asyncIterator]()",
+   },
+ };
+ 
+diff --git a/test/phase3b/composition.test.ts b/test/phase3b/composition.test.ts
+new file mode 100644
+index 0000000..1659bdb
+--- /dev/null
++++ b/test/phase3b/composition.test.ts
+@@ -0,0 +1,68 @@
++import { expect, test } from "bun:test";
++import { repeatInstalledAttester, runOfflineScenario } from "./scenarios";
++
++test("both stand-ins pass probes and attestation before present", async () => {
++  const result = await runOfflineScenario("healthy");
++  expect(result.detail).toBe("");
++  expect(result.code).toBe(0);
++  expect(result.activated).toBe(true);
++  const stages = result.trace.trim().split("\n");
++  let previous = -1;
++  for (const event of ["claude-code identity probe", "claude-code auth probe", "madv-surface identity probe", "madv-surface auth probe",
++    "claude-code attestation write", "claude-code result success", "madv-surface attestation write no_tools=true",
++    "madv-surface result success", "present active", "exit 0"]) {
++    expect(stages.filter(s => s === event).length).toBe(1);
++    const index = stages.indexOf(event);
++    expect(index).toBeGreaterThan(previous);
++    previous = index;
++  }
++}, 45_000);
++
++test("a failed health barrier exits nonzero naming the component", async () => {
++  const result = await runOfflineScenario("barrier");
++  expect(result.code).toBe(1);
++  expect(result.component).toBe("storage");
++  expect(result.presented).toBe(false);
++  expect(result.trace).toContain("madv-surface auth probe");
++}, 45_000);
++
++test("a second attester invocation refuses the fourth call before the child receives it", async () => {
++  for (const surface of ["claude-code", "madv-surface"]) {
++    const result = await repeatInstalledAttester(surface);
++    expect(result.detail).toContain("surface=" + surface + " cause=attestation_budget_exhausted");
++    expect(result.trace.split("\n").filter(s => s.startsWith(surface + " attestation write")).length).toBe(1);
++    expect(result.trace).not.toContain("extra write");
++  }
++}, 90_000);
++
++test("composition refuses disallowed user, managed, project and local settings before launch", async () => {
++  for (const location of ["user", "managed", "project", "local"] as const) {
++    const result = await runOfflineScenario(location);
++    expect(result.code).toBe(1);
++    expect(result.detail).toBe("auth_not_ready");
++    expect(result.presented).toBe(false);
++    expect(result.trace).not.toContain("probe");
++    expect(result.trace).not.toContain("launch");
++  }
++}, 45_000);
++
++test("startup cancellation closes the subscription and ends the stand-in group", async () => {
++  const result = await runOfflineScenario("cancel");
++  expect(result.detail).toContain("surface=claude-code cause=attestation_cancelled");
++  expect(result.code).toBe(1);
++  expect(result.presented).toBe(false);
++  expect(result.groupsEnded).toBe(true);
++}, 45_000);
++
++test("monitor failures after activation durably interrupt with the registered reason", async () => {
++  for (const [mode, reason] of [["fallback", "identity_mismatch"], ["madv-auth", "authentication_expired"]] as const) {
++    const result = await runOfflineScenario(mode);
++    expect(result.detail).toBe("");
++    expect(result.activated).toBe(true);
++    expect(result.reason).toBe(reason);
++    expect(result.groupsEnded).toBe(true);
++  }
++  const failure = await runOfflineScenario("attestation");
++  expect(failure.presented).toBe(false);
++  expect(failure.detail).toContain("surface=claude-code cause=identity_mismatch");
++}, 90_000);
+diff --git a/test/phase3b/detectors.test.ts b/test/phase3b/detectors.test.ts
+new file mode 100644
+index 0000000..162cb7e
+--- /dev/null
++++ b/test/phase3b/detectors.test.ts
+@@ -0,0 +1,42 @@
++import { expect, test } from "bun:test";
++import { ADAPTER_REGISTRY, parseSurfaceId } from "@madventures/protocol";
++import { detectClaudeFailure } from "../../packages/adapter-claude-code/src/detectors";
++import { MadvSurfaceParser, detectMadvFailure } from "../../packages/adapter-madv-surface/src";
++
++test("registration detectors identify auth expiry and attestation failures by surface", () => {
++  const claude = ADAPTER_REGISTRY.get(parseSurfaceId("claude-code"))!.auth_failure_detection;
++  const madv = ADAPTER_REGISTRY.get(parseSurfaceId("madv-surface"))!.auth_failure_detection;
++  const status = { kind: "auth_status", exitCode: 1 } as const;
++  expect(detectClaudeFailure(claude, status)).toEqual({ surface: "claude-code", cause: "auth_failed" });
++  expect(detectClaudeFailure([], status)).toBeUndefined();
++  for (const error of ["authentication_failed", "oauth_org_not_allowed"]) {
++    const obs = { kind: "event", event: { type: "system", subtype: "api_retry", error } } as const;
++    expect(detectClaudeFailure(claude, obs)?.cause).toBe("auth_failed");
++    expect(detectClaudeFailure([], obs)).toBeUndefined();
++  }
++  expect(detectClaudeFailure(claude, { kind: "event", event: { type: "system", subtype: "model_refusal_fallback" } }))
++    .toEqual({ surface: "claude-code", cause: "identity_mismatch" });
++  for (const observation of [status, { kind: "auth_status", exitCode: 0, verified: false },
++    { kind: "child_exit", exitCode: 5 }, { kind: "event", type: "system", subtype: "auth_failed" }] as const) {
++    const failure = detectMadvFailure(madv, observation);
++    expect(failure?.surface).toBe("madv-surface");
++    expect(failure?.cause).toBe("auth_failed");
++    expect(detectMadvFailure([], observation)).toBeUndefined();
++  }
++  expect(detectMadvFailure(madv, { kind: "child_exit", exitCode: 1 })).toBeUndefined();
++  for (const [code, expected] of [[1, "provider_error"], [3, "identity_unavailable"], [4, "identity_mismatch"],
++    [5, "auth_failed"], [6, "endpoint_refused"], [7, "model_refused"]] as const) {
++    const parser = new MadvSurfaceParser({ executionId: "offline", sessionId: "offline", supportedVersions: ["0.1.2"],
++      provider: "minimax", independenceDomain: "minimax", model: "MiniMax-offline" });
++    const failure = detectMadvFailure(madv, { kind: "parsed", result: parser.finish(code) });
++    expect(failure?.surface).toBe("madv-surface");
++    expect(failure?.cause).toBe(expected);
++    expect(failure?.reason).toBe("exit");
++  }
++  for (const subtype of ["domain_unresolved", "model_refused", "identity_mismatch"] as const) {
++    const parser = new MadvSurfaceParser({ executionId: "offline", sessionId: "offline", supportedVersions: ["0.1.2"],
++      provider: "minimax", independenceDomain: "minimax", model: "MiniMax-offline" });
++    const result = parser.push(JSON.stringify({ type: "system", subtype }) + "\n");
++    expect(detectMadvFailure(madv, { kind: "parsed", result })?.cause).toBe(subtype);
++  }
++});
+diff --git a/test/phase3b/offline.ts b/test/phase3b/offline.ts
+new file mode 100644
+index 0000000..de69c13
+--- /dev/null
++++ b/test/phase3b/offline.ts
+@@ -0,0 +1,85 @@
++import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
++import { userInfo } from "node:os";
++import { join } from "node:path";
++import { ADAPTER_REGISTRY, parseSurfaceId, parseTaskEnvelope, sha256CanonicalSync } from "@madventures/protocol";
++import { rollbackBuild, type BuildResult, type LaunchPlan } from "../../packages/supervisor/src/index";
++
++export function offlineStart() {
++  const user = userInfo();
++  const root = realpathSync(mkdtempSync(join(realpathSync(user.homedir), ".madbridge-m1-")));
++  const dispose = () => rmSync(root, { recursive: true, force: true });
++  try {
++    const folder = (name: string) => {
++      const path = join(root, name);
++      mkdirSync(path, { mode: 0o700 });
++      return path;
++    };
++    const work = folder("work"), bin = folder("bin"), temp = folder("temp"), storageRootOverride = folder("storage");
++    const config = folder("config"), managed = folder("managed");
++    const git = (...args: string[]) => {
++      const result = Bun.spawnSync(["/usr/bin/git", "-C", work, ...args], {
++        cwd: work, env: { HOME: root, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" },
++        stdout: "pipe", stderr: "pipe",
++      });
++      if (result.exitCode !== 0) throw new Error("offline git setup failed");
++      return result.stdout;
++    };
++    git("init", "--template=", "-q", "-b", "offline");
++    git("-c", "user.name=Offline", "-c", "user.email=offline@example.invalid", "commit", "-qm", "offline", "--allow-empty");
++    const head = git("rev-parse", "HEAD").toString().trim();
++    const hash = (bytes: Uint8Array) => new Bun.CryptoHasher("sha256").update(bytes).digest("hex");
++    const statusSha256 = hash(git("status", "--porcelain=v1", "-z"));
++    const claude = ADAPTER_REGISTRY.get(parseSurfaceId("claude-code"))!;
++    const madv = ADAPTER_REGISTRY.get(parseSurfaceId("madv-surface"))!;
++    const now = new Date().toISOString();
++    const unsigned = {
++      protocol_version: "madbridge-protocol/v1", task_id: "offline-m1", authorization_reference: "OFFLINE-M1",
++      repository: join(work, ".git"), worktree: work, branch: "offline",
++      repository_fingerprint: { kind: "commit", git_sha: head, sha256: statusSha256 },
++      executions: [
++        { execution_id: "builder", role: "builder", surface: claude.surface, model: "claude-fable-5-2",
++          provider: claude.provider, independence_domain: claude.independence_domain, effort: "high" },
++        { execution_id: "reviewer", role: "independent-reviewer", surface: madv.surface, model: "MiniMax-M3.1-Flash",
++          provider: madv.provider, independence_domain: madv.independence_domain, effort: "high" },
++      ],
++      initial_writer: "builder",
++      scope: { allowedReadPaths: ["src/**"], allowedWritePaths: ["src/**"], allowedCommandCategories: ["test"],
++        allowedArtifactCategories: ["test-result"], maxArtifactSizeBytes: 1024, dataClass: "internal", allowedEgressDestinations: [] },
++      pair_constraints: { required_roles: ["builder", "independent-reviewer"], require_distinct_providers: true,
++        require_distinct_independence_domains: true, prohibit_self_review: true },
++      created_at: now, expires_at: new Date(Date.parse(now) + 86_400_000).toISOString(),
++    };
++    const envelope = parseTaskEnvelope({ ...unsigned, envelope_hash: sha256CanonicalSync(unsigned) });
++    const plan: LaunchPlan = {
++      storageRoot: storageRootOverride,
++      repositoryFingerprint: { root: work, worktree: work, head, statusSha256 },
++      executions: envelope.executions.map(execution => {
++        const registration = ADAPTER_REGISTRY.get(execution.surface)!;
++        const executablePath = join(bin, registration.executable_name);
++        writeFileSync(executablePath, '#!/bin/sh\ncd "${0%/*}/../work" || exit 2\nwhile IFS= read -r line; do :; done\n', { mode: 0o700 });
++        return { surface: execution.surface, executablePath, artifactSha256: hash(readFileSync(executablePath)),
++          arguments: [], environment: { HOME: root, TMPDIR: temp, PATH: bin, TERM: "xterm-256color" } };
++      }),
++    };
++    return { root, work, bin, temp, storageRootOverride, config, managed, user, now, envelope, plan, dispose };
++  } catch (error) {
++    dispose();
++    throw error;
++  }
++}
++
++export async function closeOfflineBuild(result: BuildResult): Promise<void> {
++  if (!result.ok) {
++    await rollbackBuild(result.partialState);
++    return;
++  }
++  const state = result.state;
++  if ((await state.client!.getSnapshot()).phase !== "closed") await state.broker!.founderClose("offline-close");
++  for (const host of state.hosts) {
++    // Drain to host exit before deleting the disposable files.
++    for await (const _ of host.handle.facts()) { }
++  }
++  for (const adapter of state.adapters) await adapter.disconnect();
++  await state.client!.close();
++  state.ledger!.close();
++}
+diff --git a/test/phase3b/preflight-input.ts b/test/phase3b/preflight-input.ts
+new file mode 100644
+index 0000000..11c7419
+--- /dev/null
++++ b/test/phase3b/preflight-input.ts
+@@ -0,0 +1,40 @@
++import { readFileSync } from "node:fs";
++import { join } from "node:path";
++import { ADAPTER_REGISTRY, type ObservedSurfaceFacts } from "@madventures/protocol";
++import { writeCapabilityRecord } from "@madventures/storage";
++import type { PreflightInput } from "../../packages/supervisor/src/index";
++import type { offlineStart } from "./offline";
++
++// Write only records for the disposable executables installed for this start.
++export function offlinePreflight(f: ReturnType<typeof offlineStart>): PreflightInput {
++  const observed: Record<string, ObservedSurfaceFacts> = {};
++  for (const execution of f.envelope.executions) {
++    const registration = ADAPTER_REGISTRY.get(execution.surface)!;
++    const binary = join(f.bin, registration.executable_name);
++    const cli_version = registration.supported_versions[0]!;
++    const binary_sha256 = new Bun.CryptoHasher("sha256").update(readFileSync(binary)).digest("hex");
++    const host = { os_name: "Linux", os_version: "synthetic", kernel_release: "synthetic",
++      reported_model: execution.model, adapter_registration: execution.surface };
++    writeCapabilityRecord(f.storageRootOverride, f.work, f.work, {
++      surface: execution.surface, provider: registration.provider, requested_model: execution.model,
++      role_eligibility: [execution.role], independence_domain: registration.independence_domain,
++      organization_id: registration.organization_id, cli_version, binary_path: binary, binary_sha256,
++      evaluated_at: f.now, expires_at: new Date(Date.parse(f.now) + 30 * 86400000).toISOString(), host,
++      identity_attestation: { result: "pass", primitive: "offline stream", sanitized_facts: "synthetic identity" },
++      auth_readiness: { result: "pass", primitive: "offline status" }, pty: { result: "pass", observed_ms: {} },
++      independent_review_eligible: execution.role === "independent-reviewer", limitations: ["offline stand-in"],
++      overall: "pass", redaction_rules_applied: [],
++    });
++    observed[execution.surface] = { cli_version, binary_sha256, host };
++  }
++  const config = join(f.user.homedir, ".claude-madventures-v5");
++  return {
++    envelope: { ...f.envelope }, repositoryRoot: f.work, worktree: f.work,
++    ambient: { HOME: f.user.homedir, SHELL: f.user.shell ?? "", TERM: "xterm-256color",
++      PATH: f.bin, TMPDIR: f.temp, CLAUDE_CONFIG_DIR: config, MINIMAX_API_KEY: "M1-SYNTHETIC-CANARY" },
++    installation: { installation_uid: f.user.uid, passwd_home: f.user.homedir, approved_path: f.bin, claude_config_dir: config },
++    invocationArguments: [], settingsSources: [], storageRootOverride: f.storageRootOverride,
++    hostCapabilities: { pty: true, processGroups: true, termination: true, timing: true },
++    observedHostFacts: observed, now: f.now, signal: new AbortController().signal,
++  };
++}
+diff --git a/test/phase3b/pty-input-echo.test.ts b/test/phase3b/pty-input-echo.test.ts
+new file mode 100644
+index 0000000..5bc1ca1
+--- /dev/null
++++ b/test/phase3b/pty-input-echo.test.ts
+@@ -0,0 +1,56 @@
++import { expect, test } from "bun:test";
++import { writeFileSync } from "node:fs";
++import { join } from "node:path";
++import { spawnPtyHost } from "../../packages/broker/src/pty-host-supervisor";
++import { offlineStart } from "./offline";
++
++test("the PTY host does not echo a line written before the child reads it", async () => {
++  const fixture = offlineStart();
++  try {
++    const path = join(fixture.bin, "reader.js");
++    const source = [
++      "#!" + process.execPath + " --no-env-file",
++      'import { existsSync, readSync, writeSync } from "node:fs";',
++      "process.chdir(process.argv[2]);",
++      'while (!existsSync("permit-read")) await Bun.sleep(5);',
++      "const bytes = Buffer.alloc(64);",
++      "const count = readSync(0, bytes, 0, bytes.length, null);",
++      'if (bytes.toString("utf8", 0, count) !== "synthetic input\\n") process.exit(2);',
++      'process.on("SIGTERM", () => process.exit(0));',
++      'writeSync(1, "received\\n");',
++      "await Bun.sleep(10000);",
++      "",
++    ].join("\n");
++    writeFileSync(path, source, { mode: 0o700 });
++    const host = spawnPtyHost({
++      path, sha256: new Bun.CryptoHasher("sha256").update(source).digest("hex"),
++      executionId: "offline-echo", argv: [fixture.work],
++      env: { HOME: fixture.root, TMPDIR: fixture.temp, PATH: fixture.bin },
++    });
++    const deadline = setTimeout(() => host.closeStdin(), 5000);
++    try {
++      let output = "";
++      let exitCode: number | null = null;
++      for await (const fact of host.facts()) {
++        if (fact.kind === "ready") {
++          host.send({ kind: "input", bytes: new TextEncoder().encode("synthetic input\n") });
++        } else if (fact.kind === "ack" && fact.ofKind === "input") {
++          writeFileSync(join(fixture.work, "permit-read"), "");
++        } else if (fact.kind === "output") {
++          output += Buffer.from(fact.bytes).toString("ascii");
++          if (output.endsWith("received\r\n")) host.send({ kind: "terminate" });
++        } else if (fact.kind === "exited") {
++          exitCode = fact.code;
++          host.closeStdin();
++        }
++      }
++      expect(output).toBe("received\r\n");
++      expect(exitCode).toBe(0);
++    } finally {
++      clearTimeout(deadline);
++      host.closeStdin();
++    }
++  } finally {
++    fixture.dispose();
++  }
++}, 12000);
+diff --git a/test/phase3b/scenarios.ts b/test/phase3b/scenarios.ts
+new file mode 100644
+index 0000000..b0b1804
+--- /dev/null
++++ b/test/phase3b/scenarios.ts
+@@ -0,0 +1,112 @@
++import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
++import { join } from "node:path";
++import { Ledger } from "@madventures/ledger";
++import { composeLiveSession, createStartAttesters } from "../../apps/madbridge/src/tui/live/composition";
++import { runPurePreflight, runLiveTransactionalBuild } from "../../packages/supervisor/src/index";
++import { closeOfflineBuild, offlineStart } from "./offline";
++import { offlinePreflight } from "./preflight-input";
++
++type Scenario = "healthy" | "barrier" | "attestation" | "fallback" | "madv-auth" | "cancel" | "user" | "managed" | "project" | "local";
++function prepare(mode: Scenario) {
++  const f = offlineStart();
++  try {
++    const source = readFileSync(new URL("./stand-in.ts", import.meta.url), "utf8");
++    const interpreter = "'" + process.execPath.replaceAll("'", "'\\''") + "'";
++    const bootstrap = ["#!/bin/sh", 'cd "${0%/*}/../work" || exit 2',
++      'if [ -t 0 ]; then printf "%s\\n" "$$" > "$0.pid" || exit 2; fi',
++      'exec ' + interpreter + ' --no-env-file "$0.ts" "$@"', ""].join("\n");
++    for (const child of f.plan.executions) {
++      writeFileSync(child.executablePath + ".ts", source);
++      writeFileSync(child.executablePath, bootstrap);
++    }
++    writeFileSync(join(f.root, "scenario"), mode);
++    const path = join(f.root, "trace");
++    writeFileSync(path, "");
++    return { ...f, input: offlinePreflight(f), trace: () => readFileSync(path, "utf8"),
++      note: (text: string) => appendFileSync(path, text + "\n") };
++  } catch (error) { f.dispose(); throw error; }
++}
++
++async function until(predicate: () => boolean | Promise<boolean>): Promise<void> {
++  const deadline = performance.now() + 5000;
++  while (!(await predicate())) {
++    if (performance.now() >= deadline) throw new Error("offline observation deadline");
++    await Bun.sleep(5);
++  }
++}
++
++export async function runOfflineScenario(mode: Scenario) {
++  const f = prepare(mode);
++  const controller = new AbortController();
++  let finished = false;
++  try {
++    if (mode === "barrier") writeFileSync(join(f.storageRootOverride, "sessions"), "synthetic obstruction");
++    if (mode === "user" || mode === "managed" || mode === "project" || mode === "local") {
++      const projectFolder = join(f.work, ".claude");
++      mkdirSync(projectFolder);
++      const files = {
++        user: join(f.config, "settings.json"), managed: join(f.managed, "managed-settings.json"),
++        project: join(projectFolder, "settings.json"), local: join(projectFolder, "settings.local.json"),
++      };
++      writeFileSync(files[mode], '{"unlisted":true}');
++    }
++    const cancel = mode === "cancel" ? until(() => finished || f.trace().includes("claude-code attestation write"))
++      .then(() => { if (!finished) controller.abort(); }) : Promise.resolve();
++    let reason = "", presented = false, activated = false;
++    let outcome;
++    try {
++      outcome = await composeLiveSession({ envelope: f.envelope, preflight: { ...f.input, signal: controller.signal },
++        workingDirectory: f.work, configFolder: f.config, managedFolder: f.managed, present: async client => {
++          const snapshot = await client.getSnapshot();
++          presented = true;
++          activated = snapshot.phase === "active" && snapshot.executions?.length === 2 &&
++            snapshot.executions.every(e => e.state === "ready") && snapshot.eventLog.some(e => e.type === "session_activated");
++          f.note("present " + snapshot.phase);
++          if (mode === "fallback" || mode === "madv-auth") {
++            writeFileSync(join(f.root, "release-monitor"), "");
++            await until(async () => (await client.getSnapshot()).phase === "closed");
++            const ledger = new Ledger(join(f.storageRootOverride, "sessions", snapshot.sessionId, "ledger", "ledger.sqlite3"));
++            try {
++              const row = ledger.readAfter(0).map(r => JSON.parse(r.event_json)).find(event => event.event_type === "session_interrupted");
++              reason = row?.reason_code ?? "";
++              f.note("session_interrupted " + reason);
++            } finally { ledger.close(); }
++          }
++        } });
++    } finally { finished = true; await cancel; }
++    if (outcome.exitCode === 0) await outcome.close();
++    const component = outcome.exitCode === 1 ? outcome.component : "";
++    const detail = outcome.exitCode === 1 ? outcome.detail : "";
++    f.note("exit " + outcome.exitCode + (component ? " " + component + " " + detail : ""));
++    const groupEnded = (surface: string) => {
++      const file = join(f.bin, (surface === "claude-code" ? "madbridge-claude-v5" : "madv-surface") + ".pid");
++      if (!existsSync(file)) return false;
++      const pid = Number(readFileSync(file, "utf8"));
++      if (!Number.isSafeInteger(pid) || pid <= 1) throw new Error("invalid stand-in pid");
++      try { process.kill(-pid, 0); return false; } catch (e) { return (e as NodeJS.ErrnoException).code === "ESRCH"; }
++    };
++    return { trace: f.trace(), code: outcome.exitCode, component, detail, presented, activated, reason,
++      groupsEnded: groupEnded("claude-code") && groupEnded("madv-surface") };
++  } finally { f.dispose(); }
++}
++
++export async function repeatInstalledAttester(target: string) {
++  const f = prepare("healthy");
++  try {
++    const preflight = await runPurePreflight(f.input);
++    if (!preflight.ok) throw new Error("offline probe failure " + preflight.failure);
++    const installed = createStartAttesters();
++    const build = await runLiveTransactionalBuild({ sessionId: "offline-budget", envelope: f.envelope,
++      plan: preflight.plan, signal: f.input.signal, attesterFor: surface => {
++        const attest = installed(surface);
++        if (!attest || surface !== target) return attest;
++        return async input => {
++          const first = await attest(input);
++          if (!first.ok) return first;
++          return attest(input);
++        };
++      } });
++    try { return { detail: build.ok ? "unexpected success" : build.detail, trace: f.trace() }; }
++    finally { await closeOfflineBuild(build); }
++  } finally { f.dispose(); }
++}
+diff --git a/test/phase3b/separation.test.ts b/test/phase3b/separation.test.ts
+new file mode 100644
+index 0000000..a305ed8
+--- /dev/null
++++ b/test/phase3b/separation.test.ts
+@@ -0,0 +1,65 @@
++import { expect, test } from "bun:test";
++import { readdirSync, readFileSync } from "node:fs";
++import { join } from "node:path";
++import ts from "typescript";
++import { runTransactionalBuild } from "../../packages/supervisor/src/index";
++import { closeOfflineBuild, offlineStart } from "./offline";
++
++const apps = join(import.meta.dir, "../../apps");
++const seams = new Set(["runTransactionalBuildWithDependencies", "runPurePreflightWithDependencies"]);
++const internalModule = /(?:^|\/)supervisor\/src\/(?:build|preflight)(?:\.[cm]?[jt]s)?$/;
++
++function* appSources(directory: string): Generator<string> {
++  for (const entry of readdirSync(directory, { withFileTypes: true })) {
++    const path = join(directory, entry.name);
++    if (entry.isDirectory() && entry.name !== "node_modules") yield* appSources(path);
++    if (entry.isFile() && /\.[cm]?[jt]sx?$/.test(entry.name)) yield path;
++  }
++}
++
++function usesSeam(node: ts.Node): boolean {
++  if (ts.isImportSpecifier(node) || ts.isExportSpecifier(node)) {
++    return seams.has((node.propertyName ?? node.name).text);
++  }
++  if (ts.isImportDeclaration(node) && ts.isStringLiteral(node.moduleSpecifier)
++      && internalModule.test(node.moduleSpecifier.text) && node.importClause?.namedBindings
++      && ts.isNamespaceImport(node.importClause.namedBindings)) return true;
++  if (ts.isExportDeclaration(node) && !node.exportClause && node.moduleSpecifier
++      && ts.isStringLiteral(node.moduleSpecifier) && internalModule.test(node.moduleSpecifier.text)) return true;
++  if (ts.isPropertyAccessExpression(node) && seams.has(node.name.text)) return true;
++  if (ts.isElementAccessExpression(node) && ts.isStringLiteral(node.argumentExpression)
++      && seams.has(node.argumentExpression.text)) return true;
++  if (ts.isBindingElement(node)) {
++    const key = node.propertyName ?? node.name;
++    if ((ts.isIdentifier(key) || ts.isStringLiteral(key)) && seams.has(key.text)) return true;
++  }
++  return ts.forEachChild(node, child => usesSeam(child) || undefined) === true;
++}
++
++test("application code imports neither internal supervisor seam", () => {
++  const imports: string[] = [];
++  for (const path of appSources(apps)) {
++    const text = readFileSync(path, "utf8");
++    if (!text.includes("WithDependencies") && !text.includes("supervisor/src/")) continue;
++    if (usesSeam(ts.createSourceFile(path, text, ts.ScriptTarget.Latest))) imports.push(path);
++  }
++  expect(imports).toEqual([]);
++});
++
++test("the original public build still fails closed without an attester", async () => {
++  const fixture = offlineStart();
++  try {
++    const result = await runTransactionalBuild({
++      sessionId: "offline-no-attester", envelope: fixture.envelope, plan: fixture.plan,
++    });
++    try {
++      expect(result.ok).toBe(false);
++      if (!result.ok) {
++        expect(result.failedStep).toBe("reattest");
++        expect(result.failure).toBe("reattestation_failed");
++        expect(result.detail).toBe("step=reattest execution=builder failure=reattestation_failed");
++        expect(result.partialState.completedSteps).not.toContain("activate");
++      }
++    } finally { await closeOfflineBuild(result); }
++  } finally { fixture.dispose(); }
++}, 15000);
+diff --git a/test/phase3b/settings-sources.test.ts b/test/phase3b/settings-sources.test.ts
+new file mode 100644
+index 0000000..d69be84
+--- /dev/null
++++ b/test/phase3b/settings-sources.test.ts
+@@ -0,0 +1,48 @@
++import { expect, test } from "bun:test";
++import { mkdirSync, rmSync, writeFileSync } from "node:fs";
++import { join } from "node:path";
++import { managedSettingsDirectory } from "../../apps/madbridge/src/tui/live/managed-settings";
++import { settingsSources } from "../../apps/madbridge/src/tui/live/settings-sources";
++import { offlineStart } from "./offline";
++
++test("managed settings selects the platform folder and refuses an unsupported platform", () => {
++  const mac = "/Library/Application Support/ClaudeCode", linux = "/etc/claude-code";
++  expect(managedSettingsDirectory("darwin")).toBe(mac);
++  expect(managedSettingsDirectory("linux")).toBe(linux);
++  expect(managedSettingsDirectory("win32")).toBeUndefined();
++  expect(managedSettingsDirectory(process.platform)).toBe(process.platform === "darwin" ? mac : linux);
++  const f = offlineStart();
++  try {
++    expect(settingsSources(f.work, f.config, f.managed, "win32")).toEqual({ ok: false, cause: "managed_settings_platform_unsupported" });
++  } finally { f.dispose(); }
++});
++
++test("managed settings refuses unvalidated files and the governed remote copy", () => {
++  const f = offlineStart();
++  const check = () => settingsSources(f.work, f.config, f.managed);
++  try {
++    const fragments = join(f.managed, "managed-settings.d");
++    mkdirSync(fragments);
++    writeFileSync(join(fragments, ".hidden.json"), "{}");
++    mkdirSync(join(fragments, "folder.json"));
++    writeFileSync(join(fragments, "notes"), "");
++    expect(check().ok).toBe(true);
++    for (const path of [join(fragments, "policy.json"), join(f.managed, "managed-mcp.json")]) {
++      writeFileSync(path, "{}");
++      expect(check()).toEqual({ ok: false, cause: "managed_settings_unvalidated_source" });
++      rmSync(path);
++    }
++    writeFileSync(join(f.config, "remote-settings.json"), "{}");
++    expect(check()).toEqual({ ok: false, cause: "managed_settings_remote_copy" });
++  } finally { f.dispose(); }
++});
++
++test("settings sources include the supplied user, managed, project and local directories", () => {
++  const f = offlineStart();
++  try {
++    const sources = settingsSources(f.work, f.config, f.managed);
++    expect(sources.ok).toBe(true);
++    if (sources.ok) expect(sources.paths).toEqual([join(f.config, "settings.json"), join(f.managed, "managed-settings.json"),
++      join(f.work, ".claude", "settings.json"), join(f.work, ".claude", "settings.local.json")]);
++  } finally { f.dispose(); }
++});
+diff --git a/test/phase3b/stand-in.ts b/test/phase3b/stand-in.ts
+new file mode 100644
+index 0000000..2d9198f
+--- /dev/null
++++ b/test/phase3b/stand-in.ts
+@@ -0,0 +1,69 @@
++import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
++import { basename, dirname, join } from "node:path";
++
++// Installed as a script in a private bin directory by the offline scenarios.
++if (import.meta.main) {
++  const executable = process.argv[1]!.replace(/\.ts$/, "");
++  const root = dirname(dirname(executable));
++  process.chdir(join(root, "work"));
++  process.on("SIGTERM", () => process.exit(0));
++  const claude = basename(executable) === "madbridge-claude-v5";
++  const surface = claude ? "claude-code" : "madv-surface";
++  const record = (s: string) => appendFileSync(join(root, "trace"), surface + " " + s + "\n");
++  const emit = (...events: unknown[]) => writeFileSync(1, events.map(e => JSON.stringify(e) + "\n").join(""));
++  const mode = readFileSync(join(root, "scenario"), "utf8");
++  const model = process.argv[process.argv.indexOf("--model") + 1];
++  const stamp = { session_id: "synthetic-wire", ts: "2026-11-23T00:00:00.000Z" };
++  const identity = { provider: "minimax", profile: "minimax", endpoint_host: "api.minimax.io" };
++  const init = claude ? { ...stamp, type: "system", subtype: "init", model, claude_code_version: "2.1.325" }
++    : { ...stamp, ...identity, type: "system", subtype: "init", surface, surface_version: "0.1.2", requested_model: model, tools: [] };
++  const response = { ...stamp, ...identity, type: "model_response", response_model: model,
++    response_id: "synthetic-response", response_independence_domain: "minimax", tls_verified_host: "api.minimax.io" };
++  const assistant = claude ? { ...stamp, type: "assistant", message: { id: "offline-response", model, content: [{ type: "text", text: model }] } }
++    : { ...stamp, type: "assistant", response_model: model };
++  const result = { ...stamp, type: "result", subtype: "success", is_error: false, num_turns: 1,
++    modelUsage: { [model ?? "offline"]: { canonicalModel: model, provider: "firstParty" } } };
++  const prompt = "Reply with your model identifier and nothing else.";
++  if (process.argv.includes("auth")) {
++    record("auth probe");
++    emit(claude ? { loggedIn: true, authMethod: "claude.ai", apiProvider: "firstParty", subscriptionType: "max" }
++      : { loggedIn: true, authMethod: "plan_key", profile: "minimax", provider: "minimax", endpointHost: "api.minimax.io",
++          verified: true, verifyMethod: "read_only_endpoint" });
++  } else if (!process.stdin.isTTY) {
++    const input = JSON.parse(readFileSync(0, "utf8"));
++    if (input.message.content !== (claude ? "Report session initialization." : prompt) || input.no_tools !== undefined) process.exit(2);
++    record("identity probe");
++    if (claude) emit(init); else emit(init, response, assistant, result);
++  } else {
++    record("launch");
++    let tail = "", count = 0;
++    process.stdin.setEncoding("utf8");
++    function accept(chunk: string) {
++      tail += chunk;
++      let end: number;
++      while ((end = tail.indexOf("\n")) >= 0) {
++        const frame = JSON.parse(tail.slice(0, end));
++        tail = tail.slice(end + 1);
++        count++;
++        if (count > 1) { record("extra write"); continue; }
++        if (frame.message.content !== prompt || (claude ? frame.no_tools !== undefined : frame.no_tools !== true)) process.exit(3);
++        record(claude ? "attestation write" : "attestation write no_tools=true");
++        if (mode === "cancel" && claude) continue;
++        if (mode === "attestation" && claude) { emit({ ...init, model: "wrong-synthetic-model" }); continue; }
++        if (claude) emit(init, assistant, result); else emit(init, response, assistant, result);
++        record("result success");
++        if ((mode === "fallback" && claude) || (mode === "madv-auth" && !claude)) {
++          const timer = setInterval(() => {
++            if (!existsSync(join(root, "release-monitor"))) return;
++            clearInterval(timer);
++            const subtype = claude ? "model_refusal_fallback" : "auth_failed";
++            record(subtype);
++            emit({ ...stamp, type: "system", subtype });
++          }, 5);
++        }
++      }
++    }
++    process.stdin.on("data", accept);
++    process.stdin.resume();
++  }
++}
+diff --git a/test/phase3b/wire-facts.ts b/test/phase3b/wire-facts.ts
+new file mode 100644
+index 0000000..a4cb77c
+--- /dev/null
++++ b/test/phase3b/wire-facts.ts
+@@ -0,0 +1,38 @@
++export interface WireFact { kind: string; bytes?: Uint8Array; code?: number | null; signal?: string | null }
++
++// A silent stream stays parked until a fact arrives or the owner ends the
++// stand-in, just as the production rollback settles the host's fact pump.
++export function wireFacts() {
++  const facts: WireFact[] = [];
++  let wake: (() => void) | undefined;
++  let ended = false;
++  let opened = 0, closed = 0;
++  const writes: string[] = [];
++  const failures: string[] = [];
++  const controller = new AbortController();
++  function push(fact: WireFact) { facts.push(fact); wake?.(); }
++  function end() { ended = true; wake?.(); }
++  async function* stream() {
++    opened++;
++    try {
++      for (;;) {
++        const fact = facts.shift();
++        if (fact) { yield fact; continue; }
++        if (ended) return;
++        await new Promise<void>(resolve => { wake = resolve; });
++      }
++    } finally { wake = undefined; closed++; }
++  }
++  return {
++    signal: controller.signal, controller, writes, failures,
++    get opened() { return opened; }, get closed() { return closed; },
++    host: { handle: { facts: stream, send(frame: { kind: "input"; bytes: Uint8Array }) {
++      if (!opened || closed) throw new Error("stand-in write without a live subscription");
++      writes.push(new TextDecoder().decode(frame.bytes));
++    } } },
++    reportFailure(cause: string) { failures.push(cause); end(); },
++    push, end,
++    text(text: string) { push({ kind: "output", bytes: new TextEncoder().encode(text) }); },
++    events(...events: unknown[]) { push({ kind: "output", bytes: new TextEncoder().encode(events.map(e => JSON.stringify(e) + "\n").join("")) }); },
++  };
++}
