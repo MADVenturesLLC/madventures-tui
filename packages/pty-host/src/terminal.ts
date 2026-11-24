@@ -76,6 +76,7 @@ export function spawnGoverned(
       }
     },
   });
+  terminal.localFlags &= ~8; // ECHO on macOS and Linux.
   const child = Bun.spawn([path, ...argv], {
     terminal,
     detached: true,
