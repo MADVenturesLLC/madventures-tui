@@ -31,7 +31,7 @@ export function offlineStart() {
     const statusSha256 = hash(git("status", "--porcelain=v1", "-z"));
     const claude = ADAPTER_REGISTRY.get(parseSurfaceId("claude-code"))!;
     const madv = ADAPTER_REGISTRY.get(parseSurfaceId("madv-surface"))!;
-    const now = "2026-11-23T00:00:00.000Z";
+    const now = new Date().toISOString();
     const unsigned = {
       protocol_version: "madbridge-protocol/v1", task_id: "offline-m1", authorization_reference: "OFFLINE-M1",
       repository: join(work, ".git"), worktree: work, branch: "offline",
@@ -47,7 +47,7 @@ export function offlineStart() {
         allowedArtifactCategories: ["test-result"], maxArtifactSizeBytes: 1024, dataClass: "internal", allowedEgressDestinations: [] },
       pair_constraints: { required_roles: ["builder", "independent-reviewer"], require_distinct_providers: true,
         require_distinct_independence_domains: true, prohibit_self_review: true },
-      created_at: now, expires_at: "2026-11-24T00:00:00.000Z",
+      created_at: now, expires_at: new Date(Date.parse(now) + 86_400_000).toISOString(),
     };
     const envelope = parseTaskEnvelope({ ...unsigned, envelope_hash: sha256CanonicalSync(unsigned) });
     const plan: LaunchPlan = {
