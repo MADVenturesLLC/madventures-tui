@@ -104,3 +104,27 @@ test("madv preserves a later partial event and checks later responses", async ()
   expect(wire.opened).toBe(1);
   expect(wire.failures).toEqual(["model_refused"]);
 });
+
+test("madv attestation reports auth_failed from the surface's system/auth_failed event", async () => {
+  await rejects([init, { ...stamp, type: "system", subtype: "auth_failed" }], "auth_failed", "surface_fail_closed");
+});
+
+const registrationWithExitNine = { ...registration, auth_failure_detection: ["system/auth_failed", "exit_code:9"] };
+for (const sample of [
+  { code: 5, cause: "auth_failed", registration },
+  { code: 9, cause: "auth_failed", registration: registrationWithExitNine },
+  { code: 1, cause: "provider_error", registration },
+] as const) {
+  test(`madv attestation reports ${sample.cause} for exit code ${sample.code} before model_response`, async () => {
+    const wire = wireFacts();
+    const verdict = attestMadvSession({
+      ...wire, model, registration: sample.registration, executionId: "synthetic-execution", sessionId: "synthetic-session",
+    });
+    wire.events(init);
+    wire.push({ kind: "exited", code: sample.code, signal: null });
+    wire.end();
+    expect(await verdict).toEqual({
+      ok: false, surface: "madv-surface", cause: sample.cause, reason: sample.cause, parserReason: "exit",
+    });
+  });
+}

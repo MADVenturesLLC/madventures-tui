@@ -117,3 +117,37 @@ test("Claude hands a partial line to its monitor and interrupts on fallback or m
     expect(wire.opened).toBe(1);
   }
 });
+
+const retryRegistration = {
+  supported_versions: ["supported"],
+  auth_failure_detection: [
+    "system/api_retry.error:authentication_failed",
+    "system/api_retry.error:oauth_org_not_allowed",
+  ],
+};
+
+for (const error of ["authentication_failed", "oauth_org_not_allowed"]) {
+  const retry = { type: "system", subtype: "api_retry", session_id: id, error };
+
+  test(`Claude attestation reports auth_failed for ${error}`, async () => {
+    const wire = wireFacts();
+    const verdict = attestClaudeSession({ ...wire, model, registration: retryRegistration });
+    wire.events(init, retry);
+    wire.end();
+    expect(await verdict).toEqual({ ok: false, surface: "claude-code", cause: "auth_failed", reason: "auth_failed" });
+  });
+
+  test(`Claude monitor reports auth_failed for ${error} after handover`, async () => {
+    const wire = wireFacts();
+    const failure = Promise.withResolvers<string>();
+    const verdict = attestClaudeSession({
+      ...wire, model, registration: retryRegistration,
+      reportFailure(cause) { wire.reportFailure(cause); failure.resolve(cause); },
+    });
+    wire.events(init, assistant, result);
+    expect((await verdict).ok).toBe(true);
+    wire.events(retry);
+    wire.end();
+    expect(await failure.promise).toBe("auth_failed");
+  });
+}

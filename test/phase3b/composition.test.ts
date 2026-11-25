@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { repeatInstalledAttester, runOfflineScenario } from "./scenarios";
+import { repeatInstalledAttester, runOfflineScenario, runStartupSignal } from "./scenarios";
 
 test("both stand-ins pass probes and attestation before present", async () => {
   const result = await runOfflineScenario("healthy");
@@ -66,3 +66,17 @@ test("monitor failures after activation durably interrupt with the registered re
   expect(failure.presented).toBe(false);
   expect(failure.detail).toContain("surface=claude-code cause=identity_mismatch");
 }, 90_000);
+
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  test(`composition cancels startup on ${signal} and restores both signal listener counts`, async () => {
+    const result = await runStartupSignal(signal);
+    expect(result.countAtRaise).toBe(1);
+    expect(result.soleCompositionListener).toBe(true);
+    expect(result.emitted).toBe(true);
+    expect(result.detail).toContain("surface=claude-code cause=attestation_cancelled");
+    expect(result.code).toBe(1);
+    expect(result.presented).toBe(false);
+    expect(result.groupsEnded).toBe(true);
+    expect(result.after).toEqual(result.before);
+  }, 45_000);
+}

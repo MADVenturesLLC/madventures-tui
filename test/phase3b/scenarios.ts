@@ -110,3 +110,49 @@ export async function repeatInstalledAttester(target: string) {
     finally { await closeOfflineBuild(build); }
   } finally { f.dispose(); }
 }
+
+export async function runStartupSignal(signal: "SIGINT" | "SIGTERM") {
+  const f = prepare("cancel");
+  const controller = new AbortController();
+  const listenerCounts = () => ({
+    SIGINT: process.listenerCount("SIGINT"),
+    SIGTERM: process.listenerCount("SIGTERM"),
+  });
+  const before = listenerCounts();
+  let presented = false;
+  try {
+    const starting = composeLiveSession({
+      envelope: f.envelope, preflight: { ...f.input, signal: controller.signal },
+      workingDirectory: f.work, configFolder: f.config, managedFolder: f.managed,
+      present() { presented = true; },
+    });
+    // Composition installs its once listener synchronously before preflight.
+    const installed = process.listeners(signal);
+    let countAtRaise = 0, soleCompositionListener = false, emitted = false;
+    let outcome;
+    try {
+      await until(() => f.trace().includes("claude-code attestation write"));
+      const listeners = process.listeners(signal);
+      countAtRaise = listeners.length;
+      soleCompositionListener = before[signal] === 0 && installed.length === 1 &&
+        countAtRaise === 1 && listeners[0] === installed[0];
+      if (soleCompositionListener) emitted = process.emit(signal, signal);
+    } finally {
+      // A missing or foreign listener must not receive a synthetic signal.
+      if (!emitted) controller.abort();
+      outcome = await starting;
+      if (outcome.exitCode === 0) await outcome.close();
+    }
+    const after = listenerCounts();
+    const groupsEnded = ["madbridge-claude-v5", "madv-surface"].every(executable => {
+      const file = join(f.bin, executable + ".pid");
+      if (!existsSync(file)) return false;
+      const pid = Number(readFileSync(file, "utf8"));
+      if (!Number.isSafeInteger(pid) || pid <= 1) throw new Error("invalid stand-in pid");
+      try { process.kill(-pid, 0); return false; }
+      catch (error) { return (error as NodeJS.ErrnoException).code === "ESRCH"; }
+    });
+    return { before, countAtRaise, soleCompositionListener, emitted, after, presented, groupsEnded,
+      code: outcome.exitCode, detail: outcome.exitCode === 1 ? outcome.detail : "" };
+  } finally { f.dispose(); }
+}

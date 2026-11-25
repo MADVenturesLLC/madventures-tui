@@ -401,3 +401,13 @@ test("preflight rejects every unlisted settings control and invalid value shape"
     }
   } finally { f.dispose(); }
 }, 30_000);
+
+test("preflight refuses skillOverrides strings other than off as auth_not_ready", async () => {
+  const fixture = governedSettingsFixture();
+  try {
+    for (const value of ["on", "OFF", ""]) {
+      const result = await fixture.run({ skillOverrides: { example: value } });
+      expect(result.ok ? "unexpected success" : result.failure).toBe("auth_not_ready");
+    }
+  } finally { fixture.dispose(); }
+});
