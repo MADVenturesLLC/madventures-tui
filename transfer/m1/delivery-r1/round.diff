@@ -1,0 +1,175 @@
+diff --git a/packages/adapter-claude-code/test/live.test.ts b/packages/adapter-claude-code/test/live.test.ts
+index bceb820..baca3fa 100644
+--- a/packages/adapter-claude-code/test/live.test.ts
++++ b/packages/adapter-claude-code/test/live.test.ts
+@@ -117,3 +117,37 @@ test("Claude hands a partial line to its monitor and interrupts on fallback or m
+     expect(wire.opened).toBe(1);
+   }
+ });
++
++const retryRegistration = {
++  supported_versions: ["supported"],
++  auth_failure_detection: [
++    "system/api_retry.error:authentication_failed",
++    "system/api_retry.error:oauth_org_not_allowed",
++  ],
++};
++
++for (const error of ["authentication_failed", "oauth_org_not_allowed"]) {
++  const retry = { type: "system", subtype: "api_retry", session_id: id, error };
++
++  test(`Claude attestation reports auth_failed for ${error}`, async () => {
++    const wire = wireFacts();
++    const verdict = attestClaudeSession({ ...wire, model, registration: retryRegistration });
++    wire.events(init, retry);
++    wire.end();
++    expect(await verdict).toEqual({ ok: false, surface: "claude-code", cause: "auth_failed", reason: "auth_failed" });
++  });
++
++  test(`Claude monitor reports auth_failed for ${error} after handover`, async () => {
++    const wire = wireFacts();
++    const failure = Promise.withResolvers<string>();
++    const verdict = attestClaudeSession({
++      ...wire, model, registration: retryRegistration,
++      reportFailure(cause) { wire.reportFailure(cause); failure.resolve(cause); },
++    });
++    wire.events(init, assistant, result);
++    expect((await verdict).ok).toBe(true);
++    wire.events(retry);
++    wire.end();
++    expect(await failure.promise).toBe("auth_failed");
++  });
++}
+diff --git a/packages/adapter-madv-surface/test/live.test.ts b/packages/adapter-madv-surface/test/live.test.ts
+index 7230fa7..dd3093d 100644
+--- a/packages/adapter-madv-surface/test/live.test.ts
++++ b/packages/adapter-madv-surface/test/live.test.ts
+@@ -104,3 +104,27 @@ test("madv preserves a later partial event and checks later responses", async ()
+   expect(wire.opened).toBe(1);
+   expect(wire.failures).toEqual(["model_refused"]);
+ });
++
++test("madv attestation reports auth_failed from the surface's system/auth_failed event", async () => {
++  await rejects([init, { ...stamp, type: "system", subtype: "auth_failed" }], "auth_failed", "surface_fail_closed");
++});
++
++const registrationWithExitNine = { ...registration, auth_failure_detection: ["system/auth_failed", "exit_code:9"] };
++for (const sample of [
++  { code: 5, cause: "auth_failed", registration },
++  { code: 9, cause: "auth_failed", registration: registrationWithExitNine },
++  { code: 1, cause: "provider_error", registration },
++] as const) {
++  test(`madv attestation reports ${sample.cause} for exit code ${sample.code} before model_response`, async () => {
++    const wire = wireFacts();
++    const verdict = attestMadvSession({
++      ...wire, model, registration: sample.registration, executionId: "synthetic-execution", sessionId: "synthetic-session",
++    });
++    wire.events(init);
++    wire.push({ kind: "exited", code: sample.code, signal: null });
++    wire.end();
++    expect(await verdict).toEqual({
++      ok: false, surface: "madv-surface", cause: sample.cause, reason: sample.cause, parserReason: "exit",
++    });
++  });
++}
+diff --git a/packages/supervisor/test/preflight.test.ts b/packages/supervisor/test/preflight.test.ts
+index ba5d71e..67f95ab 100644
+--- a/packages/supervisor/test/preflight.test.ts
++++ b/packages/supervisor/test/preflight.test.ts
+@@ -401,3 +401,13 @@ test("preflight rejects every unlisted settings control and invalid value shape"
+     }
+   } finally { f.dispose(); }
+ }, 30_000);
++
++test("preflight refuses skillOverrides strings other than off as auth_not_ready", async () => {
++  const fixture = governedSettingsFixture();
++  try {
++    for (const value of ["on", "OFF", ""]) {
++      const result = await fixture.run({ skillOverrides: { example: value } });
++      expect(result.ok ? "unexpected success" : result.failure).toBe("auth_not_ready");
++    }
++  } finally { fixture.dispose(); }
++});
+diff --git a/test/phase3b/composition.test.ts b/test/phase3b/composition.test.ts
+index 1659bdb..06743f8 100644
+--- a/test/phase3b/composition.test.ts
++++ b/test/phase3b/composition.test.ts
+@@ -1,5 +1,5 @@
+ import { expect, test } from "bun:test";
+-import { repeatInstalledAttester, runOfflineScenario } from "./scenarios";
++import { repeatInstalledAttester, runOfflineScenario, runStartupSignal } from "./scenarios";
+ 
+ test("both stand-ins pass probes and attestation before present", async () => {
+   const result = await runOfflineScenario("healthy");
+@@ -66,3 +66,17 @@ test("monitor failures after activation durably interrupt with the registered re
+   expect(failure.presented).toBe(false);
+   expect(failure.detail).toContain("surface=claude-code cause=identity_mismatch");
+ }, 90_000);
++
++for (const signal of ["SIGINT", "SIGTERM"] as const) {
++  test(`composition cancels startup on ${signal} and restores both signal listener counts`, async () => {
++    const result = await runStartupSignal(signal);
++    expect(result.countAtRaise).toBe(1);
++    expect(result.soleCompositionListener).toBe(true);
++    expect(result.emitted).toBe(true);
++    expect(result.detail).toContain("surface=claude-code cause=attestation_cancelled");
++    expect(result.code).toBe(1);
++    expect(result.presented).toBe(false);
++    expect(result.groupsEnded).toBe(true);
++    expect(result.after).toEqual(result.before);
++  }, 45_000);
++}
+diff --git a/test/phase3b/scenarios.ts b/test/phase3b/scenarios.ts
+index b0b1804..82eda36 100644
+--- a/test/phase3b/scenarios.ts
++++ b/test/phase3b/scenarios.ts
+@@ -110,3 +110,49 @@ export async function repeatInstalledAttester(target: string) {
+     finally { await closeOfflineBuild(build); }
+   } finally { f.dispose(); }
+ }
++
++export async function runStartupSignal(signal: "SIGINT" | "SIGTERM") {
++  const f = prepare("cancel");
++  const controller = new AbortController();
++  const listenerCounts = () => ({
++    SIGINT: process.listenerCount("SIGINT"),
++    SIGTERM: process.listenerCount("SIGTERM"),
++  });
++  const before = listenerCounts();
++  let presented = false;
++  try {
++    const starting = composeLiveSession({
++      envelope: f.envelope, preflight: { ...f.input, signal: controller.signal },
++      workingDirectory: f.work, configFolder: f.config, managedFolder: f.managed,
++      present() { presented = true; },
++    });
++    // Composition installs its once listener synchronously before preflight.
++    const installed = process.listeners(signal);
++    let countAtRaise = 0, soleCompositionListener = false, emitted = false;
++    let outcome;
++    try {
++      await until(() => f.trace().includes("claude-code attestation write"));
++      const listeners = process.listeners(signal);
++      countAtRaise = listeners.length;
++      soleCompositionListener = before[signal] === 0 && installed.length === 1 &&
++        countAtRaise === 1 && listeners[0] === installed[0];
++      if (soleCompositionListener) emitted = process.emit(signal, signal);
++    } finally {
++      // A missing or foreign listener must not receive a synthetic signal.
++      if (!emitted) controller.abort();
++      outcome = await starting;
++      if (outcome.exitCode === 0) await outcome.close();
++    }
++    const after = listenerCounts();
++    const groupsEnded = ["madbridge-claude-v5", "madv-surface"].every(executable => {
++      const file = join(f.bin, executable + ".pid");
++      if (!existsSync(file)) return false;
++      const pid = Number(readFileSync(file, "utf8"));
++      if (!Number.isSafeInteger(pid) || pid <= 1) throw new Error("invalid stand-in pid");
++      try { process.kill(-pid, 0); return false; }
++      catch (error) { return (error as NodeJS.ErrnoException).code === "ESRCH"; }
++    });
++    return { before, countAtRaise, soleCompositionListener, emitted, after, presented, groupsEnded,
++      code: outcome.exitCode, detail: outcome.exitCode === 1 ? outcome.detail : "" };
++  } finally { f.dispose(); }
++}
