@@ -1,3 +1,5 @@
+import { detectMadvFailure } from "./detectors";
+
 // DEC-20261115-02 B3-B5; Phase 3B design 2.6. Pure parsing only:
 // the PTY host owns launch, and M1 owns interruption and timer wiring.
 export type MadvFailureCause =
@@ -6,6 +8,8 @@ export type MadvFailureCause =
 const identityProbe = Symbol("identity probe");
 export interface MadvContext {
   readonly [identityProbe]?: boolean;
+  readonly authFailureDetection?: readonly string[];
+  readonly onAttested?: (version: string) => void;
   readonly executionId: string;
   readonly sessionId: string;
   readonly model: string;
@@ -51,6 +55,9 @@ function failure(context: Pick<MadvContext, "executionId" | "sessionId">, cause:
 export function encodeUserInput(text: string): string {
   return JSON.stringify({ type: "user", message: { role: "user", content: text } }) + "\n";
 }
+export function encodeAttestationInput(text: string): string {
+  return JSON.stringify({ type: "user", message: { role: "user", content: text }, no_tools: true }) + "\n";
+}
 function eventCause(subtype: unknown): MadvFailureCause | undefined {
   switch (subtype) {
     case "auth_failed": return "auth_failed";
@@ -73,6 +80,10 @@ export class MadvSurfaceParser {
   private readonly events: BoundMadvEvent[] = [];
   private readonly decoder = new TextDecoder("utf-8", { fatal: true });
   private buffer = "";
+  private version = "";
+  private attested = false;
+  private policyFailure?: "attestation_tool_call" | "attestation_round_trips";
+  get attestationFailure() { return this.policyFailure; }
   private wireSession: string | undefined;
   private state: "init" | "waiting" | "response" | "tools" | "between" = "init";
   private readonly tools = new Map<string, string>();
@@ -124,7 +135,21 @@ export class MadvSurfaceParser {
     let value: unknown;
     try { value = JSON.parse(line); } catch { this.fail("identity_mismatch", "malformed_stream"); return; }
     if (!object(value)) { this.fail("identity_mismatch", "malformed_event"); return; }
-    const cause = value.type === "system" ? eventCause(value.subtype) : undefined;
+    const attesting = this.context.onAttested !== undefined && !this.attested;
+    if (attesting && (value.type === "tool_use" || value.type === "tool_result" ||
+      (value.type === "system" && value.subtype === "provider_error" && value.code === "unexpected_tool_call"))) {
+      this.policyFailure ??= "attestation_tool_call";
+      this.fail("provider_error", "unexpected_tool_call");
+      return;
+    }
+    if (attesting && value.type === "model_response" && this.responses > 0) {
+      this.policyFailure ??= "attestation_round_trips";
+      this.fail("identity_mismatch", "extra_model_response");
+      return;
+    }
+    const detected = this.context.authFailureDetection && detectMadvFailure(this.context.authFailureDetection,
+      { kind: "event", type: value.type, subtype: value.subtype });
+    const cause = detected?.cause ?? (value.type === "system" ? eventCause(value.subtype) : undefined);
     // A later explicit failure can outrank an earlier identity difference.
     // No further successful event or tool can escape a failed parser.
     if (cause !== undefined) {
@@ -148,6 +173,7 @@ export class MadvSurfaceParser {
       if (this.context[identityProbe] && (!Array.isArray(value.tools) || value.tools.length !== 0)) {
         this.fail("identity_mismatch", "init_tools"); return;
       }
+      this.version = value.surface_version;
       this.wireSession = value.session_id; this.state = "waiting";
     } else if (value.type === "model_response") {
       if (this.state !== "waiting" && !(this.state === "tools" && this.tools.size === 0)) { this.fail("identity_mismatch", "event_order"); return; }
@@ -178,9 +204,15 @@ export class MadvSurfaceParser {
     } else if (value.type === "result") {
       if ((this.state !== "response" && this.state !== "tools") || this.tools.size !== 0) { this.fail("identity_mismatch", "event_order"); return; }
       if (value.is_error !== false || value.subtype !== "success") { this.fail("provider_error", "result_error"); return; }
+      if (attesting && !this.assistantSeen) { this.fail("identity_mismatch", "assistant_missing"); return; }
       this.state = "between";
+      if (attesting) {
+        this.attested = true;
+        this.context.onAttested?.(this.version);
+      }
     } else { this.fail("identity_mismatch", "event_order"); return; }
-    this.events.push(Object.freeze({ executionId: this.context.executionId, sessionId: this.context.sessionId, event: freezeEvent(value) }));
+    // A live monitor consumes events in place and needs no session-long replay.
+    if (!this.context.onAttested) this.events.push(Object.freeze({ executionId: this.context.executionId, sessionId: this.context.sessionId, event: freezeEvent(value) }));
   }
   finish(exitCode: number, signal: string | number | null = null): MadvResult {
     if (!this.finished) {
@@ -199,6 +231,7 @@ export class MadvSurfaceParser {
         default: this.fail("provider_error", "unknown_exit");
       }
       if (!this.failed && (this.responses === 0 || this.waitingForEvidence)) this.fail("identity_unavailable", "model_response_missing");
+      if (!this.failed && this.context.onAttested && !this.attested) this.fail("identity_unavailable", "result_missing");
       if (!this.failed && this.tools.size !== 0) this.fail("identity_mismatch", "event_order");
     }
     return this.snapshot();
@@ -220,3 +253,6 @@ export function parseMadvAuthReadiness(output: string, exitCode = 0, signal: str
     return Object.freeze({ ok: true, events: Object.freeze([]), modelResponses: 0 });
   } catch { return failure(context, "auth_failed", "auth_predicate"); }
 }
+
+export { attestMadvSession } from "./live";
+export { detectMadvFailure } from "./detectors";

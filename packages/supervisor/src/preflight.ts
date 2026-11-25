@@ -80,7 +80,7 @@ function fingerprint(root: string, worktree: string, d: PreflightDependencies): 
   return Object.freeze({ root: canonicalRoot, worktree: canonicalWorktree, head, statusSha256: hash(git(["status", "--porcelain=v1", "-z"])) });
 }
 
-function validateEnvironment(input: PreflightInput, registrations: readonly AdapterRegistrationV1[], d: PreflightDependencies): boolean {
+function validateEnvironment(input: PreflightInput, registrations: readonly AdapterRegistrationV1[], d: PreflightDependencies, claudeModel: string | undefined): boolean {
   const u = userInfo(); const p = input.installation; const env = input.ambient;
   if (u.uid !== p.installation_uid || u.homedir !== p.passwd_home || env.SHELL !== u.shell || !env.TERM) return false;
   if (env.PATH !== p.approved_path || !p.approved_path) return false;
@@ -98,6 +98,33 @@ function validateEnvironment(input: PreflightInput, registrations: readonly Adap
     if (p.claude_config_dir !== join(p.passwd_home, ".claude-madventures-v5") || env.CLAUDE_CONFIG_DIR !== p.claude_config_dir) return false;
     if (input.invocationArguments.some(arg => arg === "--settings" || arg.startsWith("--settings="))) return false;
     const allowed = new Set(["HOME", "PATH", "SHELL", "TERM", "TMPDIR", "CLAUDE_CONFIG_DIR", "LANG", "LC_ALL", "LC_CTYPE", "USER"]);
+    const object = (v: unknown): v is Record<string, unknown> =>
+      v !== null && typeof v === "object" && !Array.isArray(v);
+    const effort = (v: unknown): boolean => typeof v === "string" && ["low", "medium", "high", "xhigh", "max"].includes(v);
+    function allowedSetting(key: string, value: unknown): boolean {
+      switch (key) {
+        case "env":
+          return object(value) && Object.entries(value).every(([name, setting]) =>
+            name === "DISABLE_AUTOUPDATER" ? setting === "1" :
+              allowed.has(name) && typeof setting === "string" && env[name] === setting);
+        case "permissions":
+          return object(value) && Object.keys(value).length === 2 && value.defaultMode === "dontAsk" &&
+            Array.isArray(value.deny) && value.deny.every(item => typeof item === "string");
+        case "enabledPlugins": return object(value) && Object.values(value).every(v => v === false);
+        case "skillOverrides": return object(value) && Object.values(value).every(v => v === "off");
+        case "autoMemoryEnabled": return value === false;
+        case "disableAllHooks": case "disableClaudeAiConnectors": return value === true;
+        case "model": return typeof value === "string" && value === claudeModel;
+        case "effortLevel": return effort(value);
+        case "modelSettings": return object(value) && Object.values(value).every(setting =>
+          object(setting) && Object.keys(setting).length === 1 && effort(setting.effortLevel));
+        case "agentPushNotifEnabled": case "inputNeededNotifEnabled": case "autoCompactEnabled":
+        case "verbose": return typeof value === "boolean";
+        case "editorMode": return value === "normal" || value === "vim";
+        case "theme": return typeof value === "string" && value.length <= 64 && !/[^a-zA-Z0-9-]/.test(value);
+        default: return false;
+      }
+    }
     for (const path of input.settingsSources) {
       if (!isAbsolute(path) || !["settings.json", "settings.local.json", "managed-settings.json"].includes(basename(path))) return false;
       let text: string;
@@ -106,16 +133,7 @@ function validateEnvironment(input: PreflightInput, registrations: readonly Adap
         return false;
       }
       const settings = JSON.parse(text);
-      if (!settings || typeof settings !== "object" || Array.isArray(settings)) return false;
-      // Fail closed on unknown settings controls: a future provider/endpoint
-      // selector cannot silently become authorized by an old validator.
-      for (const key of Object.keys(settings)) if (key !== "env") return false;
-      if (settings.env !== undefined) {
-        if (!settings.env || typeof settings.env !== "object" || Array.isArray(settings.env)) return false;
-        for (const [key, value] of Object.entries(settings.env)) {
-          if (!allowed.has(key) || typeof value !== "string" || env[key] !== value) return false;
-        }
-      }
+      if (!object(settings) || !Object.entries(settings).every(([key, value]) => allowedSetting(key, value))) return false;
     }
   }
   return true;
@@ -152,7 +170,7 @@ export async function runPurePreflightWithDependencies(input: PreflightInput, ov
   for (const [index, execution] of envelope.executions.entries()) {
     if (admitted[index]!.surface === "madv-surface" && execution.role !== "independent-reviewer") return fail("pair_ineligible");
   }
-  try { if (!validateEnvironment(input, admitted, d)) return fail("auth_not_ready"); }
+  try { if (!validateEnvironment(input, admitted, d, envelope.executions.find(e => e.surface === "claude-code")?.model)) return fail("auth_not_ready"); }
   catch { return fail("auth_not_ready"); }
   const resolved: { path: string; sha256: string }[] = [];
   try {

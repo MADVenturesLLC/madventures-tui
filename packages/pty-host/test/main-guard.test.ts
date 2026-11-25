@@ -306,7 +306,7 @@ test("a valid session lifecycle emits every fact in order exactly once, with no 
 
   host.write(encodeCommand({ kind: "input", bytes: new TextEncoder().encode("ping\n") }));
   await host.waitForFact((f) => f.kind === "ack" && f.ofKind === "input");
-  await host.waitForOutputContaining("ping\r\nping\r\n"); // local echo + /bin/cat's own echo
+  await host.waitForOutputContaining("ping\r\n"); // Output of /bin/cat.
 
   host.write(encodeCommand({ kind: "resize", cols: 90, rows: 30 }));
   await host.waitForFact((f) => f.kind === "ack" && f.ofKind === "resize");
@@ -332,7 +332,7 @@ test("a valid session lifecycle emits every fact in order exactly once, with no 
 
   const acks = facts.filter((f) => f.kind === "ack");
   expect(acks.map((f) => f.ofKind).sort()).toEqual(["input", "resize", "terminate"]);
-  expect(outputText(facts)).toBe("ping\r\nping\r\n");
+  expect(outputText(facts)).toBe("ping\r\n");
 
   const termStartedIdx = kinds.indexOf("termination_started");
   const terminateAckIdx = facts.findIndex((f) => f.kind === "ack" && f.ofKind === "terminate");
