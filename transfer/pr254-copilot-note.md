@@ -1,0 +1,17 @@
+FOUNDER NOTE ON THE COPILOT REVIEW: MADVenturesLLC/madventures-tui#254
+
+Head: 2fb92148c361ab7434d1e62e87cdeb9e59842b3f
+
+I, Michael Daley, Founder of MAD Ventures, close the two comments of Copilot's review 6063305332 on this head with no change to this pull request.
+
+1. Comment 4699513340, on packages/adapter-claude-code/src/live.ts at lines 162 to 164. In substance it is right. Once the attestation's result has passed, the reader is complete and its finish gives no cause unless a partial line remains (lines 65 to 70), so an exited or drained fact after the handover calls stop with attestation_missing (lines 162 to 164), as the end of the facts does (line 167). The build's failure path interrupts the session with the reason identity_mismatch only while it is active or paused (packages/supervisor/src/build.ts lines 638 to 648). An end of the child's output, or its exit, while the session is active or paused is therefore interrupted as identity_mismatch; a Founder close is not, since it records the session as closing before it ends the children (packages/broker/src/runtime-broker.ts lines 364 to 375).
+2. Comment 4699513419, on packages/adapter-madv-surface/src/live.ts at lines 74 to 80. Its account of the monitor is right. After the attestation, an exited fact with code 0 and no signal reaches the parser's finish, which gives no failure when the child exits between messages, or after a later model_response and before its result (packages/adapter-madv-surface/src/index.ts lines 217 to 237), so the monitor ends without reporting a failure; its sender then refuses later input (live.ts lines 60 and 87). A signal, or any exit code other than 0, is still reported. Whether the broker then keeps the session active is not established here; item 4 carries it. The two monitors thus treat the end of the child after activation differently.
+3. Neither breaches a ruling. B17 item 2c of DEC-20261123-01, with its item 4, names attestation_missing for the end of the child's output, or its exit, before an assistant event or a result; B17 items 2d and 3e name what the monitors check after the attestation; B17 item 3c takes madv-surface's failures from its parser; and B17 item 4 maps each cause to an interruption. No item rules how the end of the child's output, or the child's exit, between messages after activation is named, or whether it interrupts the session. The first monitor gives that case the cause of a missing response and fails closed; the second reports nothing where its parser gives no cause. Under B16 nothing under apps/ calls the composition before M6, so no session reaches either path before then. Neither Tier-2 review raised either point.
+4. I carry both to the act that records this merge: it rules how each surface's continuous monitor names the end of the child's output and the child's exit after activation, and whether each interrupts the session, establishing first whether the Phase 3A runtime already ends such a session by another path; and it requires the change it rules, with a test of each case on each surface, before M6 gives the composition a caller.
+5. Copilot's review is not a countable verdict under Phase 3A plan section 11.3 and adds no round. A correction commit would need a new head, a new Tier-2 review and my runs of B24 on both hosts, and this note does not call for one. This pull request merges on my merge authorization at this head, on the Tier-2 PASS that comment 7170917360 carries.
+
+— Michael Daley
+
+Date: 2026-11-25
+
+Actor-Id: founder
