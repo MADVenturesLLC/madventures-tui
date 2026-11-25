@@ -1,0 +1,38 @@
+Founder check of M1 correction round 1 before the push, under DEC-20261123-01 Addendum 3 B7: the whole session record, the resumed turns included, under DEC-20261108-03 Addendum 2 B4, as its Addenda 6 B1 and 10 B6 and DEC-20261112-02 B2 and B5 read it, with the count of code from a string of DEC-20261115-02 Addendum 3 B4.
+
+Check: h2-record-check.mjs, SHA-256 c1834dcc689e94cf57fb123a09a0600225d8e97b428c648f14276136e3dd383f, from transfer commit 730df3014bf31d2dc0770cb4d30a4a4a79e30afe, over /Users/michaeldaley/builds/m1-r1. Evidence on the MacBook: /Users/michaeldaley/builds/m1-record-check/check-20261125T150241Z, MANIFEST.sha256 fbe452e4f59069222b79dcb5e0d3fdca71fbcb56c07b306504a6f70840d2fb0d.
+
+Self-test:
+    self-test cases: 66; not as expected: 0
+    SELFTEST_OK
+
+Check:
+    records whose starting folder is /Users/michaeldaley/builds/m1-r1: 1
+    rollout-2026-11-23T01-45-43-01a20727-4377-78b1-8253-384942aea03c.jsonl: started 2026-11-23T06:45:43.425Z, cli_version 0.167.0, folder /Users/michaeldaley/builds/m1-r1
+      user messages: 0
+      event types: 13 thread_settings_applied; 1475 item_completed; 698 token_count; 9 task_complete; 9 task_started
+      turn 2026-11-23T06:46:42.711Z | model gpt-6.2-astra | effort xhigh | approval on-request | approvals reviewer user | sandbox workspace-write | network access false | folder /Users/michaeldaley/builds/m1-r1
+      turn 2026-11-23T07:15:36.848Z | model gpt-6.2-astra | effort xhigh | approval on-request | approvals reviewer user | sandbox workspace-write | network access false | folder /Users/michaeldaley/builds/m1-r1
+      turn 2026-11-23T13:22:33.763Z | model gpt-6.2-astra | effort xhigh | approval on-request | approvals reviewer user | sandbox workspace-write | network access false | folder /Users/michaeldaley/builds/m1-r1
+      turn 2026-11-23T17:22:08.389Z | model gpt-6.2-astra | effort xhigh | approval on-request | approvals reviewer user | sandbox workspace-write | network access false | folder /Users/michaeldaley/builds/m1-r1
+      turn 2026-11-23T23:02:39.638Z | model gpt-6.2-astra | effort xhigh | approval on-request | approvals reviewer user | sandbox workspace-write | network access false | folder /Users/michaeldaley/builds/m1-r1
+      turn 2026-11-24T00:07:05.398Z | model gpt-6.2-astra | effort xhigh | approval on-request | approvals reviewer user | sandbox workspace-write | network access false | folder /Users/michaeldaley/builds/m1-r1
+      turn 2026-11-24T00:29:50.382Z | model gpt-6.2-astra | effort xhigh | approval on-request | approvals reviewer user | sandbox workspace-write | network access false | folder /Users/michaeldaley/builds/m1-r1
+      turn 2026-11-24T02:33:45.755Z | model gpt-6.2-astra | effort xhigh | approval on-request | approvals reviewer user | sandbox workspace-write | network access false | folder /Users/michaeldaley/builds/m1-r1
+      turn 2026-11-24T03:35:02.518Z | model gpt-6.2-astra | effort xhigh | approval on-request | approvals reviewer user | sandbox workspace-write | network access false | folder /Users/michaeldaley/builds/m1-r1
+      turn 2026-11-24T13:03:07.805Z | model gpt-6.2-astra | effort xhigh | approval on-request | approvals reviewer user | sandbox workspace-write | network access false | folder /Users/michaeldaley/builds/m1-r1
+      turn 2026-11-25T04:23:17.963Z | model gpt-6.2-astra | effort xhigh | approval on-request | approvals reviewer user | sandbox workspace-write | network access false | folder /Users/michaeldaley/builds/m1-r1
+      turn 2026-11-25T14:11:45.727Z | model gpt-6.2-astra | effort xhigh | approval on-request | approvals reviewer user | sandbox workspace-write | network access false | folder /Users/michaeldaley/builds/m1-r1
+      top-level calls: 279 function_call wait; 403 custom_tool_call exec
+      exec calls: 403; names of Addendum 2 B4 placed as text inside exec: 0
+      calls inside exec, by called name: 10 includes; 12 notify; 12 quote; 14 q; 16 next; 28 exit; 29 replaceAll; 3 String; 4 command; 4 split; 421 exec_command; 43 run; 452 text; 5 startsWith; 54 map; 6 slice; 8 nm; 81 allSettled; 82 write_stdin
+    CHECK_OK
+
+Count, b4-count.mjs, SHA-256 2dcff5987b35e4a1e7c60e1b9229f32f7ebca58376ea0af0d39ba2b6ef647689:
+    records: 1
+    record: rollout-2026-11-23T01-45-43-01a20727-4377-78b1-8253-384942aea03c.jsonl
+    exec inputs: 403; not parsed: 0; occurrences of the six names, as any substring, in all of them: 0; calls of eval 0, Function 0, load 0, store 0; calls through a computed callee 0
+    B4_OK
+
+Head 2fb92148c361ab7434d1e62e87cdeb9e59842b3f, test commit d8818704410a72e277fc05a3a40535528b5da710, on 4630152f763baca0259d84c0d5817d0cea501145; branch build/3b-m1-r1, base 75aec139d503cbe1d34d0c6f3ac5bd514339570e.
+Build log 6875e61781cba21806929e72ef1431c633003c466d01099cbf4530f5a1acdee9; pr-body.md 7927cf4c240e598fcbb94f7b755194dc8210e6a8b43c9b564a1c3f00e1cff355; final report 7110b26e50d1efe5f18adc82f07cbf0362350c126dce86ab7dba47fef8abe744; pr-title.txt e92ca1ce72f458235121902eb2a09b254120e3a81c99606ce170b5c42113f4b9.
