@@ -2052,3 +2052,86 @@ Round 2's resolution, recorded above as pending, is now closed:
   merge commit of the pull request that files it; its builder is `session:codex/3b-m1-r1` and its
   reviewer `antigravity`; and its verdicts count under rubric milestone 6, in a count that starts at
   zero.
+
+## M1 review verdicts FAIL and PASS and M1 merged (rubric milestone 6, one round, count 1)
+
+- **Recorded:** 2026-11-25, under `DEC-20261125-01` B1 to B14 and C1, and `DEC-20261123-01` Addendum 3
+  B2.
+- **Plan milestone:** Phase 3B slice M1, live composition, health barrier and live attesters, offline
+  (`DEC-20261123-01` B13 to B26). **Rubric milestone:** 6 (`DEC-20261108-01` B9 item 2), in M1's own
+  count (`DEC-20261123-01` B15 item 3).
+- **Heads reviewed:** `4630152f763baca0259d84c0d5817d0cea501145`, then
+  `2fb92148c361ab7434d1e62e87cdeb9e59842b3f`, on PR #254 (`build/3b-m1-r1`), built by
+  `session:codex/3b-m1-r1` from binding base `75aec139d503cbe1d34d0c6f3ac5bd514339570e` under
+  `DEC-20261123-01` and its Addenda 1 to 3, SHA-256
+  `5cd930a3f2dbb8f3a85c63cfba5ed95f8088418ee132e89872d57e63fad75666`,
+  `f524cb055c363c57dbcaf25dc037645989d453a942f3ce120c7083735e6cc52c` and
+  `b7ff8171407289c4b4db9be9c76dfa049fdd8b0fe4f80076613f9aa6b48e43f7`, the builder prompt with SHA-256
+  `683951e9534f1517f68b690ceec554a3908a8dd6cebd2bd97f8791e56e6e4733` and four resume messages, the last
+  with SHA-256 `3a05d0983a06b908afcae236f0e57a0816d0a31c99b4f935319dab11e41961fa`. Before the first
+  review the session halted three times: when its runtime check ran a barred Bun; when a break wrote
+  values of its environment to log 124, which the Founder deleted under Addendum 1; and when the PTY
+  host echoed the prompt before the stand-in read it, which Addendum 2 resolved by clearing the echo bit
+  (`DEC-20261125-01` A3 and B1).
+- **First reviewer:** `antigravity`, a fresh Gemini session in Antigravity on the Founder's MacBook; the
+  report records the model as not shown. Review prompt SHA-256
+  `9a5c4f50358fe8646af345327dfbc3a6576a4f27eb244dc551721c1c99f4254a`.
+- **First verdict text SHA-256:** `882bb886a52bdfc6064af8fba96c7e986f6eaa4f778e266c076613bca2fecfae`,
+  83,621 bytes, 854 lines, saved at `/Users/michaeldaley/builds/review-m1-r1.md`, posted on PR #254 as
+  comments 7152608903 and 7152609315 by `decivantiq`.
+- **First result:** FAIL, two SUBSTANTIVE and three ADVISORY findings. Findings 1 and 2: no test gave
+  the attesters the `claude-code` cause `auth_failed`, or `madv-surface`'s causes from its events and
+  exit codes, which `DEC-20261123-01` B17 item 4 and B21 item 3 require. Findings 3 to 5: log numbers
+  the build log did not account for, a `skillOverrides` test that accepted `"on"`, and a cancellation
+  test without SIGINT and SIGTERM. **Counted:** one round, M1's first, under rubric milestone 6, and not
+  a disqualifier (`DEC-20261123-01` Addendum 3 B2 and B3).
+- **Correction round 1:** in the same builder session, under Addendum 3 B4 and the fourth resume
+  message: one commit, `d8818704410a72e277fc05a3a40535528b5da710`, adding 11 tests to four test files,
+  each shown failing on its prescribed break, and one scenario to the helper
+  `test/phase3b/scenarios.ts`; and one commit appending the round to the build log, the head. No
+  production file changed.
+- **Second reviewer:** `antigravity`, a fresh Gemini session in Antigravity on the Founder's MacBook,
+  with a model the report shows as Gemini 4 Neon (High). Review prompt SHA-256
+  `574991a7ee72772dee80f9b3b2293f19802b7f54b998a2107a04b9720f6bd173`, under Addendum 3 B8.
+- **Second verdict text SHA-256:** `96c697b746951c30b042a55f43ab6a6456d6faf74f7421c0a31844103f213796`,
+  54,417 bytes, 436 lines, saved at `/Users/michaeldaley/builds/review-m1-r2.md`, posted on PR #254 as
+  comment 7170917360 by `decivantiq`.
+- **Second result:** PASS, items 1 to 9, no SUBSTANTIVE finding. Finding 1, NOT COUNTING: the build
+  log's quote of one log drops a trailing space on two lines without saying so. Findings 2 and 3,
+  ADVISORY: no test that a `system`/`api_retry` error the registration does not name gives no
+  `auth_failed`, and none of a `madv-surface` exit code other than 1, 5 and 9 or of an exit by signal;
+  M2 answers both with tests (`DEC-20261125-01` B5). **Counted:** no round. M1's count under rubric
+  milestone 6 closes at **1**. No verdict of M1 is a disqualifier.
+- **Checks at the heads:** on the test merges of the first head and of the head into `main`,
+  `23883050ef06775975fb7331131b1115aaa62a6f` and `92bb1e328f8e9aed779396783a8cc4584c1a8420`, Verify and
+  Verify (macOS) passed with 2078 and then 2089 pass, 0 fail, across 160 files, and tui-chaos on both
+  hosts, validate-code-review, code-review, attribution-shape, CodeQL and every Analyze job succeeded.
+  The Founder's runs of `DEC-20261123-01` B24 passed at each head on the MacBook under Bun 1.4.2 and on
+  the Ubuntu PC under the custodied Bun 1.4.1; at the head, 2089 pass, 0 fail, across 160 files on each,
+  log manifests SHA-256 `f1c7438ac8abc89f4a2d053f281a7e991179500f82e7a5744b6ed143b10dd5d3` and
+  `3baa609394e758ad5d01455c1bcfba846ba79e83c16fe8db0b97e98f0c3b0c12`.
+- **Merged:** PR #254 was marked ready at the head on 2026-11-25, after the PASS was posted, and GitHub
+  then requested Copilot's review. Copilot's review 6063305332 opened two threads, on how each surface's
+  monitor treats the end of its child after activation. The Founder's note on that review, comment
+  7174298371, SHA-256 `f4d5ab0c7f6ee6471297fae2f709845081dfa8fc45e56d9d4888153896b3dc18`, found each
+  right in substance and neither a breach of a ruling, and carried both to `DEC-20261125-01`; the
+  Founder's command resolved both threads. Under the Founder's merge authorization in comment
+  7174648832, SHA-256 `652873058530601b8ad79c5f05576a5dbc9e3bdfa29911a5e6261e2e7ba6ef79`, it merged at
+  `b091b668af7db6142c5afeff16a628080885f63b`, with parents `75aec139d503cbe1d34d0c6f3ac5bd514339570e`
+  and `2fb92148c361ab7434d1e62e87cdeb9e59842b3f`, changing exactly 36 paths, 26 added and 10 modified.
+  Every run on the merge commit succeeded.
+- **Harness:** one builder session under Codex 0.167.0, the governed build of `DEC-20261108-03` Addendum
+  11. All twelve turns of its one session record, the two resumed turns included, name the model
+  `gpt-6.2-astra` and the effort `xhigh`.
+- **The end of the child after activation (`DEC-20261125-01` A11, B8 and B9):** no production path ended
+  a live session when its governed child exited or its PTY host died after activation, though Phase 3A
+  design section 3.3 requires it. The Founder ruled that from the handover each monitor watches its
+  child, that an exit to which the parser or reader gives no cause is `child_exited` and a fact stream
+  that ends with no exit is `host_exited`, and that before activation these fail the build as
+  `reattestation_failed` and after it interrupt the session with `child_failure` and `pty_host_failure`.
+  M2 builds it, before M3 routes input to the PTY hosts and before M4's session controls
+  (`DEC-20261125-01` B9).
+- **M2 (`DEC-20261125-01` B10 to B14):** `DEC-20261108-04` B4 item 4 is confirmed for M2's base.
+  `DEC-20261125-01` is M2's act: M2's binding base is the merge commit of the pull request that files
+  it; its builder is `session:codex/3b-m2-r1` and its reviewer `antigravity`; and its verdicts count
+  under rubric milestone 7, in a count that starts at zero.
