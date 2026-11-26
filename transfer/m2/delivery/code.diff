@@ -1,0 +1,1728 @@
+diff --git a/apps/madbridge/src/tui/components/DockStrip.tsx b/apps/madbridge/src/tui/components/DockStrip.tsx
+index 85c0d0f..d271778 100644
+--- a/apps/madbridge/src/tui/components/DockStrip.tsx
++++ b/apps/madbridge/src/tui/components/DockStrip.tsx
+@@ -83,7 +83,7 @@ export function buildDockLine(
+     fields.push(live);
+   } else if (isActiveWriter(state, surface)) {
+     const tok = writerToken(state, surface);
+-    fields.push("WRITER tok#" + String(tok));
++    fields.push(tok === null ? "WRITER token —" : "WRITER tok#" + String(tok));
+   }
+ 
+   fields.push(role);
+diff --git a/apps/madbridge/src/tui/components/EventLog.tsx b/apps/madbridge/src/tui/components/EventLog.tsx
+index afb7f0d..802f80c 100644
+--- a/apps/madbridge/src/tui/components/EventLog.tsx
++++ b/apps/madbridge/src/tui/components/EventLog.tsx
+@@ -34,7 +34,7 @@ export function EventLog({ entries }: Props) {
+           <text> </text>
+           <text fg={POSEIDON.lightText}>{entry.actor}</text>
+           <text> </text>
+-          <text fg={POSEIDON.cobalt}>tok:{entry.fencingToken}</text>
++          <text fg={POSEIDON.cobalt}>{entry.fencingToken === null ? "tok:—" : "tok:" + String(entry.fencingToken)}</text>
+           <text> </text>
+           <text attributes={TextAttributes.DIM}>
+             {entry.hash.slice(0, 12)}
+diff --git a/apps/madbridge/src/tui/components/IncidentBand.tsx b/apps/madbridge/src/tui/components/IncidentBand.tsx
+index d7b2d38..e980375 100644
+--- a/apps/madbridge/src/tui/components/IncidentBand.tsx
++++ b/apps/madbridge/src/tui/components/IncidentBand.tsx
+@@ -46,13 +46,13 @@ export function IncidentBand({ state }: IncidentBandProps) {
+   const incidentId = incident?.id ?? "—";
+   const timestamp = incident?.timestamp ?? "—";
+   // The retained fencing token is historical, NOT live authority.
+-  const token = state?.fencingToken ?? 0;
++  const token = state?.fencingToken;
+ 
+   // Truth boundary: a fencing token is only real evidence when one was
+   // actually issued (tokens are 1-based). A missing/zero token must never be
+   // presented as an issued token that was invalidated — that would fabricate
+   // authority history. Render an honest fallback instead.
+-  const tokenClause = token > 0
++  const tokenClause = token === null ? "token —" : token !== undefined && token > 0
+     ? "token #" + String(token) + " invalidated"
+     : "no issued token to invalidate";
+ 
+diff --git a/apps/madbridge/src/tui/components/StatusBar.tsx b/apps/madbridge/src/tui/components/StatusBar.tsx
+index c00df18..b5187d9 100644
+--- a/apps/madbridge/src/tui/components/StatusBar.tsx
++++ b/apps/madbridge/src/tui/components/StatusBar.tsx
+@@ -27,7 +27,7 @@ import { displayWidth, sliceByDisplayWidth, seatMode, seatLabel } from "./agent-
+ 
+ interface Props {
+   state: BrokerSnapshot | null;
+-  connected: boolean;
++  connected: boolean | null;
+   focus: FocusTarget;
+   /** The active Founder seat (LOCAL UI posture). When omitted, the seat
+    * fact is omitted from the line — never fabricated. */
+@@ -68,7 +68,7 @@ export function StatusBar({ state, connected, focus, seat, widthOverride }: Prop
+ // ─── Pure truncation logic (unit-testable without rendering) ───
+ 
+ export interface StatusLineInput {
+-  connected: boolean;
++  connected: boolean | null;
+   sessionWord: string;
+   ownerWord: string;
+   pendingCount: number;
+@@ -103,7 +103,7 @@ export function buildStatusLine(input: StatusLineInput): string {
+   const hasSeat = input.seatWord !== undefined && input.modeWord !== undefined;
+ 
+   // Build the fact tokens.
+-  const connToken = input.connected ? "CONNECTED" : "NOT CONNECTED";
++  const connToken = input.connected === null ? "UNKNOWN" : input.connected ? "CONNECTED" : "NOT CONNECTED";
+   const sessToken = "session " + input.sessionWord;
+   const writerToken = "writer " + input.ownerWord;
+   const pendToken = "pending " + String(input.pendingCount);
+@@ -129,7 +129,7 @@ export function buildStatusLine(input: StatusLineInput): string {
+   }
+ 
+   // ── Compact tokens ──
+-  const connCompact = input.connected ? "CONN" : "NOCONN";
++  const connCompact = input.connected === null ? "UNKNOWN" : input.connected ? "CONN" : "NOCONN";
+   const sessCompact = "S:" + input.sessionWord;
+   const pendCompact = "P:" + String(input.pendingCount);
+   const focusCompact = "F:" + input.focusWord;
+@@ -277,14 +277,15 @@ export function abbreviateWriter(ownerWord: string, maxLen: number): string {
+   // Explicit no-token state: keep the marker attached to the writer ID with a
+   // single space, and preserve the marker the same way an issued "#N" token is
+   // preserved — the ID yields budget first.
+-  const noTokenMatch = /^(.*?)\s*\(token\s+none\)\s*$/i.exec(ownerWord);
++  const noTokenMatch = /^(.*?)\s*\(token\s+(none|—)\)\s*$/i.exec(ownerWord);
+   if (noTokenMatch) {
+     const id = (noTokenMatch[1] ?? "").replace(/\s+/g, "");
+-    if (displayWidth(id) + displayWidth(NO_TOKEN_MARKER) <= maxLen) return id + NO_TOKEN_MARKER;
+-    const idBudget = maxLen - displayWidth(NO_TOKEN_MARKER);
++    const marker = noTokenMatch[2] === "—" ? " T:—" : NO_TOKEN_MARKER;
++    if (displayWidth(id) + displayWidth(marker) <= maxLen) return id + marker;
++    const idBudget = maxLen - displayWidth(marker);
+     // Marker alone exceeds the budget — keep the marker, drop the ID.
+-    if (idBudget <= 0) return NO_TOKEN_MARKER.trimStart().slice(0, maxLen);
+-    return sliceByDisplayWidth(id, idBudget) + NO_TOKEN_MARKER;
++    if (idBudget <= 0) return marker.trimStart().slice(0, maxLen);
++    return sliceByDisplayWidth(id, idBudget) + marker;
+   }
+ 
+   // Remove spaces (the compact format has no spaces)
+@@ -348,19 +349,18 @@ function describeOwner(state: BrokerSnapshot | null): string {
+   const o = state.ownershipState;
+   const w = state.activeWriter;
+   const tok = state.fencingToken;
+-  const hasToken = tok > 0;
++  const suffix = tok === null ? " (token —)" : tok > 0 ? " #" + String(tok) : " (token none)";
+   switch (o) {
++    case null:
++      return "UNKNOWN";
+     case "free":
+       return "free";
+     case "owned":
+-      if (hasToken) return (w ?? "unknown") + " #" + String(tok);
+-      return (w ?? "unknown") + " (token none)";
++      return (w ?? "unknown") + suffix;
+     case "transfer-requested":
+-      if (hasToken) return "transfer-req #" + String(tok);
+-      return "transfer-req (token none)";
++      return "transfer-req" + suffix;
+     case "sender-released":
+-      if (hasToken) return "released #" + String(tok);
+-      return "released (token none)";
++      return "released" + suffix;
+     case "receiver-validating":
+       return "validating";
+     case "rejected":
+diff --git a/apps/madbridge/src/tui/components/agent-identity.ts b/apps/madbridge/src/tui/components/agent-identity.ts
+index bb50f39..6729036 100644
+--- a/apps/madbridge/src/tui/components/agent-identity.ts
++++ b/apps/madbridge/src/tui/components/agent-identity.ts
+@@ -128,6 +128,7 @@ export function writerToken(state: BrokerSnapshot | null, surface: AgentSurface)
+  */
+ export function livenessWord(state: BrokerSnapshot | null): string {
+   if (!state) return "STREAM ENDED";
++  if (state.connected === null) return "UNKNOWN";
+   if (!state.connected) return "STREAM ENDED";
+   if (state.sessionState === "interrupted") return "WRITING FROZEN";
+   if (state.incident !== null) return "WRITING FROZEN";
+diff --git a/apps/madbridge/src/tui/hooks/useBrokerState.ts b/apps/madbridge/src/tui/hooks/useBrokerState.ts
+index c6e6c02..b7dff76 100644
+--- a/apps/madbridge/src/tui/hooks/useBrokerState.ts
++++ b/apps/madbridge/src/tui/hooks/useBrokerState.ts
+@@ -9,7 +9,7 @@ import type { BrokerSnapshot } from "../types";
+ 
+ export interface BrokerStateHook {
+   readonly state: BrokerSnapshot | null;
+-  readonly connected: boolean;
++  readonly connected: boolean | null;
+   readonly subscribe: (listener: (snapshot: BrokerSnapshot) => void) => () => void;
+ }
+ 
+@@ -21,7 +21,7 @@ export function useBrokerState(
+   externalSubscribe?: (listener: (snapshot: BrokerSnapshot) => void) => () => void,
+ ): BrokerStateHook {
+   const [state, setState] = useState<BrokerSnapshot | null>(null);
+-  const [connected, setConnected] = useState(false);
++  const [connected, setConnected] = useState<boolean | null>(false);
+   const unsubscribeRef = useRef<(() => void) | null>(null);
+ 
+   useEffect(() => {
+diff --git a/apps/madbridge/src/tui/live/projection.ts b/apps/madbridge/src/tui/live/projection.ts
+new file mode 100644
+index 0000000..a6e4f4c
+--- /dev/null
++++ b/apps/madbridge/src/tui/live/projection.ts
+@@ -0,0 +1,163 @@
++import type { BrokerSnapshot as ClientSnapshot, PendingApprovalSnapshot } from "@madventures/broker";
++import { KNOWN_COMMAND_CATEGORIES, KNOWN_DATA_CLASSES, KNOWN_ROLES, parseSurfaceId } from "@madventures/protocol";
++import type { ApprovalColorState, BrokerSnapshot } from "../types";
++
++type Check = (value: unknown, member: string) => void;
++type Fields = Readonly<Record<string, Check>>;
++
++function fault(member: string, problem: string): never {
++  throw new TypeError(member + ": " + problem);
++}
++
++function primitive(type: "string" | "number" | "boolean"): Check {
++  return (value, member) => {
++    if (typeof value !== type) fault(member, "expected " + type);
++  };
++}
++const string = primitive("string");
++const number = primitive("number");
++const boolean = primitive("boolean");
++
++function oneOf(...allowed: readonly (string | boolean)[]): Check {
++  return (value, member) => {
++    if (!allowed.some(item => item === value)) fault(member, "outside the declared set");
++  };
++}
++
++function nullable(check: Check): Check {
++  return (value, member) => { if (value !== null) check(value, member); };
++}
++
++function list(check: Check): Check {
++  return (value, member) => {
++    if (!Array.isArray(value)) fault(member, "expected array");
++    for (const element of value) check(element, member + "[]");
++  };
++}
++
++function tuple(...elements: readonly Check[]): Check {
++  return (value, member) => {
++    if (!Array.isArray(value) || value.length !== elements.length) fault(member, "expected tuple");
++    elements.forEach((check, index) => check(value[index], member + "[]"));
++  };
++}
++
++function isRecord(value: unknown): value is Record<string, unknown> {
++  return value !== null && typeof value === "object" && !Array.isArray(value);
++}
++
++function record(required: Fields, optional: Fields = {}): Check {
++  return (value, member) => {
++    if (!isRecord(value)) fault(member, "expected object");
++    for (const [key, check] of Object.entries(required)) {
++      const path = member + "." + key;
++      if (!Object.hasOwn(value, key)) fault(path, "missing");
++      check(value[key], path);
++    }
++    for (const [key, check] of Object.entries(optional)) {
++      if (Object.hasOwn(value, key)) check(value[key], member + "." + key);
++    }
++  };
++}
++
++const surface: Check = (value, member) => {
++  if (typeof value !== "string") fault(member, "expected surface identifier");
++  try { parseSurfaceId(value); } catch { fault(member, "invalid surface identifier"); }
++};
++const fingerprint = record({
++  kind: oneOf("commit", "working_tree"), sha256: string, git_sha: string,
++}, { base_git_sha: string });
++const identity = record({
++  execution_id: string, role: oneOf(...KNOWN_ROLES), surface, model: string,
++  provider: string, independence_domain: string, effort: oneOf("low", "medium", "high"),
++});
++const task = record({
++  protocol_version: oneOf("madbridge-protocol/v1"), task_id: string, authorization_reference: string,
++  repository: string, branch: string, worktree: string, repository_fingerprint: fingerprint,
++  executions: list(identity), initial_writer: string,
++  scope: record({
++    allowedReadPaths: list(string), allowedWritePaths: list(string),
++    allowedCommandCategories: list(oneOf(...KNOWN_COMMAND_CATEGORIES)),
++    allowedArtifactCategories: list(oneOf("code", "diff", "document", "report", "test-result")),
++    maxArtifactSizeBytes: number, dataClass: oneOf(...KNOWN_DATA_CLASSES), allowedEgressDestinations: list(string),
++  }),
++  pair_constraints: record({
++    required_roles: tuple(oneOf("builder"), oneOf("independent-reviewer")),
++    require_distinct_providers: oneOf(true), require_distinct_independence_domains: oneOf(true),
++    prohibit_self_review: oneOf(true),
++  }, { allowed_surface_pairs: list(tuple(surface, surface)) }),
++  expires_at: string, created_at: string, envelope_hash: string,
++});
++const execution = record({
++  identity, state: oneOf("declared", "host-starting", "launching", "attesting", "ready", "exited", "failed"),
++  hostPid: nullable(number), childPid: nullable(number), processGroupId: nullable(number),
++  executablePath: string, executableSha256: string, exitCode: nullable(number), exitSignal: nullable(string),
++});
++
++const ownerFields = { executionId: string, worktreeId: string, fencingToken: number };
++const ownerKind = record({ kind: oneOf("free", "owned", "transfer-requested", "sender-released", "rejected") });
++const owned = record({ ...ownerFields, repositoryFingerprint: fingerprint });
++const transferring = record({ ...ownerFields, repositoryFingerprint: fingerprint, transferTo: string });
++const rejected = record({ ...ownerFields, reason: string });
++
++const ownership: Check = (value, member) => {
++  if (!isRecord(value)) fault(member, "expected ownership object");
++  ownerKind(value, member);
++  switch (value.kind) {
++    case "owned": owned(value, member); break;
++    case "transfer-requested":
++    case "sender-released": transferring(value, member); break;
++    case "rejected": rejected(value, member); break;
++  }
++};
++
++const snapshotShape = record({
++  sessionId: string, snapshotSeq: nullable(number), connected: nullable(boolean),
++  phase: oneOf("starting", "active", "paused", "interrupted", "closing", "closed"),
++  taskEnvelopeHash: string, task: nullable(task), repositoryFingerprint: fingerprint,
++  executions: nullable(list(execution)), activeWriterExecutionId: nullable(string), fencingToken: nullable(number),
++  tokenState: oneOf("not_issued", "valid", "invalidated"), ownershipState: nullable(ownership),
++  pendingApprovals: list(record({
++    id: string, type: string, actor: string, taskId: string, repositoryFingerprint: fingerprint,
++    scope: string, timestamp: string, state: oneOf("pending", "approved", "rejected", "expired"),
++  })),
++  pendingTransfers: nullable(list(record({
++    id: string, from: string, to: string, reason: string, fencingToken: number, timestamp: string,
++  }))),
++  permissionSummary: nullable(record({
++    allowedReadPaths: list(string), allowedWritePaths: list(string), allowedCommandCategories: list(string),
++    allowedEgressDestinations: list(string), dataClass: string,
++  })),
++  verification: nullable(record({
++    result: oneOf("pass", "fail", "warning", "pending"), detail: string, verifiedBy: string, timestamp: string,
++  })),
++  review: nullable(record({
++    decision: oneOf("approved", "changes-requested", "rejected", "pending"), comments: string, reviewedBy: string, timestamp: string,
++  })),
++  incident: nullable(record({ id: string, reason: string, timestamp: string, severity: oneOf("low", "medium", "high") })),
++  eventLog: list(record({ seq: number, type: string, actor: string, fencingToken: nullable(number), hash: string, timestamp: string })),
++  queueDepth: nullable(number), ledgerSeq: number,
++});
++
++function approvalColor(kind: PendingApprovalSnapshot["state"]): ApprovalColorState {
++  switch (kind) {
++    case "pending": return { kind, text: "PENDING — awaiting Founder decision" };
++    case "approved": return { kind, text: "APPROVED — Founder authorized" };
++    case "rejected": return { kind, text: "REJECTED — Founder denied" };
++    case "expired": return { kind, text: "EXPIRED — decision window elapsed" };
++  }
++}
++
++export function clientSnapshotToProjection(snapshot: ClientSnapshot): BrokerSnapshot {
++  snapshotShape(snapshot, "snapshot");
++  return {
++    connected: snapshot.connected, sessionState: snapshot.phase, ownershipState: snapshot.ownershipState?.kind ?? null,
++    activeWriter: snapshot.activeWriterExecutionId, fencingToken: snapshot.fencingToken, task: snapshot.task,
++    executions: snapshot.executions?.map(execution => execution.identity) ?? null,
++    repositoryFingerprint: snapshot.repositoryFingerprint,
++    pendingApprovals: snapshot.pendingApprovals.map(({ state, ...approval }) => ({ ...approval, colorState: approvalColor(state) })),
++    pendingTransfers: snapshot.pendingTransfers, permissionSummary: snapshot.permissionSummary, transferPhase: null,
++    verificationStatus: snapshot.verification, reviewStatus: snapshot.review, incident: snapshot.incident,
++    eventLog: snapshot.eventLog, queueDepth: snapshot.queueDepth,
++  };
++}
+diff --git a/apps/madbridge/src/tui/live/subscribe.ts b/apps/madbridge/src/tui/live/subscribe.ts
+new file mode 100644
+index 0000000..b968153
+--- /dev/null
++++ b/apps/madbridge/src/tui/live/subscribe.ts
+@@ -0,0 +1,39 @@
++import type { BrokerClient } from "@madventures/broker";
++import { isDeepStrictEqual } from "node:util";
++import { waitForSnapshotTick } from "../../../../../packages/supervisor/src/index";
++import type { BrokerSnapshot } from "../types";
++import { clientSnapshotToProjection } from "./projection";
++
++export function subscribeToClient(client: BrokerClient) {
++  return (listener: (projection: BrokerSnapshot) => void): (() => void) => {
++    const controller = new AbortController();
++    const { signal } = controller;
++    let last: BrokerSnapshot | undefined;
++
++    async function read(): Promise<void> {
++      while (!signal.aborted) {
++        let next: BrokerSnapshot;
++        try {
++          const snapshot = await client.getSnapshot();
++          if (signal.aborted) return;
++          next = clientSnapshotToProjection(snapshot);
++        } catch {
++          if (last && !signal.aborted) listener({ ...last, connected: false });
++          return;
++        }
++
++        const closed = next.connected === false;
++        if (closed || !isDeepStrictEqual(last, next)) {
++          last = next;
++          listener(next);
++        }
++        if (closed || signal.aborted) return;
++        await waitForSnapshotTick(signal);
++      }
++    }
++
++    // A listener that throws also ends its own subscription.
++    void read().catch(() => controller.abort());
++    return () => controller.abort();
++  };
++}
+diff --git a/apps/madbridge/src/tui/panes/AntigravityPane.tsx b/apps/madbridge/src/tui/panes/AntigravityPane.tsx
+index 0350341..5ab2cd4 100644
+--- a/apps/madbridge/src/tui/panes/AntigravityPane.tsx
++++ b/apps/madbridge/src/tui/panes/AntigravityPane.tsx
+@@ -40,8 +40,8 @@ export function AntigravityPane({ active, state, ptyOutput }: AntigravityPanePro
+ 
+   const headerParts: string[] = ["ANTIGRAVITY"];
+   if (active) headerParts.push("FOCUSED");
+-  if (writer && tok !== null) {
+-    headerParts.push("WRITER tok#" + String(tok));
++  if (writer) {
++    headerParts.push(tok === null ? "WRITER token —" : "WRITER tok#" + String(tok));
+   } else if (live !== "LIVE") {
+     // No current-writer claim while not live (disconnected, interrupted,
+     // or incident). Show the truthful liveness word instead.
+diff --git a/apps/madbridge/src/tui/panes/ClaudePane.tsx b/apps/madbridge/src/tui/panes/ClaudePane.tsx
+index 44ab0b4..d35a5c5 100644
+--- a/apps/madbridge/src/tui/panes/ClaudePane.tsx
++++ b/apps/madbridge/src/tui/panes/ClaudePane.tsx
+@@ -39,8 +39,8 @@ export function ClaudePane({ active, state, ptyOutput }: ClaudePaneProps) {
+   // Build the header line truthfully.
+   const headerParts: string[] = ["CLAUDE CODE"];
+   if (active) headerParts.push("FOCUSED");
+-  if (writer && tok !== null) {
+-    headerParts.push("WRITER tok#" + String(tok));
++  if (writer) {
++    headerParts.push(tok === null ? "WRITER token —" : "WRITER tok#" + String(tok));
+   } else if (live !== "LIVE") {
+     // No current-writer claim while not live (disconnected, interrupted,
+     // or incident). Show the truthful liveness word instead. Real buffered
+diff --git a/apps/madbridge/src/tui/panes/GovernancePane.tsx b/apps/madbridge/src/tui/panes/GovernancePane.tsx
+index 8bd7d80..8e72ec6 100644
+--- a/apps/madbridge/src/tui/panes/GovernancePane.tsx
++++ b/apps/madbridge/src/tui/panes/GovernancePane.tsx
+@@ -51,7 +51,7 @@ export function GovernancePane({ active, state }: GovernancePaneProps) {
+   if (!state || !state.connected) {
+     return (
+       <box flexGrow={1} flexDirection="column" borderStyle="single" borderColor={active ? POSEIDON.accent : POSEIDON.uiBorder} overflow="hidden">
+-        <text>{fit("GOVERNANCE | NOT CONNECTED")}</text>
++        <text>{fit(state?.connected === null ? "GOVERNANCE | UNKNOWN" : "GOVERNANCE | NOT CONNECTED")}</text>
+         <text>{fit("No current permissions, verification, or review.")}</text>
+       </box>
+     );
+@@ -66,10 +66,10 @@ export function GovernancePane({ active, state }: GovernancePaneProps) {
+   const transfer = state.pendingTransfers?.[0] ?? null;
+ 
+   // Render empty allowed lists as "none", not healthy/active/unknown.
+-  const readPaths = perms?.allowedReadPaths?.length ? perms.allowedReadPaths.join(", ") : "none";
+-  const writePaths = perms?.allowedWritePaths?.length ? perms.allowedWritePaths.join(", ") : "none";
+-  const cmdCats = perms?.allowedCommandCategories?.length ? perms.allowedCommandCategories.join(", ") : "none";
+-  const egress = perms?.allowedEgressDestinations?.length ? perms.allowedEgressDestinations.join(", ") : "none";
++  const readPaths = perms === null ? "—" : perms?.allowedReadPaths?.length ? perms.allowedReadPaths.join(", ") : "none";
++  const writePaths = perms === null ? "—" : perms?.allowedWritePaths?.length ? perms.allowedWritePaths.join(", ") : "none";
++  const cmdCats = perms === null ? "—" : perms?.allowedCommandCategories?.length ? perms.allowedCommandCategories.join(", ") : "none";
++  const egress = perms === null ? "—" : perms?.allowedEgressDestinations?.length ? perms.allowedEgressDestinations.join(", ") : "none";
+   const dataClass = perms?.dataClass ?? "—";
+ 
+   // Build all rows as plain strings — each will be truncated to fit.
+@@ -79,10 +79,10 @@ export function GovernancePane({ active, state }: GovernancePaneProps) {
+   rows.push("Fingerprint: " + (state.repositoryFingerprint ? state.repositoryFingerprint.git_sha.slice(0, 12) : "—"));
+   rows.push("Claude: " + (cl?.execution_id ?? "—"));
+   rows.push("Antigravity: " + (agy?.execution_id ?? "—"));
+-  rows.push("Writer: " + (state.activeWriter ?? "—") + " | Token: " + String(state.fencingToken) + " | Ownership: " + state.ownershipState);
++  rows.push("Writer: " + (state.activeWriter ?? "—") + " | Token: " + (state.fencingToken ?? "—") + " | Ownership: " + (state.ownershipState ?? "UNKNOWN"));
+   rows.push("Read: " + readPaths + " | Write: " + writePaths);
+   rows.push("Commands: " + cmdCats + " | Egress: " + egress + " | Data class: " + dataClass);
+-  rows.push("Transfer phase: " + (state.transferPhase ?? "none") + " | Pending transfers: " + String(state.pendingTransfers?.length ?? 0));
++  rows.push("Transfer phase: " + (state.transferPhase ?? "none") + " | Pending transfers: " + String(state.pendingTransfers?.length ?? "—"));
+   if (transfer) {
+     rows.push("Transfer: " + transfer.from + " → " + transfer.to + " | tok#" + String(transfer.fencingToken) + " | " + transfer.reason);
+     // Provenance timestamp on its own row so the label survives narrow-width
+diff --git a/apps/madbridge/src/tui/types.ts b/apps/madbridge/src/tui/types.ts
+index 81b4299..cd5c464 100644
+--- a/apps/madbridge/src/tui/types.ts
++++ b/apps/madbridge/src/tui/types.ts
+@@ -91,7 +91,7 @@ export interface ApprovalRequestEvent {
+ 
+ /** Immutable broker snapshot for TUI consumption. */
+ export interface BrokerSnapshot {
+-  readonly connected: boolean;
++  readonly connected: boolean | null;
+   readonly sessionState:
+     | "starting"
+     | "active"
+@@ -106,21 +106,22 @@ export interface BrokerSnapshot {
+     | "transfer-requested"
+     | "sender-released"
+     | "receiver-validating"
+-    | "rejected";
++    | "rejected"
++    | null;
+   readonly activeWriter: string | null;
+-  readonly fencingToken: number;
++  readonly fencingToken: number | null;
+   readonly task: TaskEnvelopeV1 | null;
+-  readonly executions: readonly ExecutionIdentity[];
++  readonly executions: readonly ExecutionIdentity[] | null;
+   readonly repositoryFingerprint: RepositoryFingerprint | null;
+   readonly pendingApprovals: readonly PendingApproval[];
+-  readonly pendingTransfers: readonly PendingTransfer[];
+-  readonly permissionSummary: PermissionSummary;
++  readonly pendingTransfers: readonly PendingTransfer[] | null;
++  readonly permissionSummary: PermissionSummary | null;
+   readonly transferPhase: string | null;
+   readonly verificationStatus: VerificationStatus | null;
+   readonly reviewStatus: ReviewStatus | null;
+   readonly incident: IncidentRecord | null;
+   readonly eventLog: readonly LedgerEntryProjection[];
+-  readonly queueDepth: number;
++  readonly queueDepth: number | null;
+ }
+ 
+ export interface PendingApproval {
+@@ -176,7 +177,7 @@ export interface LedgerEntryProjection {
+   readonly seq: number;
+   readonly type: string;
+   readonly actor: string;
+-  readonly fencingToken: number;
++  readonly fencingToken: number | null;
+   readonly hash: string;
+   readonly timestamp: string;
+ }
+diff --git a/apps/madbridge/test/tui-projection.test.tsx b/apps/madbridge/test/tui-projection.test.tsx
+index c066104..33c41fa 100644
+--- a/apps/madbridge/test/tui-projection.test.tsx
++++ b/apps/madbridge/test/tui-projection.test.tsx
+@@ -149,10 +149,10 @@ describe("Governance pane projection", () => {
+ 
+   test("snapshot contains both execution identities", () => {
+     const snapshot = makeFullSnapshot();
+-    expect(snapshot.executions.length).toBe(2);
++    expect(snapshot.executions!.length).toBe(2);
+ 
+-    const claude = snapshot.executions.find((e) => e.surface === "claude-code");
+-    const antigravity = snapshot.executions.find((e) => e.surface === "antigravity");
++    const claude = snapshot.executions!.find((e) => e.surface === "claude-code");
++    const antigravity = snapshot.executions!.find((e) => e.surface === "antigravity");
+     expect(claude).toBeDefined();
+     expect(antigravity).toBeDefined();
+     expect(claude!.model).toBe("claude-sonnet-4");
+@@ -170,13 +170,13 @@ describe("Governance pane projection", () => {
+ 
+   test("snapshot contains permission summaries", () => {
+     const snapshot = makeFullSnapshot();
+-    expect(snapshot.permissionSummary.allowedReadPaths).toContain("./src");
+-    expect(snapshot.permissionSummary.allowedWritePaths).toContain("./src");
+-    expect(snapshot.permissionSummary.allowedCommandCategories).toContain("read");
+-    expect(snapshot.permissionSummary.allowedCommandCategories).toContain("write");
+-    expect(snapshot.permissionSummary.allowedCommandCategories).toContain("test");
+-    expect(snapshot.permissionSummary.dataClass).toBe("internal");
+-    expect(snapshot.permissionSummary.allowedEgressDestinations.length).toBe(0);
++    expect(snapshot.permissionSummary!.allowedReadPaths).toContain("./src");
++    expect(snapshot.permissionSummary!.allowedWritePaths).toContain("./src");
++    expect(snapshot.permissionSummary!.allowedCommandCategories).toContain("read");
++    expect(snapshot.permissionSummary!.allowedCommandCategories).toContain("write");
++    expect(snapshot.permissionSummary!.allowedCommandCategories).toContain("test");
++    expect(snapshot.permissionSummary!.dataClass).toBe("internal");
++    expect(snapshot.permissionSummary!.allowedEgressDestinations.length).toBe(0);
+   });
+ 
+   test("snapshot contains pending actions", () => {
+@@ -206,9 +206,9 @@ describe("Governance pane projection", () => {
+       ],
+     };
+     expect(withTransfer.transferPhase).toBe("sender-released");
+-    expect(withTransfer.pendingTransfers.length).toBe(1);
+-    expect(withTransfer.pendingTransfers[0]!.from).toBe("exec-claude-code");
+-    expect(withTransfer.pendingTransfers[0]!.to).toBe("exec-antigravity");
++    expect(withTransfer.pendingTransfers!.length).toBe(1);
++    expect(withTransfer.pendingTransfers![0]!.from).toBe("exec-claude-code");
++    expect(withTransfer.pendingTransfers![0]!.to).toBe("exec-antigravity");
+   });
+ 
+   test("snapshot contains verification status", () => {
+@@ -374,7 +374,7 @@ describe("useBrokerState subscribes to immutable snapshots", () => {
+     // Fields are readonly in the type definition.
+     expect(snapshot.connected).toBe(true);
+     expect(snapshot.task).not.toBeNull();
+-    expect(snapshot.executions.length).toBe(2);
++    expect(snapshot.executions!.length).toBe(2);
+ 
+     // The subscribe function returns an unsubscribe callback
+     const unsubscribe = (snapshot: BrokerSnapshot) => {};
+diff --git a/packages/adapter-claude-code/src/live.ts b/packages/adapter-claude-code/src/live.ts
+index 84782f6..9166b9d 100644
+--- a/packages/adapter-claude-code/src/live.ts
++++ b/packages/adapter-claude-code/src/live.ts
+@@ -7,7 +7,7 @@ export function encodeUserInput(text: string): string {
+   return JSON.stringify({ type: "user", message: { role: "user", content: text } }) + "\n";
+ }
+ 
+-type Cause = "attestation_missing" | "attestation_malformed" | "attestation_duplicate" |
++type Cause = "child_exited" | "host_exited" | "attestation_missing" | "attestation_malformed" | "attestation_duplicate" |
+   "identity_mismatch" | "auth_failed" | "attestation_deadline" | "attestation_cancelled" |
+   "attestation_tool_call" | "attestation_round_trips" | "attestation_budget_exhausted";
+ type Verdict =
+@@ -159,12 +159,14 @@ export function attestClaudeSession(input: Input, reserveWrite: () => boolean =
+         if (fact.kind === "output" && fact.bytes) {
+           const cause = reader.push(fact.bytes);
+           if (cause) stop(cause);
+-        } else if (fact.kind === "exited" || fact.kind === "drained") {
++        } else if (reader.complete && fact.kind === "exited") {
++          stop(reader.finish() ?? "child_exited");
++        } else if (!reader.complete && (fact.kind === "exited" || fact.kind === "drained")) {
+           stop(reader.finish() ?? "attestation_missing");
+         }
+         if (failed) break;
+       }
+-      if (!failed) stop(reader.finish() ?? "attestation_missing");
++      if (!failed) stop(reader.complete ? "host_exited" : reader.finish() ?? "attestation_missing");
+     } catch { stop("attestation_malformed"); }
+     finally {
+       clearTimeout(timer);
+diff --git a/packages/adapter-claude-code/test/retry.test.ts b/packages/adapter-claude-code/test/retry.test.ts
+new file mode 100644
+index 0000000..8ed6dc1
+--- /dev/null
++++ b/packages/adapter-claude-code/test/retry.test.ts
+@@ -0,0 +1,30 @@
++import { expect, test } from "bun:test";
++import { ADAPTER_REGISTRY, parseSurfaceId } from "@madventures/protocol";
++import { attestClaudeSession } from "../src/live";
++import { attestationEvents } from "../../../test/phase3b/end-stand-in";
++import { wireFacts } from "../../../test/phase3b/wire-facts";
++
++for (const stage of ["attestation", "active monitor"] as const) {
++  test("an unregistered api_retry error preserves the " + stage, async () => {
++    const registration = ADAPTER_REGISTRY.get(parseSurfaceId("claude-code"))!;
++    const wire = wireFacts();
++    const model = "claude-fable-5-2";
++    const [init, ...rest] = attestationEvents("claude-code", model);
++    const retry = { type: "system", subtype: "api_retry", session_id: "offline-wire", error: "synthetic_unregistered_retry" };
++    expect(registration.auth_failure_detection).not.toContain("system/api_retry.error:" + retry.error);
++    const result = attestClaudeSession({ ...wire, registration, model });
++    try {
++      wire.events(init);
++      if (stage === "attestation") wire.events(retry);
++      wire.events(...rest);
++      expect((await result).ok).toBe(true);
++      if (stage === "active monitor") wire.events(retry);
++      // A subsequent registered failure proves the monitor consumed the retry
++      // and remained active long enough to classify the next event.
++      wire.events({ type: "system", subtype: "model_refusal_fallback", session_id: "offline-wire" });
++      wire.end();
++      while (!wire.closed) await Bun.sleep(1);
++      expect(wire.failures).toEqual(["identity_mismatch"]);
++    } finally { wire.end(); }
++  });
++}
+diff --git a/packages/adapter-madv-surface/src/live.ts b/packages/adapter-madv-surface/src/live.ts
+index 4e5fc69..ca58ec8 100644
+--- a/packages/adapter-madv-surface/src/live.ts
++++ b/packages/adapter-madv-surface/src/live.ts
+@@ -3,7 +3,7 @@ import { EVIDENCE_DEADLINE_MS, MadvSurfaceParser, encodeAttestationInput, encode
+   type MadvFailureCause, type MadvResult } from "./index";
+ 
+ const PROMPT = "Reply with your model identifier and nothing else.";
+-type Cause = MadvFailureCause | "attestation_deadline" | "attestation_cancelled" |
++type Cause = MadvFailureCause | "child_exited" | "host_exited" | "attestation_deadline" | "attestation_cancelled" |
+   "attestation_tool_call" | "attestation_round_trips" | "attestation_budget_exhausted";
+ interface Input {
+   executionId: string;
+@@ -72,16 +72,21 @@ export function attestMadvSession(input: Input, reserveWrite: () => boolean = ()
+         if (!ready && performance.now() >= deadline) { stop("attestation_deadline"); break; }
+         if (fact.kind === "output" && fact.bytes) inspect(parser.push(fact.bytes));
+         if (fact.kind === "exited") {
++          const handedOver = ready;
+           const exitCode = fact.code ?? 1;
+           const result = parser.finish(exitCode, fact.signal ?? null);
+           const detection = detectMadvFailure(input.registration.auth_failure_detection, { kind: "child_exit", exitCode });
+           if (detection && !parser.attestationFailure) stop(detection.cause, detection.reason);
+           else inspect(result);
+-          break;
++          if (handedOver && !failure) stop("child_exited");
++          return;
+         }
+         if (failure) break;
+       }
+-      if (!failure) inspect(parser.finish(0));
++      if (!failure) {
++        if (ready) stop("host_exited");
++        else inspect(parser.finish(0));
++      }
+     } catch { stop("identity_mismatch", "malformed_stream"); }
+     finally {
+       closed = true;
+diff --git a/packages/adapter-madv-surface/test/exit-causes.test.ts b/packages/adapter-madv-surface/test/exit-causes.test.ts
+new file mode 100644
+index 0000000..91f4ab2
+--- /dev/null
++++ b/packages/adapter-madv-surface/test/exit-causes.test.ts
+@@ -0,0 +1,74 @@
++import { expect, test } from "bun:test";
++import { attestClaudeSession } from "../../adapter-claude-code/src/live";
++import { closeOfflineBuild } from "../../../test/phase3b/offline";
++import { prepareM2 } from "../../../test/phase3b/m2-offline";
++import { attestationEvents } from "../../../test/phase3b/end-stand-in";
++import { wireFacts } from "../../../test/phase3b/wire-facts";
++import { runLiveTransactionalBuild, runPurePreflight } from "../../supervisor/src/index";
++import { attestMadvSession } from "../src/live";
++
++const exits = [
++  { code: 0, reason: "child_exited" },
++  { code: 1, reason: "provider_error" },
++  { code: 3, reason: "identity_unavailable" },
++  { code: 4, reason: "identity_mismatch" },
++  { code: 5, reason: "auth_failed" },
++  { code: 6, reason: "endpoint_refused" },
++  { code: 7, reason: "model_refused" },
++  { code: 42, reason: "provider_error" },
++  { code: null, reason: "provider_error" },
++] as const;
++
++for (const { code, reason } of exits) {
++  for (const stage of ["before", "after"] as const) {
++    const cause = code === 0 && stage === "before" ? "identity_unavailable" : reason;
++    const name = code === null ? "signal" : "code " + code;
++    test("madv " + name + " gives " + cause + " " + stage + " activation", async () => {
++      const f = prepareM2("madv-surface", false, "Founder close");
++      const wire = wireFacts();
++      const exit = { kind: "exited", code, signal: code === null ? "SIGTERM" : null };
++      const reported: string[] = [];
++      try {
++        const preflight = await runPurePreflight(f.input);
++        if (!preflight.ok) throw new Error("offline preflight failed");
++        const build = await runLiveTransactionalBuild({ sessionId: "offline-exit-cause", envelope: f.envelope,
++          plan: preflight.plan, signal: f.input.signal, attesterFor: surface => {
++            if (surface === "claude-code") return input => attestClaudeSession(input);
++            if (surface !== "madv-surface") return undefined;
++            return input => {
++              const verdict = attestMadvSession({ ...input, host: wire.host, reportFailure(actual) {
++                reported.push(actual);
++                input.reportFailure(actual);
++                wire.end();
++              } });
++              const events = attestationEvents("madv-surface", input.model);
++              if (stage === "after") wire.events(...events);
++              else { wire.events(events[0]); wire.push(exit); }
++              return verdict;
++            };
++          } });
++        try {
++          if (stage === "after") {
++            expect(build.ok).toBe(true);
++            if (!build.ok) throw new Error("active build required");
++            const client = build.state.client!;
++            expect((await client.getSnapshot()).phase).toBe("active");
++            expect(reported).toEqual([]);
++            wire.push(exit);
++            const deadline = performance.now() + 5000;
++            while ((await client.getSnapshot()).phase !== "closed") {
++              if (performance.now() >= deadline) throw new Error("offline close deadline");
++              await Bun.sleep(5);
++            }
++          } else {
++            expect(build.ok).toBe(false);
++            if (build.ok) throw new Error("failed build required");
++            expect(build.failure).toBe("reattestation_failed");
++            expect(build.detail).toBe("step=reattest execution=reviewer failure=reattestation_failed surface=madv-surface cause=" + cause);
++          }
++          expect(reported).toEqual([cause]);
++        } finally { wire.end(); await closeOfflineBuild(build); }
++      } finally { wire.end(); f.dispose(); }
++    }, 20_000);
++  }
++}
+diff --git a/packages/adapter-madv-surface/test/live.test.ts b/packages/adapter-madv-surface/test/live.test.ts
+index dd3093d..50f31be 100644
+--- a/packages/adapter-madv-surface/test/live.test.ts
++++ b/packages/adapter-madv-surface/test/live.test.ts
+@@ -49,7 +49,7 @@ test("madv encodes no_tools only on the attestation message", async () => {
+   wire.events(response, assistant, result);
+   wire.end();
+   while (!wire.closed) await Bun.sleep(1);
+-  expect(wire.failures).toEqual([]);
++  expect(wire.failures).toEqual(["host_exited"]);
+ });
+ 
+ test("madv requires init, model response, assistant and success in order", async () => {
+diff --git a/packages/supervisor/src/build.ts b/packages/supervisor/src/build.ts
+index 94f7887..e216d06 100644
+--- a/packages/supervisor/src/build.ts
++++ b/packages/supervisor/src/build.ts
+@@ -145,7 +145,7 @@ export interface LiveBuildInput extends BuildInput {
+ 
+ // Use only build-owned literals in ledger and caller-visible detail.
+ function liveFailureCause(surface: SurfaceId, reported: unknown): string {
+-  const shared = ["auth_failed", "identity_mismatch", "attestation_deadline", "attestation_cancelled",
++  const shared = ["child_exited", "host_exited", "auth_failed", "identity_mismatch", "attestation_deadline", "attestation_cancelled",
+     "attestation_tool_call", "attestation_round_trips", "attestation_budget_exhausted"];
+   const specific = surface === "madv-surface"
+     ? ["endpoint_refused", "provider_error", "identity_unavailable", "model_refused", "domain_unresolved"]
+@@ -641,6 +641,8 @@ async function executeBuild(
+     firstFailure = { executionId, surface, cause };
+     if (sessionActivatedRow !== null && currentBroker !== null) {
+       const reason = cause === "auth_failed" ? "authentication_expired"
++        : cause === "child_exited" ? "child_failure"
++        : cause === "host_exited" ? "pty_host_failure"
+         : cause === "provider_error" || cause === "endpoint_refused" ? "adapter_failure" : "identity_mismatch";
+       const phase = currentBroker.snapshotProjectionInput().lifecycle.phase;
+       if (phase === "active" || phase === "paused") {
+diff --git a/packages/supervisor/src/index.ts b/packages/supervisor/src/index.ts
+index 1e7f27c..ff8ef92 100644
+--- a/packages/supervisor/src/index.ts
++++ b/packages/supervisor/src/index.ts
+@@ -28,3 +28,5 @@ export type {
+   PartialBuildState,
+   RollbackOutcome,
+ } from "./build";
++
++export { waitForSnapshotTick } from "./snapshot-timer";
+diff --git a/packages/supervisor/src/snapshot-timer.ts b/packages/supervisor/src/snapshot-timer.ts
+new file mode 100644
+index 0000000..1691dab
+--- /dev/null
++++ b/packages/supervisor/src/snapshot-timer.ts
+@@ -0,0 +1,15 @@
++// Bound the rate of projection reads for each live TUI subscription.
++export const SNAPSHOT_INTERVAL_MS = 100;
++
++export function waitForSnapshotTick(signal: AbortSignal): Promise<void> {
++  if (signal.aborted) return Promise.resolve();
++  return new Promise(resolve => {
++    function finish(): void {
++      clearTimeout(timer);
++      signal.removeEventListener("abort", finish);
++      resolve();
++    }
++    const timer = setTimeout(finish, SNAPSHOT_INTERVAL_MS);
++    signal.addEventListener("abort", finish, { once: true });
++  });
++}
+diff --git a/packages/supervisor/test/snapshot-timer.test.ts b/packages/supervisor/test/snapshot-timer.test.ts
+new file mode 100644
+index 0000000..24e5060
+--- /dev/null
++++ b/packages/supervisor/test/snapshot-timer.test.ts
+@@ -0,0 +1,29 @@
++import { expect, test } from "bun:test";
++import { getEventListeners } from "node:events";
++import { waitForSnapshotTick } from "../src/index";
++import { SNAPSHOT_INTERVAL_MS } from "../src/snapshot-timer";
++
++test("the snapshot wait paces reads and settles promptly on cancellation", async () => {
++  const controller = new AbortController();
++  const { signal } = controller;
++  const start = performance.now();
++  const stream = ["first"];
++  const tick = waitForSnapshotTick(signal).then(() => { stream.push("next"); });
++  expect(SNAPSHOT_INTERVAL_MS).toBe(100);
++  expect(getEventListeners(signal, "abort")).toHaveLength(1);
++  await Promise.resolve();
++  expect(stream).toEqual(["first"]);
++  await tick;
++  expect(performance.now() - start).toBeGreaterThanOrEqual(95);
++  expect(stream).toEqual(["first", "next"]);
++  expect(getEventListeners(signal, "abort")).toHaveLength(0);
++
++  let cancelled = false;
++  const pending = waitForSnapshotTick(signal).then(() => { cancelled = true; });
++  controller.abort();
++  await Promise.resolve();
++  expect(cancelled).toBe(true);
++  await pending;
++  await waitForSnapshotTick(signal);
++  expect(getEventListeners(signal, "abort")).toHaveLength(0);
++});
+diff --git a/scripts/phase3b/child-ends.ts b/scripts/phase3b/child-ends.ts
+new file mode 100644
+index 0000000..7a39bf4
+--- /dev/null
++++ b/scripts/phase3b/child-ends.ts
+@@ -0,0 +1,33 @@
++import { writeFileSync } from "node:fs";
++import { join } from "node:path";
++import { activeCases, observeChildEnd, surfaces } from "../../test/phase3b/child-end";
++
++if (import.meta.main) {
++  const directory = process.argv[2];
++  if (!directory) throw new Error("An evidence directory is required.");
++  const write = (name: string, observation: Awaited<ReturnType<typeof observeChildEnd>>) => {
++    writeFileSync(join(directory, name), "Offline M2 | end-stand-in.ts\n" + JSON.stringify(observation, null, 2) + "\n",
++      { mode: 0o600, flag: "wx" });
++    console.log(name);
++  };
++  for (const surface of surfaces) {
++    for (const [end, cause] of [["clean exit", "child_exited"], ["host end", "host_exited"]] as const) {
++      const seen = await observeChildEnd(surface, true, end);
++      if (seen.phase || seen.component !== "reattest" || !seen.detail.endsWith("failure=reattestation_failed surface=" + surface + " cause=" + cause)) {
++        throw new Error("offline pre-activation observation differs");
++      }
++      write(surface + "-before-" + cause + ".txt", seen);
++    }
++  }
++  for (const [surface, end, cause, reason] of activeCases) {
++    const seen = await observeChildEnd(surface, false, end);
++    if (seen.phase !== "active" || seen.closed !== "interruption" || seen.interrupted.length !== 1 ||
++      seen.interrupted[0]?.reason !== reason || seen.interrupted[0]?.detail !== surface + ": " + cause) {
++      throw new Error("offline interruption observation differs");
++    }
++    write(surface + "-active-" + end.replaceAll(" ", "-") + ".txt", seen);
++  }
++  const seen = await observeChildEnd("claude-code", false, "Founder close");
++  if (seen.phase !== "active" || seen.closed !== "founder" || seen.interrupted.length) throw new Error("offline Founder close differs");
++  write("founder-close.txt", seen);
++}
+diff --git a/scripts/phase3b/recorded-frames.tsx b/scripts/phase3b/recorded-frames.tsx
+new file mode 100644
+index 0000000..1062bf8
+--- /dev/null
++++ b/scripts/phase3b/recorded-frames.tsx
+@@ -0,0 +1,101 @@
++import { linkSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
++import { join } from "node:path";
++import { act } from "react";
++import { testRender } from "@opentui/react/test-utils";
++import type { BrokerClient, BrokerSnapshot } from "@madventures/broker";
++import { App } from "../../apps/madbridge/src/tui/App";
++import type { BrokerSnapshot as Projection } from "../../apps/madbridge/src/tui/types";
++import { composeLiveSession } from "../../apps/madbridge/src/tui/live/composition";
++import { clientSnapshotToProjection } from "../../apps/madbridge/src/tui/live/projection";
++import { prepareM2 } from "../../test/phase3b/m2-offline";
++
++async function recordStream() {
++  const f = prepareM2("claude-code", false, "Founder close");
++  const snapshots: BrokerSnapshot[] = [];
++  let client: BrokerClient | undefined;
++  try {
++    const outcome = await composeLiveSession({ ...f.start, async present(presented) {
++      client = presented;
++      snapshots.push(await presented.getSnapshot());
++    } });
++    if (outcome.exitCode !== 0) throw new Error("offline composition failed at " + outcome.component);
++    let settled = false;
++    const closing = outcome.close().finally(() => { settled = true; });
++    try {
++      if (!client) throw new Error("offline client was not presented");
++      const deadline = performance.now() + 8000;
++      let ending = "";
++      while (!ending) {
++        const afterClose = settled;
++        try {
++          const snapshot = await client.getSnapshot();
++          snapshots.push(snapshot);
++          if (snapshot.connected === false) ending = "client returned connected false";
++          else if (afterClose) ending = "final post-close read returned a snapshot";
++        } catch {
++          ending = afterClose ? "post-close snapshot read rejected" : "snapshot read rejected during close";
++        }
++        if (!ending && snapshots.length > 2) {
++          if (performance.now() >= deadline) throw new Error("offline snapshot deadline");
++          await Bun.sleep(2);
++        }
++      }
++      await closing;
++      return { snapshots, ending, founderClose: "completed" as const };
++    } finally { await closing; }
++  } finally { f.dispose(); }
++}
++
++async function render(snapshots: readonly BrokerSnapshot[]) {
++  let deliver: ((snapshot: Projection) => void) | undefined;
++  const screen = await testRender(<App subscribe={listener => {
++    deliver = listener;
++    return () => { deliver = undefined; };
++  }} catalogLoader={async () => ({ status: "ok", models: [] })} />, { width: 160, height: 38 });
++  const frames: string[] = [];
++  try {
++    await act(async () => { await screen.flush(); });
++    if (!deliver) throw new Error("offline frame subscription missing");
++    const notify = deliver;
++    for (const snapshot of snapshots) {
++      await act(async () => { notify(clientSnapshotToProjection(snapshot)); });
++      for (const [key, view] of [["1", "builder"], ["3", "governance"], ["5", "events"]] as const) {
++        await act(async () => { screen.mockInput.pressKey(key, { meta: true }); });
++        await screen.flush();
++        await screen.flush();
++        const frame = screen.captureCharFrame().split("\n").map(line => line.trimEnd()).join("\n").trimEnd();
++        frames.push("Offline | snapshot " + snapshot.snapshotSeq + " | " + view + "\n" + frame);
++      }
++    }
++  } finally { await act(async () => { screen.renderer.destroy(); }); }
++  return frames.join("\n\n") + "\n";
++}
++
++export async function recordOfflineFrames(directory: string) {
++  const stream = await recordStream();
++  if (stream.snapshots[0]?.phase !== "active" ||
++      !stream.snapshots[0].eventLog.some(row => row.type === "session_activated")) {
++    throw new Error("offline activation evidence missing");
++  }
++  const options = { mode: 0o600, flag: "wx" } as const;
++  const staging = mkdtempSync(join(directory, ".frames-"));
++  try {
++    const raw = join(staging, "healthy-stream.json"), rendered = join(staging, "healthy-frames.txt");
++    writeFileSync(raw, JSON.stringify(stream, null, 2) + "\n", options);
++    const recorded: typeof stream = JSON.parse(readFileSync(raw, "utf8"));
++    writeFileSync(rendered, await render(recorded.snapshots), options);
++    const target = join(directory, "healthy-stream.json");
++    linkSync(raw, target);
++    try { linkSync(rendered, join(directory, "healthy-frames.txt")); }
++    catch (error) { rmSync(target); throw error; }
++    return recorded;
++  } finally { rmSync(staging, { recursive: true, force: true }); }
++}
++
++if (import.meta.main) {
++  const directory = process.argv[2];
++  if (!directory) throw new Error("An evidence directory is required.");
++  const stream = await recordOfflineFrames(directory);
++  console.log("Offline healthy-stream.json and healthy-frames.txt");
++  console.log("Snapshots", stream.snapshots.length, "ending", stream.ending);
++}
+diff --git a/test/phase3a/harness-separation.test.ts b/test/phase3a/harness-separation.test.ts
+index 326687a..6079ae7 100644
+--- a/test/phase3a/harness-separation.test.ts
++++ b/test/phase3a/harness-separation.test.ts
+@@ -27,7 +27,7 @@ const EXCEPTIONS: Readonly<Record<string, { sha256: string; call?: string }>> =
+     sha256: "9210012a505848a7379ab7b9cf9d840f33197de58f85b23c359653760479c603", call: "PAYLOAD_SHAPE[knownType](payload)",
+   },
+   "packages/supervisor/src/build.ts": {
+-    sha256: "50074c2fc50b12cf2083a87c5d71bf665d3241ba1c2f5f37d5e922dfaa67db8d", call: "host.handle.facts()[Symbol.asyncIterator]()",
++    sha256: "0b329d97e88a13bd58902fe7dd1afe971d52c61bbf310862230465fd1fdd3553", call: "host.handle.facts()[Symbol.asyncIterator]()",
+   },
+ };
+ 
+diff --git a/test/phase3b/absence.test.tsx b/test/phase3b/absence.test.tsx
+new file mode 100644
+index 0000000..0e99a5a
+--- /dev/null
++++ b/test/phase3b/absence.test.tsx
+@@ -0,0 +1,104 @@
++import { expect, test } from "bun:test";
++import { testRender } from "@opentui/react/test-utils";
++import type { ReactNode } from "react";
++import { parseSurfaceId } from "@madventures/protocol";
++import { App } from "../../apps/madbridge/src/tui/App";
++import { DockStrip } from "../../apps/madbridge/src/tui/components/DockStrip";
++import { EventLog } from "../../apps/madbridge/src/tui/components/EventLog";
++import { IncidentBand } from "../../apps/madbridge/src/tui/components/IncidentBand";
++import { StatusBar } from "../../apps/madbridge/src/tui/components/StatusBar";
++import { AntigravityPane } from "../../apps/madbridge/src/tui/panes/AntigravityPane";
++import { ClaudePane } from "../../apps/madbridge/src/tui/panes/ClaudePane";
++import { GovernancePane } from "../../apps/madbridge/src/tui/panes/GovernancePane";
++import type { BrokerSnapshot } from "../../apps/madbridge/src/tui/types";
++
++const absent: BrokerSnapshot = {
++  connected: true, sessionState: "active", ownershipState: null, activeWriter: null,
++  fencingToken: null, task: null, executions: null, repositoryFingerprint: null, pendingApprovals: [],
++  pendingTransfers: null, permissionSummary: null, transferPhase: null, verificationStatus: null,
++  reviewStatus: null, incident: null, eventLog: [], queueDepth: null,
++};
++
++async function frame(node: ReactNode, width = 160): Promise<string> {
++  const screen = await testRender(node, { width, height: 38 });
++  try {
++    await screen.flush();
++    return screen.captureCharFrame();
++  } finally {
++    screen.renderer.destroy();
++  }
++}
++
++test("governance distinguishes unknown transfers and permissions from empty collections", async () => {
++  const unknown = await frame(<GovernancePane active state={absent} />);
++  expect(unknown).toContain("Pending transfers: —");
++  expect(unknown).toContain("Read: — | Write: —");
++  expect(unknown).toContain("Commands: — | Egress: — | Data class: —");
++  expect(unknown).not.toMatch(/Pending transfers: 0|Read: none|Write: none|Commands: none|Egress: none/);
++  const empty = await frame(<GovernancePane active state={{ ...absent, pendingTransfers: [], permissionSummary: {
++    allowedReadPaths: [], allowedWritePaths: [], allowedCommandCategories: [], allowedEgressDestinations: [], dataClass: "internal",
++  } }} />);
++  expect(empty).toContain("Pending transfers: 0");
++  expect(empty).toContain("Read: none | Write: none");
++  expect(empty).toContain("Commands: none | Egress: none | Data class: internal");
++});
++
++test("a null connection is unknown in bars, panes and docks", async () => {
++  const state = { ...absent, connected: null };
++  for (const width of [60, 160]) {
++    const screen = await frame(<App subscribe={listen => { listen(state); return () => {}; }}
++      catalogLoader={async () => ({ status: "ok", models: [] })} />, width);
++    expect(screen).toMatch(/UNKNOWN\s*\|\s*(session active|S:active)/);
++    expect(screen).not.toMatch(/\b(CONNECTED|CONN|NOCONN)\b/);
++  }
++  expect(await frame(<GovernancePane active state={state} />)).toContain("GOVERNANCE | UNKNOWN");
++  for (const surface of ["claude-code", "antigravity"] as const) {
++    const Pane = surface === "claude-code" ? ClaudePane : AntigravityPane;
++    const pane = await frame(<Pane active state={state} ptyOutput="" />);
++    const dock = await frame(<DockStrip surface={surface} state={state} ptyOutput="" />);
++    expect(pane).toContain("FOCUSED | UNKNOWN");
++    expect(dock).toContain("docked | UNKNOWN");
++    expect(pane + dock).not.toMatch(/STREAM ENDED|\bLIVE\b|WRITER/);
++  }
++});
++
++test("absent execution and ownership facts stay absent and queue depth stays hidden", async () => {
++  const governance = await frame(<GovernancePane active state={absent} />);
++  expect(governance).toContain("Claude: —");
++  expect(governance).toContain("Antigravity: —");
++  expect(governance).toContain("Ownership: UNKNOWN");
++  const status = await frame(<StatusBar state={absent} connected focus="claude" />);
++  expect(status).toContain("writer UNKNOWN");
++  const app = (state: BrokerSnapshot) => <App subscribe={listen => { listen(state); return () => {}; }}
++    catalogLoader={async () => ({ status: "ok", models: [] })} />;
++  expect(await frame(app(absent))).toBe(await frame(app({ ...absent, queueDepth: 81937 })));
++  for (const surface of ["claude-code", "antigravity"] as const) {
++    const Pane = surface === "claude-code" ? ClaudePane : AntigravityPane;
++    expect(await frame(<Pane active state={absent} ptyOutput="" />)).toContain("UNKNOWN | UNKNOWN");
++    expect(await frame(<DockStrip surface={surface} state={absent} ptyOutput="" />)).toContain("UNKNOWN | UNKNOWN");
++  }
++});
++
++test("a null token stays absent in writer, incident and session_open frames", async () => {
++  for (const surface of ["claude-code", "antigravity"] as const) {
++    const state: BrokerSnapshot = { ...absent, ownershipState: "owned", activeWriter: "writer",
++      executions: [{ execution_id: "writer", surface: parseSurfaceId(surface), role: "builder",
++        model: "synthetic", provider: "synthetic", independence_domain: "synthetic", effort: "low" }] };
++    const Pane = surface === "claude-code" ? ClaudePane : AntigravityPane;
++    expect(await frame(<Pane active state={state} ptyOutput="" />)).toContain("WRITER token —");
++    expect(await frame(<DockStrip surface={surface} state={state} ptyOutput="" />)).toContain("WRITER token —");
++    expect(await frame(<StatusBar state={state} connected focus="claude" />)).toContain("writer (token —)");
++    expect(await frame(<StatusBar state={state} connected focus="claude" />, 60)).toContain("T:—");
++  }
++  expect(await frame(<GovernancePane active state={absent} />)).toContain("Token: —");
++  expect(await frame(<IncidentBand state={{ ...absent, sessionState: "interrupted" }} />)).toContain("token —");
++  const entries = ["session_open", "bridge_event"].map((type, i) => ({
++    seq: i + 1, type, actor: "offline", fencingToken: null, hash: "synthetic", timestamp: "synthetic",
++  }));
++  const rows = await frame(<EventLog entries={entries} />);
++  for (const entry of entries) {
++    const line = rows.split("\n").find(row => row.includes(entry.type));
++    expect(line).toContain("tok:—");
++    expect(line).not.toMatch(/tok:(?:\s|\d)|tok#null|#0|\bnull\b/);
++  }
++});
+diff --git a/test/phase3b/child-end.test.ts b/test/phase3b/child-end.test.ts
+new file mode 100644
+index 0000000..6fede35
+--- /dev/null
++++ b/test/phase3b/child-end.test.ts
+@@ -0,0 +1,56 @@
++import { expect, test } from "bun:test";
++import { ADAPTER_REGISTRY, parseSurfaceId } from "@madventures/protocol";
++import { attestClaudeSession } from "../../packages/adapter-claude-code/src/live";
++import { attestMadvSession } from "../../packages/adapter-madv-surface/src/index";
++import { activeCases, observeChildEnd, surfaces } from "./child-end";
++import { attestationEvents } from "./end-stand-in";
++import { wireFacts } from "./wire-facts";
++
++for (const surface of surfaces) {
++  for (const [end, cause] of [["clean exit", "child_exited"], ["host end", "host_exited"]] as const) {
++    test(surface + " before activation reports " + cause, async () => {
++      const seen = await observeChildEnd(surface, true, end);
++      const execution = surface === "claude-code" ? "builder" : "reviewer";
++      expect(seen.phase).toBe("");
++      expect(seen.component).toBe("reattest");
++      expect(seen.detail).toBe("step=reattest execution=" + execution +
++        " failure=reattestation_failed surface=" + surface + " cause=" + cause);
++    }, 20_000);
++  }
++  test(surface + " drained alone leaves the monitor active", async () => {
++    const wire = wireFacts();
++    const model = surface === "claude-code" ? "claude-fable-5-2" : "MiniMax-M3.1-Flash";
++    const registration = ADAPTER_REGISTRY.get(parseSurfaceId(surface))!;
++    const input = { ...wire, model, registration, executionId: "offline-execution", sessionId: "offline-session" };
++    const result = surface === "claude-code" ? attestClaudeSession(input) : attestMadvSession(input);
++    wire.events(...attestationEvents(surface, model));
++    expect((await result).ok).toBe(true);
++    wire.push({ kind: "drained" });
++    // Yield across a full turn so the already-parked monitor consumes the fact.
++    await Bun.sleep(1);
++    expect(wire.failures).toEqual([]);
++    expect(wire.closed).toBe(0);
++    wire.push({ kind: "exited", code: 0 });
++    wire.end();
++    while (!wire.closed) await Bun.sleep(1);
++    expect(wire.failures).toEqual(["child_exited"]);
++  });
++}
++
++for (const [surface, end, cause, reason] of activeCases) {
++  test(surface + " " + end + " records " + reason, async () => {
++    const seen = await observeChildEnd(surface, false, end);
++    expect(seen.component).toBe("");
++    expect(seen.phase).toBe("active");
++    expect(seen.interrupted).toEqual([{ reason, detail: surface + ": " + cause }]);
++    expect(seen.closed).toBe("interruption");
++  }, 20_000);
++}
++
++test("Founder close on the active composition records no interruption", async () => {
++  const seen = await observeChildEnd("claude-code", false, "Founder close");
++  expect(seen.component).toBe("");
++  expect(seen.phase).toBe("active");
++  expect(seen.closed).toBe("founder");
++  expect(seen.interrupted).toEqual([]);
++}, 20_000);
+diff --git a/test/phase3b/child-end.ts b/test/phase3b/child-end.ts
+new file mode 100644
+index 0000000..96d9a45
+--- /dev/null
++++ b/test/phase3b/child-end.ts
+@@ -0,0 +1,98 @@
++import { join } from "node:path";
++import type { BrokerClient } from "@madventures/broker";
++import { Ledger } from "@madventures/ledger";
++import { attestMadvSession } from "../../packages/adapter-madv-surface/src/index";
++import { createStartAttesters, composeLiveSession } from "../../apps/madbridge/src/tui/live/composition";
++import { runLiveTransactionalBuild, runPurePreflight } from "../../packages/supervisor/src/index";
++import { closeOfflineBuild } from "./offline";
++import { prepareM2 } from "./m2-offline";
++import type { End, Surface } from "./end-stand-in";
++
++export const surfaces = ["claude-code", "madv-surface"] as const;
++export const activeCases = [
++  ["claude-code", "clean exit", "child_exited", "child_failure"],
++  ["claude-code", "host end", "host_exited", "pty_host_failure"],
++  ["claude-code", "nonzero exit", "child_exited", "child_failure"],
++  ["claude-code", "signalled exit", "child_exited", "child_failure"],
++  ["claude-code", "malformed partial line", "attestation_malformed", "identity_mismatch"],
++  ["madv-surface", "clean exit", "child_exited", "child_failure"],
++  ["madv-surface", "host end", "host_exited", "pty_host_failure"],
++  ["madv-surface", "nonzero exit", "provider_error", "adapter_failure"],
++  ["madv-surface", "malformed partial line", "identity_mismatch", "identity_mismatch"],
++  ["madv-surface", "pending request", "identity_unavailable", "identity_mismatch"],
++  ["madv-surface", "open tool", "identity_mismatch", "identity_mismatch"],
++] as const;
++
++async function until(finished: () => boolean | Promise<boolean>) {
++  const deadline = performance.now() + 5000;
++  while (!await finished()) {
++    if (performance.now() >= deadline) throw new Error("offline observation deadline");
++    await Bun.sleep(10);
++  }
++}
++
++function readClosure(root: string, id: string) {
++  const ledger = new Ledger(join(root, "sessions", id, "ledger", "ledger.sqlite3"));
++  try {
++    const rows = ledger.readAfter(0).map(row => JSON.parse(row.event_json));
++    return {
++      interrupted: rows.filter(row => row.event_type === "session_interrupted")
++        .map(row => ({ reason: String(row.reason_code), detail: String(row.payload.reason) })),
++      closed: rows.find(row => row.event_type === "session_closed")?.payload.closure_kind ?? null,
++    };
++  } finally { ledger.close(); }
++}
++
++export async function observeChildEnd(surface: Surface, before: boolean, end: End) {
++  const f = prepareM2(surface, before, end);
++  let phase = "", id = "", component = "", detail = "";
++  try {
++    async function observeActive(client: BrokerClient, send?: (text: string) => boolean) {
++      const active = await client.getSnapshot();
++      phase = active.phase;
++      id = active.sessionId;
++      if (before || end === "Founder close") return;
++      if (end === "pending request" || end === "open tool") {
++        if (!send?.("synthetic request")) throw new Error("offline request refused");
++      }
++      f.release();
++      await until(async () => (await client.getSnapshot()).phase === "closed");
++    }
++
++    if ((surface === "madv-surface" && before) || end === "pending request" || end === "open tool") {
++      const preflight = await runPurePreflight(f.input);
++      if (!preflight.ok) throw new Error("offline preflight failed");
++      const installed = createStartAttesters();
++      let send: ((text: string) => boolean) | undefined;
++      const build = await runLiveTransactionalBuild({ sessionId: "offline-child-end", envelope: f.envelope,
++        plan: preflight.plan, signal: f.input.signal, attesterFor: name => {
++          if (name !== "madv-surface") return installed(name);
++          return async input => {
++            let reported = false;
++            const verdict = await attestMadvSession({ ...input, reportFailure(cause) {
++              input.reportFailure(cause);
++              reported = true;
++            } });
++            if (verdict.ok) {
++              send = verdict.sendUserInput;
++              if (before) {
++                f.release();
++                await until(() => reported);
++              }
++            }
++            return verdict;
++          };
++        } });
++      try {
++        if (build.ok) await observeActive(build.state.client!, send);
++        else { component = build.failedStep; detail = build.detail; }
++      } finally { await closeOfflineBuild(build); }
++    } else {
++      const built = await composeLiveSession({ ...f.start, present: client => observeActive(client) });
++      if (built.exitCode === 0) await built.close();
++      else { component = built.component; detail = built.detail; }
++    }
++    const closure = id ? readClosure(f.storageRootOverride, id) : { interrupted: [], closed: null };
++    return { surface, before, end, phase, component, detail, ...closure };
++  } finally { f.dispose(); }
++}
+diff --git a/test/phase3b/end-stand-in.ts b/test/phase3b/end-stand-in.ts
+new file mode 100644
+index 0000000..9d40e5f
+--- /dev/null
++++ b/test/phase3b/end-stand-in.ts
+@@ -0,0 +1,115 @@
++import { existsSync, readFileSync, writeFileSync } from "node:fs";
++import { basename, dirname, join } from "node:path";
++import { createInterface } from "node:readline";
++
++export type Surface = "claude-code" | "madv-surface";
++export type End = "clean exit" | "host end" | "nonzero exit" | "signalled exit" |
++  "malformed partial line" | "pending request" | "open tool" | "Founder close";
++
++export function attestationEvents(surface: Surface, model: string) {
++  const stamp = { session_id: "offline-wire", ts: "2026-11-23T00:00:00.000Z" };
++  const result = { ...stamp, type: "result", subtype: "success", is_error: false };
++  if (surface === "claude-code") return [
++    { ...stamp, type: "system", subtype: "init", model, claude_code_version: "2.1.325" },
++    { ...stamp, type: "assistant", message: { id: "offline-message", model, content: [{ type: "text", text: model }] } },
++    { ...result, num_turns: 1, modelUsage: { [model]: { canonicalModel: model, provider: "firstParty" } } },
++  ];
++  const identity = { provider: "minimax", profile: "minimax", endpoint_host: "api.minimax.io" };
++  return [
++    { ...stamp, ...identity, type: "system", subtype: "init", surface, surface_version: "0.1.2", requested_model: model },
++    { ...stamp, ...identity, type: "model_response", response_model: model, response_id: "offline-response",
++      response_independence_domain: "minimax", tls_verified_host: "api.minimax.io" },
++    { ...stamp, type: "assistant", response_model: model }, result,
++  ];
++}
++
++async function run() {
++  const executable = process.argv[1]!.replace(/\.launch\.ts$/, "");
++  const root = dirname(dirname(executable));
++  // Only the private TTY launch takes a fault. All probes use the M1 stand-in.
++  if (!process.stdin.isTTY || process.cwd() !== join(root, "work") || !existsSync(join(root, "m2-case.json"))) {
++    throw new Error("expected private offline launch");
++  }
++  const surface: Surface = basename(executable) === "madbridge-claude-v5" ? "claude-code" : "madv-surface";
++  const scenario: { surface: Surface; before: boolean; end: End } =
++    JSON.parse(readFileSync(join(root, "m2-case.json"), "utf8"));
++  const model = process.argv[process.argv.indexOf("--model") + 1]!;
++  const events = attestationEvents(surface, model);
++  const emit = (...items: unknown[]) => writeFileSync(1, items.map(e => JSON.stringify(e) + "\n").join(""));
++  const release = join(root, "release-end");
++  const parent = process.ppid;
++  process.on("SIGTERM", () => process.exit(0));
++
++  let attested = false;
++  for await (const line of createInterface({ input: process.stdin })) {
++    const frame = JSON.parse(line);
++    if (attested) continue;
++    if (frame.message.content !== "Reply with your model identifier and nothing else." ||
++      (surface === "madv-surface" ? frame.no_tools !== true : frame.no_tools !== undefined)) process.exit(2);
++    if (scenario.before && scenario.surface === "claude-code" && surface === "madv-surface") {
++      // The second attestation supplies a window after the first handover.
++      writeFileSync(release, "");
++      await Bun.sleep(1200);
++    }
++    emit(...events);
++    attested = true;
++    if (surface !== scenario.surface || scenario.end === "Founder close") continue;
++    while (!existsSync(release)) await Bun.sleep(5);
++    if (scenario.end !== "host end") {
++      // The macOS host queries the state of its one child through PATH.
++      // Establish a kernel-parentage witness before taking the fault.
++      Bun.spawn([process.execPath, "--no-env-file", process.argv[1]!, "--witness", String(process.pid)], {
++        cwd: join(root, "work"), detached: true, stdin: "ignore", stdout: "ignore", stderr: "ignore",
++        env: { HOME: root, TMPDIR: join(root, "temp"), PATH: join(root, "bin") },
++      }).unref();
++      const deadline = performance.now() + 2000;
++      while (!existsSync(join(root, "watching-" + process.pid))) {
++        if (performance.now() >= deadline) throw new Error("offline exit witness unavailable");
++        await Bun.sleep(5);
++      }
++    }
++    switch (scenario.end) {
++      case "host end":
++        // This stand-in is the exec'd child of its private PTY host. Never
++        // signal an adopted parent or a parent that changed since launch.
++        if (parent <= 1 || process.ppid !== parent) throw new Error("offline host identity changed");
++        process.kill(parent, "SIGKILL");
++        break;
++      case "nonzero exit": process.exit(1);
++      case "signalled exit": process.kill(process.pid, "SIGKILL"); break;
++      case "malformed partial line": writeFileSync(1, '{"type":'); break;
++      case "open tool":
++        emit(events[1], { session_id: "offline-wire", ts: "2026-11-23T00:00:00.000Z",
++          type: "tool_use", tool_use_id: "offline-tool", name: "synthetic" });
++        break;
++    }
++    process.exit(0);
++  }
++}
++
++if (import.meta.main) {
++  const root = dirname(dirname(process.argv[1]!));
++  if (process.argv[2] === "--witness") {
++    const owner = Number(process.argv[3]);
++    if (!Number.isSafeInteger(owner) || owner <= 1 || process.ppid !== owner) process.exit(1);
++    writeFileSync(join(root, "watching-" + owner), "");
++    const deadline = performance.now() + 3000;
++    while (process.ppid === owner) {
++      if (performance.now() >= deadline) process.exit(1);
++      await Bun.sleep(5);
++    }
++    writeFileSync(join(root, "ended-" + owner), "");
++  } else if (basename(process.argv[1]!) === "ps.ts") {
++    // A reparented witness proves its original parent is no longer running.
++    // Report only that property for a known child. Never enumerate processes.
++    const [format, field, selector, pid, ...rest] = process.argv.slice(2);
++    if (format !== "-o" || field !== "state=" || selector !== "-p" || rest.length ||
++      !pid || !/^[1-9][0-9]*$/.test(pid) || !existsSync(join(root, "watching-" + pid))) process.exit(1);
++    const deadline = performance.now() + 1500;
++    while (!existsSync(join(root, "ended-" + pid))) {
++      if (performance.now() >= deadline) process.exit(1);
++      await Bun.sleep(5);
++    }
++    writeFileSync(1, "Z\n");
++  } else await run();
++}
+diff --git a/test/phase3b/m2-offline.ts b/test/phase3b/m2-offline.ts
+new file mode 100644
+index 0000000..cf35148
+--- /dev/null
++++ b/test/phase3b/m2-offline.ts
+@@ -0,0 +1,31 @@
++import { readFileSync, writeFileSync } from "node:fs";
++import { join } from "node:path";
++import { offlineStart } from "./offline";
++import { offlinePreflight } from "./preflight-input";
++import type { End, Surface } from "./end-stand-in";
++
++export function prepareM2(surface: Surface, before: boolean, end: End) {
++  const f = offlineStart();
++  try {
++    const probe = readFileSync(new URL("./stand-in.ts", import.meta.url));
++    const launch = readFileSync(new URL("./end-stand-in.ts", import.meta.url));
++    const bun = "'" + process.execPath.replaceAll("'", "'\\''") + "'";
++    const bootstrap = ["#!/bin/sh", 'cd "${0%/*}/../work" || exit 2',
++      'if [ -t 0 ]; then exec ' + bun + ' --no-env-file "$0.launch.ts" "$@"; fi',
++      'exec ' + bun + ' --no-env-file "$0.ts" "$@"', ""].join("\n");
++    for (const child of f.plan.executions) {
++      writeFileSync(child.executablePath, bootstrap);
++      writeFileSync(child.executablePath + ".ts", probe);
++      writeFileSync(child.executablePath + ".launch.ts", launch);
++    }
++    const stateProbe = join(f.bin, "ps");
++    writeFileSync(stateProbe + ".ts", launch);
++    writeFileSync(stateProbe, '#!/bin/sh\ncd "${0%/*}/../work" || exit 2\nexec ' + bun + ' --no-env-file "$0.ts" "$@"\n', { mode: 0o700 });
++    writeFileSync(join(f.root, "m2-case.json"), JSON.stringify({ surface, before, end }));
++    writeFileSync(join(f.root, "scenario"), "healthy");
++    writeFileSync(join(f.root, "trace"), "");
++    const input = offlinePreflight(f);
++    return { ...f, input, release: () => writeFileSync(join(f.root, "release-end"), ""),
++      start: { envelope: f.envelope, preflight: input, workingDirectory: f.work, configFolder: f.config, managedFolder: f.managed } };
++  } catch (error) { f.dispose(); throw error; }
++}
+diff --git a/test/phase3b/projection.test.ts b/test/phase3b/projection.test.ts
+new file mode 100644
+index 0000000..e729282
+--- /dev/null
++++ b/test/phase3b/projection.test.ts
+@@ -0,0 +1,111 @@
++import { expect, test } from "bun:test";
++import type { BrokerSnapshot as Source } from "@madventures/broker";
++import { parseSurfaceId, type ExecutionIdentity, type TaskEnvelopeV1 } from "@madventures/protocol";
++import { clientSnapshotToProjection as project } from "../../apps/madbridge/src/tui/live/projection";
++import type { BrokerSnapshot as Projection } from "../../apps/madbridge/src/tui/types";
++import { fingerprint, sparseSnapshot } from "./snapshot-input";
++
++const empty: Projection = {
++  connected: null, sessionState: "starting", ownershipState: null, activeWriter: null, fencingToken: null, task: null,
++  executions: null, repositoryFingerprint: fingerprint, pendingApprovals: [], pendingTransfers: null,
++  permissionSummary: null, transferPhase: null, verificationStatus: null, reviewStatus: null,
++  incident: null, eventLog: [], queueDepth: null,
++};
++const identity: ExecutionIdentity = { execution_id: "second", role: "observer", surface: parseSurfaceId("sample"),
++  model: "scripted", provider: "offline", independence_domain: "sample", effort: "low" };
++const first: ExecutionIdentity = { ...identity, execution_id: "first", role: "builder", effort: "high" };
++const identities = [first, identity];
++const working = { ...fingerprint, kind: "working_tree", base_git_sha: "synthetic-base" } as const;
++const task: TaskEnvelopeV1 = { protocol_version: "madbridge-protocol/v1", task_id: "task", authorization_reference: "",
++  repository: "", branch: "", worktree: "", repository_fingerprint: working, executions: identities, initial_writer: "first",
++  scope: { allowedReadPaths: [], allowedWritePaths: [], allowedCommandCategories: ["read"], allowedArtifactCategories: ["report"],
++    maxArtifactSizeBytes: 1, dataClass: "confidential", allowedEgressDestinations: [] },
++  pair_constraints: { required_roles: ["builder", "independent-reviewer"], require_distinct_providers: true,
++    require_distinct_independence_domains: true, prohibit_self_review: true, allowed_surface_pairs: [[first.surface, identity.surface]] },
++  expires_at: "", created_at: "", envelope_hash: "" };
++const owner = { executionId: "first", worktreeId: "tree", fencingToken: 37, repositoryFingerprint: working };
++const approval = { id: "approval", type: "transfer", actor: "offline", taskId: "task", repositoryFingerprint: working,
++  scope: "read", timestamp: "stamp" };
++const approvalStates = ["pending", "approved", "rejected", "expired"] as const;
++const transfers = [{ id: "transfer", from: "first", to: "second", reason: "synthetic", fencingToken: 37, timestamp: "stamp" }];
++const permissions = { allowedReadPaths: ["source"], allowedWritePaths: [], allowedCommandCategories: ["test"],
++  allowedEgressDestinations: [], dataClass: "internal" };
++const verification = { result: "warning", detail: "synthetic", verifiedBy: "second", timestamp: "stamp" } as const;
++const review = { decision: "changes-requested", comments: "synthetic", reviewedBy: "second", timestamp: "stamp" } as const;
++const incident = { id: "incident", reason: "synthetic", timestamp: "stamp", severity: "medium" } as const;
++const rows = [
++  { seq: 1, type: "session_open", actor: "offline", fencingToken: null, hash: "one", timestamp: "early" },
++  { seq: 9, type: "synthetic", actor: "first", fencingToken: 37, hash: "nine", timestamp: "late" },
++];
++const full: Source = {
++  sessionId: "session", snapshotSeq: 74, connected: true, phase: "active", taskEnvelopeHash: "envelope", task,
++  repositoryFingerprint: working, executions: identities.map(id => ({ identity: id, state: "ready", hostPid: 1,
++    childPid: 2, processGroupId: 3, executablePath: "stand-in", executableSha256: "digest", exitCode: null, exitSignal: null })),
++  activeWriterExecutionId: "first", fencingToken: 37, tokenState: "valid",
++  pendingApprovals: approvalStates.map(state => ({ ...approval, state })), pendingTransfers: transfers,
++  permissionSummary: permissions, ownershipState: { kind: "owned", ...owner }, verification, review, incident,
++  eventLog: rows, queueDepth: 12, ledgerSeq: 9,
++};
++const expected: Projection = { connected: true, sessionState: "active", ownershipState: "owned", activeWriter: "first",
++  fencingToken: 37, task, executions: identities, repositoryFingerprint: working,
++  pendingApprovals: [
++    { ...approval, colorState: { kind: "pending", text: "PENDING — awaiting Founder decision" } },
++    { ...approval, colorState: { kind: "approved", text: "APPROVED — Founder authorized" } },
++    { ...approval, colorState: { kind: "rejected", text: "REJECTED — Founder denied" } },
++    { ...approval, colorState: { kind: "expired", text: "EXPIRED — decision window elapsed" } },
++  ], pendingTransfers: transfers, permissionSummary: permissions, transferPhase: null, verificationStatus: verification,
++  reviewStatus: review, incident, eventLog: rows, queueDepth: 12 };
++
++test("the pinned table maps every broker member and declared phase and ownership kind", () => {
++  const table: Array<[Source, Projection]> = [[sparseSnapshot, empty], [full, expected]];
++  for (const phase of ["starting", "active", "paused", "interrupted", "closing", "closed"] as const) {
++    table.push([{ ...full, phase }, { ...expected, sessionState: phase }]);
++  }
++  const ownership: Array<[Source["ownershipState"], Projection["ownershipState"]]> = [
++    [null, null], [{ kind: "free" }, "free"], [{ kind: "owned", ...owner }, "owned"],
++    [{ kind: "transfer-requested", ...owner, transferTo: "second" }, "transfer-requested"],
++    [{ kind: "sender-released", ...owner, transferTo: "second" }, "sender-released"],
++    [{ kind: "rejected", ...owner, reason: "synthetic" }, "rejected"],
++  ];
++  for (const [input, output] of ownership) table.push([{ ...full, ownershipState: input }, { ...expected, ownershipState: output }]);
++  table.push([{ ...full, connected: false, snapshotSeq: 0, tokenState: "invalidated", ledgerSeq: 1000,
++    sessionId: "", taskEnvelopeHash: "", executions: [], pendingTransfers: [], fencingToken: 0, queueDepth: 0 },
++    { ...expected, connected: false, executions: [], pendingTransfers: [], fencingToken: 0, queueDepth: 0 }]);
++  for (const [input, output] of table) {
++    const original = structuredClone(input);
++    expect(project(original)).toEqual(output);
++    expect(original).toEqual(input);
++  }
++});
++
++test("the mapper rejects unknown shapes without disclosing supplied values", () => {
++  function rejects(input: unknown, member: string) {
++    let message = "";
++    try { project(input as Source); } catch (error) { if (error instanceof TypeError) message = error.message; }
++    expect(message).toContain(member + ": ");
++    expect(message).toMatch(/missing|expected|outside the declared set|invalid surface identifier/);
++    expect(message).not.toContain("synthetic-invalid-value");
++  }
++  for (const key of Object.keys(full)) {
++    const missing: Record<string, unknown> = { ...full };
++    delete missing[key];
++    rejects(missing, "snapshot." + key);
++  }
++  for (const key of ["phase", "repositoryFingerprint", "tokenState", "ledgerSeq", "sessionId", "taskEnvelopeHash", "pendingApprovals", "eventLog"]) {
++    rejects({ ...full, [key]: null }, "snapshot." + key);
++  }
++  const invalid = "synthetic-invalid-value";
++  for (const [value, member] of [
++    [{}, "kind"], [{ ...fingerprint, kind: invalid }, "kind"], [{ ...fingerprint, sha256: false }, "sha256"],
++    [{ ...fingerprint, git_sha: 4 }, "git_sha"], [{ ...fingerprint, base_git_sha: undefined }, "base_git_sha"],
++  ] as const) rejects({ ...full, repositoryFingerprint: value }, "snapshot.repositoryFingerprint." + member);
++  rejects({ ...full, phase: invalid }, "snapshot.phase");
++  rejects({ ...full, connected: invalid }, "snapshot.connected");
++  rejects({ ...full, ownershipState: { kind: invalid } }, "snapshot.ownershipState.kind");
++  rejects({ ...full, ownershipState: { ...owner, kind: "sender-released" } }, "snapshot.ownershipState.transferTo");
++  rejects({ ...full, pendingApprovals: [{ ...approval, state: invalid }] }, "snapshot.pendingApprovals[].state");
++  rejects({ ...full, executions: [{ ...full.executions![0], identity: { ...first, role: invalid } }] }, "snapshot.executions[].identity.role");
++  rejects({ ...full, task: { ...task, scope: { ...task.scope, dataClass: invalid } } }, "snapshot.task.scope.dataClass");
++  rejects({ ...full, permissionSummary: { ...permissions, allowedReadPaths: [false] } }, "snapshot.permissionSummary.allowedReadPaths[]");
++  rejects({ ...full, eventLog: [{ ...rows[0], fencingToken: invalid }] }, "snapshot.eventLog[].fencingToken");
++});
+diff --git a/test/phase3b/recorded-frames.test.tsx b/test/phase3b/recorded-frames.test.tsx
+new file mode 100644
+index 0000000..8e16fcd
+--- /dev/null
++++ b/test/phase3b/recorded-frames.test.tsx
+@@ -0,0 +1,36 @@
++import { expect, test } from "bun:test";
++import { mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
++import { userInfo } from "node:os";
++import { join } from "node:path";
++import { recordOfflineFrames } from "../../scripts/phase3b/recorded-frames";
++
++test("the healthy offline client's recorded stream renders activation through Founder close", async () => {
++  const directory = realpathSync(mkdtempSync(join(realpathSync(userInfo().homedir), ".madbridge-m2-frames-")));
++  try {
++    const stream = await recordOfflineFrames(directory);
++    const persisted = JSON.parse(readFileSync(join(directory, "healthy-stream.json"), "utf8"));
++    expect(persisted).toEqual(stream);
++    const first = stream.snapshots[0]!;
++    expect(first.phase).toBe("active");
++    expect(first.executions?.every(execution => execution.state === "ready")).toBe(true);
++    expect(first.eventLog.some(row => row.type === "session_activated")).toBe(true);
++    const frames = readFileSync(join(directory, "healthy-frames.txt"), "utf8");
++    expect(frames).toContain("session active");
++    expect(frames).toContain("session_activated");
++    expect(frames).toContain("GOVERNANCE");
++    expect(frames).toContain("session_open");
++    expect(frames).toContain("tok:—");
++    let previous = 0;
++    for (const snapshot of stream.snapshots) {
++      expect(snapshot.snapshotSeq).toBeGreaterThan(previous);
++      previous = snapshot.snapshotSeq!;
++      for (const view of ["builder", "governance", "events"]) expect(frames).toContain("Offline | snapshot " + previous + " | " + view);
++      expect(frames).toContain("session " + snapshot.phase);
++    }
++    expect(stream.founderClose).toBe("completed");
++    for (const closed of stream.snapshots.filter(s => s.phase === "closed")) {
++      expect(closed.eventLog.some(row => row.type === "session_closed")).toBe(true);
++    }
++    expect(stream.ending).toMatch(/read rejected|returned connected false|final post-close read returned a snapshot/);
++  } finally { rmSync(directory, { recursive: true, force: true }); }
++}, 20_000);
+diff --git a/test/phase3b/snapshot-input.ts b/test/phase3b/snapshot-input.ts
+new file mode 100644
+index 0000000..b5817d4
+--- /dev/null
++++ b/test/phase3b/snapshot-input.ts
+@@ -0,0 +1,10 @@
++import type { BrokerSnapshot } from "@madventures/broker";
++
++export const fingerprint = { kind: "commit", sha256: "synthetic-digest", git_sha: "synthetic-revision" } as const;
++
++export const sparseSnapshot: BrokerSnapshot = {
++  sessionId: "", snapshotSeq: null, connected: null, phase: "starting", taskEnvelopeHash: "", task: null,
++  repositoryFingerprint: fingerprint, executions: null, activeWriterExecutionId: null, fencingToken: null,
++  tokenState: "not_issued", pendingApprovals: [], pendingTransfers: null, permissionSummary: null,
++  ownershipState: null, verification: null, review: null, incident: null, eventLog: [], queueDepth: null, ledgerSeq: 0,
++};
+diff --git a/test/phase3b/subscribe.test.ts b/test/phase3b/subscribe.test.ts
+new file mode 100644
+index 0000000..a300738
+--- /dev/null
++++ b/test/phase3b/subscribe.test.ts
+@@ -0,0 +1,106 @@
++import { expect, test } from "bun:test";
++import type { BrokerClient, BrokerSnapshot as Source } from "@madventures/broker";
++import { subscribeToClient } from "../../apps/madbridge/src/tui/live/subscribe";
++import type { BrokerSnapshot } from "../../apps/madbridge/src/tui/types";
++import { SNAPSHOT_INTERVAL_MS } from "../../packages/supervisor/src/snapshot-timer";
++import { sparseSnapshot } from "./snapshot-input";
++
++const active: Source = { ...sparseSnapshot, connected: true, phase: "active" };
++const closed: Source = { ...sparseSnapshot, connected: false, phase: "closed" };
++const invalid = { ...active, phase: "invalid" } as unknown as Source;
++const readFailure = () => { throw new Error("synthetic refusal"); };
++
++function stream(read: (index: number) => Source | Promise<Source>) {
++  let count = 0;
++  const getSnapshot = async () => read(count++);
++  const client: BrokerClient = {
++    getSnapshot,
++    async *snapshots() {
++      for (;;) {
++        const snapshot = await getSnapshot();
++        if (snapshot.connected === false) return;
++        yield snapshot;
++      }
++    },
++    async *output() {}, request: readFailure, publish: readFailure, close: readFailure,
++  };
++  return { client, reads: () => count };
++}
++
++async function until(predicate: () => boolean) {
++  const deadline = performance.now() + 3000;
++  while (!predicate()) {
++    if (performance.now() >= deadline) throw new Error("synthetic stream deadline");
++    await Bun.sleep(5);
++  }
++  await Promise.resolve();
++}
++
++test("subscription gives the first, changed and closed projections exactly once", async () => {
++  const frames = [active, { ...active, snapshotSeq: 2, ledgerSeq: 7 },
++    { ...active, phase: "paused" as const, queueDepth: 3 }, closed];
++  const source = stream(i => frames[i] ?? closed);
++  const seen: BrokerSnapshot[] = [];
++  const off = subscribeToClient(source.client)(frame => { seen.push(frame); });
++  try {
++    expect(source.reads()).toBe(1);
++    await until(() => seen.length > 0);
++    expect(source.reads()).toBe(1);
++    await until(() => source.reads() >= 4);
++    await Bun.sleep(SNAPSHOT_INTERVAL_MS + 30);
++    expect(seen.map(s => [s.sessionState, s.connected, s.queueDepth])).toEqual([
++      ["active", true, null], ["paused", true, 3], ["closed", false, null],
++    ]);
++    expect(source.reads()).toBe(4);
++  } finally { off(); }
++});
++
++test("mapping and read failures end delivery from the last projection", async () => {
++  for (const fail of [() => invalid, readFailure]) {
++    const source = stream(i => i === 0 ? active : i === 1 ? fail() : closed);
++    const seen: BrokerSnapshot[] = [];
++    const off = subscribeToClient(source.client)(frame => { seen.push(frame); });
++    try {
++      await until(() => source.reads() >= 2);
++      await Bun.sleep(SNAPSHOT_INTERVAL_MS + 30);
++      expect(seen).toHaveLength(2);
++      expect(seen[0]?.connected).toBe(true);
++      expect(seen[1]).toEqual({ ...seen[0]!, connected: false });
++      expect(source.reads()).toBe(2);
++    } finally { off(); }
++  }
++});
++
++test("a first failure gives no projection", async () => {
++  for (const fail of [() => invalid, readFailure]) {
++    const source = stream(i => i === 0 ? fail() : closed);
++    const seen: BrokerSnapshot[] = [];
++    const off = subscribeToClient(source.client)(frame => { seen.push(frame); });
++    try {
++      await Bun.sleep(SNAPSHOT_INTERVAL_MS + 30);
++      expect(seen).toEqual([]);
++      expect(source.reads()).toBe(1);
++    } finally { off(); }
++  }
++});
++
++test("unsubscribe cancels pacing and suppresses in-flight delivery", async () => {
++  const source = stream(() => active);
++  const seen: BrokerSnapshot[] = [];
++  const off = subscribeToClient(source.client)(frame => { seen.push(frame); });
++  try { await until(() => seen.length > 0); } finally { off(); }
++  await Bun.sleep(SNAPSHOT_INTERVAL_MS + 30);
++  expect(source.reads()).toBe(1);
++  expect(seen).toHaveLength(1);
++
++  const held = Promise.withResolvers<Source>();
++  const parked = stream(() => held.promise);
++  const late: BrokerSnapshot[] = [];
++  const stop = subscribeToClient(parked.client)(frame => { late.push(frame); });
++  expect(parked.reads()).toBe(1);
++  stop();
++  held.resolve(active);
++  await Bun.sleep(SNAPSHOT_INTERVAL_MS + 30);
++  expect(parked.reads()).toBe(1);
++  expect(late).toEqual([]);
++});
