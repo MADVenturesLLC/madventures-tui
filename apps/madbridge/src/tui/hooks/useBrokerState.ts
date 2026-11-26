@@ -9,7 +9,7 @@ import type { BrokerSnapshot } from "../types";
 
 export interface BrokerStateHook {
   readonly state: BrokerSnapshot | null;
-  readonly connected: boolean;
+  readonly connected: boolean | null;
   readonly subscribe: (listener: (snapshot: BrokerSnapshot) => void) => () => void;
 }
 
@@ -21,7 +21,7 @@ export function useBrokerState(
   externalSubscribe?: (listener: (snapshot: BrokerSnapshot) => void) => () => void,
 ): BrokerStateHook {
   const [state, setState] = useState<BrokerSnapshot | null>(null);
-  const [connected, setConnected] = useState(false);
+  const [connected, setConnected] = useState<boolean | null>(false);
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {

@@ -149,10 +149,10 @@ describe("Governance pane projection", () => {
 
   test("snapshot contains both execution identities", () => {
     const snapshot = makeFullSnapshot();
-    expect(snapshot.executions.length).toBe(2);
+    expect(snapshot.executions!.length).toBe(2);
 
-    const claude = snapshot.executions.find((e) => e.surface === "claude-code");
-    const antigravity = snapshot.executions.find((e) => e.surface === "antigravity");
+    const claude = snapshot.executions!.find((e) => e.surface === "claude-code");
+    const antigravity = snapshot.executions!.find((e) => e.surface === "antigravity");
     expect(claude).toBeDefined();
     expect(antigravity).toBeDefined();
     expect(claude!.model).toBe("claude-sonnet-4");
@@ -170,13 +170,13 @@ describe("Governance pane projection", () => {
 
   test("snapshot contains permission summaries", () => {
     const snapshot = makeFullSnapshot();
-    expect(snapshot.permissionSummary.allowedReadPaths).toContain("./src");
-    expect(snapshot.permissionSummary.allowedWritePaths).toContain("./src");
-    expect(snapshot.permissionSummary.allowedCommandCategories).toContain("read");
-    expect(snapshot.permissionSummary.allowedCommandCategories).toContain("write");
-    expect(snapshot.permissionSummary.allowedCommandCategories).toContain("test");
-    expect(snapshot.permissionSummary.dataClass).toBe("internal");
-    expect(snapshot.permissionSummary.allowedEgressDestinations.length).toBe(0);
+    expect(snapshot.permissionSummary!.allowedReadPaths).toContain("./src");
+    expect(snapshot.permissionSummary!.allowedWritePaths).toContain("./src");
+    expect(snapshot.permissionSummary!.allowedCommandCategories).toContain("read");
+    expect(snapshot.permissionSummary!.allowedCommandCategories).toContain("write");
+    expect(snapshot.permissionSummary!.allowedCommandCategories).toContain("test");
+    expect(snapshot.permissionSummary!.dataClass).toBe("internal");
+    expect(snapshot.permissionSummary!.allowedEgressDestinations.length).toBe(0);
   });
 
   test("snapshot contains pending actions", () => {
@@ -206,9 +206,9 @@ describe("Governance pane projection", () => {
       ],
     };
     expect(withTransfer.transferPhase).toBe("sender-released");
-    expect(withTransfer.pendingTransfers.length).toBe(1);
-    expect(withTransfer.pendingTransfers[0]!.from).toBe("exec-claude-code");
-    expect(withTransfer.pendingTransfers[0]!.to).toBe("exec-antigravity");
+    expect(withTransfer.pendingTransfers!.length).toBe(1);
+    expect(withTransfer.pendingTransfers![0]!.from).toBe("exec-claude-code");
+    expect(withTransfer.pendingTransfers![0]!.to).toBe("exec-antigravity");
   });
 
   test("snapshot contains verification status", () => {
@@ -374,7 +374,7 @@ describe("useBrokerState subscribes to immutable snapshots", () => {
     // Fields are readonly in the type definition.
     expect(snapshot.connected).toBe(true);
     expect(snapshot.task).not.toBeNull();
-    expect(snapshot.executions.length).toBe(2);
+    expect(snapshot.executions!.length).toBe(2);
 
     // The subscribe function returns an unsubscribe callback
     const unsubscribe = (snapshot: BrokerSnapshot) => {};

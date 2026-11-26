@@ -91,7 +91,7 @@ export interface ApprovalRequestEvent {
 
 /** Immutable broker snapshot for TUI consumption. */
 export interface BrokerSnapshot {
-  readonly connected: boolean;
+  readonly connected: boolean | null;
   readonly sessionState:
     | "starting"
     | "active"
@@ -106,21 +106,22 @@ export interface BrokerSnapshot {
     | "transfer-requested"
     | "sender-released"
     | "receiver-validating"
-    | "rejected";
+    | "rejected"
+    | null;
   readonly activeWriter: string | null;
-  readonly fencingToken: number;
+  readonly fencingToken: number | null;
   readonly task: TaskEnvelopeV1 | null;
-  readonly executions: readonly ExecutionIdentity[];
+  readonly executions: readonly ExecutionIdentity[] | null;
   readonly repositoryFingerprint: RepositoryFingerprint | null;
   readonly pendingApprovals: readonly PendingApproval[];
-  readonly pendingTransfers: readonly PendingTransfer[];
-  readonly permissionSummary: PermissionSummary;
+  readonly pendingTransfers: readonly PendingTransfer[] | null;
+  readonly permissionSummary: PermissionSummary | null;
   readonly transferPhase: string | null;
   readonly verificationStatus: VerificationStatus | null;
   readonly reviewStatus: ReviewStatus | null;
   readonly incident: IncidentRecord | null;
   readonly eventLog: readonly LedgerEntryProjection[];
-  readonly queueDepth: number;
+  readonly queueDepth: number | null;
 }
 
 export interface PendingApproval {
@@ -176,7 +177,7 @@ export interface LedgerEntryProjection {
   readonly seq: number;
   readonly type: string;
   readonly actor: string;
-  readonly fencingToken: number;
+  readonly fencingToken: number | null;
   readonly hash: string;
   readonly timestamp: string;
 }

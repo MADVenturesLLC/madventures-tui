@@ -27,7 +27,7 @@ import { displayWidth, sliceByDisplayWidth, seatMode, seatLabel } from "./agent-
 
 interface Props {
   state: BrokerSnapshot | null;
-  connected: boolean;
+  connected: boolean | null;
   focus: FocusTarget;
   /** The active Founder seat (LOCAL UI posture). When omitted, the seat
    * fact is omitted from the line — never fabricated. */
@@ -68,7 +68,7 @@ export function StatusBar({ state, connected, focus, seat, widthOverride }: Prop
 // ─── Pure truncation logic (unit-testable without rendering) ───
 
 export interface StatusLineInput {
-  connected: boolean;
+  connected: boolean | null;
   sessionWord: string;
   ownerWord: string;
   pendingCount: number;
@@ -103,7 +103,7 @@ export function buildStatusLine(input: StatusLineInput): string {
   const hasSeat = input.seatWord !== undefined && input.modeWord !== undefined;
 
   // Build the fact tokens.
-  const connToken = input.connected ? "CONNECTED" : "NOT CONNECTED";
+  const connToken = input.connected === null ? "UNKNOWN" : input.connected ? "CONNECTED" : "NOT CONNECTED";
   const sessToken = "session " + input.sessionWord;
   const writerToken = "writer " + input.ownerWord;
   const pendToken = "pending " + String(input.pendingCount);
@@ -129,7 +129,7 @@ export function buildStatusLine(input: StatusLineInput): string {
   }
 
   // ── Compact tokens ──
-  const connCompact = input.connected ? "CONN" : "NOCONN";
+  const connCompact = input.connected === null ? "UNKNOWN" : input.connected ? "CONN" : "NOCONN";
   const sessCompact = "S:" + input.sessionWord;
   const pendCompact = "P:" + String(input.pendingCount);
   const focusCompact = "F:" + input.focusWord;
@@ -277,14 +277,15 @@ export function abbreviateWriter(ownerWord: string, maxLen: number): string {
   // Explicit no-token state: keep the marker attached to the writer ID with a
   // single space, and preserve the marker the same way an issued "#N" token is
   // preserved — the ID yields budget first.
-  const noTokenMatch = /^(.*?)\s*\(token\s+none\)\s*$/i.exec(ownerWord);
+  const noTokenMatch = /^(.*?)\s*\(token\s+(none|—)\)\s*$/i.exec(ownerWord);
   if (noTokenMatch) {
     const id = (noTokenMatch[1] ?? "").replace(/\s+/g, "");
-    if (displayWidth(id) + displayWidth(NO_TOKEN_MARKER) <= maxLen) return id + NO_TOKEN_MARKER;
-    const idBudget = maxLen - displayWidth(NO_TOKEN_MARKER);
+    const marker = noTokenMatch[2] === "—" ? " T:—" : NO_TOKEN_MARKER;
+    if (displayWidth(id) + displayWidth(marker) <= maxLen) return id + marker;
+    const idBudget = maxLen - displayWidth(marker);
     // Marker alone exceeds the budget — keep the marker, drop the ID.
-    if (idBudget <= 0) return NO_TOKEN_MARKER.trimStart().slice(0, maxLen);
-    return sliceByDisplayWidth(id, idBudget) + NO_TOKEN_MARKER;
+    if (idBudget <= 0) return marker.trimStart().slice(0, maxLen);
+    return sliceByDisplayWidth(id, idBudget) + marker;
   }
 
   // Remove spaces (the compact format has no spaces)
@@ -348,19 +349,18 @@ function describeOwner(state: BrokerSnapshot | null): string {
   const o = state.ownershipState;
   const w = state.activeWriter;
   const tok = state.fencingToken;
-  const hasToken = tok > 0;
+  const suffix = tok === null ? " (token —)" : tok > 0 ? " #" + String(tok) : " (token none)";
   switch (o) {
+    case null:
+      return "UNKNOWN";
     case "free":
       return "free";
     case "owned":
-      if (hasToken) return (w ?? "unknown") + " #" + String(tok);
-      return (w ?? "unknown") + " (token none)";
+      return (w ?? "unknown") + suffix;
     case "transfer-requested":
-      if (hasToken) return "transfer-req #" + String(tok);
-      return "transfer-req (token none)";
+      return "transfer-req" + suffix;
     case "sender-released":
-      if (hasToken) return "released #" + String(tok);
-      return "released (token none)";
+      return "released" + suffix;
     case "receiver-validating":
       return "validating";
     case "rejected":

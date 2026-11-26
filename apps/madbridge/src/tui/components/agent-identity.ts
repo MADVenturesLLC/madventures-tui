@@ -128,6 +128,7 @@ export function writerToken(state: BrokerSnapshot | null, surface: AgentSurface)
  */
 export function livenessWord(state: BrokerSnapshot | null): string {
   if (!state) return "STREAM ENDED";
+  if (state.connected === null) return "UNKNOWN";
   if (!state.connected) return "STREAM ENDED";
   if (state.sessionState === "interrupted") return "WRITING FROZEN";
   if (state.incident !== null) return "WRITING FROZEN";
