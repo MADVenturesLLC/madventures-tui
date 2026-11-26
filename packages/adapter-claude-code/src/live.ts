@@ -7,7 +7,7 @@ export function encodeUserInput(text: string): string {
   return JSON.stringify({ type: "user", message: { role: "user", content: text } }) + "\n";
 }
 
-type Cause = "attestation_missing" | "attestation_malformed" | "attestation_duplicate" |
+type Cause = "child_exited" | "host_exited" | "attestation_missing" | "attestation_malformed" | "attestation_duplicate" |
   "identity_mismatch" | "auth_failed" | "attestation_deadline" | "attestation_cancelled" |
   "attestation_tool_call" | "attestation_round_trips" | "attestation_budget_exhausted";
 type Verdict =
@@ -159,12 +159,14 @@ export function attestClaudeSession(input: Input, reserveWrite: () => boolean = 
         if (fact.kind === "output" && fact.bytes) {
           const cause = reader.push(fact.bytes);
           if (cause) stop(cause);
-        } else if (fact.kind === "exited" || fact.kind === "drained") {
+        } else if (reader.complete && fact.kind === "exited") {
+          stop(reader.finish() ?? "child_exited");
+        } else if (!reader.complete && (fact.kind === "exited" || fact.kind === "drained")) {
           stop(reader.finish() ?? "attestation_missing");
         }
         if (failed) break;
       }
-      if (!failed) stop(reader.finish() ?? "attestation_missing");
+      if (!failed) stop(reader.complete ? "host_exited" : reader.finish() ?? "attestation_missing");
     } catch { stop("attestation_malformed"); }
     finally {
       clearTimeout(timer);
