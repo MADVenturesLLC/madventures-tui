@@ -65,7 +65,7 @@ test("mapping and read failures end delivery from the last projection", async ()
       await Bun.sleep(SNAPSHOT_INTERVAL_MS + 30);
       expect(seen).toHaveLength(2);
       expect(seen[0]?.connected).toBe(true);
-      expect(seen[1]).toEqual({ ...seen[0], connected: false });
+      expect(seen[1]).toEqual({ ...seen[0]!, connected: false });
       expect(source.reads()).toBe(2);
     } finally { off(); }
   }
