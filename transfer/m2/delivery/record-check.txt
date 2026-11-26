@@ -1,0 +1,30 @@
+Founder check of M2 before the push, under DEC-20261125-01 B14 item 1 and B23: the session record under DEC-20261108-03 Addendum 2 B4, as its Addenda 6 B1 and 10 B6 and DEC-20261112-02 B2 and B5 read it, with the count of code from a string of DEC-20261115-02 Addendum 3 B4.
+
+Check: h2-record-check.mjs, SHA-256 c1834dcc689e94cf57fb123a09a0600225d8e97b428c648f14276136e3dd383f, from transfer commit 730df3014bf31d2dc0770cb4d30a4a4a79e30afe, over /Users/michaeldaley/builds/m2-r1. Evidence on the MacBook: /Users/michaeldaley/builds/m2-record-check/check-20261126T181624Z, MANIFEST.sha256 1943c8f8d52640726601da42a4e72583f43ec67688b51e10b6e8f8a31de6778a.
+
+Self-test:
+    self-test cases: 66; not as expected: 0
+    SELFTEST_OK
+
+Check:
+    records whose starting folder is /Users/michaeldaley/builds/m2-r1: 1
+    rollout-2026-11-25T22-48-55-01a215f8-7bcb-7471-96b7-176b60e7f14e.jsonl: started 2026-11-26T03:48:55.892Z, cli_version 0.167.0, folder /Users/michaeldaley/builds/m2-r1
+      user messages: 0
+      event types: 3 task_complete; 3 task_started; 322 token_count; 5 thread_settings_applied; 700 item_completed
+      turn 2026-11-26T03:49:04.336Z | model gpt-6.2-astra | effort xhigh | approval on-request | approvals reviewer user | sandbox workspace-write | network access false | folder /Users/michaeldaley/builds/m2-r1
+      turn 2026-11-26T04:29:21.069Z | model gpt-6.2-astra | effort ultra | approval on-request | approvals reviewer user | sandbox workspace-write | network access false | folder /Users/michaeldaley/builds/m2-r1
+      turn 2026-11-26T13:54:55.638Z | model gpt-6.2-astra | effort ultra | approval on-request | approvals reviewer user | sandbox workspace-write | network access false | folder /Users/michaeldaley/builds/m2-r1
+      turn 2026-11-26T14:56:55.136Z | model gpt-6.2-astra | effort ultra | approval on-request | approvals reviewer user | sandbox workspace-write | network access false | folder /Users/michaeldaley/builds/m2-r1
+      top-level calls: 136 function_call wait; 182 custom_tool_call exec
+      exec calls: 182; names of Addendum 2 B4 placed as text inside exec: 0
+      calls inside exec, by called name: 1 String; 1 filter; 1 includes; 1 match; 1 padStart; 11 exit; 13 join; 17 slice; 17 split; 183 exec_command; 2 entries; 2 push; 2 replace; 2 test; 224 text; 31 allSettled; 33 map; 38 log; 4 check; 4 startsWith; 45 write_stdin; 47 replaceAll; 49 q; 5 yield_control; 6 logger
+    CHECK_OK
+
+Count, b4-count.mjs, SHA-256 2dcff5987b35e4a1e7c60e1b9229f32f7ebca58376ea0af0d39ba2b6ef647689:
+    records: 1
+    record: rollout-2026-11-25T22-48-55-01a215f8-7bcb-7471-96b7-176b60e7f14e.jsonl
+    exec inputs: 182; not parsed: 0; occurrences of the six names, as any substring, in all of them: 0; calls of eval 0, Function 0, load 0, store 0; calls through a computed callee 0
+    B4_OK
+
+Head 6b3a38365854ed39a4bd291be1d48d5045cd109e, branch build/3b-m2-r1, base c383353885abb526a5471ef764be3cffc558a6ff.
+Build log 5daf3959fe98858d6a9dcb2c2b033f462011318ec2ca5ab7dacb3cf3ae56c727; packet 0fff814b75bd1c105542772dd407572a256dd6e4d966559033cbb4799c2bc973; pr-title.txt 7082cd88c8156b7476e69d09f34eb0a9c5a4eacacc3cfc6767ca46f84aea29ae; pr-body.md 64d2a7e06d732ee2d110165308a0a36290b903b3b830b5ac3c3061b6a7dea237; final report 7d723b9e331c40365fc5dfc82df38a1fc25fcfc71fe385a9ec4705df384a7ecb.
