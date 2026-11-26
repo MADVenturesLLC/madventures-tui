@@ -1,0 +1,1 @@
+feat(tui): project offline broker state and report child endings
