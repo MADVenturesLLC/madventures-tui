@@ -1,0 +1,21 @@
+ apps/madbridge/src/tui/App.tsx                  |   36 +-
+ apps/madbridge/src/tui/components/DockStrip.tsx |   10 +-
+ apps/madbridge/src/tui/live/retention.ts        |  127 ++
+ docs/verification/phase-3b-m3-build-log.md      | 1606 +++++++++++++++++++++++
+ packages/adapter-claude-code/src/live.ts        |    3 +
+ packages/adapter-madv-surface/src/live.ts       |   20 +-
+ packages/broker/src/in-process-client.ts        |   44 +-
+ packages/broker/src/pty-host-supervisor.ts      |   69 +-
+ packages/supervisor/src/build.ts                |   35 +-
+ test/phase3a/harness-separation.test.ts         |    2 +-
+ test/phase3b/dispatch-observation.ts            |   51 +
+ test/phase3b/dispatch.test.ts                   |  127 ++
+ test/phase3b/m3-separation.test.ts              |   37 +
+ test/phase3b/pane-client.ts                     |   65 +
+ test/phase3b/producer.test.ts                   |   26 +
+ test/phase3b/retention.test.tsx                 |   68 +
+ test/phase3b/transport-stand-in.ts              |   59 +
+ test/phase3b/transport.ts                       |   90 ++
+ test/phase3b/unbridged-stand-in.ts              |   16 +
+ test/phase3b/unbridged.ts                       |   47 +
+ 20 files changed, 2509 insertions(+), 29 deletions(-)
