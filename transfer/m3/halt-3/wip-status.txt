@@ -1,0 +1,9 @@
+ M apps/madbridge/src/tui/App.tsx
+ M apps/madbridge/src/tui/components/DockStrip.tsx
+ M apps/madbridge/src/tui/panes/AntigravityPane.tsx
+ M apps/madbridge/src/tui/panes/ClaudePane.tsx
+?? apps/madbridge/src/tui/live/line-buffer.ts
+?? test/phase3b/input-view.tsx
+?? test/phase3b/line-input.test.tsx
+?? test/phase3b/usable-input.test.tsx
+?? test/phase3b/usable-input.tsx
