@@ -1,0 +1,1336 @@
+diff --git a/apps/madbridge/src/tui/App.tsx b/apps/madbridge/src/tui/App.tsx
+index 69b529b..650c693 100644
+--- a/apps/madbridge/src/tui/App.tsx
++++ b/apps/madbridge/src/tui/App.tsx
+@@ -37,6 +37,8 @@ import { PaneTabs } from "./components/PaneTabs";
+ import { SeatBar } from "./components/SeatBar";
+ import { ModelBar, SeatModelRow } from "./components/ModelBar";
+ import { ModelPicker } from "./components/ModelPicker";
++import type { BrokerClient } from "@madventures/broker";
++import { usePaneOutput } from "./live/retention";
+ import { useBrokerState } from "./hooks/useBrokerState";
+ import { useSeatState } from "./hooks/useSeatState";
+ import { loadKeybindings, resolveKey, translateKeyEvent } from "./keybindings";
+@@ -111,7 +113,13 @@ function uiReducer(state: UIState, action: UIAction): UIState {
+   }
+ }
+ 
++export type PaneClient = Pick<BrokerClient, "output" | "getSnapshot" | "request"> & {
++  subscribe(listener: (snapshot: BrokerSnapshot) => void): () => void;
++};
++
+ interface AppProps {
++  /** Client and its externally bound projection subscription. */
++  client?: PaneClient;
+   /** External subscribe function to receive immutable broker snapshots. */
+   subscribe?: (listener: (snapshot: BrokerSnapshot) => void) => () => void;
+   /** PTY write callback — bytes go to the focused PTY. */
+@@ -128,8 +136,12 @@ interface AppProps {
+   catalogLoader?: typeof loadOmpCatalog;
+ }
+ 
+-export function App({ subscribe, onPtyWrite, onApprovalResolve, onQuit, fixture = false, catalogLoader }: AppProps) {
+-  const { state, connected } = useBrokerState(subscribe);
++export function App({ client, subscribe, onPtyWrite, onApprovalResolve, onQuit, fixture = false, catalogLoader }: AppProps) {
++  const { state, connected } = useBrokerState(client?.subscribe ?? subscribe);
++  const claudeExecution = state?.executions?.find(e => e.surface === "claude-code");
++  const secondExecution = state?.executions?.find(e => e.surface === "madv-surface");
++  const claudeRetained = usePaneOutput(client, claudeExecution?.execution_id);
++  const secondRetained = usePaneOutput(client, secondExecution?.execution_id);
+   const keybindings = useMemo(() => loadKeybindings(), []);
+   // Seat model-profile state — LOCAL UI only (pinned OMP profiles + catalog).
+   const seatState = useSeatState(catalogLoader ? { loadCatalog: catalogLoader } : undefined);
+@@ -406,10 +418,10 @@ export function App({ subscribe, onPtyWrite, onApprovalResolve, onQuit, fixture
+           <>
+             {/* Wide mode: focused surface is the full-width stage. */}
+             {claudeFocused && (
+-              <ClaudePane active={true} state={state} ptyOutput={ui.claudeOutput} />
++              <ClaudePane active={true} state={state} ptyOutput={client ? claudeRetained : ui.claudeOutput} />
+             )}
+             {antigravityFocused && (
+-              <AntigravityPane active={true} state={state} ptyOutput={ui.antigravityOutput} />
++              <AntigravityPane active={true} state={state} ptyOutput={client ? secondRetained : ui.antigravityOutput} />
+             )}
+             {governanceFocused && (
+               <GovernancePane active={true} state={state} />
+@@ -421,24 +433,24 @@ export function App({ subscribe, onPtyWrite, onApprovalResolve, onQuit, fixture
+             {/* Dock strips: the non-focused agent(s) appear as compact strips. */}
+             {!claudeFocused && !governanceFocused && !eventsFocused && (
+               // Antigravity is focused → Claude is docked.
+-              <DockStrip surface="claude-code" state={state} ptyOutput={ui.claudeOutput} />
++              <DockStrip showContent={Boolean(client)} surface="claude-code" state={state} ptyOutput={client ? claudeRetained : ui.claudeOutput} />
+             )}
+             {!antigravityFocused && !governanceFocused && !eventsFocused && (
+               // Claude is focused → Antigravity is docked.
+-              <DockStrip surface="antigravity" state={state} ptyOutput={ui.antigravityOutput} />
++              <DockStrip showContent={Boolean(client)} surface="antigravity" state={state} ptyOutput={client ? secondRetained : ui.antigravityOutput} />
+             )}
+             {governanceFocused && (
+               // Governance is the stage → both agents are docked and reachable.
+               <>
+-                <DockStrip surface="claude-code" state={state} ptyOutput={ui.claudeOutput} />
+-                <DockStrip surface="antigravity" state={state} ptyOutput={ui.antigravityOutput} />
++                <DockStrip showContent={Boolean(client)} surface="claude-code" state={state} ptyOutput={client ? claudeRetained : ui.claudeOutput} />
++                <DockStrip showContent={Boolean(client)} surface="antigravity" state={state} ptyOutput={client ? secondRetained : ui.antigravityOutput} />
+               </>
+             )}
+             {eventsFocused && (
+               // Events is the stage → both agents are docked and reachable.
+               <>
+-                <DockStrip surface="claude-code" state={state} ptyOutput={ui.claudeOutput} />
+-                <DockStrip surface="antigravity" state={state} ptyOutput={ui.antigravityOutput} />
++                <DockStrip showContent={Boolean(client)} surface="claude-code" state={state} ptyOutput={client ? claudeRetained : ui.claudeOutput} />
++                <DockStrip showContent={Boolean(client)} surface="antigravity" state={state} ptyOutput={client ? secondRetained : ui.antigravityOutput} />
+               </>
+             )}
+           </>
+@@ -447,10 +459,10 @@ export function App({ subscribe, onPtyWrite, onApprovalResolve, onQuit, fixture
+             {/* Narrow mode: tab row + exactly one selected surface. */}
+             <PaneTabs focus={ui.focus} />
+             {claudeFocused && (
+-              <ClaudePane active={true} state={state} ptyOutput={ui.claudeOutput} />
++              <ClaudePane active={true} state={state} ptyOutput={client ? claudeRetained : ui.claudeOutput} />
+             )}
+             {antigravityFocused && (
+-              <AntigravityPane active={true} state={state} ptyOutput={ui.antigravityOutput} />
++              <AntigravityPane active={true} state={state} ptyOutput={client ? secondRetained : ui.antigravityOutput} />
+             )}
+             {governanceFocused && (
+               <GovernancePane active={true} state={state} />
+diff --git a/apps/madbridge/src/tui/components/DockStrip.tsx b/apps/madbridge/src/tui/components/DockStrip.tsx
+index d271778..27be9ea 100644
+--- a/apps/madbridge/src/tui/components/DockStrip.tsx
++++ b/apps/madbridge/src/tui/components/DockStrip.tsx
+@@ -40,6 +40,7 @@ export interface DockStripProps {
+   state: BrokerSnapshot | null;
+   /** Raw PTY output for the docked agent — used to derive buffered lines. */
+   ptyOutput: string;
++  showContent?: boolean;
+ }
+ 
+ // Field priorities (high → low). When truncating to fit a width, drop from
+@@ -111,13 +112,18 @@ export function buildDockLine(
+   return truncateToWidth(label + TRUNC_MARKER, width);
+ }
+ 
+-export function DockStrip({ surface, state, ptyOutput }: DockStripProps) {
++export function DockStrip({ surface, state, ptyOutput, showContent }: DockStripProps) {
+   const { width } = useTerminalDimensions();
+   const line = buildDockLine(surface, state, ptyOutput, width);
+ 
++  const space = width - displayWidth(line) - displayWidth(SEP);
++  const preview = showContent && space > 0
++    ? truncateToWidth(ptyOutput.replace(/[\r\n]+/g, " ").trimEnd(), space)
++    : "";
++
+   return (
+     <box paddingLeft={0} paddingRight={0}>
+-      <text>{line}</text>
++      <text>{preview ? line + SEP + preview : line}</text>
+     </box>
+   );
+ }
+diff --git a/apps/madbridge/src/tui/live/retention.ts b/apps/madbridge/src/tui/live/retention.ts
+new file mode 100644
+index 0000000..82204e4
+--- /dev/null
++++ b/apps/madbridge/src/tui/live/retention.ts
+@@ -0,0 +1,127 @@
++import { useSyncExternalStore } from "react";
++import type { BrokerClient } from "@madventures/broker";
++
++export const MAX_PANE_LINES = 10_000;
++export const MAX_PANE_BYTES = 2_097_152;
++
++interface Chunk {
++  start: number;
++  bytes: Uint8Array;
++  count: number;
++}
++
++/** Absolute line starts form a ring. CRLF is one terminator across frame boundaries. */
++export class PaneRetention {
++  private readonly starts = new Float64Array(MAX_PANE_LINES);
++  private lineCount = 0;
++  private nextStartsLine = true;
++  private previousCR = false;
++  private readonly chunks = new Map<number, Chunk>();
++  private last: Chunk | undefined;
++  receivedFrames = 0;
++  receivedBytes = 0;
++  retainedFrames = 0;
++  retainedBytes = 0;
++
++  append(bytes: Uint8Array): void {
++    const start = this.receivedBytes;
++    for (let i = 0; i < bytes.length; i++) {
++      const byte = bytes[i];
++      if (this.nextStartsLine && !(this.previousCR && byte === 10)) {
++        this.starts[this.lineCount % MAX_PANE_LINES] = start + i;
++        this.lineCount++;
++      }
++      this.previousCR = byte === 13;
++      this.nextStartsLine = this.previousCR || byte === 10;
++    }
++    this.receivedBytes += bytes.byteLength;
++    this.receivedFrames++;
++    this.retainedFrames++;
++    const lineFloor = this.lineCount > MAX_PANE_LINES ? this.starts[this.lineCount % MAX_PANE_LINES]! : 0;
++    const floor = Math.max(0, this.receivedBytes - MAX_PANE_BYTES, lineFloor);
++    const offset = Math.max(0, floor - start);
++    if (!bytes.length && this.last?.bytes.length === 0) {
++      this.last.count++;
++    } else {
++      // Own the surviving bytes. A short suffix must not pin a large input array.
++      this.last = { start: start + offset, bytes: new Uint8Array(bytes.subarray(offset)), count: 1 };
++      this.chunks.set(this.receivedFrames, this.last);
++    }
++    for (const [sequence, chunk] of this.chunks) {
++      if (chunk.start >= floor) break;
++      const lost = floor - chunk.start;
++      if (lost < chunk.bytes.length) {
++        chunk.bytes = chunk.bytes.slice(lost);
++        chunk.start = floor;
++        break;
++      }
++      this.chunks.delete(sequence);
++      this.retainedFrames -= chunk.count;
++    }
++    this.retainedBytes = this.receivedBytes - floor;
++  }
++
++  *frames(): IterableIterator<Uint8Array> {
++    for (const chunk of this.chunks.values()) {
++      for (let i = 0; i < chunk.count; i++) yield chunk.bytes.slice();
++    }
++  }
++
++  text(): string {
++    const decoder = new TextDecoder();
++    let text = "";
++    for (const chunk of this.chunks.values()) text += decoder.decode(chunk.bytes, { stream: true });
++    return text + decoder.decode();
++  }
++}
++
++type Source = Pick<BrokerClient, "output">;
++const streams = new WeakMap<Source, Map<string, PaneStream>>();
++const noSubscription = () => () => {};
++const empty = () => "";
++
++class PaneStream {
++  private readonly buffer = new PaneRetention();
++  private readonly listeners = new Set<() => void>();
++  private started = false;
++  private cached: string | undefined;
++  constructor(private readonly client: Source, private readonly executionId: string) {}
++
++  readonly snapshot = (): string => this.cached ??= this.buffer.text();
++  readonly subscribe = (listener: () => void) => {
++    this.listeners.add(listener);
++    if (!this.started) {
++      this.started = true;
++      void this.consume();
++    }
++    return () => { this.listeners.delete(listener); };
++  };
++
++  private async consume(): Promise<void> {
++    try {
++      for await (const frame of this.client.output(this.executionId)) {
++        if (frame.executionId !== this.executionId) break;
++        this.buffer.append(frame.bytes);
++        this.cached = undefined;
++        for (const notify of this.listeners) notify();
++      }
++    } catch {
++      // Keep the last received bytes. The snapshot subscription owns liveness.
++    }
++  }
++}
++
++/** One consumer per client and execution, including across focus changes and remounts. */
++export function usePaneOutput(client: Source | undefined, executionId: string | undefined): string {
++  let stream: PaneStream | undefined;
++  if (client && executionId) {
++    let executions = streams.get(client);
++    if (!executions) { executions = new Map(); streams.set(client, executions); }
++    stream = executions.get(executionId);
++    if (!stream) {
++      stream = new PaneStream(client, executionId);
++      executions.set(executionId, stream);
++    }
++  }
++  return useSyncExternalStore(stream?.subscribe ?? noSubscription, stream?.snapshot ?? empty);
++}
+diff --git a/packages/adapter-claude-code/src/live.ts b/packages/adapter-claude-code/src/live.ts
+index 9166b9d..f1b46a6 100644
+--- a/packages/adapter-claude-code/src/live.ts
++++ b/packages/adapter-claude-code/src/live.ts
+@@ -19,6 +19,7 @@ interface Input {
+   model: string;
+   signal: AbortSignal;
+   reportFailure(reason: string): void;
++  onOutput?(bytes: Uint8Array): Promise<void>;
+   registration: { supported_versions: readonly string[]; auth_failure_detection: readonly string[] };
+   host: { handle: {
+     send(frame: { kind: "input"; bytes: Uint8Array }): void;
+@@ -157,8 +158,10 @@ export function attestClaudeSession(input: Input, reserveWrite: () => boolean =
+         if (failed) break;
+         if (!reader.complete && performance.now() >= deadline) { stop("attestation_deadline"); break; }
+         if (fact.kind === "output" && fact.bytes) {
++          const monitored = reader.complete;
+           const cause = reader.push(fact.bytes);
+           if (cause) stop(cause);
++          if (monitored && input.onOutput) await input.onOutput(fact.bytes);
+         } else if (reader.complete && fact.kind === "exited") {
+           stop(reader.finish() ?? "child_exited");
+         } else if (!reader.complete && (fact.kind === "exited" || fact.kind === "drained")) {
+diff --git a/packages/adapter-madv-surface/src/live.ts b/packages/adapter-madv-surface/src/live.ts
+index ca58ec8..5183e32 100644
+--- a/packages/adapter-madv-surface/src/live.ts
++++ b/packages/adapter-madv-surface/src/live.ts
+@@ -11,6 +11,7 @@ interface Input {
+   model: string;
+   signal: AbortSignal;
+   reportFailure(cause: string): void;
++  onOutput?(bytes: Uint8Array): Promise<void>;
+   registration: { auth_failure_detection: readonly string[]; supported_versions: readonly string[]; provider: string; independence_domain: string };
+   host: { handle: {
+     facts(): AsyncIterable<{ kind: string; bytes?: Uint8Array; code?: number | null; signal?: string | null }>;
+@@ -19,7 +20,7 @@ interface Input {
+ }
+ type Failure = { ok: false; surface: "madv-surface"; cause: Cause; reason: Cause; parserReason?: string };
+ type Verdict = Failure | { ok: true; evidenceKind: "actual_session"; provider: string;
+-  model: string; cliVersion: string; sendUserInput(text: string): boolean };
++  model: string; cliVersion: string; sendUserInput(text: string): boolean; sendEncodedInput(bytes: Uint8Array): boolean };
+ 
+ export function attestMadvSession(input: Input, reserveWrite: () => boolean = () => true): Promise<Verdict> {
+   const { promise, resolve } = Promise.withResolvers<Verdict>();
+@@ -46,7 +47,7 @@ export function attestMadvSession(input: Input, reserveWrite: () => boolean = ()
+       clearTimeout(timer);
+       ready = true;
+       resolve({ ok: true, evidenceKind: "actual_session", provider: input.registration.provider,
+-        model: input.model, cliVersion: version, sendUserInput });
++        model: input.model, cliVersion: version, sendUserInput, sendEncodedInput });
+     },
+   });
+   function inspect(result: MadvResult): void {
+@@ -65,12 +66,25 @@ export function attestMadvSession(input: Input, reserveWrite: () => boolean = ()
+     try { write(encodeUserInput(text)); } catch { stop("provider_error"); }
+     return !failure;
+   }
++  function sendEncodedInput(bytes: Uint8Array): boolean {
++    if (closed || !ready || failure) return false;
++    inspect(parser.beginRequest());
++    if (failure) return false;
++    clearTimeout(timer);
++    timer = setTimeout(() => inspect(parser.checkDeadline()), EVIDENCE_DEADLINE_MS);
++    try { input.host.handle.send({ kind: "input", bytes }); } catch { stop("provider_error"); }
++    return !failure;
++  }
+   async function consume(): Promise<void> {
+     try {
+       for await (const fact of input.host.handle.facts()) {
+         if (failure) break;
+         if (!ready && performance.now() >= deadline) { stop("attestation_deadline"); break; }
+-        if (fact.kind === "output" && fact.bytes) inspect(parser.push(fact.bytes));
++        if (fact.kind === "output" && fact.bytes) {
++          const monitored = ready;
++          inspect(parser.push(fact.bytes));
++          if (monitored && input.onOutput) await input.onOutput(fact.bytes);
++        }
+         if (fact.kind === "exited") {
+           const handedOver = ready;
+           const exitCode = fact.code ?? 1;
+diff --git a/packages/broker/src/in-process-client.ts b/packages/broker/src/in-process-client.ts
+index 4ef8cd5..d13d425 100644
+--- a/packages/broker/src/in-process-client.ts
++++ b/packages/broker/src/in-process-client.ts
+@@ -200,6 +200,19 @@ export function createInProcessBrokerClient(
+   broker: RuntimeBroker,
+   principal: ClientPrincipal,
+ ): InProcessBrokerClient {
++  return bindClient(broker, principal).client;
++}
++
++/** The live build keeps the delivery function separate from the client it presents. */
++export function createLiveFounderClient(broker: RuntimeBroker, bridges: ReadonlyMap<string, HostBridge>) {
++  return bindClient(broker, { kind: "founder_tui" }, bridges);
++}
++
++type PtyCommand = Extract<BrokerCommand, { kind: "pty_input" | "pty_resize" }>;
++export type HostBridge = (command: PtyCommand) => Promise<boolean>;
++
++function bindClient(broker: RuntimeBroker, principal: ClientPrincipal, bridges?: ReadonlyMap<string, HostBridge>) {
++  const inFlight = new Map<string, Promise<BrokerResult>>();
+   // The principal request() evaluates under never leaves this closure; the
+   // one callers can read is a separate frozen copy.
+   const evaluatedPrincipal = bindPrincipal(principal);
+@@ -349,6 +362,25 @@ export function createInProcessBrokerClient(
+     if (!legality.ok) {
+       return { ok: false, commandId, error: legality.error, detail: legality.detail };
+     }
++    if (bridges && (captured.kind === "pty_input" || captured.kind === "pty_resize")) {
++      const executionId = captured.executionId;
++      const wire = captured.kind === "pty_input" ? { ...captured, bytes: new Uint8Array(captured.bytes) } : captured;
++      const dispatch = async (): Promise<BrokerResult> => {
++        // A command can wait behind one for the same host. Check authority at the write.
++        const current = evaluateCommandLegality(wire, projectSnapshot(broker.snapshotProjectionInput()), evaluatedPrincipal);
++        if (!current.ok) return { ok: false, commandId, error: current.error, detail: current.detail };
++        const send = bridges.get(executionId);
++        if (closed || !send || !await send(wire)) {
++          return { ok: false, commandId, error: "host_unavailable", detail: "host unavailable" };
++        }
++        return { ok: true, commandId, acceptedSnapshotSeq: deliveredSeq };
++      };
++      const previous = inFlight.get(executionId);
++      const next = previous ? previous.then(dispatch, dispatch) : dispatch();
++      inFlight.set(executionId, next);
++      try { return await next; }
++      finally { if (inFlight.get(executionId) === next) inFlight.delete(executionId); }
++    }
+     switch (captured.kind) {
+       case "session_pause":
+         await broker.pause(commandId);
+@@ -408,6 +440,11 @@ export function createInProcessBrokerClient(
+     close,
+   });
+ 
++  async function deliver(frame: OutputFrame): Promise<void> {
++    const violation = ingestOutputFrame(frame);
++    if (violation !== null) await raise(violation);
++  }
++
+   testSeams.set(client, {
+     ingestStamped(executionId, bytes) {
+       if (closed) {
+@@ -441,10 +478,7 @@ export function createInProcessBrokerClient(
+       }
+       // B5: the check and the delivery are synchronous; a refused frame
+       // interrupts the session, awaited, and only then rejects.
+-      const violation = ingestOutputFrame(frame);
+-      if (violation !== null) {
+-        return raise(violation);
+-      }
++      await deliver(frame);
+     },
+     async offerSnapshotSeq(candidate) {
+       const violation = admitSnapshotSeq(candidate);
+@@ -454,7 +488,7 @@ export function createInProcessBrokerClient(
+     },
+   });
+ 
+-  return client;
++  return { client, deliver: (frame: OutputFrame) => closed ? Promise.resolve() : deliver(frame) };
+ }
+ 
+ function seamsOf(client: InProcessBrokerClient): TestSeams {
+diff --git a/packages/broker/src/pty-host-supervisor.ts b/packages/broker/src/pty-host-supervisor.ts
+index 7640095..5024593 100644
+--- a/packages/broker/src/pty-host-supervisor.ts
++++ b/packages/broker/src/pty-host-supervisor.ts
+@@ -298,6 +298,7 @@ const HOST_DEADLINES_MS: {
+  * and `escalateWedgedHost` never races to attach a watcher mid-escalation.
+  */
+ interface HostLifecycle {
++  acceptsCommands(): boolean;
+   /** True once `proc.exited` has resolved — authoritative host death. */
+   exitedResolved: boolean;
+   /** Resolves when the OS reports host exit. Attached at spawn time. */
+@@ -306,6 +307,53 @@ interface HostLifecycle {
+ 
+ const lifecycles = new WeakMap<PtyHostHandle, HostLifecycle>();
+ 
++/** Register a real host acknowledgement before the bridge writes the corresponding frame. */
++export async function sendAcknowledgedCommand(
++  handle: PtyHostHandle, pgid: number, kind: "input" | "resize", write: () => boolean, interrupt: () => void,
++): Promise<boolean> {
++  const lifecycle = lifecycles.get(handle);
++  if (!lifecycle?.acceptsCommands() || pendingAcks.has(handle) || escalationRecordFor(handle).phase !== "none") return false;
++  const started = performance.now();
++  const deadline = started + HOST_DEADLINES_MS.ack;
++  const { promise, resolve } = Promise.withResolvers<boolean>();
++  const pending: PendingAck = {
++    ofKind: kind, promise, settled: false,
++    settle(acked) {
++      if (pending.settled) return;
++      pending.settled = true;
++      resolve(acked && performance.now() < deadline);
++    },
++  };
++  pendingAcks.set(handle, pending);
++  let timer: ReturnType<typeof setTimeout> | undefined;
++  const check = () => {
++    const remaining = deadline - performance.now();
++    if (remaining > 0) timer = setTimeout(check, remaining);
++    else pending.settle(false);
++  };
++  try {
++    try {
++      if (!write()) return false;
++    } catch {
++      // A write error cannot prove what the host read. Its ack or the original deadline decides.
++    }
++    check();
++    if (await promise) return true;
++    // Closure or preemption by termination already has its own containment path.
++    if (pendingAcks.get(handle) !== pending) return false;
++    const containing = startEscalation(handle, pgid, handle.hostPid, started);
++    interrupt();
++    await containing;
++    return false;
++  } catch {
++    return false;
++  } finally {
++    if (timer !== undefined) clearTimeout(timer);
++    pending.settle(false);
++    if (pendingAcks.get(handle) === pending) pendingAcks.delete(handle);
++  }
++}
++
+ function concatBytes(a: Uint8Array<ArrayBuffer>, b: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
+   const out = new Uint8Array(a.byteLength + b.byteLength);
+   out.set(a, 0);
+@@ -433,8 +481,10 @@ export function spawnPtyHost(
+   // stdin; the host's EOF handler terminates the child's process group in
+   // response. Same EPIPE guard as `send` — a broken pipe after host death
+   // means the lifeline is already closed.
++  let inputClosed = false;
+   let closeStdinCalls = 0;
+   const closeStdin = (): void => {
++    inputClosed = true;
+     closeStdinCalls += 1;
+     try {
+       stdinSink.end();
+@@ -574,6 +624,7 @@ export function spawnPtyHost(
+   // escalation starts, and no escalation path ever races to attach a
+   // watcher mid-ladder.
+   const lifecycle: HostLifecycle = {
++    acceptsCommands: () => !inputClosed && !pumpSettled && !lifecycle.exitedResolved,
+     exitedResolved: false,
+     exited: Promise.resolve(),
+   };
+@@ -890,6 +941,10 @@ export async function escalateWedgedHost(
+   pgid: number,
+   hostPid: number,
+ ): Promise<EscalationOutcome> {
++  return startEscalation(handle, pgid, hostPid);
++}
++
++async function startEscalation(handle: PtyHostHandle, pgid: number, hostPid: number, commandStart?: number): Promise<EscalationOutcome> {
+   const rec = escalationRecordFor(handle);
+ 
+   // ---- Phase dispatch (requirements 2, 5, 4) ----
+@@ -905,7 +960,7 @@ export async function escalateWedgedHost(
+   }
+ 
+   // Requirement 4: delegated re-entry runs the host-bypassing ladder.
+-  const bypass = rec.phase === "delegated";
++  const bypass = commandStart !== undefined || rec.phase === "delegated";
+ 
+   // Safeguard: install the in-flight phase AND the shared promise BEFORE any
+   // asynchronous suspension, so a concurrent caller arriving in the same
+@@ -913,7 +968,7 @@ export async function escalateWedgedHost(
+   // execution. `runOwnedEscalation` is invoked (not awaited) here; the first
+   // await inside it happens strictly after this synchronous block completes.
+   rec.phase = bypass ? "in_flight_bypass" : "in_flight_initial";
+-  const execution = runOwnedEscalation(handle, pgid, hostPid, bypass, rec);
++  const execution = runOwnedEscalation(handle, pgid, hostPid, bypass, rec, commandStart);
+   rec.inFlight = execution;
+   return execution;
+ }
+@@ -935,6 +990,7 @@ async function runOwnedEscalation(
+   hostPid: number,
+   bypass: boolean,
+   rec: EscalationRecord,
++  commandStart?: number,
+ ): Promise<EscalationOutcome> {
+   const lifecycle = lifecycles.get(handle);
+   const observedMs: Record<string, number> = {};
+@@ -963,7 +1019,10 @@ async function runOwnedEscalation(
+   // This is the stale-ack-poisoning fix: with no record registered, a
+   // trailing ack produced by the FIRST call's terminate has nothing to
+   // settle and cannot fabricate an S1 for this attempt.
+-  if (!bypass) pendingAcks.set(handle, pending);
++  if (!bypass) {
++    pendingAcks.get(handle)?.settle(false);
++    pendingAcks.set(handle, pending);
++  }
+ 
+   // Requirement 3: clear on EVERY terminal path this call owns. Idempotent.
+   const clearPendingAck = (): void => {
+@@ -1012,12 +1071,12 @@ async function runOwnedEscalation(
+   // false claim. It is the attempt/bypass START time: the instant the
+   // delegated re-entry began. It anchors this attempt's observed durations
+   // only; the original command's budget was consumed by the initial call.
+-  const tAttempt = performance.now();
++  const tAttempt = commandStart ?? performance.now();
+   if (!bypass) {
+     handle.send({ kind: "terminate" });
+     observedMs.terminateSentMs = performance.now() - tAttempt;
+   } else {
+-    observedMs.bypassStartedMs = 0;
++    observedMs.bypassStartedMs = commandStart === undefined ? 0 : performance.now() - tAttempt;
+   }
+ 
+   // ---- Acknowledgement window (C7.3 step 2) ----
+diff --git a/packages/supervisor/src/build.ts b/packages/supervisor/src/build.ts
+index e216d06..94a8d5b 100644
+--- a/packages/supervisor/src/build.ts
++++ b/packages/supervisor/src/build.ts
+@@ -24,12 +24,15 @@ import { invalidateToken, issueInitialToken } from "../../broker/src/fencing";
+ import { HOST_DEADLINES_MS, terminateChildGroup } from "../../pty-host/src/signals";
+ import {
+   createInProcessBrokerClient,
++  createLiveFounderClient,
++  type HostBridge,
+   type InProcessBrokerClient,
+   type StampedBrokerSnapshot,
+ } from "../../broker/src/in-process-client";
+ import {
+   spawnPtyHost,
+   escalateWedgedHost,
++  sendAcknowledgedCommand,
+   type HostLaunchDescriptor,
+   type PtyHostHandle,
+ } from "../../broker/src/pty-host-supervisor";
+@@ -105,6 +108,7 @@ export interface LiveReattestationInput {
+   readonly sessionId: string;
+   readonly signal: AbortSignal;
+   readonly reportFailure: (reason: string) => void;
++  readonly onOutput?: (bytes: Uint8Array) => Promise<void>;
+   readonly executionId: string;
+   readonly model: string;
+   readonly provider: string;
+@@ -121,6 +125,7 @@ export type LiveReattestationResult =
+       readonly provider: string;
+       readonly model: string;
+       readonly cliVersion?: string;
++      readonly sendEncodedInput?: (bytes: Uint8Array) => boolean;
+     }
+   | {
+       readonly ok: false;
+@@ -617,6 +622,8 @@ async function executeBuild(
+   let currentBroker: RuntimeBroker | null = null;
+   let brokerHandle: RuntimeBroker | null = null;
+   let client: InProcessBrokerClient | null = null;
++  const bridges = new Map<string, HostBridge>();
++  let deliver: ReturnType<typeof createLiveFounderClient>["deliver"] | undefined;
+   const preparedDescriptors: HostLaunchDescriptor[] = [];
+   const lifelines: BuildLifelineResource[] = [];
+   const hosts: BuildHostResource[] = [];
+@@ -867,7 +874,13 @@ async function executeBuild(
+           if (brokerHandle === null) {
+             return failAt(step, "client_failed");
+           }
+-          client = createInProcessBrokerClient(brokerHandle, { kind: "founder_tui" });
++          if (live) {
++            const founder = createLiveFounderClient(brokerHandle, bridges);
++            client = founder.client;
++            deliver = founder.deliver;
++          } else {
++            client = createInProcessBrokerClient(brokerHandle, { kind: "founder_tui" });
++          }
+           resources.push(Object.freeze({ step: "client", client }));
+           break;
+         }
+@@ -1015,12 +1028,18 @@ async function executeBuild(
+               return refuse(execution.surface === "madv-surface" ? "identity_unavailable" : "attestation_missing");
+             }
+             const notifyFailure = (reason: string) => reportFailure(host.executionId, execution.surface, reason);
++            const deliverFrame = deliver;
++            let nextOutputSeq = 1;
++            const output = deliverFrame && ((bytes: Uint8Array) => deliverFrame({
++              sessionId, executionId: host.executionId, outputSeq: nextOutputSeq++, bytes,
++            }));
+             let verdict: LiveReattestationResult;
+             try {
+               if (signal.aborted) return refuse("attestation_cancelled");
+               attesting = true;
+               verdict = await attester({
+                 sessionId, signal, reportFailure: notifyFailure,
++                ...(output && { onOutput: output }),
+                 executionId: envelopeExecution.execution_id,
+                 model: envelopeExecution.model,
+                 provider: envelopeExecution.provider,
+@@ -1036,6 +1055,20 @@ async function executeBuild(
+             if (verdict.evidenceKind !== "actual_session" ||
+               verdict.provider !== envelopeExecution.provider || verdict.provider !== reg.provider ||
+               verdict.model !== envelopeExecution.model) return refuse("identity_mismatch");
++            if (live) {
++              const pgid = child.pgid;
++              const sendEncoded = verdict.sendEncodedInput;
++              bridges.set(host.executionId, command => {
++                const kind = command.kind === "pty_input" ? "input" : "resize";
++                return sendAcknowledgedCommand(host.handle, pgid, kind, () => {
++                  if (signal.aborted) return false;
++                  if (command.kind === "pty_resize") host.handle.send({ kind: "resize", cols: command.cols, rows: command.rows });
++                  else if (execution.surface === "madv-surface") return sendEncoded?.(command.bytes) ?? false;
++                  else host.handle.send({ kind: "input", bytes: command.bytes });
++                  return true;
++                }, () => notifyFailure("host_exited"));
++              });
++            }
+             const record: LiveReattestationRecord = Object.freeze({
+               executionId: envelopeExecution.execution_id,
+               surface: execution.surface,
+diff --git a/test/phase3a/harness-separation.test.ts b/test/phase3a/harness-separation.test.ts
+index 6079ae7..5468f39 100644
+--- a/test/phase3a/harness-separation.test.ts
++++ b/test/phase3a/harness-separation.test.ts
+@@ -27,7 +27,7 @@ const EXCEPTIONS: Readonly<Record<string, { sha256: string; call?: string }>> =
+     sha256: "9210012a505848a7379ab7b9cf9d840f33197de58f85b23c359653760479c603", call: "PAYLOAD_SHAPE[knownType](payload)",
+   },
+   "packages/supervisor/src/build.ts": {
+-    sha256: "0b329d97e88a13bd58902fe7dd1afe971d52c61bbf310862230465fd1fdd3553", call: "host.handle.facts()[Symbol.asyncIterator]()",
++    sha256: "f728e1e37b0e9907f21875b2396eb2e1025718295d9bcfed7b61216ba1271854", call: "host.handle.facts()[Symbol.asyncIterator]()",
+   },
+ };
+ 
+diff --git a/test/phase3b/dispatch-observation.ts b/test/phase3b/dispatch-observation.ts
+new file mode 100644
+index 0000000..9add05b
+--- /dev/null
++++ b/test/phase3b/dispatch-observation.ts
+@@ -0,0 +1,51 @@
++import type { BrokerCommand } from "@madventures/broker";
++import { encodeUserInput as claudeInput } from "../../packages/adapter-claude-code/src/live";
++import { encodeUserInput as madvInput } from "../../packages/adapter-madv-surface/src/index";
++import { pendingAckRegisteredForTest } from "../../packages/broker/src/pty-host-supervisor";
++import { observed, openTransport } from "./transport";
++import type { Surface } from "./end-stand-in";
++
++export const encodedLine = (surface: Surface, line: string) =>
++  new TextEncoder().encode((surface === "claude-code" ? claudeInput : madvInput)(line));
++
++export async function dispatchTranscript(surface: Surface) {
++  const t = await openTransport(surface);
++  const host = t.build.state.hosts.find(h => h.executionId === t.writer.execution_id)!;
++  const wire = host.handle.send;
++  const frames: { kind: string; pending: boolean; bytes?: number[]; cols?: number; rows?: number }[] = [];
++  host.handle.send = frame => {
++    if (frame.kind === "input" || frame.kind === "resize") {
++      frames.push({ kind: frame.kind, pending: pendingAckRegisteredForTest(host.handle),
++        ...(frame.kind === "resize" ? { cols: frame.cols, rows: frame.rows } : { bytes: [...frame.bytes] }) });
++    }
++    wire(frame);
++  };
++  try {
++    const snapshot = await t.client.getSnapshot();
++    const base = { sessionId: t.sessionId, executionId: t.writer.execution_id, fencingToken: snapshot.fencingToken! };
++    const bytes = encodedLine(surface, "offline transport");
++    const commands: BrokerCommand[] = [
++      { ...base, kind: "pty_resize", commandId: "offline-resize", cols: 73, rows: 19 },
++      { ...base, kind: "pty_input", commandId: "offline-input", bytes },
++    ];
++    const outcomes = [];
++    for (const command of commands) {
++      process.kill(host.hostPid, "SIGSTOP");
++      let settled = false;
++      let pending: Promise<Awaited<ReturnType<typeof t.client.request>>>;
++      let registered: boolean, answeredWhileStopped: boolean;
++      try {
++        pending = t.client.request(command).then(answer => { settled = true; return answer; });
++        await Bun.sleep(20);
++        registered = pendingAckRegisteredForTest(host.handle);
++        answeredWhileStopped = settled;
++      } finally { process.kill(host.hostPid, "SIGCONT"); }
++      outcomes.push({ kind: command.kind, registered, answeredWhileStopped, acceptedAfterResume: (await pending).ok });
++    }
++    await observed(() => t.inputs(surface).length === 1);
++    return { surface, frames, outcomes, child: t.inputs(surface)[0]!, expected: [...bytes] };
++  } finally {
++    host.handle.send = wire;
++    await t.close();
++  }
++}
+diff --git a/test/phase3b/dispatch.test.ts b/test/phase3b/dispatch.test.ts
+new file mode 100644
+index 0000000..734b214
+--- /dev/null
++++ b/test/phase3b/dispatch.test.ts
+@@ -0,0 +1,127 @@
++import { expect, spyOn, test } from "bun:test";
++import { closeStdinCallCountForTest } from "../../packages/broker/src/pty-host-supervisor";
++import { dispatchTranscript, encodedLine } from "./dispatch-observation";
++import { observed, openTransport, transportSurfaces } from "./transport";
++import { originalBuildInput } from "./unbridged";
++
++test("both host commands reach the child and wait for the matching ack", async () => {
++  for (const surface of transportSurfaces) {
++    const result = await dispatchTranscript(surface);
++    expect(result.frames).toEqual([
++      { kind: "resize", pending: true, cols: 73, rows: 19 },
++      { kind: "input", pending: true, bytes: result.expected },
++    ]);
++    expect(result.child).toEqual({ bytes: result.expected, cols: 73, rows: 19 });
++    expect(result.outcomes).toEqual((["pty_resize", "pty_input"] as const).map(kind => ({
++      kind, registered: true, answeredWhileStopped: false, acceptedAfterResume: true,
++    })));
++  }
++}, 20_000);
++
++function exists(pid: number): boolean {
++  try { process.kill(pid, 0); return true; }
++  catch (error) { if ((error as NodeJS.ErrnoException).code === "ESRCH") return false; throw error; }
++}
++
++test("a missed acknowledgement contains the stopped host and interrupts the session", async () => {
++  for (const surface of transportSurfaces) {
++    for (const kind of ["pty_resize", "pty_input"] as const) {
++      const t = await openTransport(surface);
++      const host = t.build.state.hosts.find(h => h.executionId === t.writer.execution_id)!;
++      const child = t.build.state.children.find(c => c.executionId === host.executionId)!;
++      const members = t.build.state.children.flatMap(c => [c.hostPid, c.childPid!, -c.pgid!]);
++      const kill = process.kill.bind(process);
++      const kills: { pid: number; at: number }[] = [];
++      const watch = spyOn(process, "kill").mockImplementation((pid, signal) => {
++        if (signal === "SIGKILL") kills.push({ pid, at: performance.now() });
++        return kill(pid, signal);
++      });
++      try {
++        const snapshot = await t.client.getSnapshot();
++        const base = { sessionId: t.sessionId, commandId: "offline-wedge", fencingToken: snapshot.fencingToken!,
++          executionId: host.executionId };
++        const command = kind === "pty_input" ? { ...base, kind, bytes: encodedLine(surface, "offline wedge") }
++          : { ...base, kind, cols: 61, rows: 17 };
++        kill(host.hostPid, "SIGSTOP");
++        const started = performance.now();
++        const result = await t.client.request(command);
++        expect(result).toMatchObject({ ok: false, error: "host_unavailable" });
++        expect(closeStdinCallCountForTest(host.handle)).toBeGreaterThan(0);
++        for (const pid of [-child.pgid!, host.hostPid]) {
++          const sent = kills.find(k => k.pid === pid);
++          expect(sent).toBeDefined();
++          expect(sent!.at - started).toBeGreaterThanOrEqual(249);
++          expect(sent!.at - started).toBeLessThanOrEqual(500);
++        }
++        await observed(() => !members.some(exists));
++        expect(performance.now() - started).toBeLessThanOrEqual(5000);
++        const rows = t.build.state.ledger!.readAfter(0).map(row => JSON.parse(row.event_json));
++        expect(rows.filter(e => e.event_type === "session_interrupted").map(e => e.reason_code)).toEqual(["pty_host_failure"]);
++      } finally {
++        watch.mockRestore();
++        // In a deliberately broken run the stopped host can still need resuming.
++        if (!kills.some(k => k.pid === host.hostPid) && exists(host.hostPid)) kill(host.hostPid, "SIGCONT");
++        await t.close();
++      }
++    }
++  }
++}, 35_000);
++
++test("execution clients and the original build have no host bridge", async () => {
++  for (const surface of transportSurfaces) {
++    const t = await openTransport(surface);
++    try {
++      const snapshot = await t.client.getSnapshot();
++      const host = t.build.state.hosts.find(h => h.executionId === t.writer.execution_id)!;
++      const writes = spyOn(host.handle, "send");
++      try {
++        for (const adapter of t.build.state.adapters) {
++          const result = await adapter.client.request({ kind: "pty_input", commandId: "offline-execution",
++            sessionId: t.sessionId, executionId: host.executionId, fencingToken: snapshot.fencingToken!,
++            bytes: encodedLine(surface, "offline execution") });
++          expect(result.ok).toBe(true);
++        }
++        expect(writes.mock.calls).toHaveLength(0);
++        expect(t.inputs(surface)).toEqual([]);
++        host.handle.closeStdin();
++        const unavailable = await t.client.request({ kind: "pty_resize", commandId: "offline-host-closed",
++          sessionId: t.sessionId, executionId: host.executionId, fencingToken: snapshot.fencingToken!, cols: 51, rows: 16 });
++        expect(unavailable).toMatchObject({ ok: false, error: "host_unavailable" });
++        expect(writes.mock.calls).toHaveLength(0);
++      } finally { writes.mockRestore(); }
++    } finally { await t.close(); }
++  }
++  const original = await originalBuildInput();
++  expect(original.result.ok).toBe(true);
++  expect(original.writes).toBe(0);
++}, 25_000);
++
++test("the madv byte sender begins a checked request and refuses a closed monitor", async () => {
++  const t = await openTransport("madv-surface");
++  const bytes = encodedLine("madv-surface", "offline checked request");
++  try {
++    const snapshot = await t.client.getSnapshot();
++    const receive = (async () => {
++      let text = "";
++      for await (const frame of t.client.output(t.writer.execution_id)) {
++        text += new TextDecoder().decode(frame.bytes);
++        if (text.includes('"type":"result"')) return text;
++      }
++      throw new Error("offline result missing");
++    })();
++    const answer = await t.client.request({ kind: "pty_input", commandId: "offline-check", sessionId: t.sessionId,
++      executionId: t.writer.execution_id, fencingToken: snapshot.fencingToken!, bytes });
++    expect(answer.ok).toBe(true);
++    expect(await receive).toContain('"offlineReply":"offline checked request"');
++    expect(t.failures).toEqual([]);
++    expect((await t.client.getSnapshot()).phase).toBe("active");
++    const mismatch = await t.client.request({ kind: "pty_input", commandId: "offline-mismatch", sessionId: t.sessionId,
++      executionId: t.writer.execution_id, fencingToken: snapshot.fencingToken!,
++      bytes: encodedLine("madv-surface", "offline mismatched evidence") });
++    expect(mismatch.ok).toBe(true);
++    await observed(() => t.failures.includes("madv-surface identity_mismatch"));
++    expect(t.madvSender!(bytes)).toBe(false);
++  } finally { await t.close(); }
++  expect(t.madvSender).toBeFunction();
++  expect(t.madvSender!(bytes)).toBe(false);
++}, 12_000);
+diff --git a/test/phase3b/m3-separation.test.ts b/test/phase3b/m3-separation.test.ts
+new file mode 100644
+index 0000000..35605e7
+--- /dev/null
++++ b/test/phase3b/m3-separation.test.ts
+@@ -0,0 +1,37 @@
++import { expect, test } from "bun:test";
++import { readdirSync, readFileSync } from "node:fs";
++import { join, relative } from "node:path";
++import ts from "typescript";
++
++const root = join(import.meta.dir, "../..");
++
++function* sources(directory: string): Generator<string> {
++  for (const entry of readdirSync(directory, { withFileTypes: true })) {
++    if (["node_modules", "test", "tests", "dist", ".git"].includes(entry.name)) continue;
++    const file = join(directory, entry.name);
++    if (entry.isDirectory()) yield* sources(file);
++    else if (/\.[cm]?[jt]sx?$/.test(entry.name) && !/\.(test|spec)\./.test(entry.name)) yield file;
++  }
++}
++
++test("production imports no private broker test seam", () => {
++  const offenders: string[] = [];
++  const target = /(?:^|\/)(?:in-process-client|pty-host-supervisor)(?:\.[cm]?[jt]s)?$/;
++  for (const dir of ["apps", "packages"]) {
++    for (const path of sources(join(root, dir))) {
++      const source = readFileSync(path, "utf8");
++      if (!source.includes("in-process-client") && !source.includes("pty-host-supervisor")) continue;
++      const tree = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true);
++      for (const node of tree.statements) {
++        if (!ts.isImportDeclaration(node) && !ts.isExportDeclaration(node)) continue;
++        if (!node.moduleSpecifier || !ts.isStringLiteral(node.moduleSpecifier) || !target.test(node.moduleSpecifier.text)) continue;
++        const bindings = ts.isImportDeclaration(node) ? node.importClause?.namedBindings : node.exportClause;
++        if (!bindings || ts.isNamespaceImport(bindings) || ts.isNamespaceExport(bindings) ||
++            bindings.elements.some(e => /^(unsafeTestOnly)|ForTest$/.test((e.propertyName ?? e.name).text))) {
++          offenders.push(relative(root, path));
++        }
++      }
++    }
++  }
++  expect(offenders).toEqual([]);
++});
+diff --git a/test/phase3b/pane-client.ts b/test/phase3b/pane-client.ts
+new file mode 100644
+index 0000000..8963629
+--- /dev/null
++++ b/test/phase3b/pane-client.ts
+@@ -0,0 +1,65 @@
++import type { BrokerCommand, BrokerResult, BrokerSnapshot, ExecutionSnapshot, OutputFrame } from "@madventures/broker";
++import { parseSurfaceId } from "@madventures/protocol";
++import type { PaneClient } from "../../apps/madbridge/src/tui/App";
++import { clientSnapshotToProjection } from "../../apps/madbridge/src/tui/live/projection";
++import { sparseSnapshot } from "./snapshot-input";
++
++function execution(id: string, surface: string): ExecutionSnapshot {
++  return {
++    identity: { execution_id: id, surface: parseSurfaceId(surface), role: id === "builder" ? "builder" : "independent-reviewer",
++      model: id + "-model", provider: "offline", independence_domain: id, effort: "high" },
++    state: "ready", hostPid: null, childPid: null, processGroupId: null, executablePath: "", executableSha256: "",
++    exitCode: null, exitSignal: null,
++  };
++}
++
++export function paneSnapshot(overrides: Partial<BrokerSnapshot> = {}): BrokerSnapshot {
++  return { ...sparseSnapshot, sessionId: "offline-panes", connected: true, phase: "active", snapshotSeq: 1,
++    executions: [execution("builder", "claude-code"), execution("reviewer", "madv-surface")],
++    activeWriterExecutionId: "builder", tokenState: "valid", fencingToken: 17, ...overrides };
++}
++
++export function paneClient(snapshot = paneSnapshot()) {
++  type Listener = Parameters<PaneClient["subscribe"]>[0];
++  const listeners = new Set<Listener>();
++  const commands: BrokerCommand[] = [];
++  const readers = new Map<string, (frame: OutputFrame | null) => void>();
++  const sequences = new Map<string, number>();
++  const client: PaneClient = {
++    subscribe(listener) {
++      listeners.add(listener);
++      listener(clientSnapshotToProjection(snapshot));
++      return () => { listeners.delete(listener); };
++    },
++    getSnapshot: async () => snapshot,
++    async *output(id) {
++      while (true) {
++        const frame = await new Promise<OutputFrame | null>(resolve => readers.set(id, resolve));
++        if (!frame) return;
++        yield frame;
++      }
++    },
++    async request(command): Promise<BrokerResult> {
++      commands.push(command);
++      return { ok: true, commandId: command.commandId, acceptedSnapshotSeq: 1 };
++    },
++  };
++  return {
++    client, commands,
++    setSnapshot(next: BrokerSnapshot) {
++      snapshot = next;
++      for (const notify of listeners) notify(clientSnapshotToProjection(next));
++    },
++    emit(id: string, bytes: Uint8Array) {
++      const reader = readers.get(id);
++      if (!reader) throw new Error("offline reader unavailable");
++      readers.delete(id);
++      const outputSeq = (sequences.get(id) ?? 0) + 1;
++      sequences.set(id, outputSeq);
++      reader({ sessionId: snapshot.sessionId, executionId: id, outputSeq, bytes });
++    },
++    close() { for (const reader of readers.values()) reader(null); },
++  };
++}
++
++export const offlineCatalog = async () => ({ status: "ok" as const, models: [] });
+diff --git a/test/phase3b/producer.test.ts b/test/phase3b/producer.test.ts
+new file mode 100644
+index 0000000..710b075
+--- /dev/null
++++ b/test/phase3b/producer.test.ts
+@@ -0,0 +1,26 @@
++import { expect, test } from "bun:test";
++import { unsafeTestOnlyIngestRawOutputFrame } from "../../packages/broker/src/in-process-client";
++import { openTransport, orderedTranscript, transportSurfaces } from "./transport";
++
++test("the live producer delivers contiguous monitor facts for each execution and excludes attestation", async () => {
++  for (const surface of transportSurfaces) {
++    const executionId = surface === "claude-code" ? "builder" : "reviewer";
++    expect(await orderedTranscript(surface)).toEqual([
++      { sessionId: "offline-transport", executionId, outputSeq: 1, bytes: [32, 9] },
++      { sessionId: "offline-transport", executionId, outputSeq: 2, bytes: [32, 32, 9] },
++    ]);
++  }
++}, 20000);
++
++test("a refused output sequence interrupts the live session", async () => {
++  for (const surface of transportSurfaces) {
++    const t = await openTransport(surface);
++    try {
++      const frame = { sessionId: t.sessionId, executionId: t.writer.execution_id, outputSeq: 2, bytes: Uint8Array.of(42) };
++      await expect(unsafeTestOnlyIngestRawOutputFrame(t.client, frame)).rejects.toThrow();
++      const rows = t.build.state.ledger!.readAfter(0).map(row => JSON.parse(row.event_json));
++      expect(rows.filter(e => e.event_type === "session_interrupted").map(e => e.reason_code))
++        .toEqual(["output_sequence_invariant_failed"]);
++    } finally { await t.close(); }
++  }
++}, 20000);
+diff --git a/test/phase3b/retention.test.tsx b/test/phase3b/retention.test.tsx
+new file mode 100644
+index 0000000..63a4288
+--- /dev/null
++++ b/test/phase3b/retention.test.tsx
+@@ -0,0 +1,68 @@
++import { expect, test } from "bun:test";
++import { act } from "react";
++import { testRender } from "@opentui/react/test-utils";
++import { App } from "../../apps/madbridge/src/tui/App";
++import { PaneRetention } from "../../apps/madbridge/src/tui/live/retention";
++import { offlineCatalog, paneClient } from "./pane-client";
++
++const bytes = (text: string) => new TextEncoder().encode(text);
++const decode = (value: Uint8Array) => new TextDecoder().decode(value);
++
++test("interleaved output reaches each pane and dock in host order", async () => {
++  const feed = paneClient();
++  const view = await testRender(<App client={feed.client} catalogLoader={offlineCatalog} />, { width: 154, height: 35 });
++  try {
++    await view.flush();
++    for (const [id, text] of [["builder", "alpha "], ["reviewer", "tango "], ["builder", "bravo"], ["reviewer", "sierra"]] as const) {
++      await act(async () => { feed.emit(id, bytes(text)); });
++      await view.flush();
++    }
++    function check(stage: string, dock: string) {
++      const lines = view.captureCharFrame().split("\n");
++      expect(lines.filter(line => !line.includes("docked")).join("\n")).toContain(stage);
++      expect(lines.find(line => line.includes("docked"))).toContain(dock);
++    }
++    check("alpha bravo", "tango sierra");
++    await act(async () => { view.mockInput.pressKey("4", { meta: true }); });
++    await view.flush();
++    await view.flush();
++    check("tango sierra", "alpha bravo");
++
++    const buffer = new PaneRetention();
++    for (const part of ["alpha ", "", "bravo"]) buffer.append(bytes(part));
++    expect(Array.from(buffer.frames(), decode)).toEqual(["alpha ", "", "bravo"]);
++  } finally { await act(async () => { feed.close(); view.renderer.destroy(); }); }
++});
++
++test("the line cap drops oldest content and counts received and retained frames and bytes", () => {
++  const buffer = new PaneRetention();
++  buffer.append(bytes("old\r"));
++  buffer.append(bytes("\n"));
++  for (let i = 0; i < 9_999; i++) buffer.append(bytes("x\n"));
++  expect(buffer.text()).toBe("old\r\n" + "x\n".repeat(9_999));
++  buffer.append(bytes("tail"));
++  expect(buffer.receivedFrames).toBe(10_002);
++  expect(buffer.receivedBytes).toBe(20_007);
++  expect(buffer.retainedFrames).toBe(10_000);
++  expect(buffer.retainedBytes).toBe(20_002);
++  expect(buffer.text()).toBe("x\n".repeat(9_999) + "tail");
++  expect(Array.from(buffer.frames()).length).toBe(10_000);
++});
++
++test("the byte cap retains the newest bytes including a partial frame", () => {
++  const buffer = new PaneRetention();
++  buffer.append(bytes("OLD"));
++  const block = new Uint8Array(2_097_150).fill(97);
++  block[0] = 98;
++  block[1] = 99;
++  buffer.append(block);
++  buffer.append(bytes("end"));
++  expect(buffer.receivedFrames).toBe(3);
++  expect(buffer.receivedBytes).toBe(2_097_156);
++  expect(buffer.retainedFrames).toBe(2);
++  expect(buffer.retainedBytes).toBe(2_097_152);
++  const frames = Array.from(buffer.frames());
++  expect(frames.map(frame => frame.byteLength)).toEqual([2_097_149, 3]);
++  expect(frames[0]![0]).toBe(99);
++  expect(decode(frames[1]!)).toBe("end");
++});
+diff --git a/test/phase3b/transport-stand-in.ts b/test/phase3b/transport-stand-in.ts
+new file mode 100644
+index 0000000..ece675d
+--- /dev/null
++++ b/test/phase3b/transport-stand-in.ts
+@@ -0,0 +1,59 @@
++import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
++import { basename, dirname, join } from "node:path";
++import { attestationEvents, type Surface } from "./end-stand-in";
++
++async function run(): Promise<void> {
++  const executable = process.argv[1]!;
++  const root = dirname(dirname(executable));
++  if (!process.stdin.isTTY || process.cwd() !== join(root, "work") || !existsSync(join(root, "m3-transport"))) {
++    throw new Error("expected a private transport stand-in");
++  }
++  const surface: Surface = basename(executable).startsWith("madbridge-claude-v5") ? "claude-code" : "madv-surface";
++  const model = process.argv[process.argv.indexOf("--model") + 1]!;
++  const events = attestationEvents(surface, model);
++  const emit = (items: readonly unknown[], tail = "") =>
++    writeFileSync(1, items.map(item => JSON.stringify(item) + "\n").join("") + tail);
++
++  let attested = false;
++  let next = 1;
++  const control = setInterval(() => {
++    if (!attested) return;
++    const file = join(root, surface + "-output-" + next);
++    if (!existsSync(file)) return;
++    writeFileSync(1, readFileSync(file));
++    next++;
++  }, 5);
++  try {
++    let pending = Buffer.alloc(0);
++    for await (const chunk of process.stdin) {
++      pending = Buffer.concat([pending, chunk]);
++      let end: number;
++      while ((end = pending.indexOf(10)) >= 0) {
++        const wire = pending.subarray(0, end + 1);
++        pending = pending.subarray(end + 1);
++        const message = JSON.parse(wire.toString("utf8"));
++        if (!attested) {
++          if (message.message?.content !== "Reply with your model identifier and nothing else." ||
++              (surface === "madv-surface" ? message.no_tools !== true : message.no_tools !== undefined)) {
++            throw new Error("unexpected attestation message");
++          }
++          // The whitespace following the result is a partial line in this same read.
++          emit(events, " ");
++          attested = true;
++        } else {
++          // Bun caches terminal dimensions until a resize notification is serviced.
++          const terminal = process.stdout as typeof process.stdout & { _refreshSize(): void };
++          terminal._refreshSize();
++          const observation = { bytes: [...wire], cols: process.stdout.columns, rows: process.stdout.rows };
++          appendFileSync(join(root, surface + "-inputs"), JSON.stringify(observation) + "\n");
++          const reply = message.message.content;
++          emit(events.slice(1).map(event => ({ ...event, offlineReply: reply,
++            ...(reply === "offline mismatched evidence" && event.type === "model_response" && { response_model: "MiniMax-offline-other" }),
++          })));
++        }
++      }
++    }
++  } finally { clearInterval(control); }
++}
++
++if (import.meta.main) await run();
+diff --git a/test/phase3b/transport.ts b/test/phase3b/transport.ts
+new file mode 100644
+index 0000000..0f36c7a
+--- /dev/null
++++ b/test/phase3b/transport.ts
+@@ -0,0 +1,90 @@
++import { existsSync, readFileSync, writeFileSync } from "node:fs";
++import { join } from "node:path";
++import { parseTaskEnvelope, sha256CanonicalSync } from "@madventures/protocol";
++import type { OutputFrame } from "@madventures/broker";
++import { createStartAttesters } from "../../apps/madbridge/src/tui/live/composition";
++import { runLiveTransactionalBuild, runPurePreflight } from "../../packages/supervisor/src/index";
++import type { Surface } from "./end-stand-in";
++import { prepareM2 } from "./m2-offline";
++import { closeOfflineBuild } from "./offline";
++
++export const transportSurfaces = ["claude-code", "madv-surface"] as const;
++export async function observed(predicate: () => boolean | Promise<boolean>): Promise<void> {
++  const limit = performance.now() + 3500;
++  while (!await predicate()) {
++    if (performance.now() >= limit) throw new Error("offline observation deadline");
++    await Bun.sleep(5);
++  }
++}
++
++export async function openTransport(surface: Surface) {
++  const f = prepareM2(surface, false, "Founder close");
++  try {
++    writeFileSync(join(f.root, "m3-transport"), "");
++    writeFileSync(join(f.bin, "end-stand-in.ts"), readFileSync(new URL("./end-stand-in.ts", import.meta.url)));
++    for (const child of f.plan.executions) {
++      writeFileSync(child.executablePath + ".launch.ts", readFileSync(new URL("./transport-stand-in.ts", import.meta.url)));
++    }
++    const writer = f.envelope.executions.find(e => e.surface === surface)!;
++    const { envelope_hash: _hash, ...body } = f.envelope;
++    const unsigned = { ...body, initial_writer: writer.execution_id };
++    const envelope = parseTaskEnvelope({ ...unsigned, envelope_hash: sha256CanonicalSync(unsigned) });
++    const preflight = await runPurePreflight({ ...f.input, envelope: { ...envelope } });
++    if (!preflight.ok) throw new Error("offline transport preflight " + preflight.failure);
++    const sessionId = "offline-transport";
++    const failures: string[] = [];
++    const installed = createStartAttesters();
++    let madvSender: ((bytes: Uint8Array) => boolean) | undefined;
++    const build = await runLiveTransactionalBuild({
++      sessionId, envelope, plan: preflight.plan, signal: f.input.signal,
++      attesterFor: name => {
++        const attest = installed(name);
++        if (!attest) return undefined;
++        return async input => {
++          const verdict = await attest({ ...input, reportFailure(cause) {
++            failures.push(name + " " + cause);
++            input.reportFailure(cause);
++          } });
++          if (name === "madv-surface" && verdict.ok) madvSender = verdict.sendEncodedInput;
++          return verdict;
++        };
++      },
++    });
++    if (!build.ok) {
++      await closeOfflineBuild(build);
++      throw new Error("offline transport build " + build.detail);
++    }
++    const client = build.state.client!;
++    function release(target: Surface, sequence: number, bytes: string) {
++      writeFileSync(join(f.root, target + "-output-" + sequence), bytes);
++    }
++    function inputs(target: Surface): { bytes: number[]; cols: number; rows: number }[] {
++      const file = join(f.root, target + "-inputs");
++      return existsSync(file) ? readFileSync(file, "utf8").trim().split("\n").map(line => JSON.parse(line)) : [];
++    }
++    async function close() {
++      try { await closeOfflineBuild(build); } finally { f.dispose(); }
++    }
++    return { root: f.root, build, client, envelope, sessionId, failures, writer, release, inputs, close, madvSender };
++  } catch (error) { f.dispose(); throw error; }
++}
++
++export async function orderedTranscript(surface: Surface) {
++  const t = await openTransport(surface);
++  try {
++    const frames: OutputFrame[] = [];
++    const receive = (async () => {
++      for await (const frame of t.client.output(t.writer.execution_id)) {
++        frames.push(frame);
++        if (frames.length === 2) break;
++      }
++    })();
++    t.release(surface, 1, " \t");
++    await observed(() => frames.length > 0);
++    t.release(surface, 2, "  \t");
++    await observed(() => frames.length === 2);
++    await receive;
++    return frames.map(frame => ({ sessionId: frame.sessionId, executionId: frame.executionId,
++      outputSeq: frame.outputSeq, bytes: [...frame.bytes] }));
++  } finally { await t.close(); }
++}
+diff --git a/test/phase3b/unbridged-stand-in.ts b/test/phase3b/unbridged-stand-in.ts
+new file mode 100644
+index 0000000..196f043
+--- /dev/null
++++ b/test/phase3b/unbridged-stand-in.ts
+@@ -0,0 +1,16 @@
++// Private Phase 3A fixture child and probes. Never record a process environment.
++import { basename } from "node:path";
++if (import.meta.main) {
++  if (process.argv.includes("--fixture-run")) {
++    process.on("SIGTERM", () => process.exit(0));
++    process.stdin.setRawMode(true);
++    process.stdin.on("data", data => process.stdout.write(data));
++    process.stdin.on("end", () => process.exit(0));
++    process.stdout.write("FIXTURE_READY\n");
++  } else if (process.argv.includes("--fixture-auth")) {
++    console.log(JSON.stringify({ loggedIn: true, authMethod: "claude.ai", apiProvider: "firstParty", subscriptionType: "max" }));
++  } else {
++    const model = basename(process.argv[1]!) === "fixture-builder" ? "fixture-model-0" : "fixture-model-1";
++    console.log(JSON.stringify({ type: "system", subtype: "init", model, claude_code_version: "1.0.0" }));
++  }
++}
+diff --git a/test/phase3b/unbridged.ts b/test/phase3b/unbridged.ts
+new file mode 100644
+index 0000000..ad1a279
+--- /dev/null
++++ b/test/phase3b/unbridged.ts
+@@ -0,0 +1,47 @@
++import { spyOn } from "bun:test";
++import { copyFileSync, mkdirSync, readFileSync, symlinkSync } from "node:fs";
++import { join, resolve } from "node:path";
++import * as build from "../../packages/supervisor/src/build";
++import { offlineStart } from "./offline";
++
++export async function originalBuildInput() {
++  const f = offlineStart();
++  const repo = resolve(import.meta.dir, "../..");
++  // The Phase 3A harness derives its worktree from its own file. Run an exact
++  // copy in a disposable Git worktree with the checked-out production modules.
++  try {
++    const tree = join(f.work, "test/phase3a");
++    mkdirSync(tree, { recursive: true });
++    for (const name of ["runtime-harness.ts", "fixture-adapters.ts"]) {
++      copyFileSync(join(repo, "test/phase3a", name), join(tree, name));
++    }
++    for (const name of ["packages", "node_modules"]) symlinkSync(join(repo, name), join(f.work, name), "dir");
++    copyFileSync(join(repo, "tsconfig.json"), join(f.work, "tsconfig.json"));
++    const fixtures: typeof import("../phase3a/fixture-adapters") = await import(join(tree, "fixture-adapters.ts"));
++    const harness: typeof import("../phase3a/runtime-harness") = await import(join(tree, "runtime-harness.ts"));
++    const executable = "#!" + process.execPath + "\n" + readFileSync(new URL("./unbridged-stand-in.ts", import.meta.url), "utf8");
++    const script = spyOn(fixtures, "fixtureExecutableSource").mockReturnValue(executable);
++    const original = build.runTransactionalBuildWithDependencies;
++    let state: build.PartialBuildState | undefined;
++    const capture = spyOn(build, "runTransactionalBuildWithDependencies").mockImplementation(async (...args) => {
++      const result = await original(...args);
++      if (result.ok) state = result.state;
++      return result;
++    });
++    try {
++      const session = await harness.startFixtureSession();
++      try {
++        if (!state?.client) throw new Error("original client missing");
++        const raw = state.client;
++        const snapshot = await raw.getSnapshot();
++        const host = state.hosts.find(h => h.executionId === snapshot.activeWriterExecutionId)!;
++        const observe = spyOn(host.handle, "send");
++        try {
++          const result = await raw.request({ kind: "pty_input", commandId: "original-input", sessionId: snapshot.sessionId,
++            executionId: host.executionId, fencingToken: snapshot.fencingToken!, bytes: new TextEncoder().encode("offline") });
++          return { result, writes: observe.mock.calls.length };
++        } finally { observe.mockRestore(); }
++      } finally { await session.close(); }
++    } finally { capture.mockRestore(); script.mockRestore(); }
++  } finally { f.dispose(); }
++}
