@@ -2135,3 +2135,73 @@ Round 2's resolution, recorded above as pending, is now closed:
   `DEC-20261125-01` is M2's act: M2's binding base is the merge commit of the pull request that files
   it; its builder is `session:codex/3b-m2-r1` and its reviewer `antigravity`; and its verdicts count
   under rubric milestone 7, in a count that starts at zero.
+
+## M2 review verdict PASS and M2 merged (rubric milestone 7, no round, count 0)
+
+- **Recorded:** 2026-11-27, under `DEC-20261127-01` B1 to B12 and C1.
+- **Plan milestone:** Phase 3B slice M2, snapshot projection and the end of the child after activation,
+  offline (`DEC-20261125-01` B12 to B24). **Rubric milestone:** 7 (`DEC-20261108-01` B9 item 2), in M2's
+  own count (`DEC-20261125-01` B14 item 3).
+- **Head reviewed:** `6b3a38365854ed39a4bd291be1d48d5045cd109e` on PR #256 (`build/3b-m2-r1`), built by
+  `session:codex/3b-m2-r1` from binding base `c383353885abb526a5471ef764be3cffc558a6ff` under
+  `DEC-20261125-01`, the builder prompt with SHA-256
+  `92540f1a8ff60f3a2bc68e9c4b9cdbcc121f967c2273791e61eddb8e7b8e4945` and one resume message, SHA-256
+  `f9f431738c29b2fea9b485d779fb9f4540c70d4553e55e3ee999dd6425eda3d0`. The session halted once, at its
+  precondition 3 and before any edit, on whether "null as null" in `DEC-20261125-01` B16 item 3 covers
+  `repositoryFingerprint`, which the client declares never null; the resume message upheld the halt and
+  ruled how B16 reads. Its first full run failed its type check at the eighth commit, and the ninth,
+  `53c80aad02ac89131d7a0bcd8188ae1c66653902`, a self-fix under `DEC-20261023-01` B4, added one non-null
+  assertion at line 68 of `test/phase3b/subscribe.test.ts` (`DEC-20261127-01` A3 and B1).
+- **Reviewer:** `antigravity`, a fresh Gemini session in Antigravity on the Founder's MacBook; the
+  report records the model as not shown, and the Founder chose Gemini 4 Hydrogen (High). Review prompt
+  SHA-256 `9a0fecedf7f7ef3e20bdea8a6127d2f0341395f2e9bc7eb16aaf0472d1633c73`.
+- **Verdict text SHA-256:** `d1907cb08ad6c26cb66b7d1a62b8efa18dc7a8e88354c04856b2530810a1a614`, 57,931
+  bytes, 629 lines, saved at `/Users/michaeldaley/builds/review-m2-r1.md`, posted on PR #256 as comments
+  7206983505 and 7206983775 by `decivantiq`.
+- **Result:** PASS, items 1 to 15, no SUBSTANTIVE finding, and four findings the reviewer classifies
+  ADVISORY, each from an attempt that broke what an item checks while every test of that item still
+  passed: no test rejects an execution state outside its declared set (item 2); no test renders a null
+  fencing token under the ownership kinds `transfer-requested` and `sender-released` (item 3); no test
+  shows the pacing wait settling at once on unsubscribe (item 4); and no test shows a registration's
+  exit-code rule applying after the handover beyond the code the parser also maps (item 5). The Founder
+  rules all four limits of the tests, not defects of the code: M3 answers Findings 2 and 3 with tests,
+  and Findings 1 and 4 are recorded and require nothing (`DEC-20261127-01` B4). **Counted:** no round.
+  The halt, the resume message, the Founder's answer to the session about the load and Copilot's review
+  add no round. M2's count under rubric milestone 7 closes at **0** (`DEC-20261127-01` B6).
+- **Checks at the head:** on the test merge `ba5ad0b36f4df11a5be240f0b774e18d325a1109` of the head into
+  `main` at `c383353885abb526a5471ef764be3cffc558a6ff`, Verify and Verify (macOS) passed with 2139 pass,
+  0 fail, across 168 files, and tui-chaos on both hosts, validate-code-review, code-review,
+  attribution-shape, CodeQL and every Analyze job succeeded. The Founder's runs of `DEC-20261125-01` B22
+  passed at the head on the MacBook under Bun 1.4.2 and on the Ubuntu PC under the custodied Bun 1.4.1:
+  2139 pass, 0 fail, across 168 files on each, log manifests SHA-256
+  `dd7cb69b2dbed3552dfee610456b2839ca825f439e61d56e55d1470c7ebba7a6` and
+  `b9019a862a730f4b29e7e4e909894b243e9e0701cc95aa30830e1ead99fd3e72`.
+- **Merged:** PR #256 was marked ready at the head on 2026-11-27, after the PASS was posted, and GitHub
+  then requested Copilot's review. Copilot's review 6082231961 opened one thread, on the writer and
+  fencing token the status bar shows beside NOT CONNECTED when a read fails after a projection has been
+  given. The Founder's note on that review, comment 7208418772, SHA-256
+  `3d0e6f87a2b73527e4398c1df41fac9b4398216ff0d53a2e61dfb4b7aaf2a434`, found it right as to what the
+  status bar shows and a breach of no ruling, and carried it to `DEC-20261127-01`; the Founder's command
+  resolved the thread. Under the Founder's merge authorization in comment 7208755074, SHA-256
+  `70746b3b7b323d7561aa1653a2e2b5a333a254d747f55886bb6e2049ae36aa8a`, it merged at
+  `2026cfd96ff34b6ebc44161479f23f105febc102`, with parents `c383353885abb526a5471ef764be3cffc558a6ff`
+  and `6b3a38365854ed39a4bd291be1d48d5045cd109e`, changing exactly 36 paths, 19 added and 17 modified.
+  Every run on the merge commit succeeded.
+- **Harness:** one builder session under Codex 0.167.0, the governed build of `DEC-20261108-03` Addendum
+  11. All four turns of its one session record name the model `gpt-6.2-astra`; the first names the
+  effort `xhigh` and the other three `ultra`, a change the Founder made after the first turn, which is
+  recorded and is neither a stop nor a deviation (`DEC-20261127-01` B2).
+- **The status bar of an ended stream (`DEC-20261127-01` A11, B7 and B16):** when the subscribe adapter
+  gives its last projection again with `connected` false, the status bar showed the last writer and its
+  token beside NOT CONNECTED, as if current. The Founder ruled that when a projection's `connected` is
+  false no reader under `apps/madbridge/src/tui/` presents a writer, an ownership or a fencing token as
+  current, and that it shows STREAM ENDED in their place; a null `connected` and a connected projection
+  render as before. This amends the last paragraph of `DEC-20261125-01` B16 for that case. M3 builds it,
+  before M6 gives the adapter a caller.
+- **The tests of Findings 2 and 3 (`DEC-20261127-01` B4, and B18 items 13 and 14):** M3 adds a test that
+  a null fencing token under `transfer-requested` and `sender-released` renders as absence in each
+  reader that shows the token, and a test that unsubscribing settles the adapter's pacing wait at once.
+- **M3 (`DEC-20261127-01` B8 to B12):** `DEC-20261108-04` B4 item 4 is confirmed for M3's base.
+  `DEC-20261127-01` is M3's act: M3's binding base is the merge commit of the pull request that files
+  it; its builder is `session:codex/3b-m3-r1` and its reviewer `antigravity`; and its verdicts count
+  under rubric milestones 5 and 7, in a count that starts at zero.
