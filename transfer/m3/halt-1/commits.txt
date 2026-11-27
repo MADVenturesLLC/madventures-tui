@@ -1,0 +1,4 @@
+66ebd2081cbba90a31a116960984154780d020da a7ceccbe96950b63646edc1dc6cc8590c957bf28 docs(verification): open the M3 build log with its task detail
+8a95854cda8ffc21ea35aac56a2c9e4b95a789bc 66ebd2081cbba90a31a116960984154780d020da feat(supervisor): deliver monitored PTY output to the Founder client
+ee21c4439c59f83686fd9bdb11217d2798accfa8 8a95854cda8ffc21ea35aac56a2c9e4b95a789bc feat(tui): retain ordered output for each surface pane and dock
+790eba2b5a3ea1beb37aa07311165c0fa9b8109f ee21c4439c59f83686fd9bdb11217d2798accfa8 feat(broker): await host acknowledgements for live writer commands
