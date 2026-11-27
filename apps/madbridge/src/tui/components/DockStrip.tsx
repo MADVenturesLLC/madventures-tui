@@ -83,7 +83,7 @@ export function buildDockLine(
     fields.push(live);
   } else if (isActiveWriter(state, surface)) {
     const tok = writerToken(state, surface);
-    fields.push("WRITER tok#" + String(tok));
+    fields.push(tok === null ? "WRITER token —" : "WRITER tok#" + String(tok));
   }
 
   fields.push(role);

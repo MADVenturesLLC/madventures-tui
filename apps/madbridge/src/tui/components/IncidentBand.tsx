@@ -46,13 +46,13 @@ export function IncidentBand({ state }: IncidentBandProps) {
   const incidentId = incident?.id ?? "—";
   const timestamp = incident?.timestamp ?? "—";
   // The retained fencing token is historical, NOT live authority.
-  const token = state?.fencingToken ?? 0;
+  const token = state?.fencingToken;
 
   // Truth boundary: a fencing token is only real evidence when one was
   // actually issued (tokens are 1-based). A missing/zero token must never be
   // presented as an issued token that was invalidated — that would fabricate
   // authority history. Render an honest fallback instead.
-  const tokenClause = token > 0
+  const tokenClause = token === null ? "token —" : token !== undefined && token > 0
     ? "token #" + String(token) + " invalidated"
     : "no issued token to invalidate";
 

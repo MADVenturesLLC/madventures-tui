@@ -145,7 +145,7 @@ export interface LiveBuildInput extends BuildInput {
 
 // Use only build-owned literals in ledger and caller-visible detail.
 function liveFailureCause(surface: SurfaceId, reported: unknown): string {
-  const shared = ["auth_failed", "identity_mismatch", "attestation_deadline", "attestation_cancelled",
+  const shared = ["child_exited", "host_exited", "auth_failed", "identity_mismatch", "attestation_deadline", "attestation_cancelled",
     "attestation_tool_call", "attestation_round_trips", "attestation_budget_exhausted"];
   const specific = surface === "madv-surface"
     ? ["endpoint_refused", "provider_error", "identity_unavailable", "model_refused", "domain_unresolved"]
@@ -641,6 +641,8 @@ async function executeBuild(
     firstFailure = { executionId, surface, cause };
     if (sessionActivatedRow !== null && currentBroker !== null) {
       const reason = cause === "auth_failed" ? "authentication_expired"
+        : cause === "child_exited" ? "child_failure"
+        : cause === "host_exited" ? "pty_host_failure"
         : cause === "provider_error" || cause === "endpoint_refused" ? "adapter_failure" : "identity_mismatch";
       const phase = currentBroker.snapshotProjectionInput().lifecycle.phase;
       if (phase === "active" || phase === "paused") {

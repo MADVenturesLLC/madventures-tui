@@ -3,7 +3,7 @@ import { EVIDENCE_DEADLINE_MS, MadvSurfaceParser, encodeAttestationInput, encode
   type MadvFailureCause, type MadvResult } from "./index";
 
 const PROMPT = "Reply with your model identifier and nothing else.";
-type Cause = MadvFailureCause | "attestation_deadline" | "attestation_cancelled" |
+type Cause = MadvFailureCause | "child_exited" | "host_exited" | "attestation_deadline" | "attestation_cancelled" |
   "attestation_tool_call" | "attestation_round_trips" | "attestation_budget_exhausted";
 interface Input {
   executionId: string;
@@ -72,16 +72,21 @@ export function attestMadvSession(input: Input, reserveWrite: () => boolean = ()
         if (!ready && performance.now() >= deadline) { stop("attestation_deadline"); break; }
         if (fact.kind === "output" && fact.bytes) inspect(parser.push(fact.bytes));
         if (fact.kind === "exited") {
+          const handedOver = ready;
           const exitCode = fact.code ?? 1;
           const result = parser.finish(exitCode, fact.signal ?? null);
           const detection = detectMadvFailure(input.registration.auth_failure_detection, { kind: "child_exit", exitCode });
           if (detection && !parser.attestationFailure) stop(detection.cause, detection.reason);
           else inspect(result);
-          break;
+          if (handedOver && !failure) stop("child_exited");
+          return;
         }
         if (failure) break;
       }
-      if (!failure) inspect(parser.finish(0));
+      if (!failure) {
+        if (ready) stop("host_exited");
+        else inspect(parser.finish(0));
+      }
     } catch { stop("identity_mismatch", "malformed_stream"); }
     finally {
       closed = true;

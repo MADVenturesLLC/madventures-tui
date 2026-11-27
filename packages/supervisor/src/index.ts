@@ -28,3 +28,5 @@ export type {
   PartialBuildState,
   RollbackOutcome,
 } from "./build";
+
+export { waitForSnapshotTick } from "./snapshot-timer";

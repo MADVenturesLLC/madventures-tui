@@ -51,7 +51,7 @@ export function GovernancePane({ active, state }: GovernancePaneProps) {
   if (!state || !state.connected) {
     return (
       <box flexGrow={1} flexDirection="column" borderStyle="single" borderColor={active ? POSEIDON.accent : POSEIDON.uiBorder} overflow="hidden">
-        <text>{fit("GOVERNANCE | NOT CONNECTED")}</text>
+        <text>{fit(state?.connected === null ? "GOVERNANCE | UNKNOWN" : "GOVERNANCE | NOT CONNECTED")}</text>
         <text>{fit("No current permissions, verification, or review.")}</text>
       </box>
     );
@@ -66,10 +66,10 @@ export function GovernancePane({ active, state }: GovernancePaneProps) {
   const transfer = state.pendingTransfers?.[0] ?? null;
 
   // Render empty allowed lists as "none", not healthy/active/unknown.
-  const readPaths = perms?.allowedReadPaths?.length ? perms.allowedReadPaths.join(", ") : "none";
-  const writePaths = perms?.allowedWritePaths?.length ? perms.allowedWritePaths.join(", ") : "none";
-  const cmdCats = perms?.allowedCommandCategories?.length ? perms.allowedCommandCategories.join(", ") : "none";
-  const egress = perms?.allowedEgressDestinations?.length ? perms.allowedEgressDestinations.join(", ") : "none";
+  const readPaths = perms === null ? "—" : perms?.allowedReadPaths?.length ? perms.allowedReadPaths.join(", ") : "none";
+  const writePaths = perms === null ? "—" : perms?.allowedWritePaths?.length ? perms.allowedWritePaths.join(", ") : "none";
+  const cmdCats = perms === null ? "—" : perms?.allowedCommandCategories?.length ? perms.allowedCommandCategories.join(", ") : "none";
+  const egress = perms === null ? "—" : perms?.allowedEgressDestinations?.length ? perms.allowedEgressDestinations.join(", ") : "none";
   const dataClass = perms?.dataClass ?? "—";
 
   // Build all rows as plain strings — each will be truncated to fit.
@@ -79,10 +79,10 @@ export function GovernancePane({ active, state }: GovernancePaneProps) {
   rows.push("Fingerprint: " + (state.repositoryFingerprint ? state.repositoryFingerprint.git_sha.slice(0, 12) : "—"));
   rows.push("Claude: " + (cl?.execution_id ?? "—"));
   rows.push("Antigravity: " + (agy?.execution_id ?? "—"));
-  rows.push("Writer: " + (state.activeWriter ?? "—") + " | Token: " + String(state.fencingToken) + " | Ownership: " + state.ownershipState);
+  rows.push("Writer: " + (state.activeWriter ?? "—") + " | Token: " + (state.fencingToken ?? "—") + " | Ownership: " + (state.ownershipState ?? "UNKNOWN"));
   rows.push("Read: " + readPaths + " | Write: " + writePaths);
   rows.push("Commands: " + cmdCats + " | Egress: " + egress + " | Data class: " + dataClass);
-  rows.push("Transfer phase: " + (state.transferPhase ?? "none") + " | Pending transfers: " + String(state.pendingTransfers?.length ?? 0));
+  rows.push("Transfer phase: " + (state.transferPhase ?? "none") + " | Pending transfers: " + String(state.pendingTransfers?.length ?? "—"));
   if (transfer) {
     rows.push("Transfer: " + transfer.from + " → " + transfer.to + " | tok#" + String(transfer.fencingToken) + " | " + transfer.reason);
     // Provenance timestamp on its own row so the label survives narrow-width

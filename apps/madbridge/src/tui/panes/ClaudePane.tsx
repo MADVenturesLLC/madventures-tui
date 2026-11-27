@@ -39,8 +39,8 @@ export function ClaudePane({ active, state, ptyOutput }: ClaudePaneProps) {
   // Build the header line truthfully.
   const headerParts: string[] = ["CLAUDE CODE"];
   if (active) headerParts.push("FOCUSED");
-  if (writer && tok !== null) {
-    headerParts.push("WRITER tok#" + String(tok));
+  if (writer) {
+    headerParts.push(tok === null ? "WRITER token —" : "WRITER tok#" + String(tok));
   } else if (live !== "LIVE") {
     // No current-writer claim while not live (disconnected, interrupted,
     // or incident). Show the truthful liveness word instead. Real buffered

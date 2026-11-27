@@ -49,7 +49,7 @@ test("madv encodes no_tools only on the attestation message", async () => {
   wire.events(response, assistant, result);
   wire.end();
   while (!wire.closed) await Bun.sleep(1);
-  expect(wire.failures).toEqual([]);
+  expect(wire.failures).toEqual(["host_exited"]);
 });
 
 test("madv requires init, model response, assistant and success in order", async () => {

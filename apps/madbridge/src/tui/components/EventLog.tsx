@@ -34,7 +34,7 @@ export function EventLog({ entries }: Props) {
           <text> </text>
           <text fg={POSEIDON.lightText}>{entry.actor}</text>
           <text> </text>
-          <text fg={POSEIDON.cobalt}>tok:{entry.fencingToken}</text>
+          <text fg={POSEIDON.cobalt}>{entry.fencingToken === null ? "tok:—" : "tok:" + String(entry.fencingToken)}</text>
           <text> </text>
           <text attributes={TextAttributes.DIM}>
             {entry.hash.slice(0, 12)}
