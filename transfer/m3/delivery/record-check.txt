@@ -1,0 +1,37 @@
+Founder check of M3 before the push, under DEC-20261127-01 B22: the session record under DEC-20261108-03 Addendum 2 B4, as its Addenda 6 B1 and 10 B6 and DEC-20261112-02 B2 and B5 read it, with the count of code from a string of DEC-20261115-02 Addendum 3 B4.
+
+Check: h2-record-check.mjs, SHA-256 c1834dcc689e94cf57fb123a09a0600225d8e97b428c648f14276136e3dd383f, from transfer commit 730df3014bf31d2dc0770cb4d30a4a4a79e30afe, over /Users/michaeldaley/builds/m3-r1. Evidence on the MacBook: /Users/michaeldaley/builds/m3-record-check/check-20261128T015948Z, MANIFEST.sha256 0c71f5ee66654bdadc7700f34a83628fb8554d195e0434ee508b443890cfaea2.
+
+Self-test:
+    self-test cases: 66; not as expected: 0
+    SELFTEST_OK
+
+Check:
+    records whose starting folder is /Users/michaeldaley/builds/m3-r1: 1
+    rollout-2026-11-27T13-29-07-01a21e44-af81-7971-81ca-19c10b94e4ff.jsonl: started 2026-11-27T18:29:07.598Z, cli_version 0.167.0, folder /Users/michaeldaley/builds/m3-r1
+      user messages: 0
+      event types: 429 token_count; 6 task_complete; 6 task_started; 9 thread_settings_applied; 922 item_completed
+      turn 2026-11-27T18:30:00.022Z | model gpt-6.2-astra | effort ultra | approval on-request | approvals reviewer user | sandbox workspace-write | network access false | folder /Users/michaeldaley/builds/m3-r1
+      turn 2026-11-27T19:04:33.621Z | model gpt-6.2-astra | effort ultra | approval on-request | approvals reviewer user | sandbox workspace-write | network access false | folder /Users/michaeldaley/builds/m3-r1
+      turn 2026-11-27T21:05:22.070Z | model gpt-6.2-astra | effort ultra | approval on-request | approvals reviewer user | sandbox workspace-write | network access false | folder /Users/michaeldaley/builds/m3-r1
+      turn 2026-11-27T22:09:07.491Z | model gpt-6.2-astra | effort ultra | approval on-request | approvals reviewer user | sandbox workspace-write | network access false | folder /Users/michaeldaley/builds/m3-r1
+      turn 2026-11-27T22:57:50.999Z | model gpt-6.2-astra | effort ultra | approval on-request | approvals reviewer user | sandbox workspace-write | network access false | folder /Users/michaeldaley/builds/m3-r1
+      turn 2026-11-27T23:18:20.020Z | model gpt-6.2-astra | effort ultra | approval on-request | approvals reviewer user | sandbox workspace-write | network access false | folder /Users/michaeldaley/builds/m3-r1
+      turn 2026-11-28T00:35:03.907Z | model gpt-6.2-astra | effort ultra | approval on-request | approvals reviewer user | sandbox workspace-write | network access false | folder /Users/michaeldaley/builds/m3-r1
+      turn 2026-11-28T01:07:15.571Z | model gpt-6.2-astra | effort ultra | approval on-request | approvals reviewer user | sandbox workspace-write | network access false | folder /Users/michaeldaley/builds/m3-r1
+      turn 2026-11-28T01:16:29.550Z | model gpt-6.2-astra | effort ultra | approval on-request | approvals reviewer user | sandbox workspace-write | network access false | folder /Users/michaeldaley/builds/m3-r1
+      top-level calls: 1 function_call request_user_input_async; 131 function_call wait; 2 function_call clock.sleep; 285 custom_tool_call exec
+      exec calls: 285; names of Addendum 2 B4 placed as text inside exec: 0
+      calls inside exec, by called name: 1 Number; 1 at; 1 from; 1 match; 1 notify; 1 trimEnd; 12 id; 18 startsWith; 19 filter; 2 String; 2 padStart; 2 trim; 20 includes; 20 join; 20 test; 24 q; 25 split; 276 exec_command; 3 entries; 3 replaceAll; 331 text; 34 slice; 4 wrapped; 5 replace; 51 write_stdin; 6 map; 7 endsWith; 8 exit
+    CHECK_OK
+
+Count, b4-count.mjs, SHA-256 2dcff5987b35e4a1e7c60e1b9229f32f7ebca58376ea0af0d39ba2b6ef647689:
+    records: 1
+    record: rollout-2026-11-27T13-29-07-01a21e44-af81-7971-81ca-19c10b94e4ff.jsonl
+    exec inputs: 285; not parsed: 0; occurrences of the six names, as any substring, in all of them: 0; calls of eval 0, Function 0, load 0, store 0; calls through a computed callee 0
+    B4_OK
+
+Head 67dce10bb771092743664dbdafa873e38748b5d4, branch build/3b-m3-r1, base a7ceccbe96950b63646edc1dc6cc8590c957bf28; 11 commits, the nine of halt 4 to ed8685a7f1a7cc4e5e0ea22020eb8c1907c62f1e, then a78e2d589a7d1740da86177af277472b98e9be1e and 67dce10bb771092743664dbdafa873e38748b5d4.
+Build log 9f6df429036f43e09aefb32c550734c2473e38d99cb8accb5b5f87f1489609ed; packet 6bdc7fa2a766a2f6788cccbc092cfdfcd8fda359c7a114fc4af4c5799020e91b; pr-title.txt 4f755fa41df3e98229b7a8c14e1b8039d92387ee7492a4d57b060f5152784596; pr-body.md f2957a3cd086dbb21ae3e7931a76cfcac73eb6b7b9a3480337deb2b53cea7701; final report bf702bb1f6386ca9cbe43f783742a969550634b51c7ce29d1eeca18023013efb; logs/631-final-delivery-receipt.log a87d02da0d8879fd25b4330f525e350a54a9f327c7556f3ea121ab378094d1a6.
+Notes:
+NOTE: logs/ is not logs 001 to 629, each number once, with nothing else
