@@ -1,0 +1,44 @@
+The Founder break of the declined item of M3, under DEC-20261127-01 B18 item 6 and B22, resume message 1 item 2b and resume message 2 item 2b: the clients that build.ts creates for the execution principals at its adapters step are given the build host bridges, each keeping its own principal, as the founder TUI client is given them in a live build.
+
+Head 67dce10bb771092743664dbdafa873e38748b5d4, from /Users/michaeldaley/builds/m3-r1/tui, cloned to /Users/michaeldaley/builds/m3-founder-break/run-20261128T021128Z/tui; Bun 1.4.2 at /Users/michaeldaley/.bun/bin/bun, 35d20dd0263e5c950194434b925454fdfa9ba6e4467da960410fa05b08a7a5b5; frozen install with bun.lock a4456b4e2133404912b477ccf0196e4cfa41aed132f117d5ef85d4a25ce99830 unchanged.
+Patch break.patch b2c9f33449eb39d09deb55c01927cef1730b9a66240195e88e01767c386f392c; packages/supervisor/src/build.ts f728e1e37b0e9907f21875b2396eb2e1025718295d9bcfed7b61216ba1271854 to 01f0e2e95bda65ed9b54dc7e8580a8ce5b068164a309426b9ce23848cd380ce5; packages/broker/src/in-process-client.ts fbe101f2e3580763c403180407f6b775c764cde60380ed8c05c04b619229c982 to f9d728a1eb54fda2c5d9116fd6766208e06560459a4f2c6b6c9ab53903ff56d7.
+
+Broken run of test/phase3b/dispatch.test.ts alone: exit status 1
+    start 02:12:00 21:12  up 6 days, 12:39, 1 user, load averages: 1.79 1.93 1.98
+    (pass) both host commands reach the child and wait for the matching ack [940.28ms]
+    (pass) a missed acknowledgement contains the stopped host and interrupts the session [2572.26ms]
+    Expected length: 0
+    Received length: 2
+          at <anonymous> (/Users/michaeldaley/builds/m3-founder-break/run-20261128T021128Z/tui/test/phase3b/dispatch.test.ts:84:35)
+    (fail) execution clients and the original build have no host bridge [375.17ms]
+    (pass) the madv byte sender begins a checked request and refuses a closed monitor [353.26ms]
+     3 pass
+     1 fail
+    Ran 4 tests across 1 file. [4.26s]
+Verdict: BREAK_CAUGHT: the target test failed at line 84, its assertion that the host received no frame; the other three tests passing: 3 of 3
+
+Restore: git status --porcelain --untracked-files=all: (empty);packages/supervisor/src/build.ts f728e1e37b0e9907f21875b2396eb2e1025718295d9bcfed7b61216ba1271854;packages/broker/src/in-process-client.ts fbe101f2e3580763c403180407f6b775c764cde60380ed8c05c04b619229c982;at the head: f728e1e37b0e9907f21875b2396eb2e1025718295d9bcfed7b61216ba1271854 and fbe101f2e3580763c403180407f6b775c764cde60380ed8c05c04b619229c982;
+
+Restored run of test/phase3b/dispatch.test.ts alone: exit status 1; tests passing 3 of 4
+    start 02:12:04 21:12  up 6 days, 12:39, 1 user, load averages: 1.79 1.93 1.98
+    (pass) both host commands reach the child and wait for the matching ack [855.63ms]
+    (pass) a missed acknowledgement contains the stopped host and interrupts the session [2589.70ms]
+    (fail) execution clients and the original build have no host bridge [1090.65ms]
+    (pass) the madv byte sender begins a checked request and refuses a closed monitor [359.72ms]
+     3 pass
+     1 fail
+    Ran 4 tests across 1 file. [4.91s]
+
+Waits:
+    released at reading 2, one-minute load 1.79
+    released at reading 1, one-minute load 1.79
+
+Files, MANIFEST.sha256 868c08565d2282440bb57799d9d69a3c6831509c6d98fb84e117120819722030:
+    b2c9f33449eb39d09deb55c01927cef1730b9a66240195e88e01767c386f392c  break.patch
+    6f3da63bf7592adfbdcc256ed72de440f31a0a8dab4bb7f519966ff6b87befbb  logs/01-install.log
+    628f78cc1a9a5face3f9bd831bf46dc4f01fab3993685d83039161f00dda24b5  logs/02-break.diff
+    300856fbde640adf1dc8d1f0f2f3bddf2aa7cfae981b3642a1d4d5c0757a89ba  logs/03-wait.log
+    b03c2bd9af1ddcb7bc6877cbe5fec716a86e7fd0630d1a9d6410c53e135930c5  logs/04-break-test.log
+    79c8d7e4d0ac5a7edd505700235ab62b2b864e272ed091d14a22ac6442ff0349  logs/05-restore.txt
+    ae54100438a7c09bf26a0ca1f8c04f4702a2faae04fb43c23ea4a9c012d1a0c5  logs/06-wait.log
+    27de213c436e0c6b6a51deb2715707fd3daf64f40fecd4634a035e2e66e59cf1  logs/07-restored-test.log
