@@ -1,0 +1,24 @@
+start 02:12:04 21:12  up 6 days, 12:39, 1 user, load averages: 1.79 1.93 1.98
+bun test v1.4.2 (744846f84)
+
+test/phase3b/dispatch.test.ts:
+(pass) both host commands reach the child and wait for the matching ack [855.63ms]
+(pass) a missed acknowledgement contains the stopped host and interrupts the session [2589.70ms]
+539 |       hostCapabilities: { pty: !0, processGroups: !0, termination: !0, timing: !0 },
+540 |       observedHostFacts: {},
+541 |       now,
+542 |       signal: new AbortController().signal
+543 |     }, { registration: (surface) => registry.get(surface), freshRecord: (_root, _repo, _worktree, surface) => records.get(surface) ?? null });
+544 |       throw Error(`FixturePreflightFailed:${preflight.failure}`);
+                                       ^
+error: FixturePreflightFailed:identity_mismatch
+      at startFixtureSession (/Users/michaeldaley/.madbridge-m1-TDKSap/work/test/phase3a/runtime-harness.ts:446:34)
+      at async originalBuildInput (/Users/michaeldaley/builds/m3-founder-break/run-20261128T021128Z/tui/test/phase3b/unbridged.ts:32:37)
+      at async <anonymous> (/Users/michaeldaley/builds/m3-founder-break/run-20261128T021128Z/tui/test/phase3b/dispatch.test.ts:94:26)
+(fail) execution clients and the original build have no host bridge [1090.65ms]
+(pass) the madv byte sender begins a checked request and refuses a closed monitor [359.72ms]
+
+ 3 pass
+ 1 fail
+ 66 expect() calls
+Ran 4 tests across 1 file. [4.91s]
