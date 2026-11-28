@@ -1,0 +1,28 @@
+diff --git a/packages/broker/src/in-process-client.ts b/packages/broker/src/in-process-client.ts
+index d13d425..420d14f 100644
+--- a/packages/broker/src/in-process-client.ts
++++ b/packages/broker/src/in-process-client.ts
+@@ -199,8 +199,9 @@ const testSeams = new WeakMap<InProcessBrokerClient, TestSeams>();
+ export function createInProcessBrokerClient(
+   broker: RuntimeBroker,
+   principal: ClientPrincipal,
++  bridges?: ReadonlyMap<string, HostBridge>,
+ ): InProcessBrokerClient {
+-  return bindClient(broker, principal).client;
++  return bindClient(broker, principal, bridges).client;
+ }
+ 
+ /** The live build keeps the delivery function separate from the client it presents. */
+diff --git a/packages/supervisor/src/build.ts b/packages/supervisor/src/build.ts
+index 94a8d5b..7ac88e3 100644
+--- a/packages/supervisor/src/build.ts
++++ b/packages/supervisor/src/build.ts
+@@ -1100,7 +1100,7 @@ async function executeBuild(
+             const adapterClient = createInProcessBrokerClient(brokerHandle, {
+               kind: "execution",
+               executionId: envelopeExecution.execution_id,
+-            });
++            }, live ? bridges : undefined);
+             const adapter: BuildAdapterHandle = Object.freeze({
+               executionId: envelopeExecution.execution_id,
+               surface: execution.surface,
