@@ -1,0 +1,11 @@
+66ebd2081cbba90a31a116960984154780d020da a7ceccbe96950b63646edc1dc6cc8590c957bf28 daley40-lab docs(verification): open the M3 build log with its task detail
+8a95854cda8ffc21ea35aac56a2c9e4b95a789bc 66ebd2081cbba90a31a116960984154780d020da daley40-lab feat(supervisor): deliver monitored PTY output to the Founder client
+ee21c4439c59f83686fd9bdb11217d2798accfa8 8a95854cda8ffc21ea35aac56a2c9e4b95a789bc daley40-lab feat(tui): retain ordered output for each surface pane and dock
+790eba2b5a3ea1beb37aa07311165c0fa9b8109f ee21c4439c59f83686fd9bdb11217d2798accfa8 daley40-lab feat(broker): await host acknowledgements for live writer commands
+4f44a80bf323b36c80a83c194591e2a9838e0fa0 790eba2b5a3ea1beb37aa07311165c0fa9b8109f daley40-lab feat(tui): submit encoded lines and resize the focused writer
+0ca50afec2867a337cfb37bd476c09ae8e6604b8 4f44a80bf323b36c80a83c194591e2a9838e0fa0 daley40-lab feat(tui): show madv-surface in the second pane and dock
+fcbadbe14340a5a24908fae920fce4ab8ccb3b0c 0ca50afec2867a337cfb37bd476c09ae8e6604b8 daley40-lab fix(tui): show stream end in place of current authority
+9a6ed3f38329543e3f9e00e575139efceb773ef6 fcbadbe14340a5a24908fae920fce4ab8ccb3b0c daley40-lab test(broker): observe malformed host facts after activation
+ed8685a7f1a7cc4e5e0ea22020eb8c1907c62f1e 9a6ed3f38329543e3f9e00e575139efceb773ef6 daley40-lab docs(verification): capture offline M3 transport and pane evidence
+a78e2d589a7d1740da86177af277472b98e9be1e ed8685a7f1a7cc4e5e0ea22020eb8c1907c62f1e daley40-lab test(tui-chaos): update the two madv-surface dock grids
+67dce10bb771092743664dbdafa873e38748b5d4 a78e2d589a7d1740da86177af277472b98e9be1e daley40-lab docs(verification): record M3
