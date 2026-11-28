@@ -1,0 +1,3365 @@
+diff --git a/apps/madbridge/src/tui/App.tsx b/apps/madbridge/src/tui/App.tsx
+index 69b529b..60de9f4 100644
+--- a/apps/madbridge/src/tui/App.tsx
++++ b/apps/madbridge/src/tui/App.tsx
+@@ -16,16 +16,16 @@
+ //   - the stored approval still exists in the snapshot
+ //   - approval.colorState.kind === "pending"
+ //   - the approval ID is not already in resolvedApprovalIds
+-// Claude, Antigravity, and Events focus are ALL inert.
++// Claude, madv-surface, and Events focus are ALL inert.
+ //
+ // Resolution flows through a single guarded path:
+ //   routeKeyEvent() → validateApprovalResolution() → onApprovalResolve
+ 
+-import { useReducer, useCallback, useMemo, useEffect, useRef } from "react";
++import { useReducer, useCallback, useMemo, useEffect, useRef, useSyncExternalStore } from "react";
+ import { useKeyboard as useOpenTuiKeyboard, useTerminalDimensions } from "@opentui/react";
+ import type { KeyEvent } from "@opentui/core";
+ import { ClaudePane } from "./panes/ClaudePane";
+-import { AntigravityPane } from "./panes/AntigravityPane";
++import { MadvSurfacePane } from "./panes/AntigravityPane";
+ import { GovernancePane } from "./panes/GovernancePane";
+ import { DecisionStrip } from "./components/DecisionStrip";
+ import { IncidentBand, incidentActive } from "./components/IncidentBand";
+@@ -37,6 +37,9 @@ import { PaneTabs } from "./components/PaneTabs";
+ import { SeatBar } from "./components/SeatBar";
+ import { ModelBar, SeatModelRow } from "./components/ModelBar";
+ import { ModelPicker } from "./components/ModelPicker";
++import type { BrokerClient } from "@madventures/broker";
++import { PaneLine } from "./live/line-buffer";
++import { usePaneOutput } from "./live/retention";
+ import { useBrokerState } from "./hooks/useBrokerState";
+ import { useSeatState } from "./hooks/useSeatState";
+ import { loadKeybindings, resolveKey, translateKeyEvent } from "./keybindings";
+@@ -56,6 +59,8 @@ import { POSEIDON } from "./theme";
+ // Wide mode threshold: terminal width >= 80 shows stage + dock composition.
+ // Narrow mode (< 80) shows a tab row + a single selected surface.
+ const WIDE_MODE_MIN_WIDTH = 80;
++const emptyStatus = () => "";
++const noListener = () => () => {};
+ 
+ interface UIState {
+   focus: FocusTarget;
+@@ -73,7 +78,7 @@ interface UIState {
+    * while the broker snapshot still contains it. */
+   resolvedApprovalIds: ReadonlySet<string>;
+   claudeOutput: string;
+-  antigravityOutput: string;
++  madvOutput: string;
+ }
+ 
+ type UIAction =
+@@ -83,7 +88,7 @@ type UIAction =
+   | { type: "show-approval"; show: boolean; approvalId: string | null }
+   | { type: "add-resolved"; id: string }
+   | { type: "prune-resolved"; ids: ReadonlySet<string> }
+-  | { type: "pty-output"; pane: "claude" | "antigravity"; data: string };
++  | { type: "pty-output"; pane: "claude" | "madv-surface"; data: string };
+ 
+ function uiReducer(state: UIState, action: UIAction): UIState {
+   switch (action.type) {
+@@ -106,12 +111,18 @@ function uiReducer(state: UIState, action: UIAction): UIState {
+       if (action.pane === "claude") {
+         return { ...state, claudeOutput: state.claudeOutput + action.data };
+       }
+-      return { ...state, antigravityOutput: state.antigravityOutput + action.data };
++      return { ...state, madvOutput: state.madvOutput + action.data };
+     }
+   }
+ }
+ 
++export type PaneClient = Pick<BrokerClient, "output" | "getSnapshot" | "request"> & {
++  subscribe(listener: (snapshot: BrokerSnapshot) => void): () => void;
++};
++
+ interface AppProps {
++  /** Client and its externally bound projection subscription. */
++  client?: PaneClient;
+   /** External subscribe function to receive immutable broker snapshots. */
+   subscribe?: (listener: (snapshot: BrokerSnapshot) => void) => () => void;
+   /** PTY write callback — bytes go to the focused PTY. */
+@@ -128,8 +139,12 @@ interface AppProps {
+   catalogLoader?: typeof loadOmpCatalog;
+ }
+ 
+-export function App({ subscribe, onPtyWrite, onApprovalResolve, onQuit, fixture = false, catalogLoader }: AppProps) {
+-  const { state, connected } = useBrokerState(subscribe);
++export function App({ client, subscribe, onPtyWrite, onApprovalResolve, onQuit, fixture = false, catalogLoader }: AppProps) {
++  const { state, connected } = useBrokerState(client?.subscribe ?? subscribe);
++  const claudeExecution = state?.executions?.find(e => e.surface === "claude-code");
++  const secondExecution = state?.executions?.find(e => e.surface === "madv-surface");
++  const claudeRetained = usePaneOutput(client, claudeExecution?.execution_id);
++  const secondRetained = usePaneOutput(client, secondExecution?.execution_id);
+   const keybindings = useMemo(() => loadKeybindings(), []);
+   // Seat model-profile state — LOCAL UI only (pinned OMP profiles + catalog).
+   const seatState = useSeatState(catalogLoader ? { loadCatalog: catalogLoader } : undefined);
+@@ -142,7 +157,7 @@ export function App({ subscribe, onPtyWrite, onApprovalResolve, onQuit, fixture
+     displayedApprovalId: null,
+     resolvedApprovalIds: new Set<string>(),
+     claudeOutput: "",
+-    antigravityOutput: "",
++    madvOutput: "",
+   });
+ 
+   // Keep refs for the keyboard handler so it always sees the latest state.
+@@ -160,9 +175,23 @@ export function App({ subscribe, onPtyWrite, onApprovalResolve, onQuit, fixture
+     dispatch(action);
+   }, []);
+ 
++  const claudeLine = useMemo(() => client && new PaneLine("claude-code", client), [client]);
++  const secondLine = useMemo(() => client && new PaneLine("madv-surface", client), [client]);
++  const claudeStatus = useSyncExternalStore(claudeLine?.subscribe ?? noListener, claudeLine?.status ?? emptyStatus);
++  const secondStatus = useSyncExternalStore(secondLine?.subscribe ?? noListener, secondLine?.status ?? emptyStatus);
+   const handlePtyWrite = useCallback((data: string) => {
+-    onPtyWrite?.(data);
+-  }, [onPtyWrite]);
++    if (!client) { onPtyWrite?.(data); return; }
++    const focus = uiRef.current.focus;
++    if (focus === "claude") claudeLine?.edit(data);
++    if (focus === "madv-surface") secondLine?.edit(data);
++  }, [client, onPtyWrite, claudeLine, secondLine]);
++
++  const claudeSize = useCallback((cols: number, rows: number) => {
++    claudeLine?.resize(cols, rows, () => uiRef.current.focus === "claude");
++  }, [claudeLine]);
++  const secondSize = useCallback((cols: number, rows: number) => {
++    secondLine?.resize(cols, rows, () => uiRef.current.focus === "madv-surface");
++  }, [secondLine]);
+ 
+   const handleFocusChange = useCallback((target: FocusTarget) => {
+     dispatchSync({ type: "focus", target });
+@@ -338,11 +367,11 @@ export function App({ subscribe, onPtyWrite, onApprovalResolve, onQuit, fixture
+   const { width: termWidth } = useTerminalDimensions();
+   const wideMode = termWidth >= WIDE_MODE_MIN_WIDTH;
+ 
+-  // The docked agent is whichever of Claude/Antigravity is NOT focused.
++  // The docked agent is whichever of Claude/madv-surface is NOT focused.
+   // When a non-agent surface (Governance/Events) is focused in wide mode,
+   // both agents remain reachable via their dock strips.
+   const claudeFocused = ui.focus === "claude";
+-  const antigravityFocused = ui.focus === "antigravity";
++  const madvFocused = ui.focus === "madv-surface";
+   const governanceFocused = ui.focus === "governance";
+   const eventsFocused = ui.focus === "events";
+ 
+@@ -406,10 +435,10 @@ export function App({ subscribe, onPtyWrite, onApprovalResolve, onQuit, fixture
+           <>
+             {/* Wide mode: focused surface is the full-width stage. */}
+             {claudeFocused && (
+-              <ClaudePane active={true} state={state} ptyOutput={ui.claudeOutput} />
++              <ClaudePane commandWord={claudeStatus} onPaneSize={claudeSize} active={true} state={state} ptyOutput={client ? claudeRetained : ui.claudeOutput} />
+             )}
+-            {antigravityFocused && (
+-              <AntigravityPane active={true} state={state} ptyOutput={ui.antigravityOutput} />
++            {madvFocused && (
++              <MadvSurfacePane commandWord={secondStatus} onPaneSize={secondSize} active={true} state={state} ptyOutput={client ? secondRetained : ui.madvOutput} />
+             )}
+             {governanceFocused && (
+               <GovernancePane active={true} state={state} />
+@@ -420,25 +449,25 @@ export function App({ subscribe, onPtyWrite, onApprovalResolve, onQuit, fixture
+ 
+             {/* Dock strips: the non-focused agent(s) appear as compact strips. */}
+             {!claudeFocused && !governanceFocused && !eventsFocused && (
+-              // Antigravity is focused → Claude is docked.
+-              <DockStrip surface="claude-code" state={state} ptyOutput={ui.claudeOutput} />
++              // madv-surface is focused → Claude is docked.
++              <DockStrip showContent={Boolean(client)} commandWord={claudeStatus} surface="claude-code" state={state} ptyOutput={client ? claudeRetained : ui.claudeOutput} />
+             )}
+-            {!antigravityFocused && !governanceFocused && !eventsFocused && (
+-              // Claude is focused → Antigravity is docked.
+-              <DockStrip surface="antigravity" state={state} ptyOutput={ui.antigravityOutput} />
++            {!madvFocused && !governanceFocused && !eventsFocused && (
++              // Claude is focused → madv-surface is docked.
++              <DockStrip showContent={Boolean(client)} commandWord={secondStatus} surface="madv-surface" state={state} ptyOutput={client ? secondRetained : ui.madvOutput} />
+             )}
+             {governanceFocused && (
+               // Governance is the stage → both agents are docked and reachable.
+               <>
+-                <DockStrip surface="claude-code" state={state} ptyOutput={ui.claudeOutput} />
+-                <DockStrip surface="antigravity" state={state} ptyOutput={ui.antigravityOutput} />
++                <DockStrip showContent={Boolean(client)} commandWord={claudeStatus} surface="claude-code" state={state} ptyOutput={client ? claudeRetained : ui.claudeOutput} />
++                <DockStrip showContent={Boolean(client)} commandWord={secondStatus} surface="madv-surface" state={state} ptyOutput={client ? secondRetained : ui.madvOutput} />
+               </>
+             )}
+             {eventsFocused && (
+               // Events is the stage → both agents are docked and reachable.
+               <>
+-                <DockStrip surface="claude-code" state={state} ptyOutput={ui.claudeOutput} />
+-                <DockStrip surface="antigravity" state={state} ptyOutput={ui.antigravityOutput} />
++                <DockStrip showContent={Boolean(client)} commandWord={claudeStatus} surface="claude-code" state={state} ptyOutput={client ? claudeRetained : ui.claudeOutput} />
++                <DockStrip showContent={Boolean(client)} commandWord={secondStatus} surface="madv-surface" state={state} ptyOutput={client ? secondRetained : ui.madvOutput} />
+               </>
+             )}
+           </>
+@@ -447,10 +476,10 @@ export function App({ subscribe, onPtyWrite, onApprovalResolve, onQuit, fixture
+             {/* Narrow mode: tab row + exactly one selected surface. */}
+             <PaneTabs focus={ui.focus} />
+             {claudeFocused && (
+-              <ClaudePane active={true} state={state} ptyOutput={ui.claudeOutput} />
++              <ClaudePane commandWord={claudeStatus} onPaneSize={claudeSize} active={true} state={state} ptyOutput={client ? claudeRetained : ui.claudeOutput} />
+             )}
+-            {antigravityFocused && (
+-              <AntigravityPane active={true} state={state} ptyOutput={ui.antigravityOutput} />
++            {madvFocused && (
++              <MadvSurfacePane commandWord={secondStatus} onPaneSize={secondSize} active={true} state={state} ptyOutput={client ? secondRetained : ui.madvOutput} />
+             )}
+             {governanceFocused && (
+               <GovernancePane active={true} state={state} />
+diff --git a/apps/madbridge/src/tui/components/DockStrip.tsx b/apps/madbridge/src/tui/components/DockStrip.tsx
+index d271778..30dd5f1 100644
+--- a/apps/madbridge/src/tui/components/DockStrip.tsx
++++ b/apps/madbridge/src/tui/components/DockStrip.tsx
+@@ -40,12 +40,14 @@ export interface DockStripProps {
+   state: BrokerSnapshot | null;
+   /** Raw PTY output for the docked agent — used to derive buffered lines. */
+   ptyOutput: string;
++  showContent?: boolean;
++  commandWord?: string;
+ }
+ 
+ // Field priorities (high → low). When truncating to fit a width, drop from
+ // the bottom of this list upward.
+ //
+-//   1. agent identity            (ANTIGRAVITY / CLAUDE CODE)
++//   1. agent identity            (MADV-SURFACE / CLAUDE CODE)
+ //   2. docked                    (the role-in-layout word)
+ //   3. WRITER tok#N              (only when the docked agent is the writer)
+ //   4. role                      (builder / reviewer / UNKNOWN)
+@@ -111,13 +113,19 @@ export function buildDockLine(
+   return truncateToWidth(label + TRUNC_MARKER, width);
+ }
+ 
+-export function DockStrip({ surface, state, ptyOutput }: DockStripProps) {
++export function DockStrip({ surface, state, ptyOutput, showContent, commandWord }: DockStripProps) {
+   const { width } = useTerminalDimensions();
+-  const line = buildDockLine(surface, state, ptyOutput, width);
++  const dock = buildDockLine(surface, state, ptyOutput, width);
++  const line = commandWord ? truncateToWidth(commandWord + SEP + dock, width) : dock;
++
++  const space = width - displayWidth(line) - displayWidth(SEP);
++  const preview = showContent && space > 0
++    ? truncateToWidth(ptyOutput.replace(/[\r\n]+/g, " ").trimEnd(), space)
++    : "";
+ 
+   return (
+     <box paddingLeft={0} paddingRight={0}>
+-      <text>{line}</text>
++      <text>{preview ? line + SEP + preview : line}</text>
+     </box>
+   );
+ }
+diff --git a/apps/madbridge/src/tui/components/PaneTabs.tsx b/apps/madbridge/src/tui/components/PaneTabs.tsx
+index 94f6535..7172e51 100644
+--- a/apps/madbridge/src/tui/components/PaneTabs.tsx
++++ b/apps/madbridge/src/tui/components/PaneTabs.tsx
+@@ -23,14 +23,14 @@ interface TabSpec {
+ 
+ const TABS: readonly TabSpec[] = [
+   { target: "claude", label: "CLAUDE" },
+-  { target: "antigravity", label: "AGY" },
++  { target: "madv-surface", label: "MADV" },
+   { target: "governance", label: "GOV" },
+   { target: "events", label: "LOG" },
+ ];
+ 
+ /**
+  * Build one tab cell as a pure function.
+- * Format: "[ GOV* ]" for the selected tab, "[ AGY  ]" otherwise
++ * Format: "[ GOV* ]" for the selected tab, "[ MADV  ]" otherwise
+  * (matching the historical PaneTabs spacing convention).
+  */
+ export function buildTabCell(tab: TabSpec, focus: FocusTarget): string {
+@@ -40,7 +40,7 @@ export function buildTabCell(tab: TabSpec, focus: FocusTarget): string {
+ 
+ /**
+  * Build the tab row text as a pure function.
+- * Format: [ CLAUDE* ][ AGY ][ GOV ][ LOG ]
++ * Format: [ CLAUDE* ][ MADV ][ GOV ][ LOG ]
+  * The selected tab carries a textual `*` marker.
+  */
+ export function buildTabRow(focus: FocusTarget): string {
+diff --git a/apps/madbridge/src/tui/components/StatusBar.tsx b/apps/madbridge/src/tui/components/StatusBar.tsx
+index b5187d9..ffcf374 100644
+--- a/apps/madbridge/src/tui/components/StatusBar.tsx
++++ b/apps/madbridge/src/tui/components/StatusBar.tsx
+@@ -23,7 +23,7 @@
+ 
+ import { useTerminalDimensions } from "@opentui/react";
+ import type { BrokerSnapshot, FocusTarget, SeatId } from "../types";
+-import { displayWidth, sliceByDisplayWidth, seatMode, seatLabel } from "./agent-identity";
++import { displayWidth, sliceByDisplayWidth, livenessWord, seatMode, seatLabel } from "./agent-identity";
+ 
+ interface Props {
+   state: BrokerSnapshot | null;
+@@ -140,7 +140,10 @@ export function buildStatusLine(input: StatusLineInput): string {
+ 
+   // ── Medium format (>=80): compact labels with " | " separators ──
+   // Use a generous writer budget — medium has room.
+-  const writerMedium = "W:" + abbreviateWriter(input.ownerWord, 30);
++  // Keep the ended-stream word intact when the layout drops other fields.
++  const compactWriter = (budget: number) => input.connected === false && input.ownerWord === "STREAM ENDED"
++    ? input.ownerWord : abbreviateWriter(input.ownerWord, budget);
++  const writerMedium = "W:" + compactWriter(30);
+   const medTokens = [
+     connCompact,
+     sessCompact,
+@@ -176,7 +179,7 @@ export function buildStatusLine(input: StatusLineInput): string {
+   const writerPrefix = "W:";
+   const writerBudget = Math.max(3, width - fixedLen - displayWidth(writerPrefix));
+ 
+-  const writerNarrow = writerPrefix + abbreviateWriter(input.ownerWord, writerBudget);
++  const writerNarrow = writerPrefix + compactWriter(writerBudget);
+   const narrowTokens = [
+     connCompact,
+     sessCompact,
+@@ -197,7 +200,7 @@ export function buildStatusLine(input: StatusLineInput): string {
+   // even more aggressively — down to just "#N" with no ID. The seat token
+   // keeps its documented slot here too: the minimal fallback narrows the
+   // writer, it must NOT reorder the drop priority.
+-  const writerMinimal = writerPrefix + abbreviateWriter(input.ownerWord, 3);
++  const writerMinimal = writerPrefix + compactWriter(3);
+   const minimalTokens = [
+     connCompact,
+     sessCompact,
+@@ -346,6 +349,7 @@ export function computeLedgerSeq(
+  */
+ function describeOwner(state: BrokerSnapshot | null): string {
+   if (!state) return "none";
++  if (state.connected === false) return livenessWord(state);
+   const o = state.ownershipState;
+   const w = state.activeWriter;
+   const tok = state.fencingToken;
+diff --git a/apps/madbridge/src/tui/components/agent-identity.ts b/apps/madbridge/src/tui/components/agent-identity.ts
+index 6729036..53698c6 100644
+--- a/apps/madbridge/src/tui/components/agent-identity.ts
++++ b/apps/madbridge/src/tui/components/agent-identity.ts
+@@ -7,11 +7,10 @@
+ //
+ // Presentation only — no authority decisions, no broker imports.
+ 
+-import type { CliSurface } from "@madventures/protocol";
+ import type { BrokerSnapshot, SeatId, SeatMode, FocusTarget } from "../types";
+ import { SEATS } from "../types";
+ 
+-export type AgentSurface = CliSurface; // "claude-code" | "antigravity"
++export type AgentSurface = "claude-code" | "madv-surface";
+ 
+ // ─── Seat resolution (LOCAL UI posture — no authority semantics) ───
+ //
+@@ -37,7 +36,7 @@ export function seatLabel(seat: SeatId): string {
+ 
+ /** Header label shown at the top of an agent pane or dock strip. */
+ export function agentHeaderLabel(surface: AgentSurface): string {
+-  return surface === "claude-code" ? "CLAUDE CODE" : "ANTIGRAVITY";
++  return surface === "claude-code" ? "CLAUDE CODE" : "MADV-SURFACE";
+ }
+ 
+ /**
+diff --git a/apps/madbridge/src/tui/hooks/useKeyboard.ts b/apps/madbridge/src/tui/hooks/useKeyboard.ts
+index 24dbf1b..b487ce0 100644
+--- a/apps/madbridge/src/tui/hooks/useKeyboard.ts
++++ b/apps/madbridge/src/tui/hooks/useKeyboard.ts
+@@ -36,7 +36,7 @@ export function useKeyboard(opts: UseKeyboardOptions): KeyboardHandler {
+           opts.onFocusChange("claude");
+           break;
+         case "focus-antigravity":
+-          opts.onFocusChange("antigravity");
++          opts.onFocusChange("madv-surface");
+           break;
+         case "focus-governance":
+           opts.onFocusChange("governance");
+diff --git a/apps/madbridge/src/tui/keybindings.ts b/apps/madbridge/src/tui/keybindings.ts
+index 983e91f..071d045 100644
+--- a/apps/madbridge/src/tui/keybindings.ts
++++ b/apps/madbridge/src/tui/keybindings.ts
+@@ -10,7 +10,7 @@
+ // GLM-20260918-FOUNDER-TUI-SEATS: a seat is a named posture that focuses the
+ // seat's pane (builder/architect → Claude, operator → Governance) and sets
+ // the mode label on the bars. The previous Alt+1..4 pane-focus map moved to
+-// Alt+4 (antigravity) and Alt+5 (events); "focus-claude" and
++// Alt+4 (madv-surface) and Alt+5 (events); "focus-claude" and
+ // "focus-governance" remain valid actions reachable via the FOUNDER_TUI_KEYS
+ // override. Ctrl+P opens the model picker — a modal whose keys are captured
+ // while open, which intentionally withholds Ctrl+P from the PTYs.
+diff --git a/apps/madbridge/src/tui/keyboard-router.ts b/apps/madbridge/src/tui/keyboard-router.ts
+index a2b4560..c48f32e 100644
+--- a/apps/madbridge/src/tui/keyboard-router.ts
++++ b/apps/madbridge/src/tui/keyboard-router.ts
+@@ -81,7 +81,7 @@ export interface RouteKeyInput {
+  * ALL of these conditions must hold:
+  * 1. showApprovalDialog === true
+  * 2. displayedApprovalId !== null
+- * 3. focus === "governance" (Claude, Antigravity, Events are ALL inert)
++ * 3. focus === "governance" (Claude, madv-surface, Events are ALL inert)
+  * 4. No incident/interruption has precedence (fail closed when
+  *    snapshot.sessionState === "interrupted" or snapshot.incident !== null)
+  * 5. The stored approval ID still exists in the snapshot's pendingApprovals
+@@ -98,7 +98,7 @@ export function validateApprovalResolution(
+   // 2. Must be bound to a stored approval ID
+   if (state.displayedApprovalId === null) return null;
+ 
+-  // 3. Only governance focus authorizes — Claude, Antigravity, Events
++  // 3. Only governance focus authorizes — Claude, madv-surface, Events
+   // are ALL inert even if the dialog is somehow visible.
+   if (state.focus !== "governance") return null;
+ 
+@@ -163,8 +163,8 @@ export function routeKeyEvent(input: RouteKeyInput): KeyboardRouterState {
+         return { ...state, focus: "claude" };
+ 
+       case "focus-antigravity":
+-        callbacks.onFocusChange("antigravity");
+-        return { ...state, focus: "antigravity" };
++        callbacks.onFocusChange("madv-surface");
++        return { ...state, focus: "madv-surface" };
+ 
+       case "focus-governance":
+         callbacks.onFocusChange("governance");
+diff --git a/apps/madbridge/src/tui/live/line-buffer.ts b/apps/madbridge/src/tui/live/line-buffer.ts
+new file mode 100644
+index 0000000..9457276
+--- /dev/null
++++ b/apps/madbridge/src/tui/live/line-buffer.ts
+@@ -0,0 +1,85 @@
++import type { BrokerClient, BrokerCommand } from "@madventures/broker";
++import { encodeUserInput as encodeClaude } from "../../../../../packages/adapter-claude-code/src/live";
++import { encodeUserInput as encodeMadv } from "../../../../../packages/adapter-madv-surface/src/index";
++
++type Surface = "claude-code" | "madv-surface";
++type Size = { cols: number; rows: number };
++type Client = Pick<BrokerClient, "getSnapshot" | "request">;
++
++export class PaneLine {
++  private before: string[] = [];
++  private after: string[] = [];
++  private sizes = new Map<string, Size>();
++  private readonly listeners = new Set<() => void>();
++  private word = "";
++  private latest = 0;
++
++  constructor(private readonly surface: Surface, private readonly client: Client) {}
++  readonly status = () => this.word;
++  readonly subscribe = (listener: () => void) => {
++    this.listeners.add(listener);
++    return () => { this.listeners.delete(listener); };
++  };
++
++  edit(key: string): void {
++    if (key === "\r" || key === "\n") {
++      const line = this.before.join("") + this.after.reverse().join("");
++      this.before = [];
++      this.after = [];
++      if (line.length > 0) void this.command({ line });
++    } else if (key === "\x7f" || key === "\b") {
++      this.before.pop();
++    } else if (key === "\x1b[D") {
++      const ch = this.before.pop();
++      if (ch !== undefined) this.after.push(ch);
++    } else if (key === "\x1b[C") {
++      const ch = this.after.pop();
++      if (ch !== undefined) this.before.push(ch);
++    } else if (key === "\x1b[3~") {
++      this.after.pop();
++    } else if (!/[\x00-\x1f\x7f]/u.test(key)) {
++      for (const ch of key) this.before.push(ch);
++    }
++  }
++
++  resize(cols: number, rows: number, focused: () => boolean): void {
++    if (cols > 0 && rows > 0 && focused()) void this.command({ size: { cols, rows }, focused });
++  }
++
++  private show(word: string): void {
++    if (this.word === word) return;
++    this.word = word;
++    for (const notify of this.listeners) notify();
++  }
++
++  private async command(action: { line: string } | { size: Size; focused(): boolean }): Promise<void> {
++    let order: number | undefined;
++    try {
++      const snapshot = await this.client.getSnapshot();
++      if ("size" in action && !action.focused()) return;
++      const execution = snapshot.executions?.find(entry => entry.identity.surface === this.surface);
++      const id = execution?.identity.execution_id;
++      if (!id) { this.show("EXECUTION NOT FOUND"); return; }
++      if ("size" in action && snapshot.activeWriterExecutionId !== id) return;
++      if (snapshot.connected !== true) { this.show(snapshot.connected === false ? "STREAM ENDED" : "NO CONNECTION"); return; }
++      if (snapshot.fencingToken === null) { this.show("NO TOKEN"); return; }
++      const base = { commandId: crypto.randomUUID(), sessionId: snapshot.sessionId, executionId: id,
++        fencingToken: snapshot.fencingToken };
++      let command: BrokerCommand;
++      if ("line" in action) {
++        const encoded = this.surface === "claude-code" ? encodeClaude(action.line) : encodeMadv(action.line);
++        command = { ...base, kind: "pty_input", bytes: new TextEncoder().encode(encoded) };
++      } else {
++        const last = this.sizes.get(id);
++        if (last?.cols === action.size.cols && last.rows === action.size.rows) return;
++        this.sizes.set(id, action.size);
++        command = { ...base, kind: "pty_resize", ...action.size };
++      }
++      order = ++this.latest;
++      const result = await this.client.request(command);
++      if (order === this.latest) this.show(result.ok ? "" : result.error.replaceAll("_", " ").toUpperCase());
++    } catch {
++      if (order === undefined || order === this.latest) this.show("HOST UNAVAILABLE");
++    }
++  }
++}
+diff --git a/apps/madbridge/src/tui/live/retention.ts b/apps/madbridge/src/tui/live/retention.ts
+new file mode 100644
+index 0000000..82204e4
+--- /dev/null
++++ b/apps/madbridge/src/tui/live/retention.ts
+@@ -0,0 +1,127 @@
++import { useSyncExternalStore } from "react";
++import type { BrokerClient } from "@madventures/broker";
++
++export const MAX_PANE_LINES = 10_000;
++export const MAX_PANE_BYTES = 2_097_152;
++
++interface Chunk {
++  start: number;
++  bytes: Uint8Array;
++  count: number;
++}
++
++/** Absolute line starts form a ring. CRLF is one terminator across frame boundaries. */
++export class PaneRetention {
++  private readonly starts = new Float64Array(MAX_PANE_LINES);
++  private lineCount = 0;
++  private nextStartsLine = true;
++  private previousCR = false;
++  private readonly chunks = new Map<number, Chunk>();
++  private last: Chunk | undefined;
++  receivedFrames = 0;
++  receivedBytes = 0;
++  retainedFrames = 0;
++  retainedBytes = 0;
++
++  append(bytes: Uint8Array): void {
++    const start = this.receivedBytes;
++    for (let i = 0; i < bytes.length; i++) {
++      const byte = bytes[i];
++      if (this.nextStartsLine && !(this.previousCR && byte === 10)) {
++        this.starts[this.lineCount % MAX_PANE_LINES] = start + i;
++        this.lineCount++;
++      }
++      this.previousCR = byte === 13;
++      this.nextStartsLine = this.previousCR || byte === 10;
++    }
++    this.receivedBytes += bytes.byteLength;
++    this.receivedFrames++;
++    this.retainedFrames++;
++    const lineFloor = this.lineCount > MAX_PANE_LINES ? this.starts[this.lineCount % MAX_PANE_LINES]! : 0;
++    const floor = Math.max(0, this.receivedBytes - MAX_PANE_BYTES, lineFloor);
++    const offset = Math.max(0, floor - start);
++    if (!bytes.length && this.last?.bytes.length === 0) {
++      this.last.count++;
++    } else {
++      // Own the surviving bytes. A short suffix must not pin a large input array.
++      this.last = { start: start + offset, bytes: new Uint8Array(bytes.subarray(offset)), count: 1 };
++      this.chunks.set(this.receivedFrames, this.last);
++    }
++    for (const [sequence, chunk] of this.chunks) {
++      if (chunk.start >= floor) break;
++      const lost = floor - chunk.start;
++      if (lost < chunk.bytes.length) {
++        chunk.bytes = chunk.bytes.slice(lost);
++        chunk.start = floor;
++        break;
++      }
++      this.chunks.delete(sequence);
++      this.retainedFrames -= chunk.count;
++    }
++    this.retainedBytes = this.receivedBytes - floor;
++  }
++
++  *frames(): IterableIterator<Uint8Array> {
++    for (const chunk of this.chunks.values()) {
++      for (let i = 0; i < chunk.count; i++) yield chunk.bytes.slice();
++    }
++  }
++
++  text(): string {
++    const decoder = new TextDecoder();
++    let text = "";
++    for (const chunk of this.chunks.values()) text += decoder.decode(chunk.bytes, { stream: true });
++    return text + decoder.decode();
++  }
++}
++
++type Source = Pick<BrokerClient, "output">;
++const streams = new WeakMap<Source, Map<string, PaneStream>>();
++const noSubscription = () => () => {};
++const empty = () => "";
++
++class PaneStream {
++  private readonly buffer = new PaneRetention();
++  private readonly listeners = new Set<() => void>();
++  private started = false;
++  private cached: string | undefined;
++  constructor(private readonly client: Source, private readonly executionId: string) {}
++
++  readonly snapshot = (): string => this.cached ??= this.buffer.text();
++  readonly subscribe = (listener: () => void) => {
++    this.listeners.add(listener);
++    if (!this.started) {
++      this.started = true;
++      void this.consume();
++    }
++    return () => { this.listeners.delete(listener); };
++  };
++
++  private async consume(): Promise<void> {
++    try {
++      for await (const frame of this.client.output(this.executionId)) {
++        if (frame.executionId !== this.executionId) break;
++        this.buffer.append(frame.bytes);
++        this.cached = undefined;
++        for (const notify of this.listeners) notify();
++      }
++    } catch {
++      // Keep the last received bytes. The snapshot subscription owns liveness.
++    }
++  }
++}
++
++/** One consumer per client and execution, including across focus changes and remounts. */
++export function usePaneOutput(client: Source | undefined, executionId: string | undefined): string {
++  let stream: PaneStream | undefined;
++  if (client && executionId) {
++    let executions = streams.get(client);
++    if (!executions) { executions = new Map(); streams.set(client, executions); }
++    stream = executions.get(executionId);
++    if (!stream) {
++      stream = new PaneStream(client, executionId);
++      executions.set(executionId, stream);
++    }
++  }
++  return useSyncExternalStore(stream?.subscribe ?? noSubscription, stream?.snapshot ?? empty);
++}
+diff --git a/apps/madbridge/src/tui/main.tsx b/apps/madbridge/src/tui/main.tsx
+index 2dc8963..573c82a 100644
+--- a/apps/madbridge/src/tui/main.tsx
++++ b/apps/madbridge/src/tui/main.tsx
+@@ -38,12 +38,12 @@ export function makeFixtureSnapshot(): BrokerSnapshot {
+     effort: "medium",
+   };
+ 
+-  const antigravity: ExecutionIdentity = {
+-    execution_id: "exec-antigravity",
++  const madv: ExecutionIdentity = {
++    execution_id: "exec-madv-surface",
+     role: "independent-reviewer",
+-    surface: parseSurfaceId("antigravity"),
+-    model: "gemini-2.5-pro",
+-    provider: "google",
++    surface: parseSurfaceId("madv-surface"),
++    model: "MiniMax-M3.1-Flash",
++    provider: "minimax",
+     independence_domain: "fixture-review-control",
+     effort: "medium",
+   };
+@@ -56,7 +56,7 @@ export function makeFixtureSnapshot(): BrokerSnapshot {
+     branch: "main",
+     worktree: "/tmp/fixture-worktree",
+     repository_fingerprint: fp,
+-    executions: [claude, antigravity],
++    executions: [claude, madv],
+     initial_writer: "exec-claude-code",
+     scope: {
+       allowedReadPaths: ["./src"],
+@@ -85,7 +85,7 @@ export function makeFixtureSnapshot(): BrokerSnapshot {
+     activeWriter: "exec-claude-code",
+     fencingToken: 3,
+     task,
+-    executions: [claude, antigravity],
++    executions: [claude, madv],
+     repositoryFingerprint: fp,
+     pendingApprovals: [],
+     pendingTransfers: [],
+diff --git a/apps/madbridge/src/tui/panes/AntigravityPane.tsx b/apps/madbridge/src/tui/panes/AntigravityPane.tsx
+index 5ab2cd4..db076ee 100644
+--- a/apps/madbridge/src/tui/panes/AntigravityPane.tsx
++++ b/apps/madbridge/src/tui/panes/AntigravityPane.tsx
+@@ -1,17 +1,17 @@
+ // apps/madbridge/src/tui/panes/AntigravityPane.tsx
+-// Antigravity stage pane — projects the Antigravity execution surface.
++// madv-surface stage pane — projects the madv-surface execution surface.
+ //
+ // The header truthfully derives from the snapshot:
+-//   - "ANTIGRAVITY" label
++//   - "MADV-SURFACE" label
+ //   - "FOCUSED" only when this pane is focused (active prop)
+-//   - "WRITER tok#N" only when Antigravity's execution_id === state.activeWriter
++//   - "WRITER tok#N" only when madv-surface's execution_id === state.activeWriter
+ //   - exact role and model from the matching execution identity
+ // If an identity, role, model, writer, or token is unavailable, an explicit
+ // honest word is rendered. Never invented.
+ //
+ // Border: borderStyle="single" consistently (matches ClaudePane — removes
+ // the prior inconsistency where Claude used borderStyle="single" and
+-// Antigravity used border={true}).
++// madv-surface used border={true}).
+ // Presentation only — no authority decisions.
+ 
+ import type { BrokerSnapshot } from "../types";
+@@ -24,21 +24,23 @@ import {
+ } from "../components/agent-identity";
+ import { POSEIDON } from "../theme";
+ 
+-export interface AntigravityPaneProps {
++export interface MadvSurfacePaneProps {
+   active: boolean;
+   state: BrokerSnapshot | null;
+   ptyOutput: string;
++  commandWord?: string;
++  onPaneSize?: (cols: number, rows: number) => void;
+ }
+ 
+-export function AntigravityPane({ active, state, ptyOutput }: AntigravityPaneProps) {
+-  const surface = "antigravity" as const;
++export function MadvSurfacePane({ active, state, ptyOutput, commandWord, onPaneSize }: MadvSurfacePaneProps) {
++  const surface = "madv-surface" as const;
+   const role = resolveRole(state, surface);
+   const model = resolveModel(state, surface);
+   const writer = isActiveWriter(state, surface);
+   const tok = writerToken(state, surface);
+   const live = livenessWord(state);
+ 
+-  const headerParts: string[] = ["ANTIGRAVITY"];
++  const headerParts: string[] = ["MADV-SURFACE"];
+   if (active) headerParts.push("FOCUSED");
+   if (writer) {
+     headerParts.push(tok === null ? "WRITER token —" : "WRITER tok#" + String(tok));
+@@ -49,6 +51,7 @@ export function AntigravityPane({ active, state, ptyOutput }: AntigravityPanePro
+   }
+   headerParts.push(role);
+   headerParts.push(model);
++  if (commandWord) headerParts.push(commandWord);
+   const header = headerParts.join(" | ");
+ 
+   return (
+@@ -56,7 +59,9 @@ export function AntigravityPane({ active, state, ptyOutput }: AntigravityPanePro
+       <box>
+         <text><strong>{header}</strong></text>
+       </box>
+-      <box flexGrow={1} overflow="hidden">
++      <box id="second-output" flexGrow={1} overflow="hidden" onSizeChange={function () {
++        onPaneSize?.(this.width, this.height);
++      }}>
+         <text>{ptyOutput || "Waiting for launch..."}</text>
+       </box>
+     </box>
+diff --git a/apps/madbridge/src/tui/panes/ClaudePane.tsx b/apps/madbridge/src/tui/panes/ClaudePane.tsx
+index d35a5c5..80b295b 100644
+--- a/apps/madbridge/src/tui/panes/ClaudePane.tsx
++++ b/apps/madbridge/src/tui/panes/ClaudePane.tsx
+@@ -9,7 +9,7 @@
+ // If an identity, role, model, writer, or token is unavailable, an explicit
+ // honest word is rendered. Never invented.
+ //
+-// Border: borderStyle="single" consistently (matches AntigravityPane).
++// Border: borderStyle="single" consistently (matches MadvSurfacePane).
+ // Presentation only — no authority decisions.
+ 
+ import type { BrokerSnapshot } from "../types";
+@@ -26,9 +26,11 @@ export interface ClaudePaneProps {
+   active: boolean;
+   state: BrokerSnapshot | null;
+   ptyOutput: string;
++  commandWord?: string;
++  onPaneSize?: (cols: number, rows: number) => void;
+ }
+ 
+-export function ClaudePane({ active, state, ptyOutput }: ClaudePaneProps) {
++export function ClaudePane({ active, state, ptyOutput, commandWord, onPaneSize }: ClaudePaneProps) {
+   const surface = "claude-code" as const;
+   const role = resolveRole(state, surface);
+   const model = resolveModel(state, surface);
+@@ -49,6 +51,7 @@ export function ClaudePane({ active, state, ptyOutput }: ClaudePaneProps) {
+   }
+   headerParts.push(role);
+   headerParts.push(model);
++  if (commandWord) headerParts.push(commandWord);
+   const header = headerParts.join(" | ");
+ 
+   return (
+@@ -56,7 +59,9 @@ export function ClaudePane({ active, state, ptyOutput }: ClaudePaneProps) {
+       <box>
+         <text><strong>{header}</strong></text>
+       </box>
+-      <box flexGrow={1} overflow="hidden">
++      <box id="claude-output" flexGrow={1} overflow="hidden" onSizeChange={function () {
++        onPaneSize?.(this.width, this.height);
++      }}>
+         <text>{ptyOutput || "Waiting for launch..."}</text>
+       </box>
+     </box>
+diff --git a/apps/madbridge/src/tui/panes/GovernancePane.tsx b/apps/madbridge/src/tui/panes/GovernancePane.tsx
+index 8e72ec6..cadc6fa 100644
+--- a/apps/madbridge/src/tui/panes/GovernancePane.tsx
++++ b/apps/madbridge/src/tui/panes/GovernancePane.tsx
+@@ -21,7 +21,7 @@
+ 
+ import { useTerminalDimensions } from "@opentui/react";
+ import type { BrokerSnapshot } from "../types";
+-import { truncateToWidth } from "../components/agent-identity";
++import { livenessWord, truncateToWidth } from "../components/agent-identity";
+ import { POSEIDON } from "../theme";
+ 
+ export interface GovernancePaneProps {
+@@ -52,6 +52,7 @@ export function GovernancePane({ active, state }: GovernancePaneProps) {
+     return (
+       <box flexGrow={1} flexDirection="column" borderStyle="single" borderColor={active ? POSEIDON.accent : POSEIDON.uiBorder} overflow="hidden">
+         <text>{fit(state?.connected === null ? "GOVERNANCE | UNKNOWN" : "GOVERNANCE | NOT CONNECTED")}</text>
++        {state?.connected === false && <text>{fit("Writer / Token / Ownership: " + livenessWord(state))}</text>}
+         <text>{fit("No current permissions, verification, or review.")}</text>
+       </box>
+     );
+@@ -59,7 +60,7 @@ export function GovernancePane({ active, state }: GovernancePaneProps) {
+ 
+   // Safe accessors — resolve identities by surface.
+   const cl = state.executions?.find((e) => e.surface === "claude-code");
+-  const agy = state.executions?.find((e) => e.surface === "antigravity");
++  const madv = state.executions?.find((e) => e.surface === "madv-surface");
+   const perms = state.permissionSummary;
+   const verification = state.verificationStatus;
+   const review = state.reviewStatus;
+@@ -78,7 +79,7 @@ export function GovernancePane({ active, state }: GovernancePaneProps) {
+   rows.push("Task ID: " + (state.task?.task_id ?? "—") + " | Repo: " + (state.task?.repository ?? "—"));
+   rows.push("Fingerprint: " + (state.repositoryFingerprint ? state.repositoryFingerprint.git_sha.slice(0, 12) : "—"));
+   rows.push("Claude: " + (cl?.execution_id ?? "—"));
+-  rows.push("Antigravity: " + (agy?.execution_id ?? "—"));
++  rows.push("madv-surface: " + (madv?.execution_id ?? "—"));
+   rows.push("Writer: " + (state.activeWriter ?? "—") + " | Token: " + (state.fencingToken ?? "—") + " | Ownership: " + (state.ownershipState ?? "UNKNOWN"));
+   rows.push("Read: " + readPaths + " | Write: " + writePaths);
+   rows.push("Commands: " + cmdCats + " | Egress: " + egress + " | Data class: " + dataClass);
+diff --git a/apps/madbridge/src/tui/types.ts b/apps/madbridge/src/tui/types.ts
+index cd5c464..511ff63 100644
+--- a/apps/madbridge/src/tui/types.ts
++++ b/apps/madbridge/src/tui/types.ts
+@@ -10,7 +10,7 @@ import type {
+   RepositoryFingerprint,
+ } from "@madventures/protocol";
+ 
+-export type FocusTarget = "claude" | "antigravity" | "governance" | "events";
++export type FocusTarget = "claude" | "madv-surface" | "governance" | "events";
+ 
+ /**
+  * Founder seat — a named LOCAL posture. A seat chooses which pane gets focus
+diff --git a/apps/madbridge/test/tui-governance-surfaces.test.tsx b/apps/madbridge/test/tui-governance-surfaces.test.tsx
+index 9b1eaa9..b9d3e3e 100644
+--- a/apps/madbridge/test/tui-governance-surfaces.test.tsx
++++ b/apps/madbridge/test/tui-governance-surfaces.test.tsx
+@@ -39,12 +39,12 @@ function makeFingerprint(): RepositoryFingerprint {
+ }
+ 
+ function makeExecution(
+-  surface: "claude-code" | "antigravity",
++  surface: "claude-code" | "madv-surface",
+   overrides?: Partial<ExecutionIdentity>,
+ ): ExecutionIdentity {
+   const isBuilder = surface === "claude-code";
+   const base: ExecutionIdentity = {
+-    execution_id: `exec-${surface}`,
++    execution_id: isBuilder ? "exec-claude-code" : "exec-antigravity",
+     role: isBuilder ? "builder" : "independent-reviewer",
+     surface: parseSurfaceId(surface),
+     model: isBuilder ? "claude-sonnet-4" : "gemini-2.5-pro",
+@@ -64,7 +64,7 @@ function makeTask(): TaskEnvelopeV1 {
+     branch: "feature-branch",
+     worktree: "/tmp/worktree",
+     repository_fingerprint: makeFingerprint(),
+-    executions: [makeExecution("claude-code"), makeExecution("antigravity")],
++    executions: [makeExecution("claude-code"), makeExecution("madv-surface")],
+     initial_writer: "exec-claude-code",
+     scope: {
+       allowedReadPaths: ["./src"],
+@@ -111,7 +111,7 @@ function makeSnapshot(overrides?: Partial<BrokerSnapshot>): BrokerSnapshot {
+     activeWriter: "exec-claude-code",
+     fencingToken: 3,
+     task: makeTask(),
+-    executions: [makeExecution("claude-code"), makeExecution("antigravity")],
++    executions: [makeExecution("claude-code"), makeExecution("madv-surface")],
+     repositoryFingerprint: makeFingerprint(),
+     pendingApprovals: [],
+     pendingTransfers: [],
+@@ -170,7 +170,7 @@ async function renderApp(
+     // antigravity is Alt+4 and events is Alt+5.
+     const keyMap: Record<FocusTarget, string> = {
+       claude: "1",
+-      antigravity: "4",
++      "madv-surface": "4",
+       governance: "3",
+       events: "5",
+     };
+@@ -434,7 +434,7 @@ describe("Focus and authority", () => {
+   test("12. Visible strip + Antigravity focus → inert", async () => {
+     const resolutions: ApprovalRequestEvent[] = [];
+     const snapshot = makeSnapshot({ pendingApprovals: [makeApproval("approval-A")] });
+-    const setup = await renderApp(snapshot, 120, 34, "antigravity", {
++    const setup = await renderApp(snapshot, 120, 34, "madv-surface", {
+       onApprovalResolve: (e) => resolutions.push(e),
+     });
+     try {
+@@ -874,7 +874,7 @@ describe("Layout regression", () => {
+       await setup.flush();
+       const frame = setup.captureCharFrame();
+       expect(frame).toContain("CLAUDE CODE");
+-      expect(frame).toContain("ANTIGRAVITY");
++      expect(frame).toContain("MADV-SURFACE");
+       expect(frame).toContain("docked");
+     } finally {
+       setup.renderer.destroy();
+@@ -886,7 +886,7 @@ describe("Layout regression", () => {
+     try {
+       await setup.flush();
+       const frame = setup.captureCharFrame();
+-      const tabRow = frame.split("\n").find((l) => l.includes("CLAUDE") && l.includes("AGY"));
++      const tabRow = frame.split("\n").find((l) => l.includes("CLAUDE") && l.includes("MADV"));
+       expect(tabRow).toBeDefined();
+       expect(tabRow!).toContain("GOV*");
+     } finally {
+@@ -895,7 +895,7 @@ describe("Layout regression", () => {
+   });
+ 
+   test("38. Dock remains exactly one physical row at 80 columns", async () => {
+-    const setup = await renderApp(makeSnapshot({ activeWriter: "exec-claude-code", fencingToken: 3 }), 80, 24, "antigravity");
++    const setup = await renderApp(makeSnapshot({ activeWriter: "exec-claude-code", fencingToken: 3 }), 80, 24, "madv-surface");
+     try {
+       await setup.flush();
+       const frame = setup.captureCharFrame();
+@@ -1046,7 +1046,7 @@ describe("Correction 1: interrupted/incident suppresses WRITER badge", () => {
+       activeWriter: "exec-claude-code",
+       fencingToken: 3,
+     });
+-    const setup = await renderApp(snapshot, 120, 34, "antigravity");
++    const setup = await renderApp(snapshot, 120, 34, "madv-surface");
+     try {
+       await setup.flush();
+       const frame = setup.captureCharFrame();
+@@ -1083,7 +1083,7 @@ describe("Correction 1: interrupted/incident suppresses WRITER badge", () => {
+       fencingToken: 3,
+     });
+     // Try each focus target — none should show WRITER
+-    for (const focus of ["claude", "antigravity", "governance", "events"] as FocusTarget[]) {
++    for (const focus of ["claude", "madv-surface", "governance", "events"] as FocusTarget[]) {
+       const setup = await renderApp(snapshot, 120, 34, focus);
+       try {
+         await setup.flush();
+@@ -1228,7 +1228,7 @@ describe("Correction 2: no interleaving at 60 columns with long values", () => {
+     const snapshot = makeSnapshot({
+       executions: [
+         { execution_id: "exec-claude-code-sonnet-4-20250811-long-id", role: "builder", surface: parseSurfaceId("claude-code"), model: "claude-sonnet-4", provider: "anthropic", independence_domain: "fixture-builder-control", effort: "medium" },
+-        { execution_id: "exec-antigravity-gemini-pro-20250811-long-id", role: "independent-reviewer", surface: parseSurfaceId("antigravity"), model: "gemini-2.5-pro", provider: "google", independence_domain: "fixture-review-control", effort: "medium" },
++        { execution_id: "exec-antigravity-gemini-pro-20250811-long-id", role: "independent-reviewer", surface: parseSurfaceId("madv-surface"), model: "gemini-2.5-pro", provider: "google", independence_domain: "fixture-review-control", effort: "medium" },
+       ],
+     });
+     const setup = await renderApp(snapshot, 60, 24, "governance");
+@@ -1236,7 +1236,7 @@ describe("Correction 2: no interleaving at 60 columns with long values", () => {
+       await setup.flush();
+       const frame = setup.captureCharFrame();
+       expect(frame).toContain("Claude:");
+-      expect(frame).toContain("Antigravity:");
++      expect(frame).toContain("madv-surface:");
+       expect(hasInterleavingArtifacts(frame)).toBe(false);
+     } finally {
+       setup.renderer.destroy();
+diff --git a/apps/madbridge/test/tui-truth-safety.test.tsx b/apps/madbridge/test/tui-truth-safety.test.tsx
+index 96ccd1b..2833e4d 100644
+--- a/apps/madbridge/test/tui-truth-safety.test.tsx
++++ b/apps/madbridge/test/tui-truth-safety.test.tsx
+@@ -537,7 +537,7 @@ describe("Finding 3: routeKeyEvent forwards sequence to PTY, consumes global act
+     const cbs = makeRecordingCallbacks();
+     routeKeyEvent({
+       keyStr: "alt+1", action: "focus-claude", sequence: "\x1b1", name: "1",
+-      state: makeRouterState("antigravity"), snapshot: null, callbacks: cbs, bindings,
++      state: makeRouterState("madv-surface"), snapshot: null, callbacks: cbs, bindings,
+     });
+     expect(cbs.ptyWrites).toEqual([]);
+     expect(cbs.focusChanges).toEqual(["claude"]);
+@@ -589,7 +589,7 @@ describe("Defect 1: approval keys are inert without governance focus + visible d
+     const cbs = makeRecordingCallbacks();
+     routeKeyEvent({
+       keyStr: "alt+y", action: "accept-approval", sequence: "\x1by", name: "y",
+-      state: makeRouterState("antigravity"), snapshot: makeConnectedSnapshot(), callbacks: cbs, bindings,
++      state: makeRouterState("madv-surface"), snapshot: makeConnectedSnapshot(), callbacks: cbs, bindings,
+     });
+     expect(cbs.resolutions).toEqual([]);
+   });
+@@ -637,7 +637,7 @@ describe("Defect 1: approval keys are inert without governance focus + visible d
+     const cbs = makeRecordingCallbacks();
+     routeKeyEvent({
+       keyStr: "alt+y", action: "accept-approval", sequence: "\x1by", name: "y",
+-      state: makeRouterState("antigravity", true, "approval-001"),
++      state: makeRouterState("madv-surface", true, "approval-001"),
+       snapshot: makeConnectedSnapshot(), callbacks: cbs, bindings,
+     });
+     expect(cbs.resolutions).toEqual([]);
+@@ -790,7 +790,7 @@ describe("Defect 2: validateApprovalResolution is the single guard for all paths
+   });
+ 
+   test("validateApprovalResolution returns null for Antigravity focus", () => {
+-    const state = makeRouterState("antigravity", true, "approval-001");
++    const state = makeRouterState("madv-surface", true, "approval-001");
+     const result = validateApprovalResolution(state, makeConnectedSnapshot());
+     expect(result).toBeNull();
+   });
+@@ -1137,10 +1137,11 @@ describe("Matrix: all six facts at 60 and 80 for every valid session+focus combi
+     for (const sess of sessions) {
+       for (const focus of focuses) {
+         test("w=" + width + " sess=" + sess + " focus=" + focus, () => {
++          const focusWord = focus === "ANTIGRAVITY" ? "MADV-SURFACE" : focus;
+           const line = buildStatusLine({
+             ...matrixInput,
+             sessionWord: sess,
+-            focusWord: focus,
++            focusWord,
+             width,
+           });
+           // Line length must equal width exactly (one physical row)
+@@ -1153,7 +1154,7 @@ describe("Matrix: all six facts at 60 and 80 for every valid session+focus combi
+           expect(line).toContain("#42");               // 3. fencing token
+           expect(line).toContain("P:");                // 4. pending marker
+           expect(line).toContain("F:");                // 5. focus marker
+-          expect(line).toContain(focus);               // 5. focus value
++          expect(line).toContain(focusWord);            // 5. focus value
+           expect(line).toContain("L:");                // 6. ledger marker
+           expect(line).toContain("#41");               // 6. ledger sequence
+         });
+diff --git a/apps/madbridge/test/tui-writers-stage.test.tsx b/apps/madbridge/test/tui-writers-stage.test.tsx
+index 7a4d401..de0e852 100644
+--- a/apps/madbridge/test/tui-writers-stage.test.tsx
++++ b/apps/madbridge/test/tui-writers-stage.test.tsx
+@@ -32,12 +32,12 @@ function makeFingerprint(): RepositoryFingerprint {
+ }
+ 
+ function makeExecution(
+-  surface: "claude-code" | "antigravity",
++  surface: "claude-code" | "madv-surface",
+   overrides?: Partial<ExecutionIdentity>,
+ ): ExecutionIdentity {
+   const isBuilder = surface === "claude-code";
+   const base: ExecutionIdentity = {
+-    execution_id: `exec-${surface}`,
++    execution_id: isBuilder ? "exec-claude-code" : "exec-antigravity",
+     role: isBuilder ? "builder" : "independent-reviewer",
+     surface: parseSurfaceId(surface),
+     model: isBuilder ? "claude-sonnet-4" : "gemini-2.5-pro",
+@@ -57,7 +57,7 @@ function makeTask(): TaskEnvelopeV1 {
+     branch: "feature-branch",
+     worktree: "/tmp/worktree",
+     repository_fingerprint: makeFingerprint(),
+-    executions: [makeExecution("claude-code"), makeExecution("antigravity")],
++    executions: [makeExecution("claude-code"), makeExecution("madv-surface")],
+     initial_writer: "exec-claude-code",
+     scope: {
+       allowedReadPaths: ["./src"],
+@@ -88,7 +88,7 @@ function makeSnapshot(overrides?: Partial<BrokerSnapshot>): BrokerSnapshot {
+     activeWriter: "exec-claude-code",
+     fencingToken: 3,
+     task: makeTask(),
+-    executions: [makeExecution("claude-code"), makeExecution("antigravity")],
++    executions: [makeExecution("claude-code"), makeExecution("madv-surface")],
+     repositoryFingerprint: makeFingerprint(),
+     pendingApprovals: [],
+     pendingTransfers: [],
+@@ -157,7 +157,7 @@ async function renderApp(
+     // antigravity is Alt+4 and events is Alt+5.
+     const keyMap: Record<FocusTarget, string> = {
+       claude: "1",
+-      antigravity: "4",
++      "madv-surface": "4",
+       governance: "3",
+       events: "5",
+     };
+@@ -181,7 +181,7 @@ describe("1. Wide mode (120×34) Claude focus: one stage + one dock, not three c
+       // Claude stage is visible
+       expect(frame).toContain("CLAUDE CODE");
+       // Antigravity appears as a dock strip
+-      expect(frame).toContain("ANTIGRAVITY");
++      expect(frame).toContain("MADV-SURFACE");
+       expect(frame).toContain("docked");
+       // Governance pane content is NOT visible (not three columns)
+       expect(frame).not.toContain("Permissions:");
+@@ -194,12 +194,12 @@ describe("1. Wide mode (120×34) Claude focus: one stage + one dock, not three c
+ 
+ describe("2. Wide mode (120×34) Antigravity focus: reversed stage and dock", () => {
+   test("Antigravity focused produces a full-width Antigravity stage and a Claude dock", async () => {
+-    const setup = await renderApp(makeSnapshot(), 120, 34, "antigravity");
++    const setup = await renderApp(makeSnapshot(), 120, 34, "madv-surface");
+     try {
+       await setup.flush();
+       const frame = setup.captureCharFrame();
+       // Antigravity stage is visible
+-      expect(frame).toContain("ANTIGRAVITY");
++      expect(frame).toContain("MADV-SURFACE");
+       // Claude appears as a dock strip
+       expect(frame).toContain("CLAUDE CODE");
+       expect(frame).toContain("docked");
+@@ -216,7 +216,7 @@ describe("2. Wide mode (120×34) Antigravity focus: reversed stage and dock", ()
+ describe("3. Focus and writer remain distinct", () => {
+   test("Antigravity focused while Claude remains WRITER tok#3", async () => {
+     // activeWriter is exec-claude-code, focus is antigravity
+-    const setup = await renderApp(makeSnapshot(), 120, 34, "antigravity");
++    const setup = await renderApp(makeSnapshot(), 120, 34, "madv-surface");
+     try {
+       await setup.flush();
+       const frame = setup.captureCharFrame();
+@@ -297,7 +297,7 @@ describe("4. Headers display the exact role and model from the matching executio
+   });
+ 
+   test("Antigravity header shows reviewer role and gemini-2.5-pro model", async () => {
+-    const setup = await renderApp(makeSnapshot(), 120, 34, "antigravity");
++    const setup = await renderApp(makeSnapshot(), 120, 34, "madv-surface");
+     try {
+       await setup.flush();
+       const frame = setup.captureCharFrame();
+@@ -410,7 +410,7 @@ describe("6. Dock buffered-line count derived from real PTY output", () => {
+   test("DockStrip renders the buffered-line count", async () => {
+     const snapshot = makeSnapshot();
+     const setup = await testRender(
+-      <DockStrip surface="antigravity" state={snapshot} ptyOutput={"line1\nline2\nline3\n"} />,
++      <DockStrip surface="madv-surface" state={snapshot} ptyOutput={"line1\nline2\nline3\n"} />,
+       { width: 120, height: 6 },
+     );
+     try {
+@@ -426,7 +426,7 @@ describe("6. Dock buffered-line count derived from real PTY output", () => {
+   test("DockStrip with empty PTY shows 0 buffered lines", async () => {
+     const snapshot = makeSnapshot();
+     const setup = await testRender(
+-      <DockStrip surface="antigravity" state={snapshot} ptyOutput="" />,
++      <DockStrip surface="madv-surface" state={snapshot} ptyOutput="" />,
+       { width: 120, height: 6 },
+     );
+     try {
+@@ -442,13 +442,13 @@ describe("6. Dock buffered-line count derived from real PTY output", () => {
+   test("DockStrip shows agent identity, docked, role, and model", async () => {
+     const snapshot = makeSnapshot();
+     const setup = await testRender(
+-      <DockStrip surface="antigravity" state={snapshot} ptyOutput="" />,
++      <DockStrip surface="madv-surface" state={snapshot} ptyOutput="" />,
+       { width: 120, height: 6 },
+     );
+     try {
+       await setup.flush();
+       const frame = setup.captureCharFrame();
+-      expect(frame).toContain("ANTIGRAVITY");
++      expect(frame).toContain("MADV-SURFACE");
+       expect(frame).toContain("docked");
+       expect(frame).toContain("independent-reviewer");
+       expect(frame).toContain("gemini-2.5-pro");
+@@ -461,7 +461,7 @@ describe("6. Dock buffered-line count derived from real PTY output", () => {
+     // Antigravity is docked AND is the active writer
+     const snapshot = makeSnapshot({ activeWriter: "exec-antigravity", fencingToken: 7 });
+     const setup = await testRender(
+-      <DockStrip surface="antigravity" state={snapshot} ptyOutput="" />,
++      <DockStrip surface="madv-surface" state={snapshot} ptyOutput="" />,
+       { width: 120, height: 6 },
+     );
+     try {
+@@ -478,7 +478,7 @@ describe("6. Dock buffered-line count derived from real PTY output", () => {
+     // Claude is the writer, Antigravity is docked
+     const snapshot = makeSnapshot({ activeWriter: "exec-claude-code", fencingToken: 3 });
+     const setup = await testRender(
+-      <DockStrip surface="antigravity" state={snapshot} ptyOutput="" />,
++      <DockStrip surface="madv-surface" state={snapshot} ptyOutput="" />,
+       { width: 120, height: 6 },
+     );
+     try {
+@@ -506,7 +506,7 @@ describe("Finding 1: connected===false with retained data stays truthful", () =>
+       fencingToken: 3,
+       executions: [
+         { execution_id: "exec-claude-code", role: "builder", surface: parseSurfaceId("claude-code"), model: "claude-sonnet-4", provider: "anthropic", independence_domain: "fixture-builder-control", effort: "medium" },
+-        { execution_id: "exec-antigravity", role: "independent-reviewer", surface: parseSurfaceId("antigravity"), model: "gemini-2.5-pro", provider: "google", independence_domain: "fixture-review-control", effort: "medium" },
++        { execution_id: "exec-antigravity", role: "independent-reviewer", surface: parseSurfaceId("madv-surface"), model: "gemini-2.5-pro", provider: "google", independence_domain: "fixture-review-control", effort: "medium" },
+       ],
+       ...overrides,
+     });
+@@ -516,7 +516,7 @@ describe("Finding 1: connected===false with retained data stays truthful", () =>
+     const snapshot = makeDisconnectedWithRetainedData();
+     // Antigravity docked; Claude is still the retained activeWriter
+     const setup = await testRender(
+-      <DockStrip surface="antigravity" state={snapshot} ptyOutput={"alpha\nbeta\n"} />,
++      <DockStrip surface="madv-surface" state={snapshot} ptyOutput={"alpha\nbeta\n"} />,
+       { width: 120, height: 6 },
+     );
+     try {
+@@ -535,7 +535,7 @@ describe("Finding 1: connected===false with retained data stays truthful", () =>
+   test("DockStrip: docked agent shows an explicit disconnected/stream-ended word", async () => {
+     const snapshot = makeDisconnectedWithRetainedData();
+     const setup = await testRender(
+-      <DockStrip surface="antigravity" state={snapshot} ptyOutput={"alpha\nbeta\n"} />,
++      <DockStrip surface="madv-surface" state={snapshot} ptyOutput={"alpha\nbeta\n"} />,
+       { width: 120, height: 6 },
+     );
+     try {
+@@ -561,7 +561,7 @@ describe("Finding 1: connected===false with retained data stays truthful", () =>
+       fencingToken: 7,
+     });
+     const setup = await testRender(
+-      <DockStrip surface="antigravity" state={snapshot} ptyOutput={"one\ntwo\nthree\n"} />,
++      <DockStrip surface="madv-surface" state={snapshot} ptyOutput={"one\ntwo\nthree\n"} />,
+       { width: 120, height: 6 },
+     );
+     try {
+@@ -681,7 +681,7 @@ describe("Finding 2: DockStrip is one physical row at widths >= 80", () => {
+       fencingToken: 7,
+     });
+     const setup = await testRender(
+-      <DockStrip surface="antigravity" state={snapshot} ptyOutput={"one\ntwo\n"} />,
++      <DockStrip surface="madv-surface" state={snapshot} ptyOutput={"one\ntwo\n"} />,
+       { width: 80, height: 6 },
+     );
+     try {
+@@ -689,7 +689,7 @@ describe("Finding 2: DockStrip is one physical row at widths >= 80", () => {
+       const frame = setup.captureCharFrame();
+       const rows = nonEmptyRows(frame);
+       expect(rows.length).toBe(1);
+-      expect(rows[0]).toContain("ANTIGRAVITY");
++      expect(rows[0]).toContain("MADV-SURFACE");
+       expect(rows[0]).toContain("WRITER");
+       expect(rows[0]).toContain("tok#7");
+     } finally {
+@@ -699,7 +699,7 @@ describe("Finding 2: DockStrip is one physical row at widths >= 80", () => {
+ 
+   test("buildDockLine never exceeds the provided width (display columns, not UTF-16 units)", () => {
+     for (const w of [80, 81, 100, 120]) {
+-      const line = buildDockLine("antigravity", makeSnapshot({ activeWriter: "exec-claude-code", fencingToken: 3 }), "alpha\nbeta\n", w);
++      const line = buildDockLine("madv-surface", makeSnapshot({ activeWriter: "exec-claude-code", fencingToken: 3 }), "alpha\nbeta\n", w);
+       expect(displayWidth(line)).toBeLessThanOrEqual(w);
+     }
+   });
+@@ -711,18 +711,18 @@ describe("Finding 2: DockStrip is one physical row at widths >= 80", () => {
+     // must survive, and no grapheme cluster may be split.
+     const cjkModel = "glm-4.6-中文深度思考模型-超长名称-实验版";
+     const line = buildDockLine(
+-      "antigravity",
++      "madv-surface",
+       makeSnapshot({
+         executions: [
+           { ...makeExecution("claude-code"), model: "claude-sonnet-4" },
+-          { ...makeExecution("antigravity"), model: cjkModel },
++          { ...makeExecution("madv-surface"), model: cjkModel },
+         ],
+       }),
+       "x\n",
+       80,
+     );
+     expect(displayWidth(line)).toBeLessThanOrEqual(80);
+-    expect(line).toContain("ANTIGRAVITY");
++    expect(line).toContain("MADV-SURFACE");
+     // Truncation must be grapheme-safe: the CJK model fragment is either
+     // absent (dropped) or a clean prefix — never a split cluster.
+     const modelIdx = line.indexOf(cjkModel);
+@@ -740,7 +740,7 @@ describe("Finding 2: DockStrip is one physical row at widths >= 80", () => {
+       makeSnapshot({
+         executions: [
+           { ...makeExecution("claude-code"), model: "claude-🤖-sonnet-4-5" },
+-          { ...makeExecution("antigravity"), model: "gemini-2.5-pro" },
++          { ...makeExecution("madv-surface"), model: "gemini-2.5-pro" },
+         ],
+       }),
+       "x\n",
+@@ -752,8 +752,8 @@ describe("Finding 2: DockStrip is one physical row at widths >= 80", () => {
+ 
+   test("buildDockLine preserves identity and never fabricates a model when truncating", () => {
+     // Even at exactly 80 chars, the identity and a real model fragment survive.
+-    const line = buildDockLine("antigravity", makeSnapshot(), "x\n", 80);
+-    expect(line).toContain("ANTIGRAVITY");
++    const line = buildDockLine("madv-surface", makeSnapshot(), "x\n", 80);
++    expect(line).toContain("MADV-SURFACE");
+     // Must NOT invent a model not present in the snapshot
+     expect(line).not.toContain("claude-sonnet-4");
+     expect(line.length).toBeLessThanOrEqual(80);
+@@ -769,7 +769,7 @@ describe("7. Narrow mode (60×24) tab row contains all four surfaces with textua
+       await setup.flush();
+       const frame = setup.captureCharFrame();
+       expect(frame).toContain("CLAUDE");
+-      expect(frame).toContain("AGY");
++      expect(frame).toContain("MADV");
+       expect(frame).toContain("GOV");
+       expect(frame).toContain("LOG");
+       // The selected tab carries a textual marker
+@@ -780,12 +780,12 @@ describe("7. Narrow mode (60×24) tab row contains all four surfaces with textua
+   });
+ 
+   test("Antigravity focused: AGY carries the * marker", async () => {
+-    const setup = await renderApp(makeSnapshot(), 60, 24, "antigravity");
++    const setup = await renderApp(makeSnapshot(), 60, 24, "madv-surface");
+     try {
+       await setup.flush();
+       const frame = setup.captureCharFrame();
+       expect(frame).toContain("CLAUDE");
+-      expect(frame).toContain("AGY");
++      expect(frame).toContain("MADV");
+       expect(frame).toContain("GOV");
+       expect(frame).toContain("LOG");
+       expect(frame).toContain("*");
+@@ -795,7 +795,7 @@ describe("7. Narrow mode (60×24) tab row contains all four surfaces with textua
+   });
+ 
+   test("PaneTabs renders the textual marker on the selected tab", async () => {
+-    for (const focus of ["claude", "antigravity", "governance", "events"] as FocusTarget[]) {
++    for (const focus of ["claude", "madv-surface", "governance", "events"] as FocusTarget[]) {
+       const setup = await testRender(
+         <PaneTabs focus={focus} />,
+         { width: 60, height: 3 },
+@@ -804,7 +804,7 @@ describe("7. Narrow mode (60×24) tab row contains all four surfaces with textua
+         await setup.flush();
+         const frame = setup.captureCharFrame();
+         expect(frame).toContain("CLAUDE");
+-        expect(frame).toContain("AGY");
++        expect(frame).toContain("MADV");
+         expect(frame).toContain("GOV");
+         expect(frame).toContain("LOG");
+         expect(frame).toContain("*");
+@@ -830,11 +830,11 @@ describe("8. Narrow mode (60×24): only the selected surface renders", () => {
+   });
+ 
+   test("Antigravity focused: Antigravity visible, Claude stage absent", async () => {
+-    const setup = await renderApp(makeSnapshot(), 60, 24, "antigravity");
++    const setup = await renderApp(makeSnapshot(), 60, 24, "madv-surface");
+     try {
+       await setup.flush();
+       const frame = setup.captureCharFrame();
+-      expect(frame).toContain("ANTIGRAVITY");
++      expect(frame).toContain("MADV-SURFACE");
+       // In narrow mode, only one surface renders — no dock strip
+       expect(frame).not.toContain("Permissions:");
+     } finally {
+@@ -941,7 +941,7 @@ describe("11. Two identical renders from an unchanged snapshot produce identical
+ 
+   test("narrow Antigravity focused: identical frames", async () => {
+     const snapshot = makeSnapshot();
+-    const setup1 = await renderApp(snapshot, 60, 24, "antigravity");
++    const setup1 = await renderApp(snapshot, 60, 24, "madv-surface");
+     let frame1: string;
+     try {
+       await setup1.flush();
+@@ -950,7 +950,7 @@ describe("11. Two identical renders from an unchanged snapshot produce identical
+       setup1.renderer.destroy();
+     }
+ 
+-    const setup2 = await renderApp(snapshot, 60, 24, "antigravity");
++    const setup2 = await renderApp(snapshot, 60, 24, "madv-surface");
+     let frame2: string;
+     try {
+       await setup2.flush();
+@@ -1035,7 +1035,7 @@ describe("Finding 4a: stage border spans the terminal width at 120 and 80", () =
+   });
+ 
+   test("80 cols: top border row is exactly 80 chars wide", async () => {
+-    const setup = await renderApp(makeSnapshot(), 80, 24, "antigravity");
++    const setup = await renderApp(makeSnapshot(), 80, 24, "madv-surface");
+     try {
+       await setup.flush();
+       const frame = setup.captureCharFrame();
+@@ -1053,7 +1053,7 @@ describe("Finding 4b: at 80 columns, the dock identity/status appears on exactly
+   test("Antigravity focused, Claude docked (writer): dock on one row", async () => {
+     const setup = await renderApp(
+       makeSnapshot({ activeWriter: "exec-claude-code", fencingToken: 3 }),
+-      80, 24, "antigravity",
++      80, 24, "madv-surface",
+     );
+     try {
+       await setup.flush();
+@@ -1076,7 +1076,7 @@ describe("Finding 4b: at 80 columns, the dock identity/status appears on exactly
+       await setup.flush();
+       const frame = setup.captureCharFrame();
+       const rows = frame.split("\n").filter((l) => l.trim().length > 0);
+-      const dockRows = rows.filter((r) => r.includes("ANTIGRAVITY") && r.includes("docked"));
++      const dockRows = rows.filter((r) => r.includes("MADV-SURFACE") && r.includes("docked"));
+       expect(dockRows.length).toBe(1);
+     } finally {
+       setup.renderer.destroy();
+@@ -1088,14 +1088,14 @@ describe("Finding 4c: attribute focus and writership by line", () => {
+   test("Antigravity focused while Claude is writer: AGY line has FOCUSED, Claude line has WRITER tok#3", async () => {
+     const setup = await renderApp(
+       makeSnapshot({ activeWriter: "exec-claude-code", fencingToken: 3 }),
+-      120, 34, "antigravity",
++      120, 34, "madv-surface",
+     );
+     try {
+       await setup.flush();
+       const frame = setup.captureCharFrame();
+       const rows = frame.split("\n").filter((l) => l.trim().length > 0);
+       // The Antigravity (stage) line contains FOCUSED
+-      const agyLine = rows.find((r) => r.includes("ANTIGRAVITY"));
++      const agyLine = rows.find((r) => r.includes("MADV-SURFACE"));
+       expect(agyLine).toBeDefined();
+       expect(agyLine!).toContain("FOCUSED");
+       expect(agyLine!).not.toContain("WRITER");
+@@ -1125,7 +1125,7 @@ describe("Finding 4c: attribute focus and writership by line", () => {
+       expect(claudeStage!).toContain("FOCUSED");
+       expect(claudeStage!).not.toContain("WRITER");
+       // Antigravity (dock) has WRITER tok#9 but is NOT focused
+-      const agyDock = rows.find((r) => r.includes("ANTIGRAVITY") && r.includes("docked"));
++      const agyDock = rows.find((r) => r.includes("MADV-SURFACE") && r.includes("docked"));
+       expect(agyDock).toBeDefined();
+       expect(agyDock!).not.toContain("FOCUSED");
+       expect(agyDock!).toContain("WRITER");
+@@ -1142,10 +1142,10 @@ describe("Finding 4d: exact selected tab text for every focus target", () => {
+     try {
+       await setup.flush();
+       const frame = setup.captureCharFrame();
+-      const tabRow = frame.split("\n").find((l) => l.includes("CLAUDE") && l.includes("AGY"));
++      const tabRow = frame.split("\n").find((l) => l.includes("CLAUDE") && l.includes("MADV"));
+       expect(tabRow).toBeDefined();
+       expect(tabRow!).toContain("CLAUDE*");
+-      expect(tabRow!).not.toContain("AGY*");
++      expect(tabRow!).not.toContain("MADV*");
+       expect(tabRow!).not.toContain("GOV*");
+       expect(tabRow!).not.toContain("LOG*");
+     } finally {
+@@ -1154,13 +1154,13 @@ describe("Finding 4d: exact selected tab text for every focus target", () => {
+   });
+ 
+   test("Antigravity focused → AGY* (exact)", async () => {
+-    const setup = await renderApp(makeSnapshot(), 60, 24, "antigravity");
++    const setup = await renderApp(makeSnapshot(), 60, 24, "madv-surface");
+     try {
+       await setup.flush();
+       const frame = setup.captureCharFrame();
+-      const tabRow = frame.split("\n").find((l) => l.includes("CLAUDE") && l.includes("AGY"));
++      const tabRow = frame.split("\n").find((l) => l.includes("CLAUDE") && l.includes("MADV"));
+       expect(tabRow).toBeDefined();
+-      expect(tabRow!).toContain("AGY*");
++      expect(tabRow!).toContain("MADV*");
+       expect(tabRow!).not.toContain("CLAUDE*");
+       expect(tabRow!).not.toContain("GOV*");
+       expect(tabRow!).not.toContain("LOG*");
+@@ -1174,11 +1174,11 @@ describe("Finding 4d: exact selected tab text for every focus target", () => {
+     try {
+       await setup.flush();
+       const frame = setup.captureCharFrame();
+-      const tabRow = frame.split("\n").find((l) => l.includes("CLAUDE") && l.includes("AGY"));
++      const tabRow = frame.split("\n").find((l) => l.includes("CLAUDE") && l.includes("MADV"));
+       expect(tabRow).toBeDefined();
+       expect(tabRow!).toContain("GOV*");
+       expect(tabRow!).not.toContain("CLAUDE*");
+-      expect(tabRow!).not.toContain("AGY*");
++      expect(tabRow!).not.toContain("MADV*");
+       expect(tabRow!).not.toContain("LOG*");
+     } finally {
+       setup.renderer.destroy();
+@@ -1190,11 +1190,11 @@ describe("Finding 4d: exact selected tab text for every focus target", () => {
+     try {
+       await setup.flush();
+       const frame = setup.captureCharFrame();
+-      const tabRow = frame.split("\n").find((l) => l.includes("CLAUDE") && l.includes("AGY"));
++      const tabRow = frame.split("\n").find((l) => l.includes("CLAUDE") && l.includes("MADV"));
+       expect(tabRow).toBeDefined();
+       expect(tabRow!).toContain("LOG*");
+       expect(tabRow!).not.toContain("CLAUDE*");
+-      expect(tabRow!).not.toContain("AGY*");
++      expect(tabRow!).not.toContain("MADV*");
+       expect(tabRow!).not.toContain("GOV*");
+     } finally {
+       setup.renderer.destroy();
+@@ -1289,7 +1289,7 @@ describe("Finding 4f: connected===false with retained identity/writer/output dat
+       fencingToken: 7,
+     });
+     const setup = await testRender(
+-      <DockStrip surface="antigravity" state={snapshot} ptyOutput={"a\nb\nc\nd\n"} />,
++      <DockStrip surface="madv-surface" state={snapshot} ptyOutput={"a\nb\nc\nd\n"} />,
+       { width: 120, height: 6 },
+     );
+     try {
+diff --git a/docs/verification/phase-3b-m3-evidence.md b/docs/verification/phase-3b-m3-evidence.md
+new file mode 100644
+index 0000000..3b196ea
+--- /dev/null
++++ b/docs/verification/phase-3b-m3-evidence.md
+@@ -0,0 +1,95 @@
++# Phase 3B M3 offline evidence
++
++DEC-20261127-01 B20. The script `scripts/phase3b/m3-evidence.tsx` produced six source transcripts outside the repository. Its SHA-256 is caa2f176190f15777296c51052574113c15c4652e727246087e1f5093dcb14e8. Run 475 used the pinned Bun runtime after load wait 474. The transcript manifest SHA-256 is 7ac98c8586885f90346b8f6f57b0dae3bd7150e21a64c9bf8d2b419fd533aa8d.
++
++## Ordered output — offline
++
++Source `ordered-frames.jsonl` · SHA-256 95fc7b003e4c0f7f37d49cfe4059912c29da8f65d743f34711e5b3090b173e08. The real PTY host ran transport-stand-in.ts for each execution. The first frame follows handover.
++
++| Surface | Session | Execution | Sequence | Bytes in decimal |
++| --- | --- | --- | --- | --- |
++| claude-code | offline-transport | builder | 1 | 32 9 |
++| claude-code | offline-transport | builder | 2 | 32 32 9 |
++| madv-surface | offline-transport | reviewer | 1 | 32 9 |
++| madv-surface | offline-transport | reviewer | 2 | 32 32 9 |
++
++## Host acknowledgement and child receipt — offline
++
++Source `transport.jsonl` · SHA-256 88074b94589e5a8e4f02315dee6b39415b47b67453dff34700f094df08261a32. The transport stand-in recorded bytes and the dimensions of its own terminal. The observer stopped and resumed only its spawned host.
++
++- claude-code received 72 bytes and dimensions 73 × 19. Input and resize each registered a wait before the write and completed after the host resumed. Decoded child bytes, followed by LF: `{"type":"user","message":{"role":"user","content":"offline transport"}}`.
++- madv-surface received 72 bytes and dimensions 73 × 19. Input and resize each registered a wait before the write and completed after the host resumed. Decoded child bytes, followed by LF: `{"type":"user","message":{"role":"user","content":"offline transport"}}`.
++
++## Submitted line through App — offline
++
++Source `usable-input.jsonl` · SHA-256 0652a2392cd280b7a9cad4f7a25a250bec24442cb1c2ae9aa0da32f03a30a0fb. The focused pane submitted the line proof. The controlled transport stand-in replied through the production dispatch and output path. Excerpts use the rendered field, with border padding removed.
++
++| Active writer | Focused surface | Input requests | Focused / other child receipts | Rendered excerpt |
++| --- | --- | --- | --- | --- |
++| claude-code | claude-code | 1 | 1 / 0 | `"offlineReply":"proof"` |
++| claude-code | madv-surface | 1 | 0 / 0 | `UNAUTHORIZED` |
++| madv-surface | madv-surface | 1 | 1 / 0 | `"offlineReply":"proof"` |
++| madv-surface | claude-code | 1 | 0 / 0 | `UNAUTHORIZED` |
++
++## Pane retention — offline
++
++Source `retention.jsonl` · SHA-256 5a7071c7cae02b652bb9eb055666f19a443c53b7d2a32bc1d89753d5d4647ad6. Recorded synthetic CRLF, LF, partial-line and single-line byte streams. Counts show the state at the limit and after the next addition.
++
++| Limit | Point | Received frames | Received bytes | Retained frames | Retained bytes |
++| --- | --- | --- | --- | --- | --- |
++| lines | At limit | 10001 | 20003 | 10001 | 20003 |
++| lines | After addition | 10002 | 20007 | 10000 | 20002 |
++| bytes | At limit | 2 | 2097152 | 2 | 2097152 |
++| bytes | After addition | 3 | 2097155 | 2 | 2097152 |
++
++## Authority after stream end — offline
++
++Source `ended-streams.jsonl` · SHA-256 e77adb00dfc5f961aed1bbe6a43e9fbabaae2f9dc45f870592b919b9cb280eba. The subscribe adapter read a scripted client with owned authority, writer builder and synthetic fencing token 17. Each stream produced an ended projection after its second read.
++
++### Failed read
++
++- status — `NOT CONNECTED | session active | writer STREAM ENDED | pending 0 | focus CLAUDE | ledger #0`
++- compact — `NOCONN | S:active | W:STREAM ENDED | P:0 | F:CLAUDE | L:#0`
++- governance — `Writer / Token / Ownership: STREAM ENDED`
++- claude — `CLAUDE CODE | FOCUSED | STREAM ENDED | builder | builder-model`
++- madv — `MADV-SURFACE | FOCUSED | STREAM ENDED | independent-reviewer | reviewer-model`
++- claudeDock — `CLAUDE CODE | docked | STREAM ENDED | builder | builder-model | 0 buffered`
++- madvDock — `MADV-SURFACE | docked | STREAM ENDED | independent-reviewer | reviewer-model | 0 buffered`
++
++### Closed client
++
++- status — `NOT CONNECTED | session closed | writer STREAM ENDED | pending 0 | focus CLAUDE | ledger #0`
++- compact — `NOCONN | S:closed | W:STREAM ENDED | P:0 | F:CLAUDE | L:#0`
++- governance — `Writer / Token / Ownership: STREAM ENDED`
++- claude — `CLAUDE CODE | FOCUSED | STREAM ENDED | builder | builder-model`
++- madv — `MADV-SURFACE | FOCUSED | STREAM ENDED | independent-reviewer | reviewer-model`
++- claudeDock — `CLAUDE CODE | docked | STREAM ENDED | builder | builder-model | 0 buffered`
++- madvDock — `MADV-SURFACE | docked | STREAM ENDED | independent-reviewer | reviewer-model | 0 buffered`
++
++
++## Malformed host facts — offline
++
++Source `malformed-frames.jsonl` · SHA-256 bf16c337ee4dfd0f4ba085d0ebe81b5442093b6f689d7fec300de9e9f78c732f. The real host drove transport-stand-in.ts. Each injection followed activation and a valid control frame. The decoder exceptions and monitor failure causes were observed directly. The madv-surface parser reason was identified at the executed catch site because its post-handover callback exposes only the cause.
++
++| Surface | Fault | Decoder error | Monitor | Parser reason | Interruption | Client bytes |
++| --- | --- | --- | --- | --- | --- | --- |
++| claude-code | payload | MalformedFrameError: ready carries no payload | claude-code attestation_malformed | — | identity_mismatch | 32 9 |
++| claude-code | unknown | MalformedFrameError: unknown fact tag 255 | claude-code attestation_malformed | — | identity_mismatch | 32 9 |
++| madv-surface | payload | MalformedFrameError: ready carries no payload | madv-surface identity_mismatch | malformed_stream | identity_mismatch | 32 9 |
++| madv-surface | unknown | MalformedFrameError: unknown fact tag 255 | madv-surface identity_mismatch | malformed_stream | identity_mismatch | 32 9 |
++
++## Limitations
++
++No frame of a real surface has yet been delivered. No real surface has yet received a line. All host exchanges above used disposable stand-ins. The byte injector accepts only the two complete invalid Phase 3A records and queues one at a clean decoder boundary.
++
++The application package does not declare the source dependencies imported by relative path. The base includes supervisor source imports in `apps/madbridge/src/tui/live/composition.ts`, `apps/madbridge/src/tui/live/subscribe.ts` and `apps/madbridge/src/commands/export-evidence.ts`. Composition also imports `packages/adapter-madv-surface/src`. The M3 files below reference package sources by relative path.
++
++- `apps/madbridge/src/tui/live/line-buffer.ts` — `packages/adapter-claude-code/src/live`, `packages/adapter-madv-surface/src/index`.
++- `test/phase3b/dispatch-observation.ts` — `packages/adapter-claude-code/src/live`, `packages/adapter-madv-surface/src/index`, `packages/broker/src/pty-host-supervisor`.
++- `test/phase3b/dispatch.test.ts` — `packages/broker/src/pty-host-supervisor`.
++- `test/phase3b/line-input.test.tsx` — `packages/broker/src/client`.
++- `test/phase3b/malformed-observation.ts` — `packages/adapter-madv-surface/src/live.ts`, `packages/broker/src/pty-host-protocol`, `packages/broker/src/pty-host-supervisor`, `packages/supervisor/src/index`.
++- `test/phase3b/pacing-settlement.test.ts` — `packages/supervisor/src/index`, `packages/supervisor/src/snapshot-timer`.
++- `test/phase3b/producer.test.ts` — `packages/broker/src/in-process-client`.
++- `test/phase3b/transport.ts` — `packages/supervisor/src/index`.
++- `test/phase3b/unbridged.ts` — `packages/supervisor/src/build`.
+diff --git a/packages/adapter-claude-code/src/live.ts b/packages/adapter-claude-code/src/live.ts
+index 9166b9d..f1b46a6 100644
+--- a/packages/adapter-claude-code/src/live.ts
++++ b/packages/adapter-claude-code/src/live.ts
+@@ -19,6 +19,7 @@ interface Input {
+   model: string;
+   signal: AbortSignal;
+   reportFailure(reason: string): void;
++  onOutput?(bytes: Uint8Array): Promise<void>;
+   registration: { supported_versions: readonly string[]; auth_failure_detection: readonly string[] };
+   host: { handle: {
+     send(frame: { kind: "input"; bytes: Uint8Array }): void;
+@@ -157,8 +158,10 @@ export function attestClaudeSession(input: Input, reserveWrite: () => boolean =
+         if (failed) break;
+         if (!reader.complete && performance.now() >= deadline) { stop("attestation_deadline"); break; }
+         if (fact.kind === "output" && fact.bytes) {
++          const monitored = reader.complete;
+           const cause = reader.push(fact.bytes);
+           if (cause) stop(cause);
++          if (monitored && input.onOutput) await input.onOutput(fact.bytes);
+         } else if (reader.complete && fact.kind === "exited") {
+           stop(reader.finish() ?? "child_exited");
+         } else if (!reader.complete && (fact.kind === "exited" || fact.kind === "drained")) {
+diff --git a/packages/adapter-madv-surface/src/live.ts b/packages/adapter-madv-surface/src/live.ts
+index ca58ec8..5183e32 100644
+--- a/packages/adapter-madv-surface/src/live.ts
++++ b/packages/adapter-madv-surface/src/live.ts
+@@ -11,6 +11,7 @@ interface Input {
+   model: string;
+   signal: AbortSignal;
+   reportFailure(cause: string): void;
++  onOutput?(bytes: Uint8Array): Promise<void>;
+   registration: { auth_failure_detection: readonly string[]; supported_versions: readonly string[]; provider: string; independence_domain: string };
+   host: { handle: {
+     facts(): AsyncIterable<{ kind: string; bytes?: Uint8Array; code?: number | null; signal?: string | null }>;
+@@ -19,7 +20,7 @@ interface Input {
+ }
+ type Failure = { ok: false; surface: "madv-surface"; cause: Cause; reason: Cause; parserReason?: string };
+ type Verdict = Failure | { ok: true; evidenceKind: "actual_session"; provider: string;
+-  model: string; cliVersion: string; sendUserInput(text: string): boolean };
++  model: string; cliVersion: string; sendUserInput(text: string): boolean; sendEncodedInput(bytes: Uint8Array): boolean };
+ 
+ export function attestMadvSession(input: Input, reserveWrite: () => boolean = () => true): Promise<Verdict> {
+   const { promise, resolve } = Promise.withResolvers<Verdict>();
+@@ -46,7 +47,7 @@ export function attestMadvSession(input: Input, reserveWrite: () => boolean = ()
+       clearTimeout(timer);
+       ready = true;
+       resolve({ ok: true, evidenceKind: "actual_session", provider: input.registration.provider,
+-        model: input.model, cliVersion: version, sendUserInput });
++        model: input.model, cliVersion: version, sendUserInput, sendEncodedInput });
+     },
+   });
+   function inspect(result: MadvResult): void {
+@@ -65,12 +66,25 @@ export function attestMadvSession(input: Input, reserveWrite: () => boolean = ()
+     try { write(encodeUserInput(text)); } catch { stop("provider_error"); }
+     return !failure;
+   }
++  function sendEncodedInput(bytes: Uint8Array): boolean {
++    if (closed || !ready || failure) return false;
++    inspect(parser.beginRequest());
++    if (failure) return false;
++    clearTimeout(timer);
++    timer = setTimeout(() => inspect(parser.checkDeadline()), EVIDENCE_DEADLINE_MS);
++    try { input.host.handle.send({ kind: "input", bytes }); } catch { stop("provider_error"); }
++    return !failure;
++  }
+   async function consume(): Promise<void> {
+     try {
+       for await (const fact of input.host.handle.facts()) {
+         if (failure) break;
+         if (!ready && performance.now() >= deadline) { stop("attestation_deadline"); break; }
+-        if (fact.kind === "output" && fact.bytes) inspect(parser.push(fact.bytes));
++        if (fact.kind === "output" && fact.bytes) {
++          const monitored = ready;
++          inspect(parser.push(fact.bytes));
++          if (monitored && input.onOutput) await input.onOutput(fact.bytes);
++        }
+         if (fact.kind === "exited") {
+           const handedOver = ready;
+           const exitCode = fact.code ?? 1;
+diff --git a/packages/broker/src/in-process-client.ts b/packages/broker/src/in-process-client.ts
+index 4ef8cd5..d13d425 100644
+--- a/packages/broker/src/in-process-client.ts
++++ b/packages/broker/src/in-process-client.ts
+@@ -200,6 +200,19 @@ export function createInProcessBrokerClient(
+   broker: RuntimeBroker,
+   principal: ClientPrincipal,
+ ): InProcessBrokerClient {
++  return bindClient(broker, principal).client;
++}
++
++/** The live build keeps the delivery function separate from the client it presents. */
++export function createLiveFounderClient(broker: RuntimeBroker, bridges: ReadonlyMap<string, HostBridge>) {
++  return bindClient(broker, { kind: "founder_tui" }, bridges);
++}
++
++type PtyCommand = Extract<BrokerCommand, { kind: "pty_input" | "pty_resize" }>;
++export type HostBridge = (command: PtyCommand) => Promise<boolean>;
++
++function bindClient(broker: RuntimeBroker, principal: ClientPrincipal, bridges?: ReadonlyMap<string, HostBridge>) {
++  const inFlight = new Map<string, Promise<BrokerResult>>();
+   // The principal request() evaluates under never leaves this closure; the
+   // one callers can read is a separate frozen copy.
+   const evaluatedPrincipal = bindPrincipal(principal);
+@@ -349,6 +362,25 @@ export function createInProcessBrokerClient(
+     if (!legality.ok) {
+       return { ok: false, commandId, error: legality.error, detail: legality.detail };
+     }
++    if (bridges && (captured.kind === "pty_input" || captured.kind === "pty_resize")) {
++      const executionId = captured.executionId;
++      const wire = captured.kind === "pty_input" ? { ...captured, bytes: new Uint8Array(captured.bytes) } : captured;
++      const dispatch = async (): Promise<BrokerResult> => {
++        // A command can wait behind one for the same host. Check authority at the write.
++        const current = evaluateCommandLegality(wire, projectSnapshot(broker.snapshotProjectionInput()), evaluatedPrincipal);
++        if (!current.ok) return { ok: false, commandId, error: current.error, detail: current.detail };
++        const send = bridges.get(executionId);
++        if (closed || !send || !await send(wire)) {
++          return { ok: false, commandId, error: "host_unavailable", detail: "host unavailable" };
++        }
++        return { ok: true, commandId, acceptedSnapshotSeq: deliveredSeq };
++      };
++      const previous = inFlight.get(executionId);
++      const next = previous ? previous.then(dispatch, dispatch) : dispatch();
++      inFlight.set(executionId, next);
++      try { return await next; }
++      finally { if (inFlight.get(executionId) === next) inFlight.delete(executionId); }
++    }
+     switch (captured.kind) {
+       case "session_pause":
+         await broker.pause(commandId);
+@@ -408,6 +440,11 @@ export function createInProcessBrokerClient(
+     close,
+   });
+ 
++  async function deliver(frame: OutputFrame): Promise<void> {
++    const violation = ingestOutputFrame(frame);
++    if (violation !== null) await raise(violation);
++  }
++
+   testSeams.set(client, {
+     ingestStamped(executionId, bytes) {
+       if (closed) {
+@@ -441,10 +478,7 @@ export function createInProcessBrokerClient(
+       }
+       // B5: the check and the delivery are synchronous; a refused frame
+       // interrupts the session, awaited, and only then rejects.
+-      const violation = ingestOutputFrame(frame);
+-      if (violation !== null) {
+-        return raise(violation);
+-      }
++      await deliver(frame);
+     },
+     async offerSnapshotSeq(candidate) {
+       const violation = admitSnapshotSeq(candidate);
+@@ -454,7 +488,7 @@ export function createInProcessBrokerClient(
+     },
+   });
+ 
+-  return client;
++  return { client, deliver: (frame: OutputFrame) => closed ? Promise.resolve() : deliver(frame) };
+ }
+ 
+ function seamsOf(client: InProcessBrokerClient): TestSeams {
+diff --git a/packages/broker/src/pty-host-supervisor.ts b/packages/broker/src/pty-host-supervisor.ts
+index 7640095..def0d2b 100644
+--- a/packages/broker/src/pty-host-supervisor.ts
++++ b/packages/broker/src/pty-host-supervisor.ts
+@@ -79,6 +79,22 @@ export interface PtyHostHandle {
+   killPgid(): void;
+ }
+ 
++// A single complete, undecodable fact can be placed at the next clean read
++// boundary. Restrict this test facility to the two recorded Phase 3A faults.
++interface FaultRead { pending: Uint8Array<ArrayBuffer> | null; ended: boolean }
++const faultReads = new WeakMap<PtyHostHandle, FaultRead>();
++
++export function unsafeTestOnlyInjectHostOutput(handle: PtyHostHandle, bytes: Uint8Array): void {
++  const read = faultReads.get(handle);
++  if (!read || read.ended || read.pending) throw new Error("host read unavailable");
++  const copy = new Uint8Array(bytes);
++  const fixtures = [Uint8Array.of(0, 0, 0, 2, 1, 1), Uint8Array.of(0, 0, 0, 1, 255)];
++  if (!fixtures.some(f => f.length === copy.length && f.every((value, i) => value === copy[i]))) {
++    throw new Error("unrecognized malformed fact fixture");
++  }
++  read.pending = copy;
++}
++
+ /**
+  * Test-only observability: the number of live `facts()` subscriber queues
+  * for a handle. Kept OFF the public `PtyHostHandle` contract (the ratified
+@@ -298,6 +314,7 @@ const HOST_DEADLINES_MS: {
+  * and `escalateWedgedHost` never races to attach a watcher mid-escalation.
+  */
+ interface HostLifecycle {
++  acceptsCommands(): boolean;
+   /** True once `proc.exited` has resolved — authoritative host death. */
+   exitedResolved: boolean;
+   /** Resolves when the OS reports host exit. Attached at spawn time. */
+@@ -306,6 +323,53 @@ interface HostLifecycle {
+ 
+ const lifecycles = new WeakMap<PtyHostHandle, HostLifecycle>();
+ 
++/** Register a real host acknowledgement before the bridge writes the corresponding frame. */
++export async function sendAcknowledgedCommand(
++  handle: PtyHostHandle, pgid: number, kind: "input" | "resize", write: () => boolean, interrupt: () => void,
++): Promise<boolean> {
++  const lifecycle = lifecycles.get(handle);
++  if (!lifecycle?.acceptsCommands() || pendingAcks.has(handle) || escalationRecordFor(handle).phase !== "none") return false;
++  const started = performance.now();
++  const deadline = started + HOST_DEADLINES_MS.ack;
++  const { promise, resolve } = Promise.withResolvers<boolean>();
++  const pending: PendingAck = {
++    ofKind: kind, promise, settled: false,
++    settle(acked) {
++      if (pending.settled) return;
++      pending.settled = true;
++      resolve(acked && performance.now() < deadline);
++    },
++  };
++  pendingAcks.set(handle, pending);
++  let timer: ReturnType<typeof setTimeout> | undefined;
++  const check = () => {
++    const remaining = deadline - performance.now();
++    if (remaining > 0) timer = setTimeout(check, remaining);
++    else pending.settle(false);
++  };
++  try {
++    try {
++      if (!write()) return false;
++    } catch {
++      // A write error cannot prove what the host read. Its ack or the original deadline decides.
++    }
++    check();
++    if (await promise) return true;
++    // Closure or preemption by termination already has its own containment path.
++    if (pendingAcks.get(handle) !== pending) return false;
++    const containing = startEscalation(handle, pgid, handle.hostPid, started);
++    interrupt();
++    await containing;
++    return false;
++  } catch {
++    return false;
++  } finally {
++    if (timer !== undefined) clearTimeout(timer);
++    pending.settle(false);
++    if (pendingAcks.get(handle) === pending) pendingAcks.delete(handle);
++  }
++}
++
+ function concatBytes(a: Uint8Array<ArrayBuffer>, b: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> {
+   const out = new Uint8Array(a.byteLength + b.byteLength);
+   out.set(a, 0);
+@@ -313,7 +377,7 @@ function concatBytes(a: Uint8Array<ArrayBuffer>, b: Uint8Array<ArrayBuffer>): Ui
+   return out;
+ }
+ 
+-async function* factStream(proc: Bun.Subprocess): AsyncGenerator<HostFactFrame> {
++async function* factStream(proc: Bun.Subprocess, read: FaultRead): AsyncGenerator<HostFactFrame> {
+   const stdout = proc.stdout;
+   if (stdout === undefined || typeof stdout === "number") {
+     // stdout was not piped — the host cannot produce facts. This is a
+@@ -326,6 +390,10 @@ async function* factStream(proc: Bun.Subprocess): AsyncGenerator<HostFactFrame>
+     for (;;) {
+       const { done, value } = await reader.read();
+       if (done) break;
++      if (read.pending && buffer.length === 0) {
++        buffer = read.pending;
++        read.pending = null;
++      }
+       buffer = concatBytes(buffer, new Uint8Array(value));
+       for (;;) {
+         const decoded = decodeFact(buffer);
+@@ -433,8 +501,10 @@ export function spawnPtyHost(
+   // stdin; the host's EOF handler terminates the child's process group in
+   // response. Same EPIPE guard as `send` — a broken pipe after host death
+   // means the lifeline is already closed.
++  let inputClosed = false;
+   let closeStdinCalls = 0;
+   const closeStdin = (): void => {
++    inputClosed = true;
+     closeStdinCalls += 1;
+     try {
+       stdinSink.end();
+@@ -554,14 +624,17 @@ export function spawnPtyHost(
+     }
+   };
+ 
++  const faultRead: FaultRead = { pending: null, ended: false };
+   const pump = (async () => {
+     try {
+-      for await (const frame of factStream(proc)) {
++      for await (const frame of factStream(proc, faultRead)) {
+         enqueue(frame);
+       }
+     } catch (err) {
+       pumpError = err instanceof Error ? err : new Error(String(err));
+     } finally {
++      faultRead.ended = true;
++      faultRead.pending = null;
+       pumpSettled = true;
+       settleSubscribers();
+     }
+@@ -574,6 +647,7 @@ export function spawnPtyHost(
+   // escalation starts, and no escalation path ever races to attach a
+   // watcher mid-ladder.
+   const lifecycle: HostLifecycle = {
++    acceptsCommands: () => !inputClosed && !pumpSettled && !lifecycle.exitedResolved,
+     exitedResolved: false,
+     exited: Promise.resolve(),
+   };
+@@ -722,6 +796,7 @@ export function spawnPtyHost(
+       }
+     },
+   };
++  faultReads.set(handle, faultRead);
+   subscriberCounts.set(handle, () => subscribers.size);
+   waiterCounts.set(handle, () => {
+     let total = 0;
+@@ -890,6 +965,10 @@ export async function escalateWedgedHost(
+   pgid: number,
+   hostPid: number,
+ ): Promise<EscalationOutcome> {
++  return startEscalation(handle, pgid, hostPid);
++}
++
++async function startEscalation(handle: PtyHostHandle, pgid: number, hostPid: number, commandStart?: number): Promise<EscalationOutcome> {
+   const rec = escalationRecordFor(handle);
+ 
+   // ---- Phase dispatch (requirements 2, 5, 4) ----
+@@ -905,7 +984,7 @@ export async function escalateWedgedHost(
+   }
+ 
+   // Requirement 4: delegated re-entry runs the host-bypassing ladder.
+-  const bypass = rec.phase === "delegated";
++  const bypass = commandStart !== undefined || rec.phase === "delegated";
+ 
+   // Safeguard: install the in-flight phase AND the shared promise BEFORE any
+   // asynchronous suspension, so a concurrent caller arriving in the same
+@@ -913,7 +992,7 @@ export async function escalateWedgedHost(
+   // execution. `runOwnedEscalation` is invoked (not awaited) here; the first
+   // await inside it happens strictly after this synchronous block completes.
+   rec.phase = bypass ? "in_flight_bypass" : "in_flight_initial";
+-  const execution = runOwnedEscalation(handle, pgid, hostPid, bypass, rec);
++  const execution = runOwnedEscalation(handle, pgid, hostPid, bypass, rec, commandStart);
+   rec.inFlight = execution;
+   return execution;
+ }
+@@ -935,6 +1014,7 @@ async function runOwnedEscalation(
+   hostPid: number,
+   bypass: boolean,
+   rec: EscalationRecord,
++  commandStart?: number,
+ ): Promise<EscalationOutcome> {
+   const lifecycle = lifecycles.get(handle);
+   const observedMs: Record<string, number> = {};
+@@ -963,7 +1043,10 @@ async function runOwnedEscalation(
+   // This is the stale-ack-poisoning fix: with no record registered, a
+   // trailing ack produced by the FIRST call's terminate has nothing to
+   // settle and cannot fabricate an S1 for this attempt.
+-  if (!bypass) pendingAcks.set(handle, pending);
++  if (!bypass) {
++    pendingAcks.get(handle)?.settle(false);
++    pendingAcks.set(handle, pending);
++  }
+ 
+   // Requirement 3: clear on EVERY terminal path this call owns. Idempotent.
+   const clearPendingAck = (): void => {
+@@ -1012,12 +1095,12 @@ async function runOwnedEscalation(
+   // false claim. It is the attempt/bypass START time: the instant the
+   // delegated re-entry began. It anchors this attempt's observed durations
+   // only; the original command's budget was consumed by the initial call.
+-  const tAttempt = performance.now();
++  const tAttempt = commandStart ?? performance.now();
+   if (!bypass) {
+     handle.send({ kind: "terminate" });
+     observedMs.terminateSentMs = performance.now() - tAttempt;
+   } else {
+-    observedMs.bypassStartedMs = 0;
++    observedMs.bypassStartedMs = commandStart === undefined ? 0 : performance.now() - tAttempt;
+   }
+ 
+   // ---- Acknowledgement window (C7.3 step 2) ----
+diff --git a/packages/supervisor/src/build.ts b/packages/supervisor/src/build.ts
+index e216d06..94a8d5b 100644
+--- a/packages/supervisor/src/build.ts
++++ b/packages/supervisor/src/build.ts
+@@ -24,12 +24,15 @@ import { invalidateToken, issueInitialToken } from "../../broker/src/fencing";
+ import { HOST_DEADLINES_MS, terminateChildGroup } from "../../pty-host/src/signals";
+ import {
+   createInProcessBrokerClient,
++  createLiveFounderClient,
++  type HostBridge,
+   type InProcessBrokerClient,
+   type StampedBrokerSnapshot,
+ } from "../../broker/src/in-process-client";
+ import {
+   spawnPtyHost,
+   escalateWedgedHost,
++  sendAcknowledgedCommand,
+   type HostLaunchDescriptor,
+   type PtyHostHandle,
+ } from "../../broker/src/pty-host-supervisor";
+@@ -105,6 +108,7 @@ export interface LiveReattestationInput {
+   readonly sessionId: string;
+   readonly signal: AbortSignal;
+   readonly reportFailure: (reason: string) => void;
++  readonly onOutput?: (bytes: Uint8Array) => Promise<void>;
+   readonly executionId: string;
+   readonly model: string;
+   readonly provider: string;
+@@ -121,6 +125,7 @@ export type LiveReattestationResult =
+       readonly provider: string;
+       readonly model: string;
+       readonly cliVersion?: string;
++      readonly sendEncodedInput?: (bytes: Uint8Array) => boolean;
+     }
+   | {
+       readonly ok: false;
+@@ -617,6 +622,8 @@ async function executeBuild(
+   let currentBroker: RuntimeBroker | null = null;
+   let brokerHandle: RuntimeBroker | null = null;
+   let client: InProcessBrokerClient | null = null;
++  const bridges = new Map<string, HostBridge>();
++  let deliver: ReturnType<typeof createLiveFounderClient>["deliver"] | undefined;
+   const preparedDescriptors: HostLaunchDescriptor[] = [];
+   const lifelines: BuildLifelineResource[] = [];
+   const hosts: BuildHostResource[] = [];
+@@ -867,7 +874,13 @@ async function executeBuild(
+           if (brokerHandle === null) {
+             return failAt(step, "client_failed");
+           }
+-          client = createInProcessBrokerClient(brokerHandle, { kind: "founder_tui" });
++          if (live) {
++            const founder = createLiveFounderClient(brokerHandle, bridges);
++            client = founder.client;
++            deliver = founder.deliver;
++          } else {
++            client = createInProcessBrokerClient(brokerHandle, { kind: "founder_tui" });
++          }
+           resources.push(Object.freeze({ step: "client", client }));
+           break;
+         }
+@@ -1015,12 +1028,18 @@ async function executeBuild(
+               return refuse(execution.surface === "madv-surface" ? "identity_unavailable" : "attestation_missing");
+             }
+             const notifyFailure = (reason: string) => reportFailure(host.executionId, execution.surface, reason);
++            const deliverFrame = deliver;
++            let nextOutputSeq = 1;
++            const output = deliverFrame && ((bytes: Uint8Array) => deliverFrame({
++              sessionId, executionId: host.executionId, outputSeq: nextOutputSeq++, bytes,
++            }));
+             let verdict: LiveReattestationResult;
+             try {
+               if (signal.aborted) return refuse("attestation_cancelled");
+               attesting = true;
+               verdict = await attester({
+                 sessionId, signal, reportFailure: notifyFailure,
++                ...(output && { onOutput: output }),
+                 executionId: envelopeExecution.execution_id,
+                 model: envelopeExecution.model,
+                 provider: envelopeExecution.provider,
+@@ -1036,6 +1055,20 @@ async function executeBuild(
+             if (verdict.evidenceKind !== "actual_session" ||
+               verdict.provider !== envelopeExecution.provider || verdict.provider !== reg.provider ||
+               verdict.model !== envelopeExecution.model) return refuse("identity_mismatch");
++            if (live) {
++              const pgid = child.pgid;
++              const sendEncoded = verdict.sendEncodedInput;
++              bridges.set(host.executionId, command => {
++                const kind = command.kind === "pty_input" ? "input" : "resize";
++                return sendAcknowledgedCommand(host.handle, pgid, kind, () => {
++                  if (signal.aborted) return false;
++                  if (command.kind === "pty_resize") host.handle.send({ kind: "resize", cols: command.cols, rows: command.rows });
++                  else if (execution.surface === "madv-surface") return sendEncoded?.(command.bytes) ?? false;
++                  else host.handle.send({ kind: "input", bytes: command.bytes });
++                  return true;
++                }, () => notifyFailure("host_exited"));
++              });
++            }
+             const record: LiveReattestationRecord = Object.freeze({
+               executionId: envelopeExecution.execution_id,
+               surface: execution.surface,
+diff --git a/scripts/phase3b/m3-evidence.tsx b/scripts/phase3b/m3-evidence.tsx
+new file mode 100644
+index 0000000..3a84df1
+--- /dev/null
++++ b/scripts/phase3b/m3-evidence.tsx
+@@ -0,0 +1,76 @@
++import { realpathSync, writeFileSync } from "node:fs";
++import { join } from "node:path";
++import { PaneRetention } from "../../apps/madbridge/src/tui/live/retention";
++import { transportSurfaces, orderedTranscript } from "../../test/phase3b/transport";
++import { dispatchTranscript } from "../../test/phase3b/dispatch-observation";
++import { usableInput } from "../../test/phase3b/usable-input";
++import { endedObservation } from "../../test/phase3b/ended-observation";
++import { malformedObservation } from "../../test/phase3b/malformed-observation";
++
++function retentionTranscript() {
++  const bytes = (s: string) => new TextEncoder().encode(s);
++  const counts = (buffer: PaneRetention) => ({
++    receivedFrames: buffer.receivedFrames, receivedBytes: buffer.receivedBytes,
++    retainedFrames: buffer.retainedFrames, retainedBytes: buffer.retainedBytes,
++  });
++  const lines = new PaneRetention();
++  lines.append(bytes("old\r"));
++  lines.append(bytes("\n"));
++  for (let i = 0; i < 9_999; i++) lines.append(bytes("x\n"));
++  const atLines = counts(lines);
++  lines.append(bytes("tail"));
++  const size = new PaneRetention();
++  size.append(bytes("OLD"));
++  const block = new Uint8Array(2_097_149).fill(97);
++  size.append(block);
++  const atBytes = counts(size);
++  size.append(bytes("end"));
++  return [
++    { limit: "lines", atLimit: atLines, after: counts(lines), start: lines.text().slice(0, 2), end: lines.text().slice(-4) },
++    { limit: "bytes", atLimit: atBytes, after: counts(size), start: size.text().slice(0, 3), end: size.text().slice(-3) },
++  ];
++}
++
++async function main(destination: string) {
++  const root = realpathSync(destination);
++  const transcripts = new Map<string, unknown[]>();
++  function record(name: string, observation: unknown) {
++    const rows = transcripts.get(name) ?? [];
++    rows.push(observation);
++    transcripts.set(name, rows);
++  }
++  for (const surface of transportSurfaces) {
++    record("ordered-frames", { surface, frames: await orderedTranscript(surface) });
++    record("transport", await dispatchTranscript(surface));
++    for (const nonwriter of [false, true]) {
++      const result = await usableInput(surface, nonwriter);
++      const expected = nonwriter ? "UNAUTHORIZED" : '"offlineReply":"proof"';
++      if (!result.render.includes(expected)) throw new Error("missing offline presentation");
++      record("usable-input", result);
++    }
++    for (const fault of ["payload", "unknown"] as const) {
++      const result = await malformedObservation(surface, fault);
++      if (!result.decodeError || result.interruptions.join() !== "identity_mismatch") throw new Error("missing decoder interruption");
++      record("malformed-frames", result);
++    }
++  }
++  for (const counts of retentionTranscript()) record("retention", counts);
++  for (const end of ["failed read", "closed client"] as const) {
++    const { reads, projection, rows } = await endedObservation(end);
++    record("ended-streams", { end, reads, connected: projection.connected,
++      retained: { writer: projection.activeWriter, ownership: projection.ownershipState, token: projection.fencingToken },
++      readers: Object.fromEntries(Object.entries(rows).map(([reader, text]) =>
++        [reader, text.split("\n").find(row => row.includes("STREAM ENDED"))?.trim() ?? ""])) });
++  }
++  for (const [name, rows] of transcripts) {
++    const filename = name + ".jsonl";
++    writeFileSync(join(root, filename), rows.map(row => JSON.stringify(row)).join("\n") + "\n", { flag: "wx", mode: 0o600 });
++    console.log(filename, rows.length);
++  }
++}
++
++if (import.meta.main) {
++  const destination = process.argv[2];
++  if (!destination) throw new Error("expected an offline evidence directory");
++  await main(destination);
++}
+diff --git a/test/phase3a/harness-separation.test.ts b/test/phase3a/harness-separation.test.ts
+index 6079ae7..5468f39 100644
+--- a/test/phase3a/harness-separation.test.ts
++++ b/test/phase3a/harness-separation.test.ts
+@@ -27,7 +27,7 @@ const EXCEPTIONS: Readonly<Record<string, { sha256: string; call?: string }>> =
+     sha256: "9210012a505848a7379ab7b9cf9d840f33197de58f85b23c359653760479c603", call: "PAYLOAD_SHAPE[knownType](payload)",
+   },
+   "packages/supervisor/src/build.ts": {
+-    sha256: "0b329d97e88a13bd58902fe7dd1afe971d52c61bbf310862230465fd1fdd3553", call: "host.handle.facts()[Symbol.asyncIterator]()",
++    sha256: "f728e1e37b0e9907f21875b2396eb2e1025718295d9bcfed7b61216ba1271854", call: "host.handle.facts()[Symbol.asyncIterator]()",
+   },
+ };
+ 
+diff --git a/test/phase3b/absence.test.tsx b/test/phase3b/absence.test.tsx
+index 0e99a5a..72a8c00 100644
+--- a/test/phase3b/absence.test.tsx
++++ b/test/phase3b/absence.test.tsx
+@@ -7,7 +7,7 @@ import { DockStrip } from "../../apps/madbridge/src/tui/components/DockStrip";
+ import { EventLog } from "../../apps/madbridge/src/tui/components/EventLog";
+ import { IncidentBand } from "../../apps/madbridge/src/tui/components/IncidentBand";
+ import { StatusBar } from "../../apps/madbridge/src/tui/components/StatusBar";
+-import { AntigravityPane } from "../../apps/madbridge/src/tui/panes/AntigravityPane";
++import { MadvSurfacePane } from "../../apps/madbridge/src/tui/panes/AntigravityPane";
+ import { ClaudePane } from "../../apps/madbridge/src/tui/panes/ClaudePane";
+ import { GovernancePane } from "../../apps/madbridge/src/tui/panes/GovernancePane";
+ import type { BrokerSnapshot } from "../../apps/madbridge/src/tui/types";
+@@ -52,8 +52,8 @@ test("a null connection is unknown in bars, panes and docks", async () => {
+     expect(screen).not.toMatch(/\b(CONNECTED|CONN|NOCONN)\b/);
+   }
+   expect(await frame(<GovernancePane active state={state} />)).toContain("GOVERNANCE | UNKNOWN");
+-  for (const surface of ["claude-code", "antigravity"] as const) {
+-    const Pane = surface === "claude-code" ? ClaudePane : AntigravityPane;
++  for (const surface of ["claude-code", "madv-surface"] as const) {
++    const Pane = surface === "claude-code" ? ClaudePane : MadvSurfacePane;
+     const pane = await frame(<Pane active state={state} ptyOutput="" />);
+     const dock = await frame(<DockStrip surface={surface} state={state} ptyOutput="" />);
+     expect(pane).toContain("FOCUSED | UNKNOWN");
+@@ -65,26 +65,26 @@ test("a null connection is unknown in bars, panes and docks", async () => {
+ test("absent execution and ownership facts stay absent and queue depth stays hidden", async () => {
+   const governance = await frame(<GovernancePane active state={absent} />);
+   expect(governance).toContain("Claude: —");
+-  expect(governance).toContain("Antigravity: —");
++  expect(governance).toContain("madv-surface: —");
+   expect(governance).toContain("Ownership: UNKNOWN");
+   const status = await frame(<StatusBar state={absent} connected focus="claude" />);
+   expect(status).toContain("writer UNKNOWN");
+   const app = (state: BrokerSnapshot) => <App subscribe={listen => { listen(state); return () => {}; }}
+     catalogLoader={async () => ({ status: "ok", models: [] })} />;
+   expect(await frame(app(absent))).toBe(await frame(app({ ...absent, queueDepth: 81937 })));
+-  for (const surface of ["claude-code", "antigravity"] as const) {
+-    const Pane = surface === "claude-code" ? ClaudePane : AntigravityPane;
++  for (const surface of ["claude-code", "madv-surface"] as const) {
++    const Pane = surface === "claude-code" ? ClaudePane : MadvSurfacePane;
+     expect(await frame(<Pane active state={absent} ptyOutput="" />)).toContain("UNKNOWN | UNKNOWN");
+     expect(await frame(<DockStrip surface={surface} state={absent} ptyOutput="" />)).toContain("UNKNOWN | UNKNOWN");
+   }
+ });
+ 
+ test("a null token stays absent in writer, incident and session_open frames", async () => {
+-  for (const surface of ["claude-code", "antigravity"] as const) {
++  for (const surface of ["claude-code", "madv-surface"] as const) {
+     const state: BrokerSnapshot = { ...absent, ownershipState: "owned", activeWriter: "writer",
+       executions: [{ execution_id: "writer", surface: parseSurfaceId(surface), role: "builder",
+         model: "synthetic", provider: "synthetic", independence_domain: "synthetic", effort: "low" }] };
+-    const Pane = surface === "claude-code" ? ClaudePane : AntigravityPane;
++    const Pane = surface === "claude-code" ? ClaudePane : MadvSurfacePane;
+     expect(await frame(<Pane active state={state} ptyOutput="" />)).toContain("WRITER token —");
+     expect(await frame(<DockStrip surface={surface} state={state} ptyOutput="" />)).toContain("WRITER token —");
+     expect(await frame(<StatusBar state={state} connected focus="claude" />)).toContain("writer (token —)");
+diff --git a/test/phase3b/dispatch-observation.ts b/test/phase3b/dispatch-observation.ts
+new file mode 100644
+index 0000000..9add05b
+--- /dev/null
++++ b/test/phase3b/dispatch-observation.ts
+@@ -0,0 +1,51 @@
++import type { BrokerCommand } from "@madventures/broker";
++import { encodeUserInput as claudeInput } from "../../packages/adapter-claude-code/src/live";
++import { encodeUserInput as madvInput } from "../../packages/adapter-madv-surface/src/index";
++import { pendingAckRegisteredForTest } from "../../packages/broker/src/pty-host-supervisor";
++import { observed, openTransport } from "./transport";
++import type { Surface } from "./end-stand-in";
++
++export const encodedLine = (surface: Surface, line: string) =>
++  new TextEncoder().encode((surface === "claude-code" ? claudeInput : madvInput)(line));
++
++export async function dispatchTranscript(surface: Surface) {
++  const t = await openTransport(surface);
++  const host = t.build.state.hosts.find(h => h.executionId === t.writer.execution_id)!;
++  const wire = host.handle.send;
++  const frames: { kind: string; pending: boolean; bytes?: number[]; cols?: number; rows?: number }[] = [];
++  host.handle.send = frame => {
++    if (frame.kind === "input" || frame.kind === "resize") {
++      frames.push({ kind: frame.kind, pending: pendingAckRegisteredForTest(host.handle),
++        ...(frame.kind === "resize" ? { cols: frame.cols, rows: frame.rows } : { bytes: [...frame.bytes] }) });
++    }
++    wire(frame);
++  };
++  try {
++    const snapshot = await t.client.getSnapshot();
++    const base = { sessionId: t.sessionId, executionId: t.writer.execution_id, fencingToken: snapshot.fencingToken! };
++    const bytes = encodedLine(surface, "offline transport");
++    const commands: BrokerCommand[] = [
++      { ...base, kind: "pty_resize", commandId: "offline-resize", cols: 73, rows: 19 },
++      { ...base, kind: "pty_input", commandId: "offline-input", bytes },
++    ];
++    const outcomes = [];
++    for (const command of commands) {
++      process.kill(host.hostPid, "SIGSTOP");
++      let settled = false;
++      let pending: Promise<Awaited<ReturnType<typeof t.client.request>>>;
++      let registered: boolean, answeredWhileStopped: boolean;
++      try {
++        pending = t.client.request(command).then(answer => { settled = true; return answer; });
++        await Bun.sleep(20);
++        registered = pendingAckRegisteredForTest(host.handle);
++        answeredWhileStopped = settled;
++      } finally { process.kill(host.hostPid, "SIGCONT"); }
++      outcomes.push({ kind: command.kind, registered, answeredWhileStopped, acceptedAfterResume: (await pending).ok });
++    }
++    await observed(() => t.inputs(surface).length === 1);
++    return { surface, frames, outcomes, child: t.inputs(surface)[0]!, expected: [...bytes] };
++  } finally {
++    host.handle.send = wire;
++    await t.close();
++  }
++}
+diff --git a/test/phase3b/dispatch.test.ts b/test/phase3b/dispatch.test.ts
+new file mode 100644
+index 0000000..734b214
+--- /dev/null
++++ b/test/phase3b/dispatch.test.ts
+@@ -0,0 +1,127 @@
++import { expect, spyOn, test } from "bun:test";
++import { closeStdinCallCountForTest } from "../../packages/broker/src/pty-host-supervisor";
++import { dispatchTranscript, encodedLine } from "./dispatch-observation";
++import { observed, openTransport, transportSurfaces } from "./transport";
++import { originalBuildInput } from "./unbridged";
++
++test("both host commands reach the child and wait for the matching ack", async () => {
++  for (const surface of transportSurfaces) {
++    const result = await dispatchTranscript(surface);
++    expect(result.frames).toEqual([
++      { kind: "resize", pending: true, cols: 73, rows: 19 },
++      { kind: "input", pending: true, bytes: result.expected },
++    ]);
++    expect(result.child).toEqual({ bytes: result.expected, cols: 73, rows: 19 });
++    expect(result.outcomes).toEqual((["pty_resize", "pty_input"] as const).map(kind => ({
++      kind, registered: true, answeredWhileStopped: false, acceptedAfterResume: true,
++    })));
++  }
++}, 20_000);
++
++function exists(pid: number): boolean {
++  try { process.kill(pid, 0); return true; }
++  catch (error) { if ((error as NodeJS.ErrnoException).code === "ESRCH") return false; throw error; }
++}
++
++test("a missed acknowledgement contains the stopped host and interrupts the session", async () => {
++  for (const surface of transportSurfaces) {
++    for (const kind of ["pty_resize", "pty_input"] as const) {
++      const t = await openTransport(surface);
++      const host = t.build.state.hosts.find(h => h.executionId === t.writer.execution_id)!;
++      const child = t.build.state.children.find(c => c.executionId === host.executionId)!;
++      const members = t.build.state.children.flatMap(c => [c.hostPid, c.childPid!, -c.pgid!]);
++      const kill = process.kill.bind(process);
++      const kills: { pid: number; at: number }[] = [];
++      const watch = spyOn(process, "kill").mockImplementation((pid, signal) => {
++        if (signal === "SIGKILL") kills.push({ pid, at: performance.now() });
++        return kill(pid, signal);
++      });
++      try {
++        const snapshot = await t.client.getSnapshot();
++        const base = { sessionId: t.sessionId, commandId: "offline-wedge", fencingToken: snapshot.fencingToken!,
++          executionId: host.executionId };
++        const command = kind === "pty_input" ? { ...base, kind, bytes: encodedLine(surface, "offline wedge") }
++          : { ...base, kind, cols: 61, rows: 17 };
++        kill(host.hostPid, "SIGSTOP");
++        const started = performance.now();
++        const result = await t.client.request(command);
++        expect(result).toMatchObject({ ok: false, error: "host_unavailable" });
++        expect(closeStdinCallCountForTest(host.handle)).toBeGreaterThan(0);
++        for (const pid of [-child.pgid!, host.hostPid]) {
++          const sent = kills.find(k => k.pid === pid);
++          expect(sent).toBeDefined();
++          expect(sent!.at - started).toBeGreaterThanOrEqual(249);
++          expect(sent!.at - started).toBeLessThanOrEqual(500);
++        }
++        await observed(() => !members.some(exists));
++        expect(performance.now() - started).toBeLessThanOrEqual(5000);
++        const rows = t.build.state.ledger!.readAfter(0).map(row => JSON.parse(row.event_json));
++        expect(rows.filter(e => e.event_type === "session_interrupted").map(e => e.reason_code)).toEqual(["pty_host_failure"]);
++      } finally {
++        watch.mockRestore();
++        // In a deliberately broken run the stopped host can still need resuming.
++        if (!kills.some(k => k.pid === host.hostPid) && exists(host.hostPid)) kill(host.hostPid, "SIGCONT");
++        await t.close();
++      }
++    }
++  }
++}, 35_000);
++
++test("execution clients and the original build have no host bridge", async () => {
++  for (const surface of transportSurfaces) {
++    const t = await openTransport(surface);
++    try {
++      const snapshot = await t.client.getSnapshot();
++      const host = t.build.state.hosts.find(h => h.executionId === t.writer.execution_id)!;
++      const writes = spyOn(host.handle, "send");
++      try {
++        for (const adapter of t.build.state.adapters) {
++          const result = await adapter.client.request({ kind: "pty_input", commandId: "offline-execution",
++            sessionId: t.sessionId, executionId: host.executionId, fencingToken: snapshot.fencingToken!,
++            bytes: encodedLine(surface, "offline execution") });
++          expect(result.ok).toBe(true);
++        }
++        expect(writes.mock.calls).toHaveLength(0);
++        expect(t.inputs(surface)).toEqual([]);
++        host.handle.closeStdin();
++        const unavailable = await t.client.request({ kind: "pty_resize", commandId: "offline-host-closed",
++          sessionId: t.sessionId, executionId: host.executionId, fencingToken: snapshot.fencingToken!, cols: 51, rows: 16 });
++        expect(unavailable).toMatchObject({ ok: false, error: "host_unavailable" });
++        expect(writes.mock.calls).toHaveLength(0);
++      } finally { writes.mockRestore(); }
++    } finally { await t.close(); }
++  }
++  const original = await originalBuildInput();
++  expect(original.result.ok).toBe(true);
++  expect(original.writes).toBe(0);
++}, 25_000);
++
++test("the madv byte sender begins a checked request and refuses a closed monitor", async () => {
++  const t = await openTransport("madv-surface");
++  const bytes = encodedLine("madv-surface", "offline checked request");
++  try {
++    const snapshot = await t.client.getSnapshot();
++    const receive = (async () => {
++      let text = "";
++      for await (const frame of t.client.output(t.writer.execution_id)) {
++        text += new TextDecoder().decode(frame.bytes);
++        if (text.includes('"type":"result"')) return text;
++      }
++      throw new Error("offline result missing");
++    })();
++    const answer = await t.client.request({ kind: "pty_input", commandId: "offline-check", sessionId: t.sessionId,
++      executionId: t.writer.execution_id, fencingToken: snapshot.fencingToken!, bytes });
++    expect(answer.ok).toBe(true);
++    expect(await receive).toContain('"offlineReply":"offline checked request"');
++    expect(t.failures).toEqual([]);
++    expect((await t.client.getSnapshot()).phase).toBe("active");
++    const mismatch = await t.client.request({ kind: "pty_input", commandId: "offline-mismatch", sessionId: t.sessionId,
++      executionId: t.writer.execution_id, fencingToken: snapshot.fencingToken!,
++      bytes: encodedLine("madv-surface", "offline mismatched evidence") });
++    expect(mismatch.ok).toBe(true);
++    await observed(() => t.failures.includes("madv-surface identity_mismatch"));
++    expect(t.madvSender!(bytes)).toBe(false);
++  } finally { await t.close(); }
++  expect(t.madvSender).toBeFunction();
++  expect(t.madvSender!(bytes)).toBe(false);
++}, 12_000);
+diff --git a/test/phase3b/ended-observation.tsx b/test/phase3b/ended-observation.tsx
+new file mode 100644
+index 0000000..ebd6c2d
+--- /dev/null
++++ b/test/phase3b/ended-observation.tsx
+@@ -0,0 +1,59 @@
++import { testRender } from "@opentui/react/test-utils";
++import { act, type ReactNode } from "react";
++import type { BrokerClient, BrokerSnapshot as Source } from "@madventures/broker";
++import { subscribeToClient } from "../../apps/madbridge/src/tui/live/subscribe";
++import { StatusBar } from "../../apps/madbridge/src/tui/components/StatusBar";
++import { DockStrip } from "../../apps/madbridge/src/tui/components/DockStrip";
++import { ClaudePane } from "../../apps/madbridge/src/tui/panes/ClaudePane";
++import { MadvSurfacePane } from "../../apps/madbridge/src/tui/panes/AntigravityPane";
++import { GovernancePane } from "../../apps/madbridge/src/tui/panes/GovernancePane";
++import type { BrokerSnapshot } from "../../apps/madbridge/src/tui/types";
++import { paneSnapshot } from "./pane-client";
++import { fingerprint } from "./snapshot-input";
++
++export function ownedSource(): Source {
++  return paneSnapshot({ ownershipState: { kind: "owned", executionId: "builder",
++    worktreeId: "offline", fencingToken: 17, repositoryFingerprint: fingerprint } });
++}
++
++export function snapshotReader(read: () => Promise<Source>): BrokerClient {
++  function unused(): never { throw new Error("unused synthetic operation"); }
++  return { getSnapshot: read, async *output() {}, async *snapshots() {},
++    close: unused, publish: unused, request: unused };
++}
++
++export async function rendered(node: ReactNode, width = 180): Promise<string> {
++  const view = await testRender(node, { width, height: 40 });
++  try {
++    await view.flush();
++    return view.captureCharFrame().split("\n").map(row => row.trimEnd()).filter(Boolean).join("\n");
++  } finally { await act(async () => { view.renderer.destroy(); }); }
++}
++
++export async function authorityRows(state: BrokerSnapshot) {
++  const status = (width: number) => rendered(<StatusBar state={state} connected={state.connected} focus="claude" />, width);
++  return {
++    status: await status(180), compact: await status(60),
++    governance: await rendered(<GovernancePane active state={state} />),
++    claude: await rendered(<ClaudePane active state={state} ptyOutput="" />),
++    madv: await rendered(<MadvSurfacePane active state={state} ptyOutput="" />),
++    claudeDock: await rendered(<DockStrip surface="claude-code" state={state} ptyOutput="" />),
++    madvDock: await rendered(<DockStrip surface="madv-surface" state={state} ptyOutput="" />),
++  };
++}
++
++export async function endedObservation(end: "failed read" | "closed client") {
++  const first = ownedSource();
++  let reads = 0;
++  const source = snapshotReader(async () => {
++    if (++reads === 1) return first;
++    if (end === "failed read") throw new Error("synthetic refusal");
++    return { ...first, connected: false, phase: "closed" };
++  });
++  const ended = Promise.withResolvers<BrokerSnapshot>();
++  const off = subscribeToClient(source)(state => { if (state.connected === false) ended.resolve(state); });
++  try {
++    const projection = await ended.promise;
++    return { end, reads, projection, rows: await authorityRows(projection) };
++  } finally { off(); }
++}
+diff --git a/test/phase3b/ended-stream.test.tsx b/test/phase3b/ended-stream.test.tsx
+new file mode 100644
+index 0000000..6d02e77
+--- /dev/null
++++ b/test/phase3b/ended-stream.test.tsx
+@@ -0,0 +1,58 @@
++import { expect, test } from "bun:test";
++import { IncidentBand } from "../../apps/madbridge/src/tui/components/IncidentBand";
++import { EventLog } from "../../apps/madbridge/src/tui/components/EventLog";
++import { clientSnapshotToProjection } from "../../apps/madbridge/src/tui/live/projection";
++import { authorityRows, endedObservation, ownedSource, rendered } from "./ended-observation";
++
++test("failed and closed streams replace current authority in every reader", async () => {
++  for (const end of ["failed read", "closed client"] as const) {
++    const { reads, projection, rows } = await endedObservation(end);
++    expect(reads).toBe(2);
++    expect([projection.connected, projection.ownershipState, projection.activeWriter, projection.fencingToken])
++      .toEqual([false, "owned", "builder", 17]);
++    expect(rows.status).toContain("writer STREAM ENDED");
++    expect(rows.compact).toContain("W:STREAM ENDED");
++    expect(rows.governance).toContain("Writer / Token / Ownership: STREAM ENDED");
++    for (const pane of [rows.claude, rows.madv]) expect(pane).toContain("FOCUSED | STREAM ENDED");
++    for (const dock of [rows.claudeDock, rows.madvDock]) expect(dock).toContain("docked | STREAM ENDED");
++    for (const row of Object.values(rows)) expect(row).not.toMatch(/WRITER |writer builder|W:builder|Ownership: owned|#17|Token: 17/);
++  }
++  const state = clientSnapshotToProjection(ownedSource());
++  const live = await authorityRows(state);
++  expect(live.status).toContain("writer builder #17");
++  expect(live.compact).toContain("W:builder#17");
++  expect(live.governance).toContain("Writer: builder | Token: 17 | Ownership: owned");
++  for (const row of [live.claude, live.claudeDock]) expect(row).toContain("WRITER tok#17");
++  for (const row of [live.madv, live.madvDock]) expect(row).not.toMatch(/WRITER|STREAM ENDED/);
++  const unknown = await authorityRows({ ...state, connected: null });
++  expect(unknown.status).toContain("UNKNOWN | session active");
++  expect(unknown.compact).toContain("UNKNOWN");
++  expect(unknown.governance).toContain("GOVERNANCE | UNKNOWN");
++  for (const row of [unknown.claude, unknown.madv, unknown.claudeDock, unknown.madvDock]) {
++    expect(row).toContain(" | UNKNOWN");
++    expect(row).not.toMatch(/STREAM ENDED|WRITER/);
++  }
++});
++
++test("transfer-requested and sender-released show a null token as absence", async () => {
++  const base = clientSnapshotToProjection(ownedSource());
++  for (const [kind, word] of [["transfer-requested", "transfer-req"], ["sender-released", "released"]] as const) {
++    for (const writer of ["builder", "reviewer"]) {
++      const state = { ...base, ownershipState: kind, activeWriter: writer, fencingToken: null };
++      const rows = await authorityRows(state);
++      expect(rows.status).toContain("writer " + word + " (token —)");
++      expect(rows.compact).toContain("T:—");
++      expect(rows.governance).toContain("Token: — | Ownership: " + kind);
++      const fields = writer === "builder" ? [rows.claude, rows.claudeDock] : [rows.madv, rows.madvDock];
++      for (const field of fields) expect(field).toContain("WRITER token —");
++      const incident = await rendered(<IncidentBand state={{ ...state, sessionState: "interrupted" }} />);
++      expect(incident).toContain("token —");
++      const events = await rendered(<EventLog entries={[{ seq: 1, type: kind, actor: writer,
++        fencingToken: null, hash: "offline", timestamp: "synthetic" }]} />);
++      expect(events).toContain("tok:—");
++      for (const row of [...Object.values(rows), incident, events]) {
++        expect(row).not.toMatch(/(?:tok#|tok:|Token: |WRITER tok#|token )\d|(?:transfer-req|released)\s*#\d/);
++      }
++    }
++  }
++});
+diff --git a/test/phase3b/input-view.tsx b/test/phase3b/input-view.tsx
+new file mode 100644
+index 0000000..e72a39d
+--- /dev/null
++++ b/test/phase3b/input-view.tsx
+@@ -0,0 +1,19 @@
++import { act } from "react";
++import { testRender } from "@opentui/react/test-utils";
++import { App, type PaneClient } from "../../apps/madbridge/src/tui/App";
++import { offlineCatalog } from "./pane-client";
++
++export async function inputView(client: PaneClient) {
++  const view = await testRender(<App client={client} catalogLoader={offlineCatalog} />, { width: 184, height: 60 });
++  async function key(name: string, meta = false) {
++    await act(async () => { view.mockInput.pressKey(name, { meta }); });
++    await view.flush();
++  }
++  async function line(text: string) {
++    for (const letter of text) await key(letter);
++    await key("RETURN");
++  }
++  async function close() { await act(async () => { view.renderer.destroy(); }); }
++  await view.flush();
++  return { ...view, key, line, close };
++}
+diff --git a/test/phase3b/line-input.test.tsx b/test/phase3b/line-input.test.tsx
+new file mode 100644
+index 0000000..11263bd
+--- /dev/null
++++ b/test/phase3b/line-input.test.tsx
+@@ -0,0 +1,103 @@
++import { expect, test } from "bun:test";
++import { act } from "react";
++import { BROKER_ERROR_CODES } from "../../packages/broker/src/client";
++import { encodedLine } from "./dispatch-observation";
++import { inputView } from "./input-view";
++import { paneClient, paneSnapshot } from "./pane-client";
++
++test("only Enter submits one encoded focused line and other focus sends nothing", async () => {
++  const f = paneClient();
++  const v = await inputView(f.client);
++  const inputs = () => f.commands.filter(c => c.kind === "pty_input");
++  try {
++    await v.key("a");
++    await v.key("x");
++    await v.key("BACKSPACE");
++    expect(inputs()).toHaveLength(0);
++    await v.key("4", true);
++    await v.key("b");
++    expect(inputs()).toHaveLength(0);
++    await v.key("RETURN");
++    await v.key("RETURN");
++    await v.key("1", true);
++    await act(async () => { f.setSnapshot(paneSnapshot({ fencingToken: 39 })); });
++    await v.key("c");
++    await v.key("RETURN");
++    await v.key("RETURN");
++    for (const seat of ["3", "5"]) {
++      await v.key(seat, true);
++      await v.line("z");
++    }
++    expect(inputs()).toHaveLength(2);
++    expect(inputs()[0]).toMatchObject({ sessionId: "offline-panes", executionId: "reviewer", fencingToken: 17,
++      bytes: encodedLine("madv-surface", "b") });
++    expect(inputs()[1]).toMatchObject({ sessionId: "offline-panes", executionId: "builder", fencingToken: 39,
++      bytes: encodedLine("claude-code", "ac") });
++  } finally { await v.close(); f.close(); }
++});
++
++test("only the active focused writer resizes at a changed pane size", async () => {
++  for (const writer of ["builder", "reviewer"]) {
++    const f = paneClient(paneSnapshot({ activeWriterExecutionId: writer }));
++    const v = await inputView(f.client);
++    const requests = () => f.commands.filter(c => c.kind === "pty_resize");
++    const focus = writer === "builder" ? "1" : "4";
++    const other = writer === "builder" ? "4" : "1";
++    const dimensions = () => {
++      const node = v.renderer.root.findDescendantById(writer === "builder" ? "claude-output" : "second-output")!;
++      return { cols: node.width, rows: node.height };
++    };
++    const resize = async (cols: number, rows: number) => {
++      await act(async () => { v.resize(cols, rows); });
++      await v.flush();
++    };
++    try {
++      if (writer === "reviewer") expect(requests()).toHaveLength(0);
++      await v.key(focus, true);
++      expect(requests()).toHaveLength(1);
++      expect(requests()[0]).toMatchObject({ ...dimensions(), executionId: writer, sessionId: "offline-panes", fencingToken: 17 });
++      await resize(167, 49);
++      expect(requests()).toHaveLength(2);
++      expect(requests()[1]).toMatchObject(dimensions());
++      await v.key(other, true);
++      await resize(136, 36);
++      await v.key("3", true);
++      await resize(145, 40);
++      await v.key("5", true);
++      await resize(151, 43);
++      expect(requests()).toHaveLength(2);
++      await v.key(focus, true);
++      expect(requests()).toHaveLength(3);
++      expect(requests()[2]).toMatchObject(dimensions());
++      await v.key(other, true);
++      await v.key(focus, true);
++      expect(requests()).toHaveLength(3);
++      expect(requests().every(c => c.executionId === writer)).toBe(true);
++    } finally { await v.close(); f.close(); }
++  }
++});
++
++test("each refusal is shown once without retry and no token sends nothing", async () => {
++  const f = paneClient();
++  let refusal = BROKER_ERROR_CODES[0] as typeof BROKER_ERROR_CODES[number];
++  const original = f.client.request;
++  f.client.request = async command => {
++    const accepted = await original(command);
++    return command.kind === "pty_input" ? { ok: false, commandId: command.commandId, error: refusal, detail: "offline refusal" } : accepted;
++  };
++  const v = await inputView(f.client);
++  try {
++    for (const code of BROKER_ERROR_CODES) {
++      refusal = code;
++      const count = f.commands.length;
++      await v.line("x");
++      expect(v.captureCharFrame()).toContain(code.replaceAll("_", " ").toUpperCase());
++      expect(f.commands.length).toBe(count + 1);
++    }
++    await act(async () => { f.setSnapshot(paneSnapshot({ fencingToken: null })); });
++    const count = f.commands.length;
++    await v.line("x");
++    expect(v.captureCharFrame()).toContain("NO TOKEN");
++    expect(f.commands.length).toBe(count);
++  } finally { await v.close(); f.close(); }
++});
+diff --git a/test/phase3b/m3-separation.test.ts b/test/phase3b/m3-separation.test.ts
+new file mode 100644
+index 0000000..35605e7
+--- /dev/null
++++ b/test/phase3b/m3-separation.test.ts
+@@ -0,0 +1,37 @@
++import { expect, test } from "bun:test";
++import { readdirSync, readFileSync } from "node:fs";
++import { join, relative } from "node:path";
++import ts from "typescript";
++
++const root = join(import.meta.dir, "../..");
++
++function* sources(directory: string): Generator<string> {
++  for (const entry of readdirSync(directory, { withFileTypes: true })) {
++    if (["node_modules", "test", "tests", "dist", ".git"].includes(entry.name)) continue;
++    const file = join(directory, entry.name);
++    if (entry.isDirectory()) yield* sources(file);
++    else if (/\.[cm]?[jt]sx?$/.test(entry.name) && !/\.(test|spec)\./.test(entry.name)) yield file;
++  }
++}
++
++test("production imports no private broker test seam", () => {
++  const offenders: string[] = [];
++  const target = /(?:^|\/)(?:in-process-client|pty-host-supervisor)(?:\.[cm]?[jt]s)?$/;
++  for (const dir of ["apps", "packages"]) {
++    for (const path of sources(join(root, dir))) {
++      const source = readFileSync(path, "utf8");
++      if (!source.includes("in-process-client") && !source.includes("pty-host-supervisor")) continue;
++      const tree = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true);
++      for (const node of tree.statements) {
++        if (!ts.isImportDeclaration(node) && !ts.isExportDeclaration(node)) continue;
++        if (!node.moduleSpecifier || !ts.isStringLiteral(node.moduleSpecifier) || !target.test(node.moduleSpecifier.text)) continue;
++        const bindings = ts.isImportDeclaration(node) ? node.importClause?.namedBindings : node.exportClause;
++        if (!bindings || ts.isNamespaceImport(bindings) || ts.isNamespaceExport(bindings) ||
++            bindings.elements.some(e => /^(unsafeTestOnly)|ForTest$/.test((e.propertyName ?? e.name).text))) {
++          offenders.push(relative(root, path));
++        }
++      }
++    }
++  }
++  expect(offenders).toEqual([]);
++});
+diff --git a/test/phase3b/madv-pane.test.tsx b/test/phase3b/madv-pane.test.tsx
+new file mode 100644
+index 0000000..d99f3cb
+--- /dev/null
++++ b/test/phase3b/madv-pane.test.tsx
+@@ -0,0 +1,20 @@
++import { expect, test } from "bun:test";
++import { inputView } from "./input-view";
++import { paneClient, paneSnapshot } from "./pane-client";
++
++test("Alt+4 focuses the madv-surface execution", async () => {
++  const f = paneClient(paneSnapshot({ activeWriterExecutionId: "reviewer", fencingToken: 37 }));
++  const v = await inputView(f.client);
++  try {
++    const dock = v.captureCharFrame().split("\n").find(row => row.includes("docked"));
++    expect(dock).toContain("MADV-SURFACE");
++    expect(dock).toContain("reviewer-model");
++    expect(dock).toContain("WRITER tok#37");
++    await v.key("4", true);
++    const focused = v.captureCharFrame().split("\n").find(row => row.includes("FOCUSED"));
++    expect(focused).toContain("MADV-SURFACE");
++    expect(focused).toContain("reviewer-model");
++    expect(focused).toContain("WRITER tok#37");
++    expect(v.captureCharFrame().split("\n").find(row => row.includes("docked"))).toContain("CLAUDE CODE");
++  } finally { await v.close(); f.close(); }
++});
+diff --git a/test/phase3b/malformed-host.test.ts b/test/phase3b/malformed-host.test.ts
+new file mode 100644
+index 0000000..045c172
+--- /dev/null
++++ b/test/phase3b/malformed-host.test.ts
+@@ -0,0 +1,19 @@
++import { expect, test } from "bun:test";
++import { malformedObservation } from "./malformed-observation";
++import { transportSurfaces } from "./transport";
++
++test("malformed payloads and unknown tags interrupt each live monitor without client bytes", async () => {
++  for (const surface of transportSurfaces) {
++    for (const fault of ["payload", "unknown"] as const) {
++      const result = await malformedObservation(surface, fault);
++      expect(result.active).toBe("active");
++      expect(result.decodeError).toBe(fault === "payload"
++        ? "MalformedFrameError: ready carries no payload" : "MalformedFrameError: unknown fact tag 255");
++      expect(result.cause).toBe(surface + (surface === "claude-code" ? " attestation_malformed" : " identity_mismatch"));
++      if (surface === "madv-surface") expect(result.parserReason).toBe("malformed_stream");
++      expect(result.interruptions).toEqual(["identity_mismatch"]);
++      expect(result.endPhase).toBe("closed");
++      expect(result.frames).toEqual([[32, 9]]);
++    }
++  }
++}, 30000);
+diff --git a/test/phase3b/malformed-observation.ts b/test/phase3b/malformed-observation.ts
+new file mode 100644
+index 0000000..da81860
+--- /dev/null
++++ b/test/phase3b/malformed-observation.ts
+@@ -0,0 +1,81 @@
++import { readFileSync } from "node:fs";
++import type { BuildResult } from "../../packages/supervisor/src/index";
++import { MalformedFrameError } from "../../packages/broker/src/pty-host-protocol";
++import { unsafeTestOnlyInjectHostOutput } from "../../packages/broker/src/pty-host-supervisor";
++import type { Surface } from "./end-stand-in";
++import { observed, openTransport } from "./transport";
++
++export const malformedFacts = {
++  payload: Uint8Array.of(0, 0, 0, 2, 1, 1),
++  unknown: Uint8Array.of(0, 0, 0, 1, 255),
++};
++
++// After handover reportFailure exposes the cause. Identify the additional
++// private parser reason from the stop call which actually reported it.
++function madvReasonAtCall(): string | null {
++  const source = readFileSync(new URL("../../packages/adapter-madv-surface/src/live.ts", import.meta.url), "utf8").split("\n");
++  for (const site of (new Error().stack ?? "").matchAll(/packages\/adapter-madv-surface\/src\/live\.ts:(\d+):\d+/g)) {
++    const line = source[Number(site[1]) - 1];
++    const match = line?.match(/catch\s*\{\s*stop\("identity_mismatch",\s*"([^"]+)"/);
++    if (match) return match[1]!;
++  }
++  return null;
++}
++
++export async function malformedObservation(surface: Surface, fault: keyof typeof malformedFacts) {
++  const failure: { parserReason: string | null; decodeError: string | null } = { parserReason: null, decodeError: null };
++  const t = await openTransport(surface, (name, cause) => {
++    if (name === "madv-surface" && cause === "identity_mismatch") failure.parserReason = madvReasonAtCall();
++  });
++  const host = t.build.state.hosts.find(h => h.executionId === t.writer.execution_id)!;
++  const frames: number[][] = [];
++  const receiving = (async () => {
++    for await (const frame of t.client.output(t.writer.execution_id)) frames.push([...frame.bytes]);
++  })();
++
++  async function closeAndDrain(build: BuildResult) {
++    if (!build.ok) throw new Error("expected active fixture");
++    const state = build.state;
++    if ((await t.client.getSnapshot()).phase !== "closed") await state.broker!.founderClose("offline-close");
++    try {
++      for (const entry of state.hosts) {
++        try {
++          for await (const _ of entry.handle.facts()) {}
++        } catch (error) {
++          if (entry !== host || !(error instanceof MalformedFrameError)) throw error;
++          failure.decodeError = error.name + ": " + error.message;
++        }
++      }
++      await observed(() => {
++        try { process.kill(host.hostPid, 0); return false; }
++        catch (error) { if ((error as NodeJS.ErrnoException).code === "ESRCH") return true; throw error; }
++      });
++    } finally {
++      for (const adapter of state.adapters) await adapter.disconnect();
++      await t.client.close();
++      await receiving;
++      state.ledger!.close();
++    }
++  }
++
++  let active = "", endPhase = "", cause: string | null = null;
++  let interruptions: string[] = [];
++  try {
++    active = (await t.client.getSnapshot()).phase;
++    t.release(surface, 1, " \t");
++    await observed(() => frames.length > 0);
++    unsafeTestOnlyInjectHostOutput(host.handle, malformedFacts[fault]);
++    // A genuine stand-in output wakes the supervisor's pending stdout read.
++    t.release(surface, 2, "  \t");
++    const deadline = performance.now() + 1700;
++    do {
++      endPhase = (await t.client.getSnapshot()).phase;
++      if (endPhase === "closed") break;
++      await Bun.sleep(5);
++    } while (performance.now() < deadline);
++    cause = t.failures.find(item => item.startsWith(surface + " ")) ?? null;
++    interruptions = t.build.state.ledger!.readAfter(0).map(row => JSON.parse(row.event_json))
++      .filter(row => row.event_type === "session_interrupted").map(row => String(row.reason_code));
++  } finally { await t.close(closeAndDrain); }
++  return { surface, fault, active, endPhase, ...failure, cause, interruptions, frames };
++}
+diff --git a/test/phase3b/pacing-settlement.test.ts b/test/phase3b/pacing-settlement.test.ts
+new file mode 100644
+index 0000000..fd70ed0
+--- /dev/null
++++ b/test/phase3b/pacing-settlement.test.ts
+@@ -0,0 +1,25 @@
++import { expect, spyOn, test } from "bun:test";
++import * as supervisor from "../../packages/supervisor/src/index";
++import { SNAPSHOT_INTERVAL_MS } from "../../packages/supervisor/src/snapshot-timer";
++import { subscribeToClient } from "../../apps/madbridge/src/tui/live/subscribe";
++import { ownedSource, snapshotReader } from "./ended-observation";
++
++test("unsubscribe settles the pending pacing wait before its deadline", async () => {
++  const wait = spyOn(supervisor, "waitForSnapshotTick");
++  const first = Promise.withResolvers<void>();
++  const off = subscribeToClient(snapshotReader(async () => ownedSource()))(() => first.resolve());
++  try {
++    await first.promise;
++    expect(wait).toHaveBeenCalledTimes(1);
++    const pending = wait.mock.results[0]!.value as Promise<void>;
++    let settled = false;
++    void pending.then(() => { settled = true; });
++    await Promise.resolve();
++    expect(settled).toBe(false);
++    const start = performance.now();
++    off();
++    await Promise.resolve();
++    expect(settled).toBe(true);
++    expect(performance.now() - start).toBeLessThan(SNAPSHOT_INTERVAL_MS / 2);
++  } finally { off(); wait.mockRestore(); }
++});
+diff --git a/test/phase3b/pane-client.ts b/test/phase3b/pane-client.ts
+new file mode 100644
+index 0000000..8963629
+--- /dev/null
++++ b/test/phase3b/pane-client.ts
+@@ -0,0 +1,65 @@
++import type { BrokerCommand, BrokerResult, BrokerSnapshot, ExecutionSnapshot, OutputFrame } from "@madventures/broker";
++import { parseSurfaceId } from "@madventures/protocol";
++import type { PaneClient } from "../../apps/madbridge/src/tui/App";
++import { clientSnapshotToProjection } from "../../apps/madbridge/src/tui/live/projection";
++import { sparseSnapshot } from "./snapshot-input";
++
++function execution(id: string, surface: string): ExecutionSnapshot {
++  return {
++    identity: { execution_id: id, surface: parseSurfaceId(surface), role: id === "builder" ? "builder" : "independent-reviewer",
++      model: id + "-model", provider: "offline", independence_domain: id, effort: "high" },
++    state: "ready", hostPid: null, childPid: null, processGroupId: null, executablePath: "", executableSha256: "",
++    exitCode: null, exitSignal: null,
++  };
++}
++
++export function paneSnapshot(overrides: Partial<BrokerSnapshot> = {}): BrokerSnapshot {
++  return { ...sparseSnapshot, sessionId: "offline-panes", connected: true, phase: "active", snapshotSeq: 1,
++    executions: [execution("builder", "claude-code"), execution("reviewer", "madv-surface")],
++    activeWriterExecutionId: "builder", tokenState: "valid", fencingToken: 17, ...overrides };
++}
++
++export function paneClient(snapshot = paneSnapshot()) {
++  type Listener = Parameters<PaneClient["subscribe"]>[0];
++  const listeners = new Set<Listener>();
++  const commands: BrokerCommand[] = [];
++  const readers = new Map<string, (frame: OutputFrame | null) => void>();
++  const sequences = new Map<string, number>();
++  const client: PaneClient = {
++    subscribe(listener) {
++      listeners.add(listener);
++      listener(clientSnapshotToProjection(snapshot));
++      return () => { listeners.delete(listener); };
++    },
++    getSnapshot: async () => snapshot,
++    async *output(id) {
++      while (true) {
++        const frame = await new Promise<OutputFrame | null>(resolve => readers.set(id, resolve));
++        if (!frame) return;
++        yield frame;
++      }
++    },
++    async request(command): Promise<BrokerResult> {
++      commands.push(command);
++      return { ok: true, commandId: command.commandId, acceptedSnapshotSeq: 1 };
++    },
++  };
++  return {
++    client, commands,
++    setSnapshot(next: BrokerSnapshot) {
++      snapshot = next;
++      for (const notify of listeners) notify(clientSnapshotToProjection(next));
++    },
++    emit(id: string, bytes: Uint8Array) {
++      const reader = readers.get(id);
++      if (!reader) throw new Error("offline reader unavailable");
++      readers.delete(id);
++      const outputSeq = (sequences.get(id) ?? 0) + 1;
++      sequences.set(id, outputSeq);
++      reader({ sessionId: snapshot.sessionId, executionId: id, outputSeq, bytes });
++    },
++    close() { for (const reader of readers.values()) reader(null); },
++  };
++}
++
++export const offlineCatalog = async () => ({ status: "ok" as const, models: [] });
+diff --git a/test/phase3b/producer.test.ts b/test/phase3b/producer.test.ts
+new file mode 100644
+index 0000000..710b075
+--- /dev/null
++++ b/test/phase3b/producer.test.ts
+@@ -0,0 +1,26 @@
++import { expect, test } from "bun:test";
++import { unsafeTestOnlyIngestRawOutputFrame } from "../../packages/broker/src/in-process-client";
++import { openTransport, orderedTranscript, transportSurfaces } from "./transport";
++
++test("the live producer delivers contiguous monitor facts for each execution and excludes attestation", async () => {
++  for (const surface of transportSurfaces) {
++    const executionId = surface === "claude-code" ? "builder" : "reviewer";
++    expect(await orderedTranscript(surface)).toEqual([
++      { sessionId: "offline-transport", executionId, outputSeq: 1, bytes: [32, 9] },
++      { sessionId: "offline-transport", executionId, outputSeq: 2, bytes: [32, 32, 9] },
++    ]);
++  }
++}, 20000);
++
++test("a refused output sequence interrupts the live session", async () => {
++  for (const surface of transportSurfaces) {
++    const t = await openTransport(surface);
++    try {
++      const frame = { sessionId: t.sessionId, executionId: t.writer.execution_id, outputSeq: 2, bytes: Uint8Array.of(42) };
++      await expect(unsafeTestOnlyIngestRawOutputFrame(t.client, frame)).rejects.toThrow();
++      const rows = t.build.state.ledger!.readAfter(0).map(row => JSON.parse(row.event_json));
++      expect(rows.filter(e => e.event_type === "session_interrupted").map(e => e.reason_code))
++        .toEqual(["output_sequence_invariant_failed"]);
++    } finally { await t.close(); }
++  }
++}, 20000);
+diff --git a/test/phase3b/retention.test.tsx b/test/phase3b/retention.test.tsx
+new file mode 100644
+index 0000000..63a4288
+--- /dev/null
++++ b/test/phase3b/retention.test.tsx
+@@ -0,0 +1,68 @@
++import { expect, test } from "bun:test";
++import { act } from "react";
++import { testRender } from "@opentui/react/test-utils";
++import { App } from "../../apps/madbridge/src/tui/App";
++import { PaneRetention } from "../../apps/madbridge/src/tui/live/retention";
++import { offlineCatalog, paneClient } from "./pane-client";
++
++const bytes = (text: string) => new TextEncoder().encode(text);
++const decode = (value: Uint8Array) => new TextDecoder().decode(value);
++
++test("interleaved output reaches each pane and dock in host order", async () => {
++  const feed = paneClient();
++  const view = await testRender(<App client={feed.client} catalogLoader={offlineCatalog} />, { width: 154, height: 35 });
++  try {
++    await view.flush();
++    for (const [id, text] of [["builder", "alpha "], ["reviewer", "tango "], ["builder", "bravo"], ["reviewer", "sierra"]] as const) {
++      await act(async () => { feed.emit(id, bytes(text)); });
++      await view.flush();
++    }
++    function check(stage: string, dock: string) {
++      const lines = view.captureCharFrame().split("\n");
++      expect(lines.filter(line => !line.includes("docked")).join("\n")).toContain(stage);
++      expect(lines.find(line => line.includes("docked"))).toContain(dock);
++    }
++    check("alpha bravo", "tango sierra");
++    await act(async () => { view.mockInput.pressKey("4", { meta: true }); });
++    await view.flush();
++    await view.flush();
++    check("tango sierra", "alpha bravo");
++
++    const buffer = new PaneRetention();
++    for (const part of ["alpha ", "", "bravo"]) buffer.append(bytes(part));
++    expect(Array.from(buffer.frames(), decode)).toEqual(["alpha ", "", "bravo"]);
++  } finally { await act(async () => { feed.close(); view.renderer.destroy(); }); }
++});
++
++test("the line cap drops oldest content and counts received and retained frames and bytes", () => {
++  const buffer = new PaneRetention();
++  buffer.append(bytes("old\r"));
++  buffer.append(bytes("\n"));
++  for (let i = 0; i < 9_999; i++) buffer.append(bytes("x\n"));
++  expect(buffer.text()).toBe("old\r\n" + "x\n".repeat(9_999));
++  buffer.append(bytes("tail"));
++  expect(buffer.receivedFrames).toBe(10_002);
++  expect(buffer.receivedBytes).toBe(20_007);
++  expect(buffer.retainedFrames).toBe(10_000);
++  expect(buffer.retainedBytes).toBe(20_002);
++  expect(buffer.text()).toBe("x\n".repeat(9_999) + "tail");
++  expect(Array.from(buffer.frames()).length).toBe(10_000);
++});
++
++test("the byte cap retains the newest bytes including a partial frame", () => {
++  const buffer = new PaneRetention();
++  buffer.append(bytes("OLD"));
++  const block = new Uint8Array(2_097_150).fill(97);
++  block[0] = 98;
++  block[1] = 99;
++  buffer.append(block);
++  buffer.append(bytes("end"));
++  expect(buffer.receivedFrames).toBe(3);
++  expect(buffer.receivedBytes).toBe(2_097_156);
++  expect(buffer.retainedFrames).toBe(2);
++  expect(buffer.retainedBytes).toBe(2_097_152);
++  const frames = Array.from(buffer.frames());
++  expect(frames.map(frame => frame.byteLength)).toEqual([2_097_149, 3]);
++  expect(frames[0]![0]).toBe(99);
++  expect(decode(frames[1]!)).toBe("end");
++});
+diff --git a/test/phase3b/transport-stand-in.ts b/test/phase3b/transport-stand-in.ts
+new file mode 100644
+index 0000000..ece675d
+--- /dev/null
++++ b/test/phase3b/transport-stand-in.ts
+@@ -0,0 +1,59 @@
++import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
++import { basename, dirname, join } from "node:path";
++import { attestationEvents, type Surface } from "./end-stand-in";
++
++async function run(): Promise<void> {
++  const executable = process.argv[1]!;
++  const root = dirname(dirname(executable));
++  if (!process.stdin.isTTY || process.cwd() !== join(root, "work") || !existsSync(join(root, "m3-transport"))) {
++    throw new Error("expected a private transport stand-in");
++  }
++  const surface: Surface = basename(executable).startsWith("madbridge-claude-v5") ? "claude-code" : "madv-surface";
++  const model = process.argv[process.argv.indexOf("--model") + 1]!;
++  const events = attestationEvents(surface, model);
++  const emit = (items: readonly unknown[], tail = "") =>
++    writeFileSync(1, items.map(item => JSON.stringify(item) + "\n").join("") + tail);
++
++  let attested = false;
++  let next = 1;
++  const control = setInterval(() => {
++    if (!attested) return;
++    const file = join(root, surface + "-output-" + next);
++    if (!existsSync(file)) return;
++    writeFileSync(1, readFileSync(file));
++    next++;
++  }, 5);
++  try {
++    let pending = Buffer.alloc(0);
++    for await (const chunk of process.stdin) {
++      pending = Buffer.concat([pending, chunk]);
++      let end: number;
++      while ((end = pending.indexOf(10)) >= 0) {
++        const wire = pending.subarray(0, end + 1);
++        pending = pending.subarray(end + 1);
++        const message = JSON.parse(wire.toString("utf8"));
++        if (!attested) {
++          if (message.message?.content !== "Reply with your model identifier and nothing else." ||
++              (surface === "madv-surface" ? message.no_tools !== true : message.no_tools !== undefined)) {
++            throw new Error("unexpected attestation message");
++          }
++          // The whitespace following the result is a partial line in this same read.
++          emit(events, " ");
++          attested = true;
++        } else {
++          // Bun caches terminal dimensions until a resize notification is serviced.
++          const terminal = process.stdout as typeof process.stdout & { _refreshSize(): void };
++          terminal._refreshSize();
++          const observation = { bytes: [...wire], cols: process.stdout.columns, rows: process.stdout.rows };
++          appendFileSync(join(root, surface + "-inputs"), JSON.stringify(observation) + "\n");
++          const reply = message.message.content;
++          emit(events.slice(1).map(event => ({ ...event, offlineReply: reply,
++            ...(reply === "offline mismatched evidence" && event.type === "model_response" && { response_model: "MiniMax-offline-other" }),
++          })));
++        }
++      }
++    }
++  } finally { clearInterval(control); }
++}
++
++if (import.meta.main) await run();
+diff --git a/test/phase3b/transport.ts b/test/phase3b/transport.ts
+new file mode 100644
+index 0000000..797602d
+--- /dev/null
++++ b/test/phase3b/transport.ts
+@@ -0,0 +1,91 @@
++import { existsSync, readFileSync, writeFileSync } from "node:fs";
++import { join } from "node:path";
++import { parseTaskEnvelope, sha256CanonicalSync } from "@madventures/protocol";
++import type { OutputFrame } from "@madventures/broker";
++import { createStartAttesters } from "../../apps/madbridge/src/tui/live/composition";
++import { runLiveTransactionalBuild, runPurePreflight } from "../../packages/supervisor/src/index";
++import type { Surface } from "./end-stand-in";
++import { prepareM2 } from "./m2-offline";
++import { closeOfflineBuild } from "./offline";
++
++export const transportSurfaces = ["claude-code", "madv-surface"] as const;
++export async function observed(predicate: () => boolean | Promise<boolean>): Promise<void> {
++  const limit = performance.now() + 3500;
++  while (!await predicate()) {
++    if (performance.now() >= limit) throw new Error("offline observation deadline");
++    await Bun.sleep(5);
++  }
++}
++
++export async function openTransport(surface: Surface, onFailure?: (surface: string, cause: string) => void) {
++  const f = prepareM2(surface, false, "Founder close");
++  try {
++    writeFileSync(join(f.root, "m3-transport"), "");
++    writeFileSync(join(f.bin, "end-stand-in.ts"), readFileSync(new URL("./end-stand-in.ts", import.meta.url)));
++    for (const child of f.plan.executions) {
++      writeFileSync(child.executablePath + ".launch.ts", readFileSync(new URL("./transport-stand-in.ts", import.meta.url)));
++    }
++    const writer = f.envelope.executions.find(e => e.surface === surface)!;
++    const { envelope_hash: _hash, ...body } = f.envelope;
++    const unsigned = { ...body, initial_writer: writer.execution_id };
++    const envelope = parseTaskEnvelope({ ...unsigned, envelope_hash: sha256CanonicalSync(unsigned) });
++    const preflight = await runPurePreflight({ ...f.input, envelope: { ...envelope } });
++    if (!preflight.ok) throw new Error("offline transport preflight " + preflight.failure);
++    const sessionId = "offline-transport";
++    const failures: string[] = [];
++    const installed = createStartAttesters();
++    let madvSender: ((bytes: Uint8Array) => boolean) | undefined;
++    const build = await runLiveTransactionalBuild({
++      sessionId, envelope, plan: preflight.plan, signal: f.input.signal,
++      attesterFor: name => {
++        const attest = installed(name);
++        if (!attest) return undefined;
++        return async input => {
++          const verdict = await attest({ ...input, reportFailure(cause) {
++            onFailure?.(name, cause);
++            failures.push(name + " " + cause);
++            input.reportFailure(cause);
++          } });
++          if (name === "madv-surface" && verdict.ok) madvSender = verdict.sendEncodedInput;
++          return verdict;
++        };
++      },
++    });
++    if (!build.ok) {
++      await closeOfflineBuild(build);
++      throw new Error("offline transport build " + build.detail);
++    }
++    const client = build.state.client!;
++    function release(target: Surface, sequence: number, bytes: string) {
++      writeFileSync(join(f.root, target + "-output-" + sequence), bytes);
++    }
++    function inputs(target: Surface): { bytes: number[]; cols: number; rows: number }[] {
++      const file = join(f.root, target + "-inputs");
++      return existsSync(file) ? readFileSync(file, "utf8").trim().split("\n").map(line => JSON.parse(line)) : [];
++    }
++    async function close(finish = closeOfflineBuild) {
++      try { await finish(build); } finally { f.dispose(); }
++    }
++    return { root: f.root, build, client, envelope, sessionId, failures, writer, release, inputs, close, madvSender };
++  } catch (error) { f.dispose(); throw error; }
++}
++
++export async function orderedTranscript(surface: Surface) {
++  const t = await openTransport(surface);
++  try {
++    const frames: OutputFrame[] = [];
++    const receive = (async () => {
++      for await (const frame of t.client.output(t.writer.execution_id)) {
++        frames.push(frame);
++        if (frames.length === 2) break;
++      }
++    })();
++    t.release(surface, 1, " \t");
++    await observed(() => frames.length > 0);
++    t.release(surface, 2, "  \t");
++    await observed(() => frames.length === 2);
++    await receive;
++    return frames.map(frame => ({ sessionId: frame.sessionId, executionId: frame.executionId,
++      outputSeq: frame.outputSeq, bytes: [...frame.bytes] }));
++  } finally { await t.close(); }
++}
+diff --git a/test/phase3b/unbridged-stand-in.ts b/test/phase3b/unbridged-stand-in.ts
+new file mode 100644
+index 0000000..196f043
+--- /dev/null
++++ b/test/phase3b/unbridged-stand-in.ts
+@@ -0,0 +1,16 @@
++// Private Phase 3A fixture child and probes. Never record a process environment.
++import { basename } from "node:path";
++if (import.meta.main) {
++  if (process.argv.includes("--fixture-run")) {
++    process.on("SIGTERM", () => process.exit(0));
++    process.stdin.setRawMode(true);
++    process.stdin.on("data", data => process.stdout.write(data));
++    process.stdin.on("end", () => process.exit(0));
++    process.stdout.write("FIXTURE_READY\n");
++  } else if (process.argv.includes("--fixture-auth")) {
++    console.log(JSON.stringify({ loggedIn: true, authMethod: "claude.ai", apiProvider: "firstParty", subscriptionType: "max" }));
++  } else {
++    const model = basename(process.argv[1]!) === "fixture-builder" ? "fixture-model-0" : "fixture-model-1";
++    console.log(JSON.stringify({ type: "system", subtype: "init", model, claude_code_version: "1.0.0" }));
++  }
++}
+diff --git a/test/phase3b/unbridged.ts b/test/phase3b/unbridged.ts
+new file mode 100644
+index 0000000..ad1a279
+--- /dev/null
++++ b/test/phase3b/unbridged.ts
+@@ -0,0 +1,47 @@
++import { spyOn } from "bun:test";
++import { copyFileSync, mkdirSync, readFileSync, symlinkSync } from "node:fs";
++import { join, resolve } from "node:path";
++import * as build from "../../packages/supervisor/src/build";
++import { offlineStart } from "./offline";
++
++export async function originalBuildInput() {
++  const f = offlineStart();
++  const repo = resolve(import.meta.dir, "../..");
++  // The Phase 3A harness derives its worktree from its own file. Run an exact
++  // copy in a disposable Git worktree with the checked-out production modules.
++  try {
++    const tree = join(f.work, "test/phase3a");
++    mkdirSync(tree, { recursive: true });
++    for (const name of ["runtime-harness.ts", "fixture-adapters.ts"]) {
++      copyFileSync(join(repo, "test/phase3a", name), join(tree, name));
++    }
++    for (const name of ["packages", "node_modules"]) symlinkSync(join(repo, name), join(f.work, name), "dir");
++    copyFileSync(join(repo, "tsconfig.json"), join(f.work, "tsconfig.json"));
++    const fixtures: typeof import("../phase3a/fixture-adapters") = await import(join(tree, "fixture-adapters.ts"));
++    const harness: typeof import("../phase3a/runtime-harness") = await import(join(tree, "runtime-harness.ts"));
++    const executable = "#!" + process.execPath + "\n" + readFileSync(new URL("./unbridged-stand-in.ts", import.meta.url), "utf8");
++    const script = spyOn(fixtures, "fixtureExecutableSource").mockReturnValue(executable);
++    const original = build.runTransactionalBuildWithDependencies;
++    let state: build.PartialBuildState | undefined;
++    const capture = spyOn(build, "runTransactionalBuildWithDependencies").mockImplementation(async (...args) => {
++      const result = await original(...args);
++      if (result.ok) state = result.state;
++      return result;
++    });
++    try {
++      const session = await harness.startFixtureSession();
++      try {
++        if (!state?.client) throw new Error("original client missing");
++        const raw = state.client;
++        const snapshot = await raw.getSnapshot();
++        const host = state.hosts.find(h => h.executionId === snapshot.activeWriterExecutionId)!;
++        const observe = spyOn(host.handle, "send");
++        try {
++          const result = await raw.request({ kind: "pty_input", commandId: "original-input", sessionId: snapshot.sessionId,
++            executionId: host.executionId, fencingToken: snapshot.fencingToken!, bytes: new TextEncoder().encode("offline") });
++          return { result, writes: observe.mock.calls.length };
++        } finally { observe.mockRestore(); }
++      } finally { await session.close(); }
++    } finally { capture.mockRestore(); script.mockRestore(); }
++  } finally { f.dispose(); }
++}
+diff --git a/test/phase3b/usable-input.test.tsx b/test/phase3b/usable-input.test.tsx
+new file mode 100644
+index 0000000..b4c7020
+--- /dev/null
++++ b/test/phase3b/usable-input.test.tsx
+@@ -0,0 +1,31 @@
++import { expect, test } from "bun:test";
++import { encodedLine } from "./dispatch-observation";
++import { transportSurfaces } from "./transport";
++import { usableInput } from "./usable-input";
++
++test("each submitted stream-json line produces a checked stand-in response in its pane", async () => {
++  for (const surface of transportSurfaces) {
++    const r = await usableInput(surface);
++    const id = surface === "claude-code" ? "builder" : "reviewer";
++    const bytes = [...encodedLine(surface, "proof")];
++    expect(r.inputs).toEqual([{ executionId: id, bytes }]);
++    expect(r.child).toHaveLength(1);
++    expect(r.child[0]!.bytes).toEqual(bytes);
++    expect(r.otherChild).toEqual([]);
++    expect(r.frames.filter(f => f.executionId === id).map(f => f.text).join("")).toContain('"offlineReply":"proof"');
++    expect(r.render).toContain('"offlineReply":"proof"');
++    expect(r.failures).toEqual([]);
++  }
++}, 25_000);
++
++test("a nonwriter submission is unauthorized in its pane and never reaches the child", async () => {
++  for (const surface of transportSurfaces) {
++    const r = await usableInput(surface, true);
++    const id = surface === "claude-code" ? "reviewer" : "builder";
++    expect(r.inputs).toEqual([{ executionId: id, bytes: [...encodedLine(r.focused, "proof")] }]);
++    expect(r.child).toEqual([]);
++    expect(r.otherChild).toEqual([]);
++    expect(r.render).toContain("UNAUTHORIZED");
++    expect(r.frames).toEqual([]);
++  }
++}, 25_000);
+diff --git a/test/phase3b/usable-input.tsx b/test/phase3b/usable-input.tsx
+new file mode 100644
+index 0000000..0dff2d3
+--- /dev/null
++++ b/test/phase3b/usable-input.tsx
+@@ -0,0 +1,39 @@
++import { act } from "react";
++import type { BrokerCommand, OutputFrame } from "@madventures/broker";
++import { subscribeToClient } from "../../apps/madbridge/src/tui/live/subscribe";
++import type { Surface } from "./end-stand-in";
++import { inputView } from "./input-view";
++import { openTransport } from "./transport";
++
++export async function usableInput(surface: Surface, nonwriter = false) {
++  const t = await openTransport(surface);
++  try {
++    const frames: OutputFrame[] = [], requests: BrokerCommand[] = [];
++    const focused = nonwriter ? (surface === "claude-code" ? "madv-surface" : "claude-code") : surface;
++    const v = await inputView({
++      getSnapshot: t.client.getSnapshot, subscribe: subscribeToClient(t.client),
++      async *output(id) {
++        for await (const frame of t.client.output(id)) { frames.push(frame); yield frame; }
++      },
++      request(command) { requests.push(command); return t.client.request(command); },
++    });
++    try {
++      await v.key(focused === "madv-surface" ? "4" : "1", true);
++      await v.line("proof");
++      // Capture the actual pane even on a broken path. The test must reach
++      // its byte, destination and rendering assertions with that observation.
++      const marker = nonwriter ? "UNAUTHORIZED" : '"offlineReply":"proof"';
++      const deadline = performance.now() + 3500;
++      let render = "";
++      do {
++        await act(async () => { await Bun.sleep(5); });
++        await v.flush();
++        render = v.captureCharFrame().split("\n").find(row => row.includes(marker)) ?? "";
++      } while (!render && performance.now() < deadline);
++      return { writer: surface, focused, render: render.trim(), failures: t.failures.slice(),
++        child: t.inputs(focused), otherChild: t.inputs(focused === "madv-surface" ? "claude-code" : "madv-surface"),
++        inputs: requests.filter(c => c.kind === "pty_input").map(c => ({ executionId: c.executionId, bytes: [...c.bytes] })),
++        frames: frames.map(frame => ({ executionId: frame.executionId, outputSeq: frame.outputSeq, text: new TextDecoder().decode(frame.bytes) })) };
++    } finally { await v.close(); }
++  } finally { await t.close(); }
++}
