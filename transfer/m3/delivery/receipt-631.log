@@ -1,0 +1,29 @@
+python3 /private/tmp/m3-build.U6WP3RU0/delivery-check.py
+20:34  1 user, load averages: 2.21 2.06 2.10
+Sat Nov 28 01:34:50 UTC 2026
+9f6df429036f43e09aefb32c550734c2473e38d99cb8accb5b5f87f1489609ed tui/docs/verification/phase-3b-m3-build-log.md
+6bdc7fa2a766a2f6788cccbc092cfdfcd8fda359c7a114fc4af4c5799020e91b tui/docs/verification/phase-3b-m3-evidence.md
+7ac98c8586885f90346b8f6f57b0dae3bd7150e21a64c9bf8d2b419fd533aa8d evidence/SHA256.txt
+4f755fa41df3e98229b7a8c14e1b8039d92387ee7492a4d57b060f5152784596 pr/pr-title.txt
+f2957a3cd086dbb21ae3e7931a76cfcac73eb6b7b9a3480337deb2b53cea7701 pr/pr-body.md
+bf702bb1f6386ca9cbe43f783742a969550634b51c7ce29d1eeca18023013efb pr/m3-report.md
+Commit range a7ceccbe96950b63646edc1dc6cc8590c957bf28 67dce10bb771092743664dbdafa873e38748b5d4 11 commits
+66ebd2081cbba90a31a116960984154780d020da a7ceccbe96950b63646edc1dc6cc8590c957bf28 docs(verification): open the M3 build log with its task detail
+8a95854cda8ffc21ea35aac56a2c9e4b95a789bc 66ebd2081cbba90a31a116960984154780d020da feat(supervisor): deliver monitored PTY output to the Founder client
+ee21c4439c59f83686fd9bdb11217d2798accfa8 8a95854cda8ffc21ea35aac56a2c9e4b95a789bc feat(tui): retain ordered output for each surface pane and dock
+790eba2b5a3ea1beb37aa07311165c0fa9b8109f ee21c4439c59f83686fd9bdb11217d2798accfa8 feat(broker): await host acknowledgements for live writer commands
+4f44a80bf323b36c80a83c194591e2a9838e0fa0 790eba2b5a3ea1beb37aa07311165c0fa9b8109f feat(tui): submit encoded lines and resize the focused writer
+0ca50afec2867a337cfb37bd476c09ae8e6604b8 4f44a80bf323b36c80a83c194591e2a9838e0fa0 feat(tui): show madv-surface in the second pane and dock
+fcbadbe14340a5a24908fae920fce4ab8ccb3b0c 0ca50afec2867a337cfb37bd476c09ae8e6604b8 fix(tui): show stream end in place of current authority
+9a6ed3f38329543e3f9e00e575139efceb773ef6 fcbadbe14340a5a24908fae920fce4ab8ccb3b0c test(broker): observe malformed host facts after activation
+ed8685a7f1a7cc4e5e0ea22020eb8c1907c62f1e 9a6ed3f38329543e3f9e00e575139efceb773ef6 docs(verification): capture offline M3 transport and pane evidence
+a78e2d589a7d1740da86177af277472b98e9be1e ed8685a7f1a7cc4e5e0ea22020eb8c1907c62f1e test(tui-chaos): update the two madv-surface dock grids
+67dce10bb771092743664dbdafa873e38748b5d4 a78e2d589a7d1740da86177af277472b98e9be1e docs(verification): record M3
+Numbered logs through 631 occupied 629 unused numbers 605 and 606
+c4a538520d4d3ae34b22c1e1a95c045d3638a117a1b147de1577c5eddfe617e7 logs/627-write-pr-files.log
+3dc1a73a017a42313c06515a432d63d31b326325a103ceeadff08e712f95f9e6 logs/628-prbody-attribution.log
+dae9b885acc01d480938006db7c3db3dc3700e80fbeecfc0f7af46332a20afb2 logs/629-branch-attribution.log
+656d4edda60f020f2b59b3d67fc76b4e8068e874d4ff1f91f974c1ac798b5539 logs/630-write-final-report.log
+Report has 13 ordered sections, zero square brackets and zero bare divider lines. Clean branch.
+Sat Nov 28 01:34:50 UTC 2026
+exit status 0
